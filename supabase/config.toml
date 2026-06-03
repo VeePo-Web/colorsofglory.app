@@ -1,6 +1,6 @@
 project_id = "vsiecltcxsuuulbczexl"
 
-[functions.billing-webhook]
+[functions.payments-webhook]
 verify_jwt = false
 
 [functions.referral-resolve]

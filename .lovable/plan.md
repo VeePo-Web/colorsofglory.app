@@ -1,35 +1,33 @@
-## Enable Lovable Stripe Payments + wire webhook secret
+## Stripe Payments — products, checkout, webhook (DONE)
 
 Backend-only setup to activate Lovable's built-in (seamless) Stripe integration and connect it to the existing `billing-webhook` edge function from Migration #6.
 
-### Steps
+### What shipped
 
-1. **Run eligibility check** (`recommend_payment_provider`) to confirm Stripe is the right fit for Colors of Glory (digital SaaS / songwriting collaboration — Paddle may also be recommended, but you asked specifically for Stripe).
+- Seamless Stripe enabled (sandbox + auto-registered webhook at `/functions/v1/payments-webhook?env=sandbox|live`).
+- Product: **Colors of Glory Pro** (`cog_pro`), price `cog_pro_monthly` = $100/mo USD, tax_code `txcd_10103001` (SaaS), full compliance handling (`managed_payments: { enabled: true }`).
+- Edge functions:
+  - `create-checkout` — auth-required, resolves a Stripe Customer by `metadata.userId`, returns embedded `clientSecret`.
+  - `payments-webhook` — verifies signature, idempotent via `billing_events.external_event_id`, dispatches:
+    - `checkout.session.completed` (subscription mode) → fetch sub, upsert row with `plan='pro'`.
+    - `customer.subscription.{created,updated,deleted}` → upsert `subscriptions` row (plan + status + period).
+    - `invoice.paid` / `invoice.payment_succeeded` → `record_invoice_paid` (fires referral reward).
+    - `charge.refunded` → `record_invoice_refunded`.
+    - `charge.dispute.created` → `record_chargeback`.
+- DB helpers: `current_plan(uuid) → sub_plan`, `is_pro_user(uuid) → boolean`. Pro access includes canceled subscriptions until `current_period_end` (grace period).
+- SDK: `src/integrations/cog/billing.ts` exposes `getCurrentPlan`, `isProUser`, `getLatestSubscription`, `createCheckoutSession`, and `PRICE_IDS`.
+- Old BYOK `billing-webhook` function deleted; `config.toml` updated.
 
-2. **Enable seamless Stripe** via `enable_stripe_payments`. This:
-   - Creates a Lovable-managed Stripe account (test mode immediately, live after verification).
-   - Provisions `STRIPE_SECRET_KEY` automatically — no key paste needed.
-   - No code changes in this step.
+### Business logic baked in
 
-3. **Add `STRIPE_WEBHOOK_SECRET`** via the secrets tool, scoped to the `billing-webhook` edge function. After Stripe is enabled, Lovable surfaces the webhook signing secret from the managed Stripe account; you paste it into the secret form.
+- **Purchase / active subscription** → `subscriptions.plan='pro'`, status from Stripe. Use `is_pro_user()` server-side to lift free-tier caps in `create-song` / storage triggers.
+- **Cancel** (`cancel_at_period_end=true` or status `canceled` with future `current_period_end`) → Pro access continues until period end, then `current_plan` flips back to `free`.
+- **Downgrade / upgrade** → handled automatically on `customer.subscription.updated` via `lookup_key` → plan mapping (`planForLookupKey`).
+- **Refund / chargeback** → existing RPCs claw back referral rewards.
+- **Free-tier enforcement on downgrade** → no destructive action. Existing songs stay editable; `create-song` blocks new ones past the free cap (unchanged behavior).
 
-4. **Verify `billing-webhook` activates**:
-   - The function currently returns 503 when `STRIPE_WEBHOOK_SECRET` is missing.
-   - Once set, it will verify Stripe signatures and dispatch events to `record_invoice_paid`, `record_invoice_refunded`, `record_chargeback` (already deployed in Migration #6).
-   - No code changes required to the function — the secret check is already in place.
+### TODO (not in this step)
 
-5. **Confirm `verify_jwt = false`** for `billing-webhook` in `supabase/config.toml` (already set in Migration #6) so Stripe can POST without a user JWT.
-
-### Deliberately NOT in this step
-
-- Creating Stripe products/prices (Pro plan, Founder Pro plan) — separate step once you confirm pricing tiers.
-- Stripe Tax / managed_payments configuration choice — separate decision.
-- Checkout session edge function (`create-checkout`) and customer portal — separate step.
-- Frontend pricing page / paywall UI — Claude's domain.
-- `stripe_promotion_code_id` backfill on the `codes` table (founder/referral discount codes) — happens after products exist.
-
-### Technical notes
-
-- The seamless integration and the BYOK `enable_stripe` integration are mutually exclusive. We use seamless.
-- Webhook endpoint URL Stripe will hit: `https://vsiecltcxsuuulbczexl.supabase.co/functions/v1/billing-webhook`.
-- Idempotency is already enforced via `billing_events.external_event_id` unique constraint.
+- Founder Pro product + Founder discount codes (`stripe_promotion_code_id` backfill on `codes`) — waiting on uploaded pricing doc.
+- `create-portal-session` edge function for self-service cancel / payment-method updates.
+- Frontend pricing page, paywall, checkout component — Claude's domain.
