@@ -532,12 +532,17 @@ export type Database = {
       }
       voice_memo_transcripts: {
         Row: {
+          attempt_count: number
           created_at: string
           error: string | null
           id: string
           language: string | null
+          last_attempt_at: string | null
+          last_error: string | null
+          max_attempts: number
           memo_id: string
           model: string | null
+          next_attempt_at: string
           segments: Json
           song_id: string
           status: Database["public"]["Enums"]["transcription_status"]
@@ -545,12 +550,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          attempt_count?: number
           created_at?: string
           error?: string | null
           id?: string
           language?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_attempts?: number
           memo_id: string
           model?: string | null
+          next_attempt_at?: string
           segments?: Json
           song_id: string
           status?: Database["public"]["Enums"]["transcription_status"]
@@ -558,12 +568,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          attempt_count?: number
           created_at?: string
           error?: string | null
           id?: string
           language?: string | null
+          last_attempt_at?: string | null
+          last_error?: string | null
+          max_attempts?: number
           memo_id?: string
           model?: string | null
+          next_attempt_at?: string
           segments?: Json
           song_id?: string
           status?: Database["public"]["Enums"]["transcription_status"]
@@ -652,6 +667,15 @@ export type Database = {
         Args: { _delta: number; _owner_user_id: string }
         Returns: undefined
       }
+      claim_transcript_attempt: {
+        Args: { _memo_id: string }
+        Returns: {
+          attempt_count: number
+          max_attempts: number
+          memo_id: string
+          song_id: string
+        }[]
+      }
       current_invite_expiry: { Args: never; Returns: string }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
@@ -671,7 +695,12 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
       }
+      mark_memo_transcribed: { Args: { _memo_id: string }; Returns: undefined }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      reset_transcript_attempts: {
+        Args: { _memo_id: string }
+        Returns: undefined
+      }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
