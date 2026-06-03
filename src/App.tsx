@@ -9,8 +9,10 @@ import PhoneLoginPage from "./pages/auth/PhoneLoginPage";
 import CodeVerifyPage from "./pages/auth/CodeVerifyPage";
 
 // Onboarding screens
+import FirstIntentPage from "./pages/onboarding/FirstIntentPage";
 import StartFirstSongPage from "./pages/onboarding/StartFirstSongPage";
 import FounderCodePage from "./pages/onboarding/FounderCodePage";
+import CaptureFirstIdeaPage from "./pages/onboarding/CaptureFirstIdeaPage";
 import InvitePreviewPage from "./pages/InvitePreviewPage";
 
 // Core app screens
