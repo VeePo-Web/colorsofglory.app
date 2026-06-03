@@ -91,3 +91,34 @@ export async function createCheckoutSession(opts: {
   if (!data?.clientSecret) throw new Error("checkout_session_failed");
   return { clientSecret: data.clientSecret as string };
 }
+
+/** Stripe-hosted billing portal session. Open the returned URL in a new tab. */
+export async function openBillingPortal(opts: {
+  returnUrl: string;
+  environment?: "sandbox" | "live";
+}): Promise<{ url: string }> {
+  const { data, error } = await supabase.functions.invoke("billing-customer-portal", {
+    body: { returnUrl: opts.returnUrl, environment: opts.environment ?? "sandbox" },
+  });
+  if (error) throw error;
+  if (!data?.url) throw new Error("portal_session_failed");
+  return { url: data.url as string };
+}
+
+/** Cancel the caller's active subscription. Defaults to end-of-period (grace) cancellation. */
+export async function cancelSubscription(opts: {
+  subscriptionId?: string;
+  atPeriodEnd?: boolean;
+  environment?: "sandbox" | "live";
+} = {}): Promise<{ ok: true; status: string; cancel_at_period_end: boolean }> {
+  const { data, error } = await supabase.functions.invoke("billing-cancel-subscription", {
+    body: {
+      subscription_id: opts.subscriptionId,
+      at_period_end: opts.atPeriodEnd ?? true,
+      environment: opts.environment ?? "sandbox",
+    },
+  });
+  if (error) throw error;
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  return data as { ok: true; status: string; cancel_at_period_end: boolean };
+}

@@ -1354,6 +1354,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      can_create_song: { Args: { _user_id: string }; Returns: boolean }
+      can_invite: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_upload_bytes: {
+        Args: { _bytes: number; _owner_user_id: string }
+        Returns: boolean
+      }
       claim_transcript_attempt: {
         Args: { _memo_id: string }
         Returns: {
@@ -1451,6 +1460,7 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      owned_active_song_count: { Args: { _user_id: string }; Returns: number }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
       record_invoice_refunded: { Args: { _event: Json }; Returns: number }
