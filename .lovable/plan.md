@@ -3,7 +3,7 @@
 
 Implements the data model + event-driven backend from the Founder/Referral PDF. No frontend, no page changes. Pure schema, RLS, SECURITY DEFINER helpers, edge functions, and SDK glue under `src/integrations/cog/*`.
 
-Stripe is **not** enabled yet in this project. This plan builds the **provider-agnostic ledger** and the **internal entry points** (`record_invoice_paid`, `record_invoice_refunded`, etc.) that a Stripe webhook will call once payments are turned on. A thin webhook receiver shell is included but no-ops until Stripe secrets exist.
+**STATUS: SHIPPED.** All schema, RLS, SECURITY DEFINER helpers, edge functions, and SDK glue are in place. Stripe is **not** enabled yet — `billing-webhook` returns 503 until `STRIPE_WEBHOOK_SECRET` is set and Stripe signature verification is uncommented. `pg_cron` schedule for `rewards-mature-worker` deferred until the project owner wants it live (one `cron.schedule` insert).
 
 ---
 
