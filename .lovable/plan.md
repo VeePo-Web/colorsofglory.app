@@ -149,3 +149,25 @@ Backend can only shape what UI consumes. Standardize:
 7. Hand off SDK changes (`src/integrations/cog/*`) so Claude Code can consume new error codes and admin RPCs.
 
 After approval I will execute D1+D2 in one batch (migrations + edge functions + SDK), then D3, then D4+D5.
+
+---
+## Execution log — D1+D2 shipped (2026-06-03)
+
+Migration `20260603202127`:
+- `voice_memos.failure_reason` + `mark_memo_failed(memo, reason)` SECURITY DEFINER
+- Atomic `accept_song_invite(token, user)` returning structured code (`OK | INVITE_NOT_FOUND | INVITE_EXPIRED | INVITE_ALREADY_USED | INVITE_EXHAUSTED`)
+- `is_last_owner`, `can_unarchive_song`, `safe_transfer_song_owner`, `safe_leave_song`, `safe_unarchive_song` (all SECURITY DEFINER, structured-code returns)
+- `expire_pending_invites()` sweeper
+- `pg_cron`: `cog-mature-holds-daily` (07:17 UTC), `cog-expire-invites-hourly` (07 * * * *)
+
+Edge functions refactored to atomic helpers + standard `{ ok, code, message, data }` envelope:
+- `song-invite-accept`, `song-leave`, `song-transfer-owner`
+- New: `song-unarchive`
+- `voice-memo-transcribe`: calls `mark_memo_failed` when retries exhausted
+
+SDK (`src/integrations/cog/songs.ts`):
+- `CogError` class + `CogErrorCode` enum exported
+- Envelope-aware `call()` with backward compat
+- New `unarchiveSong()`
+
+Remaining for D3+: storage-reconcile worker (needs net.http_post + anon key via insert tool), payments-webhook refund/dispute cases, delete-account, admin views.
