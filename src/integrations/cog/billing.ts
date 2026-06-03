@@ -8,12 +8,12 @@ export type PlanId = "free" | "pro" | "founder_pro";
 // Single canonical price IDs the app ships with. Add more here as you
 // create new products via the payments tool.
 export const PRICE_IDS = {
-  pro_monthly: "cog_pro_monthly",
-  founder_pro_monthly: "cog_founder_pro_monthly",
-  storage_25gb_monthly: "cog_storage_25gb_monthly",
-  storage_100gb_monthly: "cog_storage_100gb_monthly",
-  storage_500gb_monthly: "cog_storage_500gb_monthly",
-  storage_1tb_monthly: "cog_storage_1tb_monthly",
+  pro_monthly: "cog_pro_monthly_cad",
+  founder_pro_monthly: "cog_founder_pro_monthly_cad",
+  storage_25gb_monthly: "cog_storage_25gb_monthly_cad",
+  storage_100gb_monthly: "cog_storage_100gb_monthly_cad",
+  storage_500gb_monthly: "cog_storage_500gb_monthly_cad",
+  storage_1tb_monthly: "cog_storage_1tb_monthly_cad",
 } as const;
 
 export type PriceId = (typeof PRICE_IDS)[keyof typeof PRICE_IDS];

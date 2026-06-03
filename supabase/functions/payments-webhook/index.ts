@@ -91,7 +91,7 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
   const { start, end } = periodFromSubscription(sub);
   const item = sub.items?.data?.[0];
   const unitAmount = item?.price?.unit_amount ?? defaultUnitAmountForPlan(plan);
-  const currency = item?.price?.currency ?? "usd";
+  const currency = item?.price?.currency ?? "cad";
 
   await db().from("subscriptions").upsert(
     {
@@ -171,7 +171,7 @@ async function handleInvoicePaid(invoice: any) {
       invoice_external_id: invoice.id,
       subscription_id: subRowId,
       amount_cents: invoice.amount_paid ?? invoice.amount_due ?? 0,
-      currency: invoice.currency ?? "usd",
+      currency: invoice.currency ?? "cad",
     },
   });
 }
@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
     kind,
     obj?.metadata?.userId ?? null,
     obj?.amount_paid ?? obj?.amount ?? obj?.amount_total ?? 0,
-    obj?.currency ?? "usd",
+    obj?.currency ?? "cad",
     event,
   );
 
