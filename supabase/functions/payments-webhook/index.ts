@@ -143,6 +143,16 @@ async function handleInvoicePaid(invoice: any) {
       .eq("external_id", subscriptionExternal)
       .maybeSingle();
     subRowId = data?.id ?? null;
+
+    // Storage-addon invoices never produce referral rewards.
+    if (!subRowId) {
+      const { data: addon } = await db()
+        .from("storage_addons")
+        .select("id")
+        .eq("external_id", subscriptionExternal)
+        .maybeSingle();
+      if (addon) return;
+    }
   }
 
   const effectiveUser = userId
