@@ -35,6 +35,54 @@ export type Database = {
         }
         Relationships: []
       }
+      chord_progressions: {
+        Row: {
+          chords: Json
+          created_at: string
+          created_by_user_id: string
+          id: string
+          label: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        Insert: {
+          chords?: Json
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          label?: string | null
+          section_id?: string | null
+          song_id: string
+          updated_at?: string
+        }
+        Update: {
+          chords?: Json
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          label?: string | null
+          section_id?: string | null
+          song_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chord_progressions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chord_progressions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_submissions: {
         Row: {
           created_at: string
@@ -104,6 +152,223 @@ export type Database = {
         }
         Relationships: []
       }
+      song_lyrics: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          plain_text: string
+          section_id: string
+          song_id: string
+          updated_at: string
+          updated_by_user_id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          id?: string
+          plain_text?: string
+          section_id: string
+          song_id: string
+          updated_at?: string
+          updated_by_user_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          plain_text?: string
+          section_id?: string
+          song_id?: string
+          updated_at?: string
+          updated_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_lyrics_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: true
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_lyrics_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_members: {
+        Row: {
+          id: string
+          invited_by_user_id: string | null
+          joined_at: string
+          role: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          invited_by_user_id?: string | null
+          joined_at?: string
+          role?: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          invited_by_user_id?: string | null
+          joined_at?: string
+          role?: Database["public"]["Enums"]["song_member_role"]
+          song_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_members_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_notes: {
+        Row: {
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_user_id: string
+          body?: string
+          created_at?: string
+          id?: string
+          section_id?: string | null
+          song_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_user_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          section_id?: string | null
+          song_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_notes_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_notes_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_sections: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          id: string
+          kind: Database["public"]["Enums"]["section_kind"]
+          label: string | null
+          position: number
+          song_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          kind?: Database["public"]["Enums"]["section_kind"]
+          label?: string | null
+          position?: number
+          song_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["section_kind"]
+          label?: string | null
+          position?: number
+          song_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_sections_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      songs: {
+        Row: {
+          cover_color: string | null
+          created_at: string
+          id: string
+          is_locked: boolean
+          key_signature: string | null
+          last_activity_at: string
+          owner_user_id: string
+          status: Database["public"]["Enums"]["song_status"]
+          tags: string[]
+          tempo_bpm: number | null
+          time_signature: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          cover_color?: string | null
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          key_signature?: string | null
+          last_activity_at?: string
+          owner_user_id: string
+          status?: Database["public"]["Enums"]["song_status"]
+          tags?: string[]
+          tempo_bpm?: number | null
+          time_signature?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          cover_color?: string | null
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          key_signature?: string | null
+          last_activity_at?: string
+          owner_user_id?: string
+          status?: Database["public"]["Enums"]["song_status"]
+          tags?: string[]
+          tempo_bpm?: number | null
+          time_signature?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -138,10 +403,34 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_song_member: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_song_owner: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
+      song_role: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: Database["public"]["Enums"]["song_member_role"]
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
       plan_tier: "free" | "pro"
+      section_kind:
+        | "verse"
+        | "chorus"
+        | "bridge"
+        | "pre_chorus"
+        | "intro"
+        | "outro"
+        | "hook"
+        | "tag"
+        | "other"
+      song_member_role: "owner" | "collaborator" | "viewer"
+      song_status: "active" | "archived" | "deleted"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -271,6 +560,19 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user"],
       plan_tier: ["free", "pro"],
+      section_kind: [
+        "verse",
+        "chorus",
+        "bridge",
+        "pre_chorus",
+        "intro",
+        "outro",
+        "hook",
+        "tag",
+        "other",
+      ],
+      song_member_role: ["owner", "collaborator", "viewer"],
+      song_status: ["active", "archived", "deleted"],
     },
   },
 } as const
