@@ -680,7 +680,14 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user"
       invite_status: "pending" | "accepted" | "revoked" | "expired"
-      memo_status: "uploading" | "ready" | "failed" | "deleted"
+      memo_status:
+        | "uploading"
+        | "ready"
+        | "failed"
+        | "deleted"
+        | "uploaded"
+        | "finalized"
+        | "transcribed"
       plan_tier: "free" | "pro"
       section_kind:
         | "verse"
@@ -830,7 +837,15 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user"],
       invite_status: ["pending", "accepted", "revoked", "expired"],
-      memo_status: ["uploading", "ready", "failed", "deleted"],
+      memo_status: [
+        "uploading",
+        "ready",
+        "failed",
+        "deleted",
+        "uploaded",
+        "finalized",
+        "transcribed",
+      ],
       plan_tier: ["free", "pro"],
       section_kind: [
         "verse",
