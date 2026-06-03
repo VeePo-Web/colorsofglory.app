@@ -488,6 +488,27 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_usage: {
+        Row: {
+          bytes_limit: number | null
+          bytes_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bytes_limit?: number | null
+          bytes_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bytes_limit?: number | null
+          bytes_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -509,12 +530,130 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_memo_transcripts: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          language: string | null
+          memo_id: string
+          model: string | null
+          segments: Json
+          song_id: string
+          status: Database["public"]["Enums"]["transcription_status"]
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          language?: string | null
+          memo_id: string
+          model?: string | null
+          segments?: Json
+          song_id: string
+          status?: Database["public"]["Enums"]["transcription_status"]
+          text?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          language?: string | null
+          memo_id?: string
+          model?: string | null
+          segments?: Json
+          song_id?: string
+          status?: Database["public"]["Enums"]["transcription_status"]
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_memo_transcripts_memo_id_fkey"
+            columns: ["memo_id"]
+            isOneToOne: true
+            referencedRelation: "voice_memos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_memos: {
+        Row: {
+          author_user_id: string
+          byte_size: number
+          created_at: string
+          duration_ms: number | null
+          id: string
+          mime_type: string
+          section_id: string | null
+          song_id: string
+          status: Database["public"]["Enums"]["memo_status"]
+          storage_path: string
+          title: string | null
+          updated_at: string
+          waveform_peaks: Json | null
+        }
+        Insert: {
+          author_user_id: string
+          byte_size?: number
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          mime_type: string
+          section_id?: string | null
+          song_id: string
+          status?: Database["public"]["Enums"]["memo_status"]
+          storage_path: string
+          title?: string | null
+          updated_at?: string
+          waveform_peaks?: Json | null
+        }
+        Update: {
+          author_user_id?: string
+          byte_size?: number
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          mime_type?: string
+          section_id?: string | null
+          song_id?: string
+          status?: Database["public"]["Enums"]["memo_status"]
+          storage_path?: string
+          title?: string | null
+          updated_at?: string
+          waveform_peaks?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_memos_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_memos_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      apply_storage_delta: {
+        Args: { _delta: number; _owner_user_id: string }
+        Returns: undefined
+      }
       current_invite_expiry: { Args: never; Returns: string }
+      effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -541,6 +680,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user"
       invite_status: "pending" | "accepted" | "revoked" | "expired"
+      memo_status: "uploading" | "ready" | "failed" | "deleted"
       plan_tier: "free" | "pro"
       section_kind:
         | "verse"
@@ -554,6 +694,12 @@ export type Database = {
         | "other"
       song_member_role: "owner" | "collaborator" | "viewer"
       song_status: "active" | "archived" | "deleted"
+      transcription_status:
+        | "pending"
+        | "processing"
+        | "ready"
+        | "failed"
+        | "skipped"
       version_kind: "manual" | "auto" | "restore_point"
     }
     CompositeTypes: {
@@ -684,6 +830,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user"],
       invite_status: ["pending", "accepted", "revoked", "expired"],
+      memo_status: ["uploading", "ready", "failed", "deleted"],
       plan_tier: ["free", "pro"],
       section_kind: [
         "verse",
@@ -698,6 +845,13 @@ export const Constants = {
       ],
       song_member_role: ["owner", "collaborator", "viewer"],
       song_status: ["active", "archived", "deleted"],
+      transcription_status: [
+        "pending",
+        "processing",
+        "ready",
+        "failed",
+        "skipped",
+      ],
       version_kind: ["manual", "auto", "restore_point"],
     },
   },
