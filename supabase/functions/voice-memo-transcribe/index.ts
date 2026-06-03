@@ -144,6 +144,10 @@ Deno.serve(async (req) => {
           next_attempt_at: exhausted ? new Date(Date.now() + 365 * 24 * 3600_000).toISOString() : nextAt,
         })
         .eq("memo_id", memo_id);
+      if (exhausted) {
+        // Surface terminal failure on the parent memo so the UI stops spinning.
+        await admin.rpc("mark_memo_failed", { _memo_id: memo_id, _reason: msg });
+      }
       return jsonResponse({
         memo_id,
         status: "failed",

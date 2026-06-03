@@ -1,9 +1,49 @@
 import { supabase } from "@/integrations/supabase/client";
 
+/**
+ * Canonical edge-function error codes. UI can switch on these to render
+ * specific messages without parsing free-text error strings.
+ */
+export type CogErrorCode =
+  | "INTERNAL"
+  | "INVALID_INPUT"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "METHOD_NOT_ALLOWED"
+  | "QUOTA_EXCEEDED_SONGS"
+  | "QUOTA_EXCEEDED_STORAGE"
+  | "SONG_NOT_FOUND"
+  | "SONG_DELETED"
+  | "NOT_A_MEMBER"
+  | "OWNER_CANNOT_LEAVE"
+  | "NEW_OWNER_NOT_MEMBER"
+  | "TRANSFER_BLOCKED_QUOTA"
+  | "INVITE_NOT_FOUND"
+  | "INVITE_EXPIRED"
+  | "INVITE_ALREADY_USED"
+  | "INVITE_EXHAUSTED";
+
+export class CogError extends Error {
+  code: CogErrorCode | string;
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.code = code;
+  }
+}
+
+type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
+
 async function call<T = unknown>(fn: string, body: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error) throw error;
-  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  if (error) throw new CogError("INTERNAL", error.message);
+  const env = data as Envelope<T> | undefined;
+  // New-shape envelope
+  if (env && typeof env === "object" && "ok" in env) {
+    if (!env.ok) throw new CogError(env.code ?? "INTERNAL", env.message);
+    return (env.data ?? env) as T;
+  }
+  // Legacy shape (function not yet migrated): pass through
+  if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
   return data as T;
 }
 
@@ -17,9 +57,10 @@ export const createSong = (input: {
 }) => call<{ song: any }>("create-song", input);
 
 export const deleteSong = (song_id: string) => call<{ ok: true }>("song-delete", { song_id });
-export const leaveSong = (song_id: string) => call<{ ok: true }>("song-leave", { song_id });
+export const leaveSong = (song_id: string) => call<void>("song-leave", { song_id });
 export const transferOwner = (song_id: string, new_owner_user_id: string) =>
-  call<{ ok: true }>("song-transfer-owner", { song_id, new_owner_user_id });
+  call<void>("song-transfer-owner", { song_id, new_owner_user_id });
+export const unarchiveSong = (song_id: string) => call<void>("song-unarchive", { song_id });
 
 export const deleteVoiceMemo = (memo_id: string) =>
   call<{ ok: true }>("voice-memo-delete", { memo_id });
@@ -34,4 +75,4 @@ export const createInvite = (input: {
 }) => call<{ invite: any }>("song-invite-create", input);
 
 export const acceptInvite = (token: string) =>
-  call<{ ok: true; song_id: string; role: string; already_member?: boolean }>("song-invite-accept", { token });
+  call<{ song_id: string; role: string }>("song-invite-accept", { token });
