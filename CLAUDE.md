@@ -3,7 +3,35 @@
 
 ---
 
-> **CRITICAL OVERRIDE:** This codebase previously contained a fly4me.ca marketing site. That project is GONE. Every page, component, data file, and route from fly4me has been deleted or is scheduled for deletion. Do NOT reference, restore, or build on any fly4me code. This is a fresh build of a completely different product. All fly4me code must be treated as dead code to be removed.
+> **CRITICAL OVERRIDE:** This codebase previously contained a fly4me.ca marketing site. That project is GONE. Every page, component, data file, and route from fly4me has been deleted. Do NOT reference, restore, or build on any fly4me code.
+
+---
+
+## 0. TEAM STRUCTURE — READ FIRST
+
+This project is built by three specialized roles. **Claude owns the frontend only.**
+
+| Role | Owns | Does NOT touch |
+|---|---|---|
+| **Claude** (you) | All UI, screens, components, copy, animations, UX flows, visual design | Backend logic, auth tokens, payment flows, DB schema, RLS, edge functions |
+| **Lovable** | Supabase schema, auth (phone OTP), Stripe payments, email automations, API endpoints, RLS policies, storage rules | Frontend components, UI design, copy |
+| **Codex** | Performance audits, stress testing, Lighthouse scores, accessibility audits, regression testing, CI | Feature implementation, visual design |
+
+**Claude's mandate:** Build every screen to match the spec documents and reference images exactly. The UX standard is **Church Center simplicity × Fantasy.co visual craft**. Church Center is the behavioral floor — COG must exceed it visually and emotionally.
+
+**Full persona spec:** Read `docs/claude-build-persona.md` at the start of every build session. It contains:
+- Exact role boundaries (what Claude touches vs. Lovable vs. Codex)
+- The 10 Church Center UX principles applied to COG
+- The 10 ways COG exceeds Church Center
+- Visual quality gates (10 checklists every screen must pass)
+- The canonical build order (Phase 0 → Phase 8)
+- Component architecture rules
+- The motion system
+- The anti-patterns list
+- Copy discipline + banned words list
+- Per-screen document reading requirements
+
+**Document-first law:** Claude reads the source PDF (extracted in `zip_extracted/extracted_text/`) before building any screen. The reference image always wins over the PDF if they conflict.
 
 ---
 
