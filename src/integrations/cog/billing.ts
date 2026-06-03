@@ -2,13 +2,21 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
+export type StorageAddon = Database["public"]["Tables"]["storage_addons"]["Row"];
 export type PlanId = "free" | "pro" | "founder_pro";
 
 // Single canonical price IDs the app ships with. Add more here as you
 // create new products via the payments tool.
 export const PRICE_IDS = {
   pro_monthly: "cog_pro_monthly",
+  founder_pro_monthly: "cog_founder_pro_monthly",
+  storage_25gb_monthly: "cog_storage_25gb_monthly",
+  storage_100gb_monthly: "cog_storage_100gb_monthly",
+  storage_500gb_monthly: "cog_storage_500gb_monthly",
+  storage_1tb_monthly: "cog_storage_1tb_monthly",
 } as const;
+
+export type PriceId = (typeof PRICE_IDS)[keyof typeof PRICE_IDS];
 
 /** Reads the effective plan for the signed-in user via the SECURITY DEFINER helper. */
 export async function getCurrentPlan(userId: string): Promise<PlanId> {
@@ -35,6 +43,35 @@ export async function getLatestSubscription(userId: string): Promise<Subscriptio
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+/** All active storage add-ons for a user. */
+export async function getStorageAddons(userId: string): Promise<StorageAddon[]> {
+  const { data, error } = await supabase
+    .from("storage_addons")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["active", "trialing", "past_due"]);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Effective storage limit (bytes) for the user — plan base + active add-ons. */
+export async function getEffectiveStorageLimit(userId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("effective_storage_limit", { _user_id: userId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+/** True if the user has a founder-code attribution that unlocks the Founder Rate. */
+export async function canPurchaseFounderRate(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("referral_attributions")
+    .select("referrer_type")
+    .eq("referred_user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.referrer_type === "founder";
 }
 
 /** Server-side checkout session creation. Returns the embedded clientSecret. */
