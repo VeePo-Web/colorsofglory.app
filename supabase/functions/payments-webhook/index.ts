@@ -1,8 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   type StripeEnv,
+  bytesForStorageLookupKey,
   createStripeClient,
   defaultUnitAmountForPlan,
+  isStorageLookupKey,
   planForLookupKey,
   verifyWebhook,
 } from "../_shared/stripe.ts";
@@ -77,6 +79,14 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
     return;
   }
   const lookupKey = lookupKeyFromSubscription(sub);
+
+  // Storage add-ons live in their own table and never affect plan/quota math
+  // beyond the bytes they grant.
+  if (isStorageLookupKey(lookupKey)) {
+    await upsertStorageAddon(sub, userId, lookupKey);
+    return;
+  }
+
   const plan = planForLookupKey(lookupKey);
   const { start, end } = periodFromSubscription(sub);
   const item = sub.items?.data?.[0];
@@ -90,6 +100,25 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
       plan,
       unit_amount_cents: unitAmount,
       currency,
+      status: sub.status,
+      current_period_start: start,
+      current_period_end: end,
+      cancelled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "external_id" },
+  );
+}
+
+async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | null) {
+  const { start, end } = periodFromSubscription(sub);
+  const bytes = bytesForStorageLookupKey(lookupKey);
+  await db().from("storage_addons").upsert(
+    {
+      user_id: userId,
+      external_id: sub.id,
+      lookup_key: lookupKey ?? "",
+      bytes_granted: bytes,
       status: sub.status,
       current_period_start: start,
       current_period_end: end,
@@ -114,6 +143,16 @@ async function handleInvoicePaid(invoice: any) {
       .eq("external_id", subscriptionExternal)
       .maybeSingle();
     subRowId = data?.id ?? null;
+
+    // Storage-addon invoices never produce referral rewards.
+    if (!subRowId) {
+      const { data: addon } = await db()
+        .from("storage_addons")
+        .select("id")
+        .eq("external_id", subscriptionExternal)
+        .maybeSingle();
+      if (addon) return;
+    }
   }
 
   const effectiveUser = userId

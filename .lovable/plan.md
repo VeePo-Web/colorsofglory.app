@@ -94,3 +94,16 @@ cog_storage_1tb_*   → 1024 * 1024^3
 - Frontend pricing page, checkout component, storage-meter UI — Claude's domain.
 - Storage overage soft warnings (80%/95%/100%) — frontend concern.
 - Lead-magnet "First Song Free" funnel — frontend/marketing, already covered by existing free-tier enforcement.
+
+---
+
+## ✅ Migration #8 SHIPPED (2026-06-03)
+
+- Stripe products created: `cog_founder_pro_monthly` ($50/mo), `cog_storage_25gb_monthly` ($10), `cog_storage_100gb_monthly` ($25), `cog_storage_500gb_monthly` ($75), `cog_storage_1tb_monthly` ($125). All tax_code `txcd_10103001`.
+- New table `public.storage_addons` (user_id, external_id, lookup_key, bytes_granted, status, period dates). RLS: user reads own, admin reads all.
+- `effective_storage_limit(user_id)` rewritten: base = 200 MB free / 100 GB pro (new `pro_storage_gb` app_setting) + SUM of active storage_addons.bytes_granted.
+- `_shared/stripe.ts`: added `isStorageLookupKey()` + `bytesForStorageLookupKey()`; corrected `defaultUnitAmountForPlan('founder_pro')` to 5000¢; storage keys map to plan='free'.
+- `create-checkout`: founder-rate priceId returns `403 founder_code_required` unless user has `referral_attributions` row with `referrer_type='founder'`.
+- `payments-webhook`: subscription events with storage lookup_keys route to `upsertStorageAddon()` (separate table). `invoice.paid` for storage-addon subs returns early — no referral reward.
+- SDK `src/integrations/cog/billing.ts`: added 5 new `PRICE_IDS`, `getStorageAddons()`, `getEffectiveStorageLimit()`, `canPurchaseFounderRate()`.
+

@@ -83,6 +83,7 @@ export async function verifyWebhook(
 export function planForLookupKey(lookupKey: string | null | undefined): "free" | "pro" | "founder_pro" {
   if (!lookupKey) return "free";
   if (lookupKey.startsWith("cog_founder")) return "founder_pro";
+  if (lookupKey.startsWith("cog_storage")) return "free"; // storage addons don't change plan
   if (lookupKey.startsWith("cog_pro")) return "pro";
   return "free";
 }
@@ -90,6 +91,24 @@ export function planForLookupKey(lookupKey: string | null | undefined): "free" |
 // Unit price (cents) for a given plan — used when seeding subscription rows.
 export function defaultUnitAmountForPlan(plan: "free" | "pro" | "founder_pro"): number {
   if (plan === "pro") return 10000;
-  if (plan === "founder_pro") return 12000;
+  if (plan === "founder_pro") return 5000;
+  return 0;
+}
+
+// True if the lookup_key denotes a storage add-on subscription rather
+// than the primary Pro / Founder Pro plan.
+export function isStorageLookupKey(lookupKey: string | null | undefined): boolean {
+  return !!lookupKey && lookupKey.startsWith("cog_storage");
+}
+
+const GIB = 1024 * 1024 * 1024;
+
+// Bytes granted by a storage-addon lookup_key. Returns 0 for non-storage keys.
+export function bytesForStorageLookupKey(lookupKey: string | null | undefined): number {
+  if (!lookupKey) return 0;
+  if (lookupKey.startsWith("cog_storage_25gb")) return 25 * GIB;
+  if (lookupKey.startsWith("cog_storage_100gb")) return 100 * GIB;
+  if (lookupKey.startsWith("cog_storage_500gb")) return 500 * GIB;
+  if (lookupKey.startsWith("cog_storage_1tb")) return 1024 * GIB;
   return 0;
 }
