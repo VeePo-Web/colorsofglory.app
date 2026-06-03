@@ -10,18 +10,26 @@ const StartFirstSongPage = () => {
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleCreate = (mode: "create" | "skip") => {
     const songTitle = mode === "skip" || !title.trim() ? "Untitled Song" : title.trim();
     setIsSubmitting(true);
-    setError(null);
-    // Simulated creation — Lovable wires real Supabase song creation
+
+    sessionStorage.setItem(
+      "cog:first-song",
+      JSON.stringify({
+        id: "1",
+        title: songTitle,
+        key: key || null,
+        bpm: bpm || null,
+        createdFrom: "onboarding",
+      }),
+    );
+
     setTimeout(() => {
       setIsSubmitting(false);
-      navigate("/songs/1/capture");
-    }, 800);
-    void songTitle;
+      navigate("/songs/1?first=1");
+    }, 650);
   };
 
   return (
@@ -29,7 +37,6 @@ const StartFirstSongPage = () => {
       className="relative min-h-screen flex flex-col"
       style={{ backgroundColor: "var(--cog-cream)" }}
     >
-      {/* Warm glow */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{
@@ -42,7 +49,6 @@ const StartFirstSongPage = () => {
         className="relative flex flex-col flex-1 px-6"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        {/* Back */}
         <div className="pt-14 pb-6">
           <button
             onClick={() => navigate("/onboarding/intent")}
@@ -54,7 +60,6 @@ const StartFirstSongPage = () => {
           </button>
         </div>
 
-        {/* Brand */}
         <p
           className="text-sm font-medium tracking-widest uppercase mb-8 text-center"
           style={{ color: "var(--cog-muted)" }}
@@ -62,7 +67,6 @@ const StartFirstSongPage = () => {
           Colors of Glory
         </p>
 
-        {/* Headline */}
         <h1
           className="text-4xl font-semibold mb-2 text-center"
           style={{
@@ -78,7 +82,6 @@ const StartFirstSongPage = () => {
           Just the basics. You can add the rest inside.
         </p>
 
-        {/* Song title — large tactile field */}
         <div className="mb-4">
           <label
             htmlFor="song-title"
@@ -90,7 +93,7 @@ const StartFirstSongPage = () => {
           <textarea
             id="song-title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(event) => setTitle(event.target.value)}
             placeholder="Name your song..."
             rows={3}
             className="w-full resize-none rounded-2xl px-4 py-4 text-xl font-semibold outline-none transition-all duration-150"
@@ -107,9 +110,7 @@ const StartFirstSongPage = () => {
           />
         </div>
 
-        {/* Key + BPM row */}
         <div className="flex gap-3 mb-8">
-          {/* Key selector */}
           <div className="flex-1">
             <label
               htmlFor="song-key"
@@ -124,7 +125,7 @@ const StartFirstSongPage = () => {
             <select
               id="song-key"
               value={key}
-              onChange={(e) => setKey(e.target.value)}
+              onChange={(event) => setKey(event.target.value)}
               className="w-full rounded-xl px-3 py-3.5 outline-none transition-all duration-150 appearance-none"
               style={{
                 backgroundColor: "var(--cog-cream-light)",
@@ -137,15 +138,14 @@ const StartFirstSongPage = () => {
               }}
             >
               <option value="">Key</option>
-              {KEYS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
+              {KEYS.map((songKey) => (
+                <option key={songKey} value={songKey}>
+                  {songKey}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* BPM */}
           <div className="flex-1">
             <label
               htmlFor="song-bpm"
@@ -164,7 +164,7 @@ const StartFirstSongPage = () => {
               min={40}
               max={240}
               value={bpm}
-              onChange={(e) => setBpm(e.target.value)}
+              onChange={(event) => setBpm(event.target.value)}
               placeholder="120"
               className="w-full rounded-xl px-3 py-3.5 outline-none transition-all duration-150"
               style={{
@@ -180,18 +180,6 @@ const StartFirstSongPage = () => {
           </div>
         </div>
 
-        {/* Error */}
-        {error && (
-          <p
-            className="text-sm text-center mb-4"
-            style={{ color: "#8B3A3A" }}
-            aria-live="polite"
-          >
-            {error}
-          </p>
-        )}
-
-        {/* Create song CTA */}
         <button
           onClick={() => handleCreate("create")}
           disabled={isSubmitting}
@@ -205,7 +193,6 @@ const StartFirstSongPage = () => {
           {isSubmitting ? "Creating..." : "Create song"}
         </button>
 
-        {/* Skip */}
         <button
           onClick={() => handleCreate("skip")}
           disabled={isSubmitting}

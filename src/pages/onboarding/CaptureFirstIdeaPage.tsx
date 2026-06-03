@@ -7,15 +7,14 @@ const CaptureFirstIdeaPage = () => {
   const { id } = useParams();
   const songId = id ?? "1";
   const [isRecording, setIsRecording] = useState(false);
-  const [pulseScale, setPulseScale] = useState(1);
 
   const handleRecord = () => {
-    // Mic permission would be requested here — Lovable wires real MediaRecorder
+    if (isRecording) return;
+
     setIsRecording(true);
-    // Simulate a short recording + redirect to voice memo added state
     setTimeout(() => {
       setIsRecording(false);
-      navigate(`/songs/${songId}`);
+      navigate(`/songs/${songId}/voice-added`);
     }, 2000);
   };
 
@@ -24,7 +23,6 @@ const CaptureFirstIdeaPage = () => {
       className="relative min-h-screen flex flex-col"
       style={{ backgroundColor: "var(--cog-cream)" }}
     >
-      {/* Warm radial glow — centered */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{
@@ -37,7 +35,6 @@ const CaptureFirstIdeaPage = () => {
         className="relative flex flex-col flex-1 items-center justify-center px-6 pb-16 pt-20"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        {/* Brand */}
         <p
           className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
           style={{ color: "var(--cog-muted)" }}
@@ -45,7 +42,6 @@ const CaptureFirstIdeaPage = () => {
           Colors of Glory
         </p>
 
-        {/* Headline */}
         <h1
           className="text-4xl font-semibold mb-3 text-center"
           style={{
@@ -64,9 +60,7 @@ const CaptureFirstIdeaPage = () => {
           Record a melody, lyric thought, chord idea, or prayer moment.
         </p>
 
-        {/* Large circular mic button */}
         <div className="relative mb-14 flex items-center justify-center">
-          {/* Pulse ring when recording */}
           {isRecording && (
             <>
               <div
@@ -75,7 +69,7 @@ const CaptureFirstIdeaPage = () => {
                   width: 160,
                   height: 160,
                   backgroundColor: "rgba(184,149,58,0.12)",
-                  animation: "ping 1.2s cubic-bezier(0,0,0.2,1) infinite",
+                  animation: "cog-record-ping 1.2s cubic-bezier(0,0,0.2,1) infinite",
                 }}
               />
               <div
@@ -84,17 +78,17 @@ const CaptureFirstIdeaPage = () => {
                   width: 140,
                   height: 140,
                   backgroundColor: "rgba(184,149,58,0.10)",
-                  animation: "ping 1.2s cubic-bezier(0,0,0.2,1) infinite 0.3s",
+                  animation: "cog-record-ping 1.2s cubic-bezier(0,0,0.2,1) infinite 0.3s",
                 }}
               />
             </>
           )}
 
           <button
-            onMouseDown={handleRecord}
-            onTouchStart={handleRecord}
-            className="relative flex items-center justify-center rounded-full transition-all duration-150 active:scale-95"
-            aria-label="Hold to record voice memo"
+            onClick={handleRecord}
+            disabled={isRecording}
+            className="relative flex items-center justify-center rounded-full transition-all duration-150 active:scale-95 disabled:cursor-default"
+            aria-label="Record voice memo"
             style={{
               width: 120,
               height: 120,
@@ -107,22 +101,17 @@ const CaptureFirstIdeaPage = () => {
                 : "0 8px 32px rgba(184,149,58,0.20)",
             }}
           >
-            <Mic
-              size={42}
-              strokeWidth={1.5}
-              style={{ color: isRecording ? "#fff" : "var(--cog-gold)" }}
-            />
+            <Mic size={42} strokeWidth={1.5} style={{ color: isRecording ? "#fff" : "var(--cog-gold)" }} />
           </button>
         </div>
 
-        {/* Recording state label */}
         {isRecording && (
-          <div className="flex items-center gap-2 mb-8">
+          <div className="flex items-center gap-2 mb-8" aria-live="polite">
             <div
               className="w-2 h-2 rounded-full"
               style={{
                 backgroundColor: "var(--cog-gold)",
-                animation: "pulse 1s ease-in-out infinite",
+                animation: "cog-record-pulse 1s ease-in-out infinite",
               }}
             />
             <p className="text-sm font-medium" style={{ color: "var(--cog-gold-alt)" }}>
@@ -131,7 +120,6 @@ const CaptureFirstIdeaPage = () => {
           </div>
         )}
 
-        {/* Record voice memo CTA */}
         <button
           onClick={handleRecord}
           disabled={isRecording}
@@ -145,7 +133,6 @@ const CaptureFirstIdeaPage = () => {
           {isRecording ? "Recording..." : "Record voice memo"}
         </button>
 
-        {/* Secondary: Write lyrics */}
         <button
           onClick={() => navigate(`/songs/${songId}/lyrics`)}
           disabled={isRecording}
@@ -163,10 +150,10 @@ const CaptureFirstIdeaPage = () => {
       </div>
 
       <style>{`
-        @keyframes ping {
+        @keyframes cog-record-ping {
           75%, 100% { transform: scale(1.4); opacity: 0; }
         }
-        @keyframes pulse {
+        @keyframes cog-record-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
         }

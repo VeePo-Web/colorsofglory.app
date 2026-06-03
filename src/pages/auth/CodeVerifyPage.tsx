@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
-const PHONE_DISPLAY = "+1 (555) 555-5555";
+const formatPhoneDisplay = (raw: string | null) => {
+  const digits = (raw ?? "").replace(/\D/g, "").slice(0, 10);
+  if (digits.length !== 10) return "+1 (555) 555-5555";
+  return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+};
 
 const CodeVerifyPage = () => {
   const navigate = useNavigate();
@@ -10,6 +14,9 @@ const CodeVerifyPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resendCountdown, setResendCountdown] = useState(30);
+  const [phoneDisplay] = useState(() =>
+    formatPhoneDisplay(sessionStorage.getItem("cog:onboarding-phone")),
+  );
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Focus first box on mount
@@ -126,7 +133,7 @@ const CodeVerifyPage = () => {
         <p className="text-base mb-10 text-center" style={{ color: "var(--cog-warm-gray)" }}>
           We sent a 6-digit code to
           <br />
-          <span style={{ color: "var(--cog-charcoal)", fontWeight: 500 }}>{PHONE_DISPLAY}</span>
+          <span style={{ color: "var(--cog-charcoal)", fontWeight: 500 }}>{phoneDisplay}</span>
         </p>
 
         {/* OTP boxes */}

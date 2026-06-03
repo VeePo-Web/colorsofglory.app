@@ -635,8 +635,8 @@
     object-fit: cover;
     /*
       No scroll-velocity blur. The blur(var(--scroll-vel) * 0.6px) gimmick
-      degrades 4K drone footage at precisely the moments it matters most.
-      Removed entirely — footage renders at full fidelity always.
+      degrades rich media at precisely the moments it matters most.
+      Removed entirely so media renders at full fidelity always.
     */
     transition:
       transform var(--dur-cine) var(--ease-out-soft),
@@ -650,7 +650,7 @@
   }
 
   .media-meta {
-    /* 0.90 at rest — work titles read as primary, not de-emphasized */
+    /* 0.90 at rest so card titles read as primary, not de-emphasized */
     opacity: 0.90;
     transform: translateY(2px);
     transition:

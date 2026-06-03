@@ -1,80 +1,102 @@
-import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ArrowLeft, Home, LogIn } from "lucide-react";
 
 const NotFound = () => {
   const location = useLocation();
 
   useEffect(() => {
-    document.title = "Page not found — Fly4MEdia";
+    document.title = "Page not found - Colors of Glory";
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-background flex flex-col">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ backgroundColor: "var(--cog-cream)" }}
+    >
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 72% 52% at 50% 82%, rgba(184,149,58,0.16) 0%, transparent 68%)",
+        }}
+      />
 
-      {/* Minimal nav — home link only */}
-      <nav className="container-x pt-8 md:pt-10">
+      <main
+        className="relative mx-auto flex min-h-screen w-full flex-col justify-center px-6 py-16"
+        style={{ maxWidth: "var(--max-w-app)" }}
+      >
         <Link
           to="/"
-          className="inline-flex items-center gap-2 t-eyebrow text-background/50 hover:text-background transition-colors duration-200"
+          className="mb-12 inline-flex min-h-11 w-fit items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+          style={{ color: "var(--cog-warm-gray)" }}
         >
-          ← Fly4MEdia
+          <ArrowLeft size={16} />
+          Songs
         </Link>
-      </nav>
 
-      {/* Main content — left-anchored, vertically centered */}
-      <div className="flex-1 container-x flex flex-col justify-center py-20">
+        <p
+          className="text-xs font-medium tracking-widest uppercase mb-5"
+          style={{ color: "var(--cog-muted)" }}
+        >
+          Colors of Glory
+        </p>
 
-        {/* Ghost 404 behind the headline */}
-        <div className="relative">
-          <span
-            className="absolute -top-8 md:-top-14 left-0 text-[clamp(8rem,25vw,18rem)] font-bold leading-none text-background/[0.03] select-none pointer-events-none tabular-nums"
-            aria-hidden
-          >
-            404
-          </span>
-
-          <p className="t-eyebrow text-background/40 mb-6 relative">
-            Error / 404
-          </p>
-          <h1 className="t-display-2 text-background mb-6 relative max-w-[14ch]">
-            Lost signal.
-          </h1>
-          <p className="t-lede text-background/55 mb-14 max-w-md relative">
-            The page you&rsquo;re looking for has drifted out of frame.
-          </p>
+        <div
+          className="mb-8 inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-medium"
+          style={{
+            backgroundColor: "rgba(184,149,58,0.12)",
+            color: "var(--cog-gold-alt)",
+            border: "1px solid rgba(184,149,58,0.22)",
+          }}
+        >
+          Page not found
         </div>
 
-        {/* Navigation options */}
-        <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+        <h1
+          className="mb-4 font-semibold leading-tight"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--cog-charcoal)",
+            fontSize: "clamp(2.5rem, 12vw, 4.5rem)",
+          }}
+        >
+          This song room is not here.
+        </h1>
+
+        <p className="mb-10 text-base leading-relaxed" style={{ color: "var(--cog-warm-gray)" }}>
+          The link may have changed, expired, or been typed incorrectly. Your songs are still safe.
+        </p>
+
+        <div className="flex flex-col gap-3">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 t-button text-background border border-background/20 hover:border-background/60 px-6 py-3 transition-colors duration-200"
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl font-semibold text-white transition-transform duration-150 active:scale-[0.97]"
+            style={{
+              backgroundColor: "var(--cog-gold)",
+              fontFamily: "var(--font-body)",
+              boxShadow: "0 4px 20px rgba(184,149,58,0.35)",
+            }}
           >
-            <span>Return home</span>
-            <span aria-hidden>↗</span>
+            <Home size={18} strokeWidth={1.7} />
+            Go to songs
           </Link>
+
           <Link
-            to="/work"
-            className="inline-flex items-center gap-2 t-button text-background/55 hover:text-background transition-colors duration-200 px-2 py-3"
+            to="/auth/login"
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl text-sm font-medium transition-transform duration-150 active:scale-[0.97]"
+            style={{
+              backgroundColor: "var(--cog-cream-light)",
+              border: "1.5px solid var(--cog-border)",
+              color: "var(--cog-charcoal)",
+              fontFamily: "var(--font-body)",
+            }}
           >
-            Browse work
-          </Link>
-          <Link
-            to="/services"
-            className="inline-flex items-center gap-2 t-button text-background/55 hover:text-background transition-colors duration-200 px-2 py-3"
-          >
-            Services
+            <LogIn size={17} strokeWidth={1.7} />
+            Sign in
           </Link>
         </div>
-      </div>
-
-      {/* Footer line */}
-      <div className="container-x pb-8 md:pb-10 border-t border-background/10 pt-6">
-        <p className="t-micro text-background/25">
-          © {new Date().getFullYear()} Fly4MEdia · Alberta, Canada
-        </p>
-      </div>
-
+      </main>
     </div>
   );
 };

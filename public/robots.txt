@@ -1,18 +1,9 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
 Allow: /
 
-Sitemap: https://fly4me.ca/sitemap.xml
+Disallow: /auth/
+Disallow: /settings/
+Disallow: /invite/
+Disallow: /songs/
 
-Sitemap: https://fly4me.ca/sitemap.xml
+Sitemap: https://colorsofglory.app/sitemap.xml

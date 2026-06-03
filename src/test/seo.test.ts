@@ -1,41 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { areaPages, getAreaBySlug, getNearbyAreas } from "@/data/seoAreas";
-import { buildBreadcrumbSchema, buildCanonicalUrl } from "@/lib/seo";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-describe("local SEO area data", () => {
-  it("contains the first 10 priority local SEO pages", () => {
-    expect(areaPages).toHaveLength(10);
-    expect(areaPages.map((area) => area.slug)).toContain("canmore");
-    expect(areaPages.map((area) => area.slug)).toContain("springbank");
+const root = process.cwd();
+
+const read = (path: string) => readFileSync(join(root, path), "utf8");
+const oldBrandPattern = new RegExp(
+  ["fly" + "4me", "Fly" + "4MEdia", "drone " + "photography", "areas" + "-we-serve"].join("|"),
+  "i",
+);
+const oldRoutePattern = new RegExp(
+  ["fly" + "4me", "areas" + "-we-serve", "services", "pricing"].join("|"),
+  "i",
+);
+
+describe("Colors of Glory public metadata", () => {
+  it("uses Colors of Glory metadata in the document head", () => {
+    const html = read("index.html");
+
+    expect(html).toContain("Colors of Glory - Songwriting Collaboration App");
+    expect(html).toContain("https://colorsofglory.app/");
+    expect(html).toContain("Everything for this song stays connected here.");
+    expect(html).not.toMatch(oldBrandPattern);
   });
 
-  it("finds an area by slug", () => {
-    expect(getAreaBySlug("bearspaw")?.name).toBe("Bearspaw");
-  });
+  it("keeps robots and sitemap pointed at colorsofglory.app", () => {
+    const robots = read("public/robots.txt");
+    const sitemap = read("public/sitemap.xml");
 
-  it("returns nearby areas without including the current area", () => {
-    const nearby = getNearbyAreas("cochrane").map((area) => area.slug);
-
-    expect(nearby).not.toContain("cochrane");
-    expect(nearby.length).toBeGreaterThan(0);
+    expect(robots).toContain("Sitemap: https://colorsofglory.app/sitemap.xml");
+    expect(sitemap).toContain("https://colorsofglory.app/");
+    expect(`${robots}\n${sitemap}`).not.toMatch(oldRoutePattern);
   });
 });
 
-describe("SEO helpers", () => {
-  it("builds canonical URLs from clean paths", () => {
-    expect(buildCanonicalUrl("/areas-we-serve/canmore")).toBe(
-      "https://fly4me.ca/areas-we-serve/canmore",
-    );
+describe("Colors of Glory route safety", () => {
+  it("wires the first onboarding path routes", () => {
+    const app = read("src/App.tsx");
+
+    expect(app).toContain('path="/onboarding/intent"');
+    expect(app).toContain('path="/onboarding/start-song"');
+    expect(app).toContain('path="/songs/:id/capture"');
+    expect(app).toContain('path="/songs/:id/voice-added"');
   });
 
-  it("builds breadcrumb schema for area pages", () => {
-    const schema = buildBreadcrumbSchema([
-      { name: "Home", path: "/" },
-      { name: "Areas We Serve", path: "/areas-we-serve" },
-      { name: "Canmore", path: "/areas-we-serve/canmore" },
-    ]);
+  it("keeps the 404 page branded to Colors of Glory", () => {
+    const notFound = read("src/pages/NotFound.tsx");
 
-    expect(schema["@type"]).toBe("BreadcrumbList");
-    expect(schema.itemListElement).toHaveLength(3);
+    expect(notFound).toContain("Colors of Glory");
+    expect(notFound).toContain("This song room is not here.");
+    expect(notFound).not.toMatch(new RegExp(["fly" + "4me", "Fly" + "4MEdia", "Browse work", "Services"].join("|"), "i"));
   });
 });
