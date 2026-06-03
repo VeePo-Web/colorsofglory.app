@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     // Founder-rate gating: only users with an active founder-code attribution
     // may purchase the discounted Founder Pro plan. The frontend should prompt
     // for a code (calling `referral-attach`) before retrying checkout.
-    if (priceId === "cog_founder_pro_monthly") {
+    if (priceId === "cog_founder_pro_monthly" || priceId === "cog_founder_pro_monthly_cad") {
       const { data: attr, error: attrErr } = await supabaseAdmin
         .from("referral_attributions")
         .select("id, referrer_type")
