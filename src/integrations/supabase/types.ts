@@ -987,6 +987,48 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_addons: {
+        Row: {
+          bytes_granted: number
+          cancelled_at: string | null
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          external_id: string
+          id: string
+          lookup_key: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bytes_granted?: number
+          cancelled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id: string
+          id?: string
+          lookup_key: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bytes_granted?: number
+          cancelled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id?: string
+          id?: string
+          lookup_key?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       storage_usage: {
         Row: {
           bytes_limit: number | null
