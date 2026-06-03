@@ -1,11 +1,15 @@
+/* Colors of Glory design tokens — must be first */
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 7%;
+    /* shadcn/ui variables — mapped to COG palette */
+    --background: 36 33% 93%;       /* #F5F0E8 cream */
+    --foreground: 30 13% 10%;       /* #1C1A17 charcoal */
 
     --card: 0 0% 100%;
     --card-foreground: 0 0% 7%;

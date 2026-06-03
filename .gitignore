@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Source document zips and extracted content
+*.zip
+zip_extracted/
