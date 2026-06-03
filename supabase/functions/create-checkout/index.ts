@@ -67,6 +67,21 @@ Deno.serve(async (req) => {
       return json({ error: "invalid_return_url" }, 400);
     }
 
+    // Founder-rate gating: only users with an active founder-code attribution
+    // may purchase the discounted Founder Pro plan. The frontend should prompt
+    // for a code (calling `referral-attach`) before retrying checkout.
+    if (priceId === "cog_founder_pro_monthly") {
+      const { data: attr, error: attrErr } = await supabaseAdmin
+        .from("referral_attributions")
+        .select("id, referrer_type")
+        .eq("referred_user_id", user.id)
+        .maybeSingle();
+      if (attrErr) return json({ error: "attribution_lookup_failed" }, 500);
+      if (!attr || attr.referrer_type !== "founder") {
+        return json({ error: "founder_code_required" }, 403);
+      }
+    }
+
     const stripe = createStripeClient(environment);
 
     const prices = await stripe.prices.list({ lookup_keys: [priceId], expand: ["data.product"] });
