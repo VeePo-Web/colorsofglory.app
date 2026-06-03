@@ -1,64 +1,55 @@
-# Pricing hero — Brunson-style scannable copy, blurred image backdrop
+## Scope
 
-## Copy rewrite
+Confirm that the 6 CAD lookup keys exported by the app SDK round-trip cleanly through Stripe → `payments-webhook` → the right DB fields. This is a verification pass — no code changes are planned. If a mapping bug surfaces, I'll patch the helper or webhook handler in a follow-up.
 
-Keep the same promise (honest pricing, footage that earns it, $600 start, Alberta) but cut it into Russell Brunson cadence: short punchy lines, one idea per line, a hook → stakes → resolution rhythm. Scannable on a phone in two seconds.
+## What I already audited (no edits)
 
-**New hero copy:**
+Mapping chain, end-to-end:
 
 ```
-h1:    Most drone footage
-       just fills space.
-       Ours moves people.
+src/integrations/cog/billing.ts          supabase/functions/_shared/stripe.ts        payments-webhook → DB
+─────────────────────────────────        ────────────────────────────────────         ────────────────────
+PRICE_IDS.pro_monthly                    planForLookupKey  "cog_pro*"   → pro         subscriptions.plan='pro',
+  = "cog_pro_monthly_cad"                defaultUnitAmount pro          → 10000         unit_amount_cents=10000,
+                                                                                        currency='cad'
 
-meta:  Honest packages from $600 · Alberta
+PRICE_IDS.founder_pro_monthly            planForLookupKey  "cog_founder*"→founder_pro subscriptions.plan='founder_pro',
+  = "cog_founder_pro_monthly_cad"        defaultUnitAmount founder_pro  → 5000          unit_amount_cents=5000,
+                                                                                        currency='cad'
+
+PRICE_IDS.storage_25gb_monthly           isStorageLookupKey  → true                   storage_addons.bytes_granted
+  = "cog_storage_25gb_monthly_cad"       bytesForStorageLookupKey "cog_storage_25gb*"  = 25 GiB, currency 'cad'
+                                          → 25 * GiB
+(same shape for 100gb / 500gb / 1tb)
 ```
 
-- Line 1 is the hook (problem).
-- Line 2 is the punch (us, different).
-- Subhead collapses price + region into one scannable meta line — no two-sentence lede.
+Founder gating in `create-checkout` accepts both legacy and `_cad` IDs:
+`priceId === "cog_founder_pro_monthly" || priceId === "cog_founder_pro_monthly_cad"`.
 
-Total: 12 words in the headline, 6 in the meta. Down from the current 11 / 6 but with a real story beat instead of two parallel statements.
+Webhook currency defaults are `'cad'` in `upsertSubscription`, `handleInvoicePaid`. Prefix-based helpers (`startsWith("cog_pro")`, `"cog_founder"`, `"cog_storage_*"`) all still match the `_cad`-suffixed keys, so no helper changes are required.
 
-## Blurred background image
+## Verification steps (read-only / synthetic)
 
-Mirror the About hero pattern (dark cinematic section, image fills, gradient overlay, text bottom-left) but with the image **blurred** so it reads as atmosphere, not subject — the headline stays the hero.
+For each of the 6 CAD lookup keys, post a signed synthetic Stripe webhook to `payments-webhook?env=sandbox` and assert the exact DB row written. Re-uses the same synthetic `USER_ID` and webhook-signing harness from the prior CAD verification run.
 
-Use `src/assets/hero-aerial.jpg` (already in the project, aerial Alberta landscape — on-brand and avoids loading a new asset). Lazy-decoded, explicit width/height, no video.
+1. `cog_pro_monthly_cad` → `customer.subscription.created`
+   - assert `subscriptions`: `plan='pro'`, `currency='cad'`, `unit_amount_cents=10000`, `status='active'`, period start/end set.
+2. `cog_founder_pro_monthly_cad` → `customer.subscription.created`
+   - assert `subscriptions`: `plan='founder_pro'`, `currency='cad'`, `unit_amount_cents=5000`.
+3. `cog_storage_25gb_monthly_cad` → `customer.subscription.created`
+   - assert `storage_addons`: `bytes_granted = 25 * 2^30`, `lookup_key='cog_storage_25gb_monthly_cad'`, `status='active'`.
+4. `cog_storage_100gb_monthly_cad` → assert `bytes_granted = 100 * 2^30`.
+5. `cog_storage_500gb_monthly_cad` → assert `bytes_granted = 500 * 2^30`.
+6. `cog_storage_1tb_monthly_cad` → assert `bytes_granted = 1024 * 2^30`.
+7. Run `current_plan(USER_ID)` and `effective_storage_limit(USER_ID)` — confirm `founder_pro` and base+addons math.
+8. Cleanup: delete the synthetic `billing_events`, `subscriptions`, `storage_addons` rows.
 
-Structure:
+## What I will NOT do here
 
-```text
-<section relative min-h-[100svh] overflow-hidden bg-[#0a0a0a]>
-  <img src=hero-aerial.jpg
-       class="absolute inset-0 w-full h-full object-cover
-              scale-110 blur-lg opacity-70"
-       loading="eager" fetchpriority="high" decoding="async"
-       width=1620 height=1080 alt="" aria-hidden />
-  <div absolute-inset gradient:
-       linear-gradient(to top,
-         rgba(8,8,8,0.92) 0%,
-         rgba(8,8,8,0.55) 40%,
-         rgba(8,8,8,0.35) 100%) />
-  <div container-x relative, bottom-aligned like About>
-     <h1 t-display-2 text-background ...>...</h1>
-     <p t-meta text-background/60 ...>...</p>
-  </div>
-</section>
-```
+- No edits to `src/pages/**` or `src/components/**` (Claude owns).
+- No live `4242` end-to-end run — still blocked on Claude shipping the embedded checkout host route. Once that route exists, the SDK→checkout→webhook path is exercised automatically by clicking each PRICE_IDS entry.
+- No new migrations. Cleanup uses the existing `service_role` delete path.
 
-`scale-110` hides the blur edge bleed. `blur-lg` (16px) is enough atmosphere without becoming mush. Dark gradient ensures WCAG AA on the white headline regardless of image region.
+## Expected outcome
 
-## Performance notes (fantasy.co bar)
-
-- Single static JPEG, no video — LCP candidate is the headline text node; image decodes off the critical path because text paints first.
-- `loading="eager"` + `fetchpriority="high"` on the bg image so the blur is present at first paint (avoids a flash of black).
-- Blur is a CSS filter on a static element — composited once, no per-frame cost; mobile parallax stays on the text wrapper only, so the blurred image never re-rasterizes during scroll.
-- Explicit width/height = zero CLS. Gradient overlay is a single paint layer.
-- No new IntersectionObservers, no new effects. Existing mobile parallax `useEffect` stays.
-
-## Files touched
-
-- `src/pages/Pricing.tsx` — rewrite `PricingHero` only. Update text content, wrap the section in the dark image-backed shell, switch text colors to `text-background`. Keep parallax ref, keep `animate-fade-up`, keep `min-h-[100svh]` mobile / `md:pt-48 lg:pt-56` desktop padding pattern.
-
-Nothing else changes. Differentiators, ProcessStrip, Packages, Add-ons, Guarantee, FAQ, CTA, schema all untouched.
+If all 6 synthetic webhooks land with `processing_error=null`, `currency='cad'`, and the asserted field values, the mapping is verified for the backend half. I'll report PASS per product and flag the UI-side as still pending Claude.
