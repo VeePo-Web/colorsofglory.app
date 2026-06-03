@@ -1,33 +1,96 @@
-## Stripe Payments — products, checkout, webhook (DONE)
+## Migration #8 — Founder-Rate Pro, Storage Add-ons, Founder-Code-Gated Checkout
 
-Backend-only setup to activate Lovable's built-in (seamless) Stripe integration and connect it to the existing `billing-webhook` edge function from Migration #6.
+Backend-only. No frontend. Implements the Growth System doc's pricing architecture on top of what Migration #7 already shipped.
 
-### What shipped
+### Pricing being implemented (from Growth System doc)
 
-- Seamless Stripe enabled (sandbox + auto-registered webhook at `/functions/v1/payments-webhook?env=sandbox|live`).
-- Product: **Colors of Glory Pro** (`cog_pro`), price `cog_pro_monthly` = $100/mo USD, tax_code `txcd_10103001` (SaaS), full compliance handling (`managed_payments: { enabled: true }`).
-- Edge functions:
-  - `create-checkout` — auth-required, resolves a Stripe Customer by `metadata.userId`, returns embedded `clientSecret`.
-  - `payments-webhook` — verifies signature, idempotent via `billing_events.external_event_id`, dispatches:
-    - `checkout.session.completed` (subscription mode) → fetch sub, upsert row with `plan='pro'`.
-    - `customer.subscription.{created,updated,deleted}` → upsert `subscriptions` row (plan + status + period).
-    - `invoice.paid` / `invoice.payment_succeeded` → `record_invoice_paid` (fires referral reward).
-    - `charge.refunded` → `record_invoice_refunded`.
-    - `charge.dispute.created` → `record_chargeback`.
-- DB helpers: `current_plan(uuid) → sub_plan`, `is_pro_user(uuid) → boolean`. Pro access includes canceled subscriptions until `current_period_end` (grace period).
-- SDK: `src/integrations/cog/billing.ts` exposes `getCurrentPlan`, `isProUser`, `getLatestSubscription`, `createCheckoutSession`, and `PRICE_IDS`.
-- Old BYOK `billing-webhook` function deleted; `config.toml` updated.
+| Product | Price ID | Amount | Notes |
+|---|---|---|---|
+| Pro (public) | `cog_pro_monthly` | $100/mo | Already created ✅ |
+| **Founder Rate Pro** | `cog_founder_pro_monthly` | **$50/mo** | New. Gated server-side by founder-code attribution. |
+| Storage +25 GB | `cog_storage_25gb_monthly` | $10/mo | New. Stackable add-on. |
+| Storage +100 GB | `cog_storage_100gb_monthly` | $25/mo | New. |
+| Storage +500 GB | `cog_storage_500gb_monthly` | $75/mo | New. |
+| Storage +1 TB | `cog_storage_1tb_monthly` | $125/mo | New. |
 
-### Business logic baked in
+All products: `tax_code = txcd_10103001` (SaaS), `managed_payments` on every checkout (full compliance handling, your choice).
 
-- **Purchase / active subscription** → `subscriptions.plan='pro'`, status from Stripe. Use `is_pro_user()` server-side to lift free-tier caps in `create-song` / storage triggers.
-- **Cancel** (`cancel_at_period_end=true` or status `canceled` with future `current_period_end`) → Pro access continues until period end, then `current_plan` flips back to `free`.
-- **Downgrade / upgrade** → handled automatically on `customer.subscription.updated` via `lookup_key` → plan mapping (`planForLookupKey`).
-- **Refund / chargeback** → existing RPCs claw back referral rewards.
-- **Free-tier enforcement on downgrade** → no destructive action. Existing songs stay editable; `create-song` blocks new ones past the free cap (unchanged behavior).
+### Why a separate Founder-Rate product instead of a Stripe promotion code
 
-### TODO (not in this step)
+The Growth System doc treats the founder rate as "privileged access through trusted songwriters" — i.e. you only ever pay $50, not "$100 with a coupon." A second product gives:
+- Clean accounting: founder revenue rolls up separately (existing `subscriptions.plan='founder_pro'` enum already exists).
+- Simpler refund/chargeback math.
+- Founder reward math (already in `record_invoice_paid`: $20/mo first 6 months, $10/mo after) keyed off `plan='founder_pro'` works without changes.
+- Avoids `managed_payments` ↔ promotion-code edge cases.
 
-- Founder Pro product + Founder discount codes (`stripe_promotion_code_id` backfill on `codes`) — waiting on uploaded pricing doc.
-- `create-portal-session` edge function for self-service cancel / payment-method updates.
-- Frontend pricing page, paywall, checkout component — Claude's domain.
+### Founder-code gating (server-side, in `create-checkout`)
+
+If `priceId === 'cog_founder_pro_monthly'`:
+1. Verify the user has an active `referral_attributions` row with `referrer_type='founder'` (already populated by `referral-attach` edge function when they redeemed a founder code at signup).
+2. If not, return `403 founder_code_required` — the frontend can prompt for the code, call `referral-attach`, then retry checkout.
+3. If yes, proceed with checkout at $50/mo.
+
+This means founder codes are redeemed **once** at signup (existing flow), and that attribution permanently unlocks the founder-rate product for that user. Codes themselves remain single-use via existing `redeem_code()` RPC.
+
+### Storage add-ons — schema
+
+New table `public.storage_addons`:
+- `id`, `user_id`, `external_id` (Stripe sub id, unique), `lookup_key` (e.g. `cog_storage_100gb_monthly`), `bytes_granted bigint`, `status text` (active/canceled/past_due), `current_period_end`, timestamps.
+- RLS: user reads own; service_role full; admin reads all.
+- GRANTs: `authenticated` SELECT, `service_role` ALL.
+
+`effective_storage_limit(user_id)` rewritten:
+```
+free_base_mb  (app_settings) -- 200MB today
++ pro_base_gb (app_settings, new) -- 100GB per Growth doc
+  if current_plan(user) IN ('pro','founder_pro')
++ SUM(bytes_granted) FROM active storage_addons
+```
+
+Add new `app_settings` rows: `pro_storage_gb = 100`.
+
+### `payments-webhook` changes
+
+Add lookup-key routing:
+- `cog_pro_monthly` / `cog_founder_pro_monthly` → existing `upsertSubscription` path (plan from `planForLookupKey`).
+- `cog_storage_*` → new `upsertStorageAddon` path:
+  - Upsert `storage_addons` row; map lookup_key → bytes (25/100/500/1024 GB).
+  - **Do NOT** call `record_invoice_paid` (storage add-ons excluded from referral rewards per launch rule).
+- `invoice.paid` continues to call `record_invoice_paid` only when the invoice's subscription resolves to a row in `subscriptions` (not `storage_addons`). Already true since lookup happens via `subscriptions.external_id`.
+
+### `_shared/stripe.ts` changes
+
+Extend `planForLookupKey()` and add `bytesForStorageLookupKey()`:
+```
+cog_pro_*           → pro
+cog_founder_pro_*   → founder_pro
+cog_storage_25gb_*  → 25  * 1024^3 bytes
+cog_storage_100gb_* → 100 * 1024^3
+cog_storage_500gb_* → 500 * 1024^3
+cog_storage_1tb_*   → 1024 * 1024^3
+```
+
+### SDK additions (`src/integrations/cog/billing.ts`)
+
+- Extend `PRICE_IDS` with founder + 4 storage SKUs.
+- Add `getStorageAddons(userId)` and `getEffectiveStorageLimit(userId)` (RPC).
+- Add `canPurchaseFounderRate(userId)` helper (checks attribution exists).
+
+### Order of operations
+
+1. **`payments--batch_create_product`** — create the 5 new products/prices in Stripe sandbox.
+2. **Migration #8** — `storage_addons` table + GRANTs + RLS, rewrite `effective_storage_limit`, seed `pro_storage_gb` app setting.
+3. **Edit `_shared/stripe.ts`** — add helpers.
+4. **Edit `create-checkout/index.ts`** — add founder-rate gating.
+5. **Edit `payments-webhook/index.ts`** — add storage-addon upsert branch.
+6. **Edit `src/integrations/cog/billing.ts`** — expose new IDs + helpers.
+7. **Update `.lovable/plan.md`**.
+
+### Deliberately NOT in this step
+
+- Founder code creation UI (already exists via `admin-founders` edge function from Migration #6).
+- Annual Pro option — Growth System doc doesn't define one; the North Star $500/yr conflicts and is older.
+- Future Team/Church $199+ plan — explicitly "later" in both docs.
+- Frontend pricing page, checkout component, storage-meter UI — Claude's domain.
+- Storage overage soft warnings (80%/95%/100%) — frontend concern.
+- Lead-magnet "First Song Free" funnel — frontend/marketing, already covered by existing free-tier enforcement.
