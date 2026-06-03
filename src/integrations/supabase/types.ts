@@ -152,6 +152,71 @@ export type Database = {
         }
         Relationships: []
       }
+      song_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by_user_id: string | null
+          created_at: string
+          created_by_user_id: string
+          expires_at: string
+          id: string
+          invited_email: string | null
+          invited_phone: string | null
+          max_uses: number
+          message: string | null
+          role: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+          status: Database["public"]["Enums"]["invite_status"]
+          token: string
+          updated_at: string
+          use_count: number
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          created_by_user_id: string
+          expires_at?: string
+          id?: string
+          invited_email?: string | null
+          invited_phone?: string | null
+          max_uses?: number
+          message?: string | null
+          role?: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+          status?: Database["public"]["Enums"]["invite_status"]
+          token: string
+          updated_at?: string
+          use_count?: number
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          created_by_user_id?: string
+          expires_at?: string
+          id?: string
+          invited_email?: string | null
+          invited_phone?: string | null
+          max_uses?: number
+          message?: string | null
+          role?: Database["public"]["Enums"]["song_member_role"]
+          song_id?: string
+          status?: Database["public"]["Enums"]["invite_status"]
+          token?: string
+          updated_at?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_invites_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_lyrics: {
         Row: {
           content: Json
@@ -321,6 +386,60 @@ export type Database = {
           },
         ]
       }
+      song_versions: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          description: string | null
+          id: string
+          kind: Database["public"]["Enums"]["version_kind"]
+          label: string | null
+          parent_version_id: string | null
+          snapshot: Json
+          song_id: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["version_kind"]
+          label?: string | null
+          parent_version_id?: string | null
+          snapshot?: Json
+          song_id: string
+          version_number?: number
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["version_kind"]
+          label?: string | null
+          parent_version_id?: string | null
+          snapshot?: Json
+          song_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_versions_parent_version_id_fkey"
+            columns: ["parent_version_id"]
+            isOneToOne: false
+            referencedRelation: "song_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_versions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       songs: {
         Row: {
           cover_color: string | null
@@ -395,6 +514,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_invite_expiry: { Args: never; Returns: string }
       generate_referral_code: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -403,6 +523,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_invite_valid: { Args: { _invite_id: string }; Returns: boolean }
       is_song_member: {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
@@ -411,6 +532,7 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
       }
+      next_song_version_number: { Args: { _song_id: string }; Returns: number }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
@@ -418,6 +540,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      invite_status: "pending" | "accepted" | "revoked" | "expired"
       plan_tier: "free" | "pro"
       section_kind:
         | "verse"
@@ -431,6 +554,7 @@ export type Database = {
         | "other"
       song_member_role: "owner" | "collaborator" | "viewer"
       song_status: "active" | "archived" | "deleted"
+      version_kind: "manual" | "auto" | "restore_point"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -559,6 +683,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      invite_status: ["pending", "accepted", "revoked", "expired"],
       plan_tier: ["free", "pro"],
       section_kind: [
         "verse",
@@ -573,6 +698,7 @@ export const Constants = {
       ],
       song_member_role: ["owner", "collaborator", "viewer"],
       song_status: ["active", "archived", "deleted"],
+      version_kind: ["manual", "auto", "restore_point"],
     },
   },
 } as const
