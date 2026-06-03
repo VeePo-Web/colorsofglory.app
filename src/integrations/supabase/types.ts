@@ -1326,6 +1326,10 @@ export type Database = {
         Returns: string
       }
       current_invite_expiry: { Args: never; Returns: string }
+      current_plan: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["sub_plan"]
+      }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
       has_role: {
@@ -1337,6 +1341,7 @@ export type Database = {
       }
       is_admin: { Args: { _uid: string }; Returns: boolean }
       is_invite_valid: { Args: { _invite_id: string }; Returns: boolean }
+      is_pro_user: { Args: { _user_id: string }; Returns: boolean }
       is_song_member: {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
