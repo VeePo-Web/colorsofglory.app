@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     const realSize = Number(fileEntry.metadata?.size ?? actual_byte_size ?? memo.byte_size);
 
     const update: Record<string, unknown> = {
-      status: "ready",
+      status: "finalized",
       byte_size: realSize,
     };
     if (duration_ms != null) update.duration_ms = duration_ms;
@@ -80,7 +80,15 @@ Deno.serve(async (req) => {
 
     // Enqueue transcript row
     await admin.from("voice_memo_transcripts").upsert(
-      { memo_id, song_id: memo.song_id, status: "pending" },
+      {
+        memo_id,
+        song_id: memo.song_id,
+        status: "pending",
+        attempt_count: 0,
+        next_attempt_at: new Date().toISOString(),
+        last_error: null,
+        error: null,
+      },
       { onConflict: "memo_id" },
     );
 
@@ -95,7 +103,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ memo_id }),
     }).catch((e) => console.error("transcribe dispatch error", e));
 
-    return jsonResponse({ memo_id, status: "ready", byte_size: realSize });
+    return jsonResponse({ memo_id, status: "finalized", byte_size: realSize });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
