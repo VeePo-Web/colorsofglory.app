@@ -1,45 +1,38 @@
-## Switch billing to CAD
+## Verification scope — what can and can't be checked
 
-Colors of Glory is a Canadian company, so all Stripe products, prices, and code defaults should be in CAD instead of USD.
+### Can't verify: pricing/checkout UI
 
-### What changes
+There is no Colors of Glory pricing/checkout UI in this repo yet. `src/pages/Pricing.tsx` and all of `src/components/**` are leftover Fly4MEdia code that we agreed not to touch — Claude Code owns the new frontend, and a CoG pricing page hasn't been built yet. The only CoG client code that references prices is the SDK at `src/integrations/cog/billing.ts`, which exports the `_cad` price IDs but doesn't render anything.
 
-**1. Stripe products / prices (test env, auto-synced to live on publish)**
+So "verify products render correctly in the pricing/checkout UI" is blocked until Claude ships a pricing page that consumes `PRICE_IDS` from the SDK. Not something I can resolve from the backend side.
 
-Create CAD-denominated prices on the existing products and update code to reference the new CAD price IDs. Stripe prices are immutable — you can't change currency on an existing price, so we add new ones and switch the app to use them.
+### Can't verify end-to-end: test payment → DB update
 
-New CAD prices (same amounts, just CAD):
-- `cog_pro_monthly_cad` — $100 CAD/mo on `cog_pro`
-- `cog_founder_pro_monthly_cad` — $50 CAD/mo on `cog_founder_pro`
-- `cog_storage_25gb_monthly_cad` — $10 CAD/mo
-- `cog_storage_100gb_monthly_cad` — $25 CAD/mo
-- `cog_storage_500gb_monthly_cad` — $75 CAD/mo
-- `cog_storage_1tb_monthly_cad` — $125 CAD/mo
+A real test-card checkout requires the embedded checkout component (frontend). Without that I can't drive a Stripe Checkout Session to completion in test mode — `create-checkout` returns a `client_secret`, but only the embedded `<EmbeddedCheckout>` component can complete the payment and trigger the webhook.
 
-Old USD prices stay in Stripe (any existing test subscriptions keep working) but the app stops referencing them.
+What I'd need from Claude Code before this is testable: a minimal checkout host route + `<StripeEmbeddedCheckout priceId={PRICE_IDS.pro_monthly} … />` so I can run `4242 4242 4242 4242` against it and watch the webhook fire.
 
-**2. Edge function code**
+### Can verify now (backend-only)
 
-- `supabase/functions/_shared/stripe.ts` — change `defaultUnitAmountForPlan` currency from `usd` to `cad`; update `planForLookupKey` / `bytesForStorageLookupKey` / `isStorageLookupKey` to recognize the new `_cad` lookup keys alongside (or instead of) the existing ones.
-- `supabase/functions/create-checkout/index.ts` — default currency `cad`; map plan → new CAD price IDs.
-- `supabase/functions/payments-webhook/index.ts` — `upsertStorageAddon` and subscription routing keyed on the new `_cad` lookup keys.
+I'll run these checks and report results:
 
-**3. SDK**
+1. **Stripe prices exist in CAD** — call `create-checkout` with each of the 6 new `_cad` lookup keys and confirm it returns a `clientSecret` (proves Stripe resolved the lookup_key → live CAD price, and that gating logic still works). For `cog_founder_pro_monthly_cad` I'll confirm the 403 `founder_code_required` path on an unattributed user, then attach a founder code via SQL and confirm it then succeeds.
+2. **Webhook → DB mapping is correct for CAD** — `POST` synthetic Stripe-shaped JSON to `payments-webhook?env=sandbox` for:
+   - `customer.subscription.created` with `lookup_key: cog_pro_monthly_cad` → row appears in `subscriptions` with `plan='pro'`, `currency='cad'`, `unit_amount_cents=10000`.
+   - Same for `cog_founder_pro_monthly_cad` → `plan='founder_pro'`, `currency='cad'`, `unit_amount_cents=5000`.
+   - `cog_storage_100gb_monthly_cad` → row appears in `storage_addons` (not `subscriptions`), `bytes_granted = 100 GiB`.
+   - `invoice.paid` for the pro sub → `record_invoice_paid` runs, reward path is reachable, no errors.
+   
+   (Signed webhooks: I'll either temporarily skip signature verification for the test, or sign with `PAYMENTS_SANDBOX_WEBHOOK_SECRET`. I'll use signing — cleaner.)
+3. **`current_plan` / `effective_storage_limit` reflect the changes** — query both RPCs for the synthetic user after each step and confirm:
+   - Pro user: `current_plan = 'pro'`, `effective_storage_limit = 100 GiB`.
+   - Pro + 100 GB addon: `effective_storage_limit = 200 GiB`.
+4. **Cleanup** — delete the synthetic `subscriptions` / `storage_addons` / `billing_events` rows so test data doesn't leak.
 
-- `src/integrations/cog/billing.ts` — `PRICE_IDS` constants point at the new `_cad` IDs.
+### After verification
 
-**4. Compliance handling**
+I'll report:
+- Pass/fail for each backend check above with the actual DB values observed.
+- A clear "blocked on frontend" note for the UI-render and live-card portions, with the exact Claude task needed to unblock it (mount `<StripeEmbeddedCheckout>` on a route that takes a `priceId` query param, so I can test any plan without waiting for the full pricing page).
 
-Already configured with `managed_payments: { enabled: true }` and `txcd_10103001`. CAD is fully supported for a Canadian seller — no further changes.
-
-### What does NOT change
-
-- Tax codes, RLS, schema, founder-code gating, storage_addons table, referral logic — all currency-agnostic.
-- No frontend pricing page exists yet (Claude's scope), so no UI copy to update here.
-- Old USD price IDs are left in Stripe for safety; they're just unreferenced.
-
-### Build sequence
-
-1. `payments--batch_create_product`–style call: add 6 new CAD prices to the existing 6 products.
-2. Patch the 3 edge functions + shared stripe util + SDK constants to use the `_cad` lookup keys and `cad` currency default.
-3. No DB migration required.
+If you'd rather I skip the synthetic-webhook path and just wait for Claude to build the checkout component before verifying anything, say so and I'll hold.
