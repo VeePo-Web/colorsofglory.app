@@ -1,158 +1,80 @@
-# Migration #4 — Voice Memos + Storage Usage + Transcription
+# Voice Memo Lifecycle + Transcription Auto-Retry
 
-Adds per-section voice memos with upload, playback via signed URLs, and async transcription through the Lovable AI Gateway (no user-provided API key).
+Extends Migration #4 with an explicit lifecycle on `voice_memos`, retry bookkeeping on `voice_memo_transcripts`, and a scheduled worker that re-drives failed/pending transcriptions.
 
-## New enums
+## Schema changes (Migration #5)
 
-- `memo_status` — `uploading | ready | failed | deleted`
-- `transcription_status` — `pending | processing | ready | failed | skipped`
+### 1. Expand `memo_status` enum
+Add new values so the memo row tracks the full lifecycle:
 
-## New tables
+- `uploading` (existing) — row created, awaiting bucket PUT
+- `uploaded` (new) — bucket object present, not yet finalized
+- `finalized` (new) — size verified, transcript queued; replaces today's `ready`
+- `transcribed` (new) — transcript reached `ready`
+- `failed` (existing) — unrecoverable upload/finalize error
+- `deleted` (existing)
 
-### 1. `voice_memos`
-- `id uuid pk`
-- `song_id uuid` → `songs(id)` ON DELETE CASCADE
-- `section_id uuid` nullable → `song_sections(id)` ON DELETE SET NULL (memo can be pinned to the room or to a section)
-- `author_user_id uuid`
-- `storage_path text` (bucket-relative, `{owner_user_id}/{song_id}/{memo_id}.{ext}`)
-- `mime_type text`, `duration_ms int`, `byte_size bigint`
-- `title text` (optional user label, e.g. "Bridge hum take 2")
-- `status memo_status` default `uploading`
-- `waveform_peaks jsonb` (downsampled peaks for UI; client-supplied)
-- `created_at`, `updated_at`
+Postgres enums can only be appended, so we add the three new values and migrate existing `ready` rows to `finalized` (and to `transcribed` if their transcript is already ready). `ready` stays in the enum (Postgres can't drop values) but is no longer written by new code.
 
-### 2. `voice_memo_transcripts`
-Separate table so transcripts can be re-generated and so we can RLS them identically to memos without bloating memo rows.
-- `id uuid pk`
-- `memo_id uuid` UNIQUE → `voice_memos(id)` ON DELETE CASCADE
-- `song_id uuid` (denormalized for RLS)
-- `status transcription_status` default `pending`
-- `language text`
-- `text text` (full transcript, may be empty until ready)
-- `segments jsonb` (`[{start_ms, end_ms, text}]` — model-provided)
-- `model text` (e.g. `google/gemini-2.5-flash`)
-- `error text`
-- `created_at`, `updated_at`
+The storage-delta trigger updates to count any row in (`finalized`, `transcribed`) — the byte size doesn't change between finalize and transcribe, so usage stays correct.
 
-### 3. `storage_usage`
-Per-user (song owner) rolling counter. Free-plan cap enforced server-side.
-- `user_id uuid pk`
-- `bytes_used bigint default 0`
-- `bytes_limit bigint` (snapshot of plan cap at last refresh; null = use `app_settings.free_storage_mb`)
-- `updated_at`
+### 2. Add retry fields on `voice_memo_transcripts`
 
-## Helpers (SECURITY DEFINER, search_path=public)
+- `attempt_count int default 0`
+- `max_attempts int default 5`
+- `next_attempt_at timestamptz default now()` — when the worker is allowed to retry
+- `last_attempt_at timestamptz`
+- `last_error text` — kept alongside existing `error` for clarity
+- Partial index on `(next_attempt_at)` where `status in ('pending','failed')` and `attempt_count < max_attempts` so the worker query is cheap.
 
-- `voice_memo_signed_path(_memo_id uuid)` returns text — returns the storage path if `is_song_member(memo.song_id, auth.uid())`, else null. Used by the edge function that mints signed URLs.
-- `apply_storage_delta(_owner_user_id uuid, _delta bigint)` — atomically updates `storage_usage.bytes_used`. Service-role only.
-- `effective_storage_limit(_user_id uuid) returns bigint` — pro plan cap if user is on pro (when plans table arrives in Migration #6), else `app_settings.free_storage_mb * 1024 * 1024`. For now reads free cap only — will be amended.
+### 3. New helper: `mark_memo_transcribed(memo_id uuid)`
+SECURITY DEFINER. Called by the transcribe function on success to flip `voice_memos.status` to `transcribed`. Validates the transcript row is `ready`.
 
-## Triggers
-
-- `voice_memos` INSERT/UPDATE/DELETE → `touch_song_activity`
-- `voice_memos` AFTER INSERT (status=`ready`) and AFTER UPDATE OF status/byte_size → `apply_storage_delta` based on diff (positive on become-ready, negative on delete/become-failed)
-- `voice_memos` AFTER DELETE → `apply_storage_delta(owner, -byte_size)` if previously ready
-- `updated_at` triggers on all three new tables
-
-Storage charge is counted against the **song owner**, not the uploading member (per memory). Trigger fetches owner via `songs.owner_user_id`.
-
-## GRANTs
-
-All three tables:
-- `GRANT SELECT, INSERT, UPDATE, DELETE TO authenticated`
-- `GRANT ALL TO service_role`
-- No `anon`.
-
-`storage_usage` SELECT is owner-only (RLS); INSERT/UPDATE go through service role.
-
-## RLS policies
-
-### `voice_memos`
-- SELECT: `is_song_member(song_id, auth.uid())`
-- INSERT: `is_song_member(song_id, auth.uid()) AND author_user_id = auth.uid()`
-- UPDATE: author or song owner; cannot change `song_id` / `author_user_id` / `byte_size` (enforced by trigger guard)
-- DELETE: author or song owner
-
-### `voice_memo_transcripts`
-- SELECT: `is_song_member(song_id, auth.uid())`
-- INSERT/UPDATE: service role only (edge function writes transcripts); no authenticated policy → effectively read-only for users
-- DELETE: cascades from memo
-
-### `storage_usage`
-- SELECT: `user_id = auth.uid()`
-- All writes: service role only
-
-## Indexes
-
-- `voice_memos(song_id, created_at desc)`
-- `voice_memos(section_id)` partial where `section_id is not null`
-- `voice_memos(author_user_id)`
-- `voice_memo_transcripts(song_id)`
-- `voice_memo_transcripts(status)` partial where `status in ('pending','processing')` (for the worker)
-
-## Realtime
-
-- `voice_memos`, `voice_memo_transcripts` → `REPLICA IDENTITY FULL` + add to `supabase_realtime` so the section UI updates when a memo finishes uploading or its transcript becomes ready.
-
-## Storage
-
-- Create private bucket `voice-memos` via `supabase--storage_create_bucket(name="voice-memos", public=false)`.
-- RLS on `storage.objects`:
-  - SELECT/INSERT/UPDATE/DELETE for `authenticated` only when `bucket_id = 'voice-memos'` AND `is_song_member((storage.foldername(name))[2]::uuid, auth.uid())` (path layout: `{owner}/{song_id}/{memo}.{ext}`)
-  - Full access for `service_role`
-- All client playback goes through signed URLs minted by the `voice-memo-signed-url` edge function (5-minute TTL). No public reads.
-
-## Edge functions
-
-Three Deno functions, all with CORS and JWT validation:
-
-### `voice-memo-upload-url`
-- Auth: requires logged-in user
-- Input: `{ song_id, section_id?, mime_type, byte_size, duration_ms?, title? }`
-- Validates: caller is `is_song_member(song_id)`, `mime_type` in allowlist (`audio/webm`, `audio/mp4`, `audio/mpeg`, `audio/wav`, `audio/ogg`), `byte_size <= 50 MB`, and `(owner.bytes_used + byte_size) <= effective_storage_limit(owner)` → returns 413 if over cap
-- Creates a `voice_memos` row (`status=uploading`) and returns a Supabase Storage signed upload URL for `{owner}/{song_id}/{memo_id}.{ext}` plus the memo id
+## Edge function changes
 
 ### `voice-memo-finalize`
-- Auth: required; caller must be the memo author or song owner
-- Input: `{ memo_id, actual_byte_size, duration_ms?, waveform_peaks? }`
-- Verifies object exists in bucket and matches size, flips memo to `status=ready`, enqueues transcription by inserting a `voice_memo_transcripts` row with `status='pending'`, then invokes `voice-memo-transcribe` asynchronously
-- Storage delta trigger fires automatically when status becomes `ready`
+- On success, set `voice_memos.status = 'finalized'` (was `ready`).
+- Insert/upsert transcript row with `status='pending'`, `attempt_count=0`, `next_attempt_at=now()`.
+- Still fires `voice-memo-transcribe` immediately for low latency; the cron worker only catches stragglers.
 
 ### `voice-memo-transcribe`
-- Service-role only (called server-to-server)
-- Input: `{ memo_id }`
-- Flow: download object via service-role client → POST audio to Lovable AI Gateway with `google/gemini-2.5-flash` (multimodal audio input) → write `text` + `segments` back to `voice_memo_transcripts` with `status='ready'`, or `status='failed'` + `error` on exception
-- No user content sent to third parties — only the Lovable AI Gateway (per memory)
-- Retry: on failure, leave row as `failed`; manual retry exposed via a separate `voice-memo-retranscribe` later
+Rework to be idempotent and retry-aware:
+1. Atomically claim the row: `UPDATE voice_memo_transcripts SET status='processing', attempt_count=attempt_count+1, last_attempt_at=now() WHERE memo_id=$1 AND status IN ('pending','failed') AND attempt_count < max_attempts RETURNING *`. If no row claimed, exit 200 (already done / exhausted / in flight).
+2. Run Gemini Flash transcription as today.
+3. On success: write transcript `status='ready'`, clear errors, then call `mark_memo_transcribed`.
+4. On failure: compute backoff (`min(60s * 2^attempt_count, 30 min)` + jitter), set `status='failed'`, `last_error`, `next_attempt_at = now() + backoff`. If `attempt_count >= max_attempts` it stays `failed` and the worker stops picking it up.
 
-### `voice-memo-signed-url`
-- Auth: required; caller must be `is_song_member`
-- Input: `{ memo_id }`
-- Returns a 5-minute signed download URL for playback
+### New `voice-memo-transcribe-worker` (scheduled)
+- Service-role only.
+- Query: `SELECT memo_id FROM voice_memo_transcripts WHERE status IN ('pending','failed') AND attempt_count < max_attempts AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 10`.
+- For each, invoke `voice-memo-transcribe` (fire-and-forget, capped concurrency of 3 via Promise pool).
+- Returns counts for observability.
 
-## SDK additions (`src/integrations/cog/`)
+### Scheduling
+Enable `pg_cron` + `pg_net` and schedule the worker every minute via `cron.schedule`. Uses `supabase--insert` (not migration) per project-specific URL/anon-key rule. One-minute cadence keeps the typical retry latency well under a minute while letting backoff stretch out.
 
-Tiny typed wrappers (no UI):
-- `memos.ts` — `createUploadUrl`, `finalizeUpload`, `getPlaybackUrl`, `listForSong`, `listForSection`, `deleteMemo`, `subscribeMemos(songId, cb)`
-- `storage.ts` — `getStorageUsage()`, `getEffectiveLimit()`
+## SDK changes (`src/integrations/cog/memos.ts`)
 
-Hooks return React Query results and zod-validated payloads. Claude consumes these — never reaches into Supabase directly.
+- Update `VoiceMemo` type usage — no API shape change, but consumers should treat `status` as the lifecycle field. Add a typed enum re-export:
+  ```ts
+  export type MemoLifecycle = "uploading" | "uploaded" | "finalized" | "transcribed" | "failed" | "deleted";
+  ```
+- Add `retryTranscription(memoId)` thin wrapper that resets `attempt_count=0`, `status='pending'`, `next_attempt_at=now()` via a new `voice-memo-retranscribe` edge function (service-checked to require author or song owner). This unblocks rows that exhausted their attempts when the user explicitly asks for another try.
+- `listMemosForSong` / `listMemosForSection` already return the row including `status`; no change needed beyond docs.
 
-## What is NOT in this migration
+## What is NOT in this plan
 
-- Layered/overdub memos — open question, leave for later
-- Per-memo "smart summary" / mood tagging — Phase 4 canvas PDF read still pending
-- Storage add-on purchases — Stripe migration
-- Pro plan storage cap — pending plans table in Migration #6 (`effective_storage_limit` returns free cap until then)
-- Section vs room scoping UI semantics — Claude's call
+- Switching the worker to Inngest — keep pg_cron to avoid a new connector dependency. Inngest stays an option for later phases.
+- Streaming/partial transcript updates.
+- Memo-side activity feed entries (Migration #6 territory).
 
 ## Sequence
 
-1. Migration creating enums, tables, helpers, RLS, indexes, realtime, storage-usage triggers
-2. `supabase--storage_create_bucket` for `voice-memos` (private)
-3. Second migration: RLS policies on `storage.objects` for the new bucket
-4. Deploy four edge functions
-5. Add SDK files under `src/integrations/cog/`
-6. Run linter; expected new SECURITY DEFINER warnings (4–5) for the storage/transcript helpers — same intentional pattern as previous migrations
+1. Migration: enum values, transcript retry columns, partial index, `mark_memo_transcribed` helper, backfill `ready` → `finalized`/`transcribed`.
+2. Update `voice-memo-finalize` and `voice-memo-transcribe`.
+3. Add `voice-memo-transcribe-worker` and `voice-memo-retranscribe` edge functions.
+4. `supabase--insert` to enable `pg_cron`/`pg_net` and schedule the worker every minute.
+5. Update SDK (`memos.ts`) with the lifecycle type and `retryTranscription` helper.
+6. Run linter; expected SECURITY DEFINER warnings only (same accepted pattern).
 
-After approval I'll work through these steps in order, pausing only if a step needs your input (e.g. if a non-default behavior shows up).
+After your approval I'll run through these in order without pausing unless something surprises me.

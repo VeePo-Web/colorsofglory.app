@@ -31,19 +31,18 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user) return jsonResponse({ error: "Unauthorized" }, 401);
     const userId = userData.user.id;
 
-    const { memo_id, actual_byte_size, duration_ms, waveform_peaks } = await req.json();
-    if (!memo_id || typeof memo_id !== "string") return jsonResponse({ error: "memo_id required" }, 400);
+    const { memo_id } = await req.json();
+    if (!memo_id) return jsonResponse({ error: "memo_id required" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const { data: memo, error: memoErr } = await admin
       .from("voice_memos")
-      .select("id, song_id, author_user_id, storage_path, byte_size, status")
+      .select("id, song_id, author_user_id")
       .eq("id", memo_id)
       .maybeSingle();
     if (memoErr || !memo) return jsonResponse({ error: "Memo not found" }, 404);
 
-    // Caller must be author or song owner
     const { data: isOwner } = await admin.rpc("is_song_owner", {
       _song_id: memo.song_id,
       _user_id: userId,
@@ -52,58 +51,19 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Forbidden" }, 403);
     }
 
-    // Verify object exists
-    const { data: head, error: headErr } = await admin.storage
-      .from("voice-memos")
-      .list(memo.storage_path.substring(0, memo.storage_path.lastIndexOf("/")), {
-        search: memo.storage_path.split("/").pop(),
-        limit: 1,
-      });
-    if (headErr) return jsonResponse({ error: headErr.message }, 500);
-    const fileEntry = head?.[0];
-    if (!fileEntry) {
-      await admin.from("voice_memos").update({ status: "failed" }).eq("id", memo_id);
-      return jsonResponse({ error: "Upload not found in storage" }, 404);
-    }
+    await admin.rpc("reset_transcript_attempts", { _memo_id: memo_id });
 
-    const realSize = Number(fileEntry.metadata?.size ?? actual_byte_size ?? memo.byte_size);
-
-    const update: Record<string, unknown> = {
-      status: "finalized",
-      byte_size: realSize,
-    };
-    if (duration_ms != null) update.duration_ms = duration_ms;
-    if (waveform_peaks != null) update.waveform_peaks = waveform_peaks;
-
-    const { error: updErr } = await admin.from("voice_memos").update(update).eq("id", memo_id);
-    if (updErr) return jsonResponse({ error: updErr.message }, 500);
-
-    // Enqueue transcript row
-    await admin.from("voice_memo_transcripts").upsert(
-      {
-        memo_id,
-        song_id: memo.song_id,
-        status: "pending",
-        attempt_count: 0,
-        next_attempt_at: new Date().toISOString(),
-        last_error: null,
-        error: null,
-      },
-      { onConflict: "memo_id" },
-    );
-
-    // Fire and forget transcribe
-    const transcribeUrl = `${SUPABASE_URL}/functions/v1/voice-memo-transcribe`;
-    fetch(transcribeUrl, {
+    // Fire-and-forget immediate run
+    fetch(`${SUPABASE_URL}/functions/v1/voice-memo-transcribe`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${SERVICE_KEY}`,
       },
       body: JSON.stringify({ memo_id }),
-    }).catch((e) => console.error("transcribe dispatch error", e));
+    }).catch((e) => console.error("retranscribe dispatch error", e));
 
-    return jsonResponse({ memo_id, status: "finalized", byte_size: realSize });
+    return jsonResponse({ memo_id, status: "queued" });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }

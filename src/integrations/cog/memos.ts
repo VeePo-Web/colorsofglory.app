@@ -4,6 +4,23 @@ import type { Database } from "@/integrations/supabase/types";
 export type VoiceMemo = Database["public"]["Tables"]["voice_memos"]["Row"];
 export type VoiceMemoTranscript = Database["public"]["Tables"]["voice_memo_transcripts"]["Row"];
 
+/** Lifecycle stages for a voice memo. `ready` is legacy — new rows use the others. */
+export type MemoLifecycle =
+  | "uploading"
+  | "uploaded"
+  | "finalized"
+  | "transcribed"
+  | "failed"
+  | "deleted"
+  | "ready";
+
+export type TranscriptStatus =
+  | "pending"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "skipped";
+
 export interface CreateUploadUrlInput {
   songId: string;
   sectionId?: string | null;
@@ -97,6 +114,14 @@ export async function getTranscript(memoId: string): Promise<VoiceMemoTranscript
 
 export async function deleteMemo(memoId: string): Promise<void> {
   const { error } = await supabase.from("voice_memos").delete().eq("id", memoId);
+  if (error) throw error;
+}
+
+/** Reset attempt count and re-queue transcription for a failed memo. */
+export async function retryTranscription(memoId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke("voice-memo-retranscribe", {
+    body: { memo_id: memoId },
+  });
   if (error) throw error;
 }
 

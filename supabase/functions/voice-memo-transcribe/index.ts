@@ -53,9 +53,22 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (memoErr || !memo) return jsonResponse({ error: "Memo not found" }, 404);
 
+    // Atomically claim the row (sets status=processing, attempts++)
+    const { data: claimRows, error: claimErr } = await admin.rpc("claim_transcript_attempt", {
+      _memo_id: memo_id,
+    });
+    if (claimErr) return jsonResponse({ error: claimErr.message }, 500);
+    const claim = Array.isArray(claimRows) ? claimRows[0] : claimRows;
+    if (!claim) {
+      // Nothing to do: already ready, in flight, or exhausted
+      return jsonResponse({ memo_id, status: "skipped" });
+    }
+    const attempt: number = claim.attempt_count;
+    const maxAttempts: number = claim.max_attempts;
+
     await admin
       .from("voice_memo_transcripts")
-      .update({ status: "processing", model: MODEL })
+      .update({ model: MODEL })
       .eq("memo_id", memo_id);
 
     try {
@@ -107,17 +120,38 @@ Deno.serve(async (req) => {
           segments: [],
           model: MODEL,
           error: null,
+          last_error: null,
         })
         .eq("memo_id", memo_id);
 
-      return jsonResponse({ memo_id, status: "ready", chars: text.length });
+      // Flip the memo lifecycle to 'transcribed'
+      await admin.rpc("mark_memo_transcribed", { _memo_id: memo_id });
+
+      return jsonResponse({ memo_id, status: "ready", chars: text.length, attempt });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // Exponential backoff: 60s * 2^attempt, capped at 30min, with ±20% jitter
+      const baseMs = Math.min(60_000 * Math.pow(2, attempt), 30 * 60_000);
+      const jitter = baseMs * (0.8 + Math.random() * 0.4);
+      const nextAt = new Date(Date.now() + jitter).toISOString();
+      const exhausted = attempt >= maxAttempts;
       await admin
         .from("voice_memo_transcripts")
-        .update({ status: "failed", error: msg })
+        .update({
+          status: "failed",
+          error: msg,
+          last_error: msg,
+          next_attempt_at: exhausted ? new Date(Date.now() + 365 * 24 * 3600_000).toISOString() : nextAt,
+        })
         .eq("memo_id", memo_id);
-      return jsonResponse({ memo_id, status: "failed", error: msg }, 500);
+      return jsonResponse({
+        memo_id,
+        status: "failed",
+        error: msg,
+        attempt,
+        will_retry: !exhausted,
+        next_attempt_at: exhausted ? null : nextAt,
+      }, 500);
     }
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
