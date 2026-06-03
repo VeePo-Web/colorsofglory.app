@@ -35,6 +35,98 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      billing_events: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          external_event_id: string
+          id: string
+          invoice_external_id: string | null
+          kind: Database["public"]["Enums"]["billing_event_kind"]
+          occurred_at: string
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          subscription_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          external_event_id: string
+          id?: string
+          invoice_external_id?: string | null
+          kind: Database["public"]["Enums"]["billing_event_kind"]
+          occurred_at?: string
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          subscription_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          external_event_id?: string
+          id?: string
+          invoice_external_id?: string | null
+          kind?: Database["public"]["Enums"]["billing_event_kind"]
+          occurred_at?: string
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          subscription_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_events_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chord_progressions: {
         Row: {
           chords: Json
@@ -83,6 +175,65 @@ export type Database = {
           },
         ]
       }
+      codes: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          discount_cents: number
+          expires_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions: number | null
+          owner_founder_id: string | null
+          owner_user_id: string | null
+          redemption_count: number
+          status: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id: string | null
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          discount_cents?: number
+          expires_at?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions?: number | null
+          owner_founder_id?: string | null
+          owner_user_id?: string | null
+          redemption_count?: number
+          status?: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id?: string | null
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          discount_cents?: number
+          expires_at?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["code_kind"]
+          max_redemptions?: number | null
+          owner_founder_id?: string | null
+          owner_user_id?: string | null
+          redemption_count?: number
+          status?: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id?: string | null
+          updated_at?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "codes_owner_founder_id_fkey"
+            columns: ["owner_founder_id"]
+            isOneToOne: false
+            referencedRelation: "founders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_submissions: {
         Row: {
           created_at: string
@@ -112,6 +263,205 @@ export type Database = {
           services?: string[] | null
         }
         Relationships: []
+      }
+      credit_ledger: {
+        Row: {
+          amount_cents: number
+          applied_at: string | null
+          applied_to_invoice_external_id: string | null
+          available_at: string | null
+          created_at: string
+          id: string
+          idempotency_key: string
+          reversed_at: string | null
+          source_reward_event_id: string | null
+          status: Database["public"]["Enums"]["credit_status"]
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          applied_at?: string | null
+          applied_to_invoice_external_id?: string | null
+          available_at?: string | null
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          reversed_at?: string | null
+          source_reward_event_id?: string | null
+          status?: Database["public"]["Enums"]["credit_status"]
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          applied_at?: string | null
+          applied_to_invoice_external_id?: string | null
+          available_at?: string | null
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          reversed_at?: string | null
+          source_reward_event_id?: string | null
+          status?: Database["public"]["Enums"]["credit_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_source_reward_event_id_fkey"
+            columns: ["source_reward_event_id"]
+            isOneToOne: false
+            referencedRelation: "reward_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      founders: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          display_name: string
+          id: string
+          notes: string | null
+          paused_at: string | null
+          payout_method_status: string
+          revoked_at: string | null
+          reward_profile: Json
+          slug: string
+          status: Database["public"]["Enums"]["founder_status"]
+          tier: Database["public"]["Enums"]["founder_tier"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          display_name: string
+          id?: string
+          notes?: string | null
+          paused_at?: string | null
+          payout_method_status?: string
+          revoked_at?: string | null
+          reward_profile?: Json
+          slug: string
+          status?: Database["public"]["Enums"]["founder_status"]
+          tier?: Database["public"]["Enums"]["founder_tier"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          display_name?: string
+          id?: string
+          notes?: string | null
+          paused_at?: string | null
+          payout_method_status?: string
+          revoked_at?: string | null
+          reward_profile?: Json
+          slug?: string
+          status?: Database["public"]["Enums"]["founder_status"]
+          tier?: Database["public"]["Enums"]["founder_tier"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      fraud_flags: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          reason: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          severity?: string
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          reason?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          severity?: string
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: []
+      }
+      payouts: {
+        Row: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          approved_at?: string | null
+          approved_by_user_id?: string | null
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          founder_id: string
+          id?: string
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          provider?: string | null
+          provider_payout_id?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          approved_at?: string | null
+          approved_by_user_id?: string | null
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          founder_id?: string
+          id?: string
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          provider?: string | null
+          provider_payout_id?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_founder_id_fkey"
+            columns: ["founder_id"]
+            isOneToOne: false
+            referencedRelation: "founders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -151,6 +501,155 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      referral_attributions: {
+        Row: {
+          attributed_at: string
+          code_id: string | null
+          id: string
+          locked: boolean
+          override_by_user_id: string | null
+          override_reason: string | null
+          referred_user_id: string
+          referrer_founder_id: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id: string | null
+          source: Database["public"]["Enums"]["attribution_source"]
+        }
+        Insert: {
+          attributed_at?: string
+          code_id?: string | null
+          id?: string
+          locked?: boolean
+          override_by_user_id?: string | null
+          override_reason?: string | null
+          referred_user_id: string
+          referrer_founder_id?: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id?: string | null
+          source: Database["public"]["Enums"]["attribution_source"]
+        }
+        Update: {
+          attributed_at?: string
+          code_id?: string | null
+          id?: string
+          locked?: boolean
+          override_by_user_id?: string | null
+          override_reason?: string | null
+          referred_user_id?: string
+          referrer_founder_id?: string | null
+          referrer_type?: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id?: string | null
+          source?: Database["public"]["Enums"]["attribution_source"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_attributions_code_id_fkey"
+            columns: ["code_id"]
+            isOneToOne: false
+            referencedRelation: "codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_attributions_referrer_founder_id_fkey"
+            columns: ["referrer_founder_id"]
+            isOneToOne: false
+            referencedRelation: "founders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reward_events: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          hold_until: string
+          id: string
+          idempotency_key: string
+          invoice_external_id: string
+          paid_month_index: number | null
+          payout_id: string | null
+          period_end: string | null
+          period_start: string | null
+          referred_user_id: string
+          referrer_founder_id: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id: string | null
+          reversed_by_event_id: string | null
+          reward_kind: Database["public"]["Enums"]["reward_kind"]
+          status: Database["public"]["Enums"]["reward_status"]
+          subscription_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          hold_until?: string
+          id?: string
+          idempotency_key: string
+          invoice_external_id: string
+          paid_month_index?: number | null
+          payout_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          referred_user_id: string
+          referrer_founder_id?: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id?: string | null
+          reversed_by_event_id?: string | null
+          reward_kind: Database["public"]["Enums"]["reward_kind"]
+          status?: Database["public"]["Enums"]["reward_status"]
+          subscription_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          hold_until?: string
+          id?: string
+          idempotency_key?: string
+          invoice_external_id?: string
+          paid_month_index?: number | null
+          payout_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          referred_user_id?: string
+          referrer_founder_id?: string | null
+          referrer_type?: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id?: string | null
+          reversed_by_event_id?: string | null
+          reward_kind?: Database["public"]["Enums"]["reward_kind"]
+          status?: Database["public"]["Enums"]["reward_status"]
+          subscription_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reward_events_payout_fk"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reward_events_referrer_founder_id_fkey"
+            columns: ["referrer_founder_id"]
+            isOneToOne: false
+            referencedRelation: "founders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reward_events_reversed_by_event_id_fkey"
+            columns: ["reversed_by_event_id"]
+            isOneToOne: false
+            referencedRelation: "reward_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reward_events_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       song_invites: {
         Row: {
@@ -509,6 +1008,65 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          cancelled_at: string | null
+          code_id: string | null
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
+          external_id: string | null
+          id: string
+          plan: Database["public"]["Enums"]["sub_plan"]
+          started_at: string
+          status: string
+          unit_amount_cents: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          code_id?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id?: string | null
+          id?: string
+          plan?: Database["public"]["Enums"]["sub_plan"]
+          started_at?: string
+          status?: string
+          unit_amount_cents?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          code_id?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id?: string | null
+          id?: string
+          plan?: Database["public"]["Enums"]["sub_plan"]
+          started_at?: string
+          status?: string
+          unit_amount_cents?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_code_id_fkey"
+            columns: ["code_id"]
+            isOneToOne: false
+            referencedRelation: "codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -663,9 +1221,96 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_override_attribution: {
+        Args: {
+          _new_referrer_id: string
+          _new_referrer_type: Database["public"]["Enums"]["referrer_type"]
+          _reason: string
+          _referred_user: string
+        }
+        Returns: {
+          attributed_at: string
+          code_id: string | null
+          id: string
+          locked: boolean
+          override_by_user_id: string | null
+          override_reason: string | null
+          referred_user_id: string
+          referrer_founder_id: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id: string | null
+          source: Database["public"]["Enums"]["attribution_source"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "referral_attributions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      apply_credit_to_invoice: {
+        Args: {
+          _invoice_amount_cents: number
+          _invoice_external_id: string
+          _user: string
+        }
+        Returns: number
+      }
       apply_storage_delta: {
         Args: { _delta: number; _owner_user_id: string }
         Returns: undefined
+      }
+      approve_payout: {
+        Args: { _payout: string }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attribute_referral: {
+        Args: {
+          _code_value: string
+          _referred_user: string
+          _source: Database["public"]["Enums"]["attribution_source"]
+        }
+        Returns: {
+          attributed_at: string
+          code_id: string | null
+          id: string
+          locked: boolean
+          override_by_user_id: string | null
+          override_reason: string | null
+          referred_user_id: string
+          referrer_founder_id: string | null
+          referrer_type: Database["public"]["Enums"]["referrer_type"]
+          referrer_user_id: string | null
+          source: Database["public"]["Enums"]["attribution_source"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "referral_attributions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       claim_transcript_attempt: {
         Args: { _memo_id: string }
@@ -675,6 +1320,10 @@ export type Database = {
           memo_id: string
           song_id: string
         }[]
+      }
+      create_payout_batch: {
+        Args: { _founder: string; _period_end: string; _period_start: string }
+        Returns: string
       }
       current_invite_expiry: { Args: never; Returns: string }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
@@ -686,6 +1335,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: { _uid: string }; Returns: boolean }
       is_invite_valid: { Args: { _invite_id: string }; Returns: boolean }
       is_song_member: {
         Args: { _song_id: string; _user_id: string }
@@ -696,18 +1346,164 @@ export type Database = {
         Returns: boolean
       }
       mark_memo_transcribed: { Args: { _memo_id: string }; Returns: undefined }
+      mark_payout_failed: {
+        Args: { _payout: string; _reason: string }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mark_payout_paid: {
+        Args: { _payout: string; _provider_id: string }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mature_holds: { Args: never; Returns: number }
+      next_paid_month_index: {
+        Args: { _referred_user: string; _referrer_founder: string }
+        Returns: number
+      }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      record_chargeback: { Args: { _event: Json }; Returns: number }
+      record_invoice_paid: { Args: { _event: Json }; Returns: string }
+      record_invoice_refunded: { Args: { _event: Json }; Returns: number }
+      redeem_code: {
+        Args: { _code_value: string; _user: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          discount_cents: number
+          expires_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions: number | null
+          owner_founder_id: string | null
+          owner_user_id: string | null
+          redemption_count: number
+          status: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id: string | null
+          updated_at: string
+          value: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       reset_transcript_attempts: {
         Args: { _memo_id: string }
         Returns: undefined
       }
+      resolve_code: {
+        Args: { _value: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          discount_cents: number
+          expires_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions: number | null
+          owner_founder_id: string | null
+          owner_user_id: string | null
+          redemption_count: number
+          status: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id: string | null
+          updated_at: string
+          value: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reward_hold_days: { Args: never; Returns: number }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
       }
+      write_audit: {
+        Args: {
+          _action: string
+          _actor: string
+          _after: Json
+          _before: Json
+          _entity_id: string
+          _entity_type: string
+          _reason: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      attribution_source:
+        | "founder_code"
+        | "user_referral_code"
+        | "invite_link"
+        | "admin_override"
+      billing_event_kind:
+        | "invoice_paid"
+        | "invoice_refunded"
+        | "chargeback_created"
+        | "subscription_created"
+        | "subscription_cancelled"
+        | "hold_elapsed"
+        | "manual_adjustment"
+      code_kind: "founder" | "user_referral" | "internal"
+      code_status: "active" | "paused" | "revoked" | "expired" | "exhausted"
+      credit_status:
+        | "pending"
+        | "available"
+        | "applied"
+        | "reversed"
+        | "expired"
+      founder_status: "active" | "paused" | "revoked" | "internal"
+      founder_tier: "standard" | "strategic" | "internal"
       invite_status: "pending" | "accepted" | "revoked" | "expired"
       memo_status:
         | "uploading"
@@ -717,7 +1513,17 @@ export type Database = {
         | "uploaded"
         | "finalized"
         | "transcribed"
+      payout_status:
+        | "draft"
+        | "approved"
+        | "processing"
+        | "paid"
+        | "failed"
+        | "cancelled"
       plan_tier: "free" | "pro"
+      referrer_type: "founder" | "user"
+      reward_kind: "cash" | "service_credit"
+      reward_status: "pending" | "payable" | "paid" | "reversed" | "void"
       section_kind:
         | "verse"
         | "chorus"
@@ -730,6 +1536,7 @@ export type Database = {
         | "other"
       song_member_role: "owner" | "collaborator" | "viewer"
       song_status: "active" | "archived" | "deleted"
+      sub_plan: "free" | "pro" | "founder_pro"
       transcription_status:
         | "pending"
         | "processing"
@@ -865,6 +1672,26 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      attribution_source: [
+        "founder_code",
+        "user_referral_code",
+        "invite_link",
+        "admin_override",
+      ],
+      billing_event_kind: [
+        "invoice_paid",
+        "invoice_refunded",
+        "chargeback_created",
+        "subscription_created",
+        "subscription_cancelled",
+        "hold_elapsed",
+        "manual_adjustment",
+      ],
+      code_kind: ["founder", "user_referral", "internal"],
+      code_status: ["active", "paused", "revoked", "expired", "exhausted"],
+      credit_status: ["pending", "available", "applied", "reversed", "expired"],
+      founder_status: ["active", "paused", "revoked", "internal"],
+      founder_tier: ["standard", "strategic", "internal"],
       invite_status: ["pending", "accepted", "revoked", "expired"],
       memo_status: [
         "uploading",
@@ -875,7 +1702,18 @@ export const Constants = {
         "finalized",
         "transcribed",
       ],
+      payout_status: [
+        "draft",
+        "approved",
+        "processing",
+        "paid",
+        "failed",
+        "cancelled",
+      ],
       plan_tier: ["free", "pro"],
+      referrer_type: ["founder", "user"],
+      reward_kind: ["cash", "service_credit"],
+      reward_status: ["pending", "payable", "paid", "reversed", "void"],
       section_kind: [
         "verse",
         "chorus",
@@ -889,6 +1727,7 @@ export const Constants = {
       ],
       song_member_role: ["owner", "collaborator", "viewer"],
       song_status: ["active", "archived", "deleted"],
+      sub_plan: ["free", "pro", "founder_pro"],
       transcription_status: [
         "pending",
         "processing",
