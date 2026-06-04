@@ -1269,6 +1269,7 @@ export type Database = {
       accept_song_invite: {
         Args: { _token: string; _user_id: string }
         Returns: {
+          already_member: boolean
           code: string
           role: Database["public"]["Enums"]["song_member_role"]
           song_id: string
