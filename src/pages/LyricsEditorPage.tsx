@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Mic, Plus } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import SongTabBar from "@/components/cog/SongTabBar";
+import { useSongTitle } from "@/lib/songContext";
 
 type Tab = "Lyrics" | "Chords" | "Voice" | "Notes";
 
@@ -44,6 +46,7 @@ const LyricsEditorPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const songId = id ?? "1";
+  const songTitle = useSongTitle(songId);
   const [activeTab, setActiveTab] = useState<Tab>("Lyrics");
   const [sections, setSections] = useState<SongSection[]>(INITIAL_SECTIONS);
   const [saved, setSaved] = useState(true);
@@ -107,7 +110,7 @@ const LyricsEditorPage = () => {
                 lineHeight: 1.1,
               }}
             >
-              Grace in the Waiting
+              {songTitle}
             </h1>
             <div
               className="flex items-center gap-1.5 mt-1.5 flex-shrink-0"
@@ -243,6 +246,7 @@ const LyricsEditorPage = () => {
           </div>
         </div>
       </div>
+      <SongTabBar activeTab="lyrics" />
     </div>
   );
 };

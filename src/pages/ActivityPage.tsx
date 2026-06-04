@@ -1,6 +1,8 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import SongTabBar from "@/components/cog/SongTabBar";
+import { useSongTitle } from "@/lib/songContext";
 
 interface ActivityItem {
   id: string;
@@ -218,6 +220,7 @@ const ActivityPage = () => {
           Open song
         </button>
       </div>
+      <SongTabBar activeTab="people" />
     </div>
   );
 };

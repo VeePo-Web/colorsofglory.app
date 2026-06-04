@@ -10,6 +10,7 @@ Gate command: `npm.cmd run qa:codex`
 This audit turns Codex from an occasional reviewer into a repeatable quality gate for Colors of Glory. The gate now checks:
 
 - lint
+- TypeScript typecheck
 - production build
 - full test suite
 - bundle budgets
@@ -26,23 +27,24 @@ This audit turns Codex from an occasional reviewer into a repeatable quality gat
 | --- | --- | --- |
 | `npm.cmd run qa:codex` | Pass | Hard checks passed |
 | `npm.cmd run lint` | Pass | 0 errors, 4 inherited shadcn fast-refresh warnings |
+| `npm.cmd run typecheck` | Pass | TypeScript app check completed with no errors |
 | `npm.cmd run build` | Pass | Production build completed |
-| `npm.cmd run test` | Pass | 4 files, 13 tests passed |
+| `npm.cmd run test` | Pass | 4 files, 14 tests passed |
 | `npm.cmd run perf:budget` | Pass | All current bundle budgets passed |
 | Old-brand content scan | Pass | No forbidden old-brand content in `src`, `public`, or `index.html` |
 | Legacy asset filename scan | Warn | 15 old asset filenames remain under `src/assets` |
-| 390px mobile render smoke | Pass | Catalog, workspace, capture, saved memo, settings, upgrade, and 404 route covered through tests |
-| Production preview route smoke | Pass | 21 SPA routes returned HTTP 200 |
+| 390px mobile render smoke | Pass | Catalog, workspace, capture, saved memo, chords, settings, upgrade, and 404 route covered through tests |
+| Production preview route smoke | Pass | 22 SPA routes returned HTTP 200 |
 | Placeholder route scan | Pass | No reachable `coming soon` placeholder files detected |
 | Basic accessibility source checks | Pass | Head metadata, route fallback label, 404 heading, and key form labels detected |
 | Instant-feel source checks | Pass | Route lazy-loading, skeleton fallback, stable card/touch target signals detected |
 
 ## Bundle Snapshot
 
-- Main JS: `309.3 kB` raw, `99.8 kB` gzip
-- Main CSS: `82.6 kB` raw, `15.0 kB` gzip
-- Route chunks checked: `37`
-- Largest route chunk: `PeoplePage`, `6.0 kB` raw
+- Main JS: `309.7 kB` raw, `99.9 kB` gzip
+- Main CSS: `82.8 kB` raw, `15.1 kB` gzip
+- Route chunks checked: `41`
+- Largest route chunk: `PeoplePage`, `6.2 kB` raw
 
 Current bundle shape is healthy. The main JS budget has roughly 10 kB gzip of headroom before it hits the current Codex cap, so audio, editor, transcription, and canvas work must stay lazy-loaded.
 

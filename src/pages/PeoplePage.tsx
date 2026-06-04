@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import SongTabBar from "@/components/cog/SongTabBar";
+import { useSongTitle } from "@/lib/songContext";
 
 type CollabRole = "Viewer" | "Contributor" | "Reviewer";
 
@@ -255,6 +257,7 @@ const PeoplePage = () => {
           </div>
         </div>
       </div>
+      <SongTabBar activeTab="people" />
     </div>
   );
 };

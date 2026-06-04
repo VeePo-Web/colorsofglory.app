@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import SongTabBar from "@/components/cog/SongTabBar";
+import { useSongTitle } from "@/lib/songContext";
 
 const SAVED_NOTES = [
   "Inspired by Psalm 46 — 'Be still and know'",
@@ -140,6 +142,7 @@ const NotesPage = () => {
           {isSaved ? "Note saved" : "Save note"}
         </button>
       </div>
+      <SongTabBar activeTab="notes" />
     </div>
   );
 };

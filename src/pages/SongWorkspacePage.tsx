@@ -49,7 +49,9 @@ const SongWorkspacePage = () => {
 
   const firstSong = useMemo(readFirstSong, []);
   const isFirstVisit = searchParams.get("first") === "1";
-  const songTitle = firstSong.title || "Grace in the Waiting";
+  const songId = id ?? "1";
+  const rawTitle = firstSong.title || "";
+  const songTitle = rawTitle || (songId === "1" ? "Grace in the Waiting" : songId === "2" ? "Morning Prayer" : songId === "3" ? "Holy Fire" : "Untitled Song");
   const songMeta = [firstSong.key, firstSong.bpm ? `${firstSong.bpm} BPM` : null].filter(Boolean);
 
   return (

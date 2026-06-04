@@ -140,6 +140,22 @@ const PhoneLoginPage = () => {
         >
           Use email instead
         </button>
+
+        {/* Demo fast-track — subtle, bottom of screen */}
+        <div className="mt-auto pt-12 pb-4">
+          <div
+            className="h-px w-16 mx-auto mb-4"
+            style={{ backgroundColor: "var(--cog-border)" }}
+          />
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="text-xs text-center w-full py-2 transition-opacity duration-150 hover:opacity-70"
+            style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
+          >
+            Preview demo ›
+          </button>
+        </div>
       </div>
     </div>
   );

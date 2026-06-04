@@ -16,6 +16,7 @@ const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const LyricsEditorPage = lazy(() => import("./pages/LyricsEditorPage"));
+const ChordsPage = lazy(() => import("./pages/ChordsPage"));
 const VoiceMemosPage = lazy(() => import("./pages/VoiceMemosPage"));
 const NotesPage = lazy(() => import("./pages/NotesPage"));
 const PeoplePage = lazy(() => import("./pages/PeoplePage"));
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="/songs/:id/capture" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
             <Route path="/songs/:id/lyrics" element={<LyricsEditorPage />} />
+            <Route path="/songs/:id/chords" element={<ChordsPage />} />
             <Route path="/songs/:id/voice" element={<VoiceMemosPage />} />
             <Route path="/songs/:id/notes" element={<NotesPage />} />
             <Route path="/songs/:id/people" element={<PeoplePage />} />

@@ -274,6 +274,7 @@ async function main() {
 
   const hardChecks = [
     runCommand("lint", ["run", "lint"]),
+    runCommand("typecheck", ["run", "typecheck"]),
     runCommand("build", ["run", "build"]),
     runCommand("test", ["run", "test"]),
     runCommand("bundle budget", ["run", "perf:budget"]),

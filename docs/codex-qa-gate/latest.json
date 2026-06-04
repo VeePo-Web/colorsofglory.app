@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T03:35:23.787Z",
+  "generatedAt": "2026-06-04T03:57:36.944Z",
   "routesChecked": [
     {
       "path": "/",
@@ -48,6 +48,10 @@
     {
       "path": "/songs/1/voice",
       "label": "Voice memos"
+    },
+    {
+      "path": "/songs/1/chords",
+      "label": "Chords"
     },
     {
       "path": "/songs/1/notes",
@@ -112,6 +116,10 @@
       "label": "Voice memo added"
     },
     {
+      "path": "/songs/1/chords",
+      "label": "Chords"
+    },
+    {
       "path": "/settings",
       "label": "Settings"
     },
@@ -127,6 +135,11 @@
   "results": [
     {
       "name": "lint",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "typecheck",
       "status": "pass",
       "details": ""
     },
@@ -173,7 +186,7 @@
     {
       "name": "Production preview route smoke",
       "status": "pass",
-      "details": "21 routes"
+      "details": "22 routes"
     }
   ],
   "findings": [

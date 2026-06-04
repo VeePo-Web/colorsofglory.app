@@ -13,7 +13,8 @@
     "qa:mobile": "vitest run src/test/codex-mobile-render.test.tsx",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

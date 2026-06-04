@@ -56,7 +56,7 @@ export async function getStorageAddons(userId: string): Promise<StorageAddon[]> 
   return data ?? [];
 }
 
-/** Effective storage limit (bytes) for the user — plan base + active add-ons. */
+/** Effective storage limit (bytes) for the user: plan base plus active add-ons. */
 export async function getEffectiveStorageLimit(userId: string): Promise<number> {
   const { data, error } = await supabase.rpc("effective_storage_limit", { _user_id: userId });
   if (error) throw error;

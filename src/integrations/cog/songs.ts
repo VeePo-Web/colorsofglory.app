@@ -1,4 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+export type Song = Database["public"]["Tables"]["songs"]["Row"];
+export type SongInvite = Database["public"]["Tables"]["song_invites"]["Row"];
 
 /**
  * Canonical edge-function error codes. UI can switch on these to render
@@ -32,14 +36,17 @@ export class CogError extends Error {
 }
 
 type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
+type FunctionErrorContext = { json?: () => Promise<unknown> };
+type FunctionInvokeError = { context?: FunctionErrorContext; message?: string };
 
 async function call<T = unknown>(fn: string, body: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   let env = data as Envelope<T> | undefined;
+  const functionError = error as FunctionInvokeError | null;
   // On non-2xx, supabase-js puts the Response on error.context; parse the body.
-  if (error && (error as any).context && typeof (error as any).context.json === "function") {
+  if (functionError?.context && typeof functionError.context.json === "function") {
     try {
-      env = (await (error as any).context.json()) as Envelope<T>;
+      env = (await functionError.context.json()) as Envelope<T>;
     } catch {
       /* ignore parse failure, fall through to generic error */
     }
@@ -62,7 +69,7 @@ export const createSong = (input: {
   time_signature?: string;
   cover_color?: string;
   tags?: string[];
-}) => call<{ song: any }>("create-song", input);
+}) => call<{ song: Song }>("create-song", input);
 
 export const deleteSong = (song_id: string) => call<{ ok: true }>("song-delete", { song_id });
 export const leaveSong = (song_id: string) => call<void>("song-leave", { song_id });
@@ -80,7 +87,7 @@ export const createInvite = (input: {
   invited_phone?: string;
   max_uses?: number;
   message?: string;
-}) => call<{ invite: any }>("song-invite-create", input);
+}) => call<{ invite: SongInvite }>("song-invite-create", input);
 
 export const acceptInvite = (token: string) =>
   call<{ song_id: string; role: string; already_member: boolean }>(

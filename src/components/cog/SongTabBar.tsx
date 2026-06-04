@@ -1,0 +1,108 @@
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { FileText, Mic, Music, StickyNote, Users } from "lucide-react";
+
+interface SongTab {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  segment: string; // URL segment: "lyrics", "voice", etc.
+}
+
+const TABS: SongTab[] = [
+  { id: "lyrics", label: "Lyrics",  icon: FileText,    segment: "lyrics" },
+  { id: "voice",  label: "Voice",   icon: Mic,         segment: "voice" },
+  { id: "chords", label: "Chords",  icon: Music,       segment: "chords" },
+  { id: "notes",  label: "Notes",   icon: StickyNote,  segment: "notes" },
+  { id: "people", label: "People",  icon: Users,       segment: "people" },
+];
+
+interface SongTabBarProps {
+  /** Override active tab detection when inside nested routes. */
+  activeTab?: string;
+}
+
+/**
+ * Persistent bottom tab bar for all song-interior screens.
+ * Replaces the main BottomNav when you're deep inside a song.
+ * Frosted cream glass, gold underline on active tab, 60px height.
+ */
+const SongTabBar = ({ activeTab }: SongTabBarProps) => {
+  const navigate = useNavigate();
+  const { id: songId } = useParams<{ id: string }>();
+  const location = useLocation();
+
+  const getActive = () => {
+    if (activeTab) return activeTab;
+    const path = location.pathname;
+    const found = TABS.find((t) => path.endsWith(`/${t.segment}`));
+    return found?.id ?? null;
+  };
+
+  const active = getActive();
+
+  return (
+    <nav
+      aria-label="Song sections"
+      className="fixed bottom-0 left-0 right-0 flex items-stretch"
+      style={{
+        backgroundColor: "rgba(245,240,232,0.94)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        borderTop: "1px solid rgba(28,26,23,0.07)",
+        height: 72,
+        paddingBottom: "env(safe-area-inset-bottom)",
+        zIndex: 500,
+      }}
+    >
+      {TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = active === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            onClick={() => navigate(`/songs/${songId}/${tab.segment}`)}
+            aria-label={tab.label}
+            aria-current={isActive ? "page" : undefined}
+            className="flex flex-col items-center justify-center flex-1 gap-1 relative transition-all duration-150 active:scale-90"
+            style={{
+              color: isActive ? "var(--cog-gold-alt)" : "var(--cog-muted)",
+            }}
+          >
+            {/* Gold top-border indicator on active tab */}
+            {isActive && (
+              <span
+                className="absolute top-0 left-3 right-3 rounded-b-full"
+                style={{
+                  height: 2.5,
+                  backgroundColor: "var(--cog-gold)",
+                }}
+              />
+            )}
+
+            <Icon
+              size={20}
+              strokeWidth={isActive ? 2 : 1.5}
+              style={{
+                color: isActive ? "var(--cog-gold)" : "var(--cog-muted)",
+                transition: "color 150ms, stroke-width 150ms",
+              }}
+            />
+            <span
+              className="text-[10px] font-medium tracking-wide leading-none"
+              style={{
+                fontFamily: "var(--font-body)",
+                color: isActive ? "var(--cog-gold-alt)" : "var(--cog-muted)",
+                transition: "color 150ms",
+              }}
+            >
+              {tab.label}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+};
+
+export default SongTabBar;

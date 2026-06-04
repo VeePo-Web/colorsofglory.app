@@ -8,6 +8,7 @@ import VoiceMemoAddedPage from "@/pages/onboarding/VoiceMemoAddedPage";
 import NotFound from "@/pages/NotFound";
 import UpgradePage from "@/pages/UpgradePage";
 import SettingsPage from "@/pages/settings/SettingsPage";
+import ChordsPage from "@/pages/ChordsPage";
 
 const setMobileViewport = () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -76,5 +77,12 @@ describe("Codex 390px mobile render smoke", () => {
 
     expect(screen.getByRole("heading", { name: /settings/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /storage/i })).toBeInTheDocument();
+  });
+
+  it("renders the chords page at the primary mobile width", () => {
+    renderRoute("/songs/1/chords", "/songs/:id/chords", <ChordsPage />);
+
+    expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
+    expect(screen.getByText(/chord chart/i)).toBeInTheDocument();
   });
 });
