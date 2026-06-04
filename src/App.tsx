@@ -28,6 +28,12 @@ const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const RequireAdmin = lazy(() => import("./components/admin/RequireAdmin"));
+const AdminHomePage = lazy(() => import("./pages/admin/AdminHomePage"));
+const FoundersPage = lazy(() => import("./pages/admin/FoundersPage"));
+const FounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPage"));
+const CodesPage = lazy(() => import("./pages/admin/CodesPage"));
+const PayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +101,13 @@ const App = () => (
             <Route path="/settings/storage" element={<StoragePage />} />
             <Route path="/settings/referral" element={<ReferralPage />} />
             <Route path="/upgrade" element={<UpgradePage />} />
+
+            {/* Internal admin (server-gated via RequireAdmin, noindex) */}
+            <Route path="/admin" element={<RequireAdmin><AdminHomePage /></RequireAdmin>} />
+            <Route path="/admin/founders" element={<RequireAdmin><FoundersPage /></RequireAdmin>} />
+            <Route path="/admin/founders/:id" element={<RequireAdmin><FounderDetailPage /></RequireAdmin>} />
+            <Route path="/admin/codes" element={<RequireAdmin><CodesPage /></RequireAdmin>} />
+            <Route path="/admin/payouts" element={<RequireAdmin><PayoutsPage /></RequireAdmin>} />
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />
