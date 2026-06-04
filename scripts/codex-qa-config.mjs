@@ -134,7 +134,7 @@ export const instantFeelSourceChecks = [
   {
     file: "src/pages/SongWorkspacePage.tsx",
     label: "Song workspace primary actions use stable touch targets",
-    pattern: /className="[^"]*min-h-14[^"]*"/,
+    pattern: /active:scale-\[0\.97\][\s\S]*height:\s*44/,
   },
   {
     file: "src/pages/SongCatalogPage.tsx",

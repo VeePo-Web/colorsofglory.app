@@ -30,7 +30,7 @@ const MODULES: Module[] = [
   { id: "voice",  label: "Voice Memo", icon: Mic,       route: "voice" },
   { id: "chords", label: "Chords",     icon: Music,     route: "chords" },
   { id: "notes",  label: "Notes",      icon: StickyNote, route: "notes" },
-  { id: "invite", label: "Invite",     icon: UserPlus,  route: "people" },
+  { id: "people", label: "People",     icon: UserPlus,  route: "people" },
 ];
 
 const readFirstSong = (): StoredSong => {
@@ -101,7 +101,7 @@ const SongWorkspacePage = () => {
           {songTitle}
         </h1>
         <p className="text-[0.9375rem] text-center mb-1" style={{ color: "#666" }}>
-          Private song space
+          Private song room
         </p>
         {songMeta.length > 0 && (
           <p className="text-[0.8125rem] text-center mb-2" style={{ color: "#999" }}>
@@ -114,7 +114,7 @@ const SongWorkspacePage = () => {
           className="text-[0.875rem] text-center mb-7 leading-relaxed mx-auto"
           style={{ color: "#999", maxWidth: 300 }}
         >
-          Start anywhere. Add a lyric, record a voice memo, or invite someone into the song.
+          Start anywhere. Lyrics, voice memos, chords, notes, and people all stay inside one canvas.
         </p>
 
         {/* Module cards — 2-column grid matching reference */}
@@ -123,7 +123,7 @@ const SongWorkspacePage = () => {
             <ModuleCard
               key={module.id}
               module={module}
-              onClick={() => navigate(`/songs/${sid}/${module.route}`)}
+              onClick={() => navigate(`/songs/${sid}/canvas?layer=${module.route}`)}
             />
           ))}
         </div>
@@ -139,18 +139,18 @@ const SongWorkspacePage = () => {
           <QuickAction
             label="Write lyric"
             icon={PenLine}
-            onClick={() => navigate(`/songs/${sid}/lyrics`)}
+            onClick={() => navigate(`/songs/${sid}/canvas?layer=lyrics`)}
           />
           <QuickAction
             label="Record memo"
             icon={Mic}
-            onClick={() => navigate(`/songs/${sid}/capture`)}
+            onClick={() => navigate(`/songs/${sid}/canvas?layer=voice`)}
             primary
           />
           <QuickAction
             label="Invite"
             icon={UserPlus}
-            onClick={() => navigate(`/songs/${sid}/people`)}
+            onClick={() => navigate(`/songs/${sid}/canvas?layer=people`)}
           />
         </div>
       </main>
