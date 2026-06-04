@@ -39,18 +39,39 @@ Deno.serve(async (req) => {
       // Membership check happens at /accept; here we just flag it.
     }
 
-    const [{ data: song }, { data: inviter }, { count: collaboratorCount }] = await Promise.all([
-      admin.from("songs").select("title").eq("id", invite.song_id).maybeSingle(),
+    const [
+      { data: song },
+      { data: inviter },
+      { count: collaboratorCount },
+      { data: collaborators },
+    ] = await Promise.all([
+      admin.from("songs").select("title, lyrics_snippet").eq("id", invite.song_id).maybeSingle(),
       admin
         .from("profiles")
-        .select("display_name")
+        .select("display_name, first_name, last_name, avatar_color")
         .eq("user_id", invite.created_by_user_id)
         .maybeSingle(),
       admin
         .from("song_members")
         .select("user_id", { count: "exact", head: true })
         .eq("song_id", invite.song_id),
+      admin
+        .from("song_members")
+        .select("user_id, role, joined_at, profiles!inner(display_name, first_name, last_name, avatar_color)")
+        .eq("song_id", invite.song_id)
+        .order("joined_at", { ascending: true })
+        .limit(5),
     ]);
+
+    const initials = (first?: string | null, last?: string | null, display?: string | null) => {
+      const f = (first ?? display ?? "").trim();
+      const l = (last ?? "").trim();
+      const a = f ? f[0] : "";
+      const b = l ? l[0] : (f.length > 1 ? f[1] : "");
+      return (a + b).toUpperCase() || "·";
+    };
+
+    const inviterFirst = inviter?.first_name ?? inviter?.display_name ?? "A collaborator";
 
     return jsonResponse(
       {
@@ -59,9 +80,19 @@ Deno.serve(async (req) => {
         data: {
           song_id: invite.song_id,
           song_title: song?.title ?? "Untitled song",
-          inviter_name: inviter?.display_name ?? "A collaborator",
+          lyrics_snippet: song?.lyrics_snippet ?? null,
+          inviter_name: inviter?.display_name ?? inviterFirst,
+          inviter_first_name: inviterFirst,
+          inviter_avatar_color: inviter?.avatar_color ?? null,
           role: invite.role,
           collaborator_count: collaboratorCount ?? 0,
+          collaborators: (collaborators ?? []).map((m: any) => ({
+            user_id: m.user_id,
+            role: m.role,
+            first_name: m.profiles?.first_name ?? m.profiles?.display_name ?? null,
+            avatar_color: m.profiles?.avatar_color ?? null,
+            initials: initials(m.profiles?.first_name, m.profiles?.last_name, m.profiles?.display_name),
+          })),
           expires_at: invite.expires_at,
           uses_remaining: Math.max(0, (invite.max_uses ?? 0) - (invite.use_count ?? 0)),
         },
