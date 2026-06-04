@@ -44,3 +44,24 @@ So the filters map to:
 - Function is SECURITY DEFINER but re-checks `has_role(auth.uid(),'admin')` at top; revokes EXECUTE from `public`/`anon`, grants to `authenticated`
 - Default limit 50, max 500
 - Returns `meta` jsonb verbatim so the UI can render the full skip/reversal context
+
+### Hand-off to Claude — `/admin/audit` page
+
+SDK is ready: `searchAuditLogs(filters)` from `src/integrations/cog/admin.ts`. Gate the route with `isCurrentUserAdmin()`.
+
+Filter bar inputs (all optional, debounced submit):
+- `invoice_id` (text, e.g. `in_1QabcXYZ`)
+- `referrer_user_id` (uuid)
+- `referred_user_id` (uuid)
+- `reversed_reason` (select: `churned_before_maturity`, `invoice_refunded`, `no_subscription`, `storage_addon`, `zero_amount`, `wrong_plan`, `bad_status`, `user_mismatch`, `no_attribution`, `self_referral`, `fraud_hold` — plus free text)
+- `action` (select: `reward_skipped`, `reward_reversed`, `attribute_referral`, `redeem_code`, `approve_payout`, `mark_payout_paid`, `mark_payout_failed`, `override_attribution`, `admin_create_founder`, `admin_create_founder_code`, `admin_deactivate_code` — plus free text)
+- `since` / `until` (datetime-local)
+
+Results table columns: timestamp · action · entity (type+id) · actor (referred) · referrer (uuid or founder id) · invoice_id · reason / reversed_reason · "View JSON" expand row showing `before` + `after`.
+
+Pagination: limit 50, page via `offset`; show `total` and `has_more`. CSV export button calls SDK with limit 500 and downloads client-side.
+
+Notes:
+- `invoice_id` is extracted from `after.invoice` / `before.invoice` jsonb
+- `referrer_user_id` is resolved by joining `referral_attributions` on the row's `actor_user_id` (the referred user)
+- All access enforced server-side by `has_role(auth.uid(),'admin')` inside `admin_search_audit_logs` — front-end gate is UX only
