@@ -11,14 +11,14 @@ const STEPS = [
 const BodySchema = z.object({
   to: z.enum(STEPS),
   patch: z.record(z.unknown()).optional(),
-  source: z.enum(['user','system']).optional().default('user'),
+  source: z.enum(['user','system','client']).optional().default('user'),
 });
 
 const NEXT_ROUTE: Record<string, (firstSongId: string | null) => string> = {
   not_started: () => '/onboarding/intent',
   intent_selected: () => '/onboarding/founder-code',
   founder_code_seen: () => '/onboarding/start-song',
-  first_song_created: (id) => id ? `/songs/${id}/capture` : '/',
+  first_song_created: (id) => id ? `/songs/${id}` : '/',
   first_idea_captured: (id) => id ? `/songs/${id}/voice` : '/',
   first_voice_memo_added: (id) => id ? `/songs/${id}/lyrics` : '/',
   first_lyrics_added: (id) => id ? `/songs/${id}/people` : '/',
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     _user_id: userId,
     _to: to,
     _patch: patch ?? {},
-    _source: `user:${source}`,
+    _source: source,
   });
 
   if (rpcErr) {
