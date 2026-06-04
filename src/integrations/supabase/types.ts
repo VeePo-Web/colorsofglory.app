@@ -1773,6 +1773,7 @@ export type Database = {
         }
         Returns: number
       }
+      apply_song_lock_for_quota: { Args: { _user_id: string }; Returns: number }
       apply_storage_delta: {
         Args: { _delta: number; _owner_user_id: string }
         Returns: undefined
@@ -2067,6 +2068,7 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
       }
+      unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
         Args: {
           _action: string
