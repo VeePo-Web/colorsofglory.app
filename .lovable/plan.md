@@ -1,65 +1,38 @@
-## Problem
-The `/admin` dashboard pages (Founders, Codes, Home) were planned in a previous session but do **not exist** in the current codebase. The backend RPCs and SDK in `src/integrations/cog/admin.ts` are ready. This plan builds the missing admin pages with search and filtering as a first-class feature.
+## Goal
+On the Founder Detail page (`/admin/founders/:id`), let you select one of the founder's codes and drill into exactly which users that code referred and what payouts each of them has generated.
 
-## What We Build
+## Where it lives
+Add a fourth tab to the existing `Tabs` in `src/pages/admin/FounderDetailPage.tsx`:
 
-### 1. Admin Route Shell + Guard
-- `src/components/admin/RequireAdmin.tsx` — checks `isCurrentUserAdmin()` RPC, shows loading state, redirects non-admins, adds `noindex,nofollow` meta
-- `src/components/admin/AdminShell.tsx` — minimal chrome with nav links (Home / Founders / Codes / Payouts), cream bg, gold accent
+`Codes | Users | Rewards | By code` ← new
 
-### 2. Admin Pages (with search + filtering built in)
-- **`/admin`** → `AdminHomePage.tsx` — high-level stats (active founders, total referrals, total payable), recent activity feed
-- **`/admin/founders`** → `FoundersPage.tsx` — **searchable/filterable** table of all founders
-  - Search by: display name, slug, code value, referred user email
-  - Filter by: status (active/paused/revoked), tier
-  - Sort by: name, referral count, earnings, created date
-  - Actions: view detail, create new founder (dialog)
-- **`/admin/codes`** → `CodesPage.tsx` — **searchable/filterable** table of all founder codes
-  - Search by: code string, founder name, label
-  - Filter by: status (active/disabled), expiration state
-  - Sort by: created date, usage count, expiration
-  - Actions: deactivate code
-- **`/admin/founders/:id`** → `FounderDetailPage.tsx` — single founder view with their codes, attributions, reward events
-- **`/admin/payouts`** → `PayoutsPage.tsx` — monthly grouped payouts with CSV export
+Keeping it inside FounderDetailPage means we reuse the data already loaded by `adminFounderDetail(id)` — no new RPC, no extra fetches.
 
-### 3. Management Components
-- `CreateFounderDialog.tsx` — form: display_name, slug, tier, reward_profile, notes. Validates slug uniqueness client-side via RPC
-- `CreateCodeDialog.tsx` — form: founder picker (searchable dropdown), code string, max_redemptions, expires_at, label. Validates `^[A-Z0-9-]{4,32}$`
-- `DeactivateCodeButton.tsx` — confirmation + RPC call + toast + cache invalidation
+## Data wiring (all client-side, from the existing payload)
+`adminFounderDetail` already returns:
+- `codes[]` — `{ id, value, status, redemption_count, ... }`
+- `attributed_users[]` — `{ user_id, attributed_at, code_id }`
+- `reward_events[]` — `{ referred_user_id, amount_cents, status, reward_kind, created_at, invoice_external_id, ... }`
 
-### 4. Search & Filtering Architecture
-Both FoundersPage and CodesPage use the same pattern:
-- **Client-side filtering** on the full dataset returned by `adminFounderSummary()` / `adminReferralsRecent()`
-- Single search input that scans across multiple fields (name, slug, code, referral email)
-- Dropdown filters for categorical fields (status, tier)
-- Real-time filtering — no submit button needed
-- Result count badge
-- Clear-all filters button
+We build two lookup maps:
+- `usersByCode: Map<code_id, attributed_users[]>`
+- `rewardsByUser: Map<referred_user_id, reward_events[]>`
 
-### 5. Route Wiring
-Add to `src/App.tsx` inside a lazy-loaded admin route group:
-```
-/admin → AdminHomePage
-/admin/founders → FoundersPage
-/admin/founders/:id → FounderDetailPage
-/admin/codes → CodesPage
-/admin/payouts → PayoutsPage
-```
-All wrapped in `<RequireAdmin>`.
+## The "By code" tab UI
+- Top: a `Select` listing the founder's codes (label: `CODE · N users · $payable`). Defaults to the code with most referrals.
+- Summary strip for the selected code: total referred users, total pending / payable / paid (sum of cash reward_events from those users).
+- Table of referred users for that code:
+  - User id (truncated, monospace, copy-on-click)
+  - Attributed at
+  - Reward events count
+  - Pending / Payable / Paid totals (money, monospace)
+  - Last invoice id (monospace, muted)
+- Empty state when a code has no referrals: "No users have signed up with this code yet."
 
-### 6. Data Layer
-- Uses existing `src/integrations/cog/admin.ts` RPC wrappers
-- TanStack Query with 30s stale time
-- Mutations invalidate relevant query keys
+## Quick entry point from the Codes tab
+In the existing Codes tab, add a small "View referrals →" link in each row that switches the tab to "By code" and pre-selects that code (via local state lifted to the page).
 
-## Design Notes
-- Desktop-first (admin is desktop-only)
-- Utilitarian, cream background, monospace numbers for money/counts
-- Reuses shadcn `Table`, `Dialog`, `Button`, `Input`, `Badge`, `Tabs`
-- No gold glow, no serif headings — this is internal tooling
-
-## Out of Scope
-- No new migrations or edge functions (backend is done)
-- No editing reward_profile after creation
-- No Stripe Connect / automatic money movement
-- No `/admin` link in public nav (secret URL only)
+## Out of scope
+- No new RPC, migration, or edge function — purely UI on existing data.
+- No per-user expand/sub-rows yet (can come later if needed).
+- No CSV export from this panel (Payouts page already exports monthly).
