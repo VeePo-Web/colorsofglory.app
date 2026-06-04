@@ -19,6 +19,7 @@ const ACCEPT_ERROR_COPY: Record<string, string> = {
 };
 
 const PREVIEW_ERROR_COPY: Record<string, string> = {
+  INVALID_INPUT: "This invite link is missing or malformed.",
   INVITE_NOT_FOUND: "This invite link is no longer valid.",
   INVITE_EXPIRED: "This invite has expired. Ask for a fresh link.",
   INVITE_REVOKED: "This invite was revoked.",
