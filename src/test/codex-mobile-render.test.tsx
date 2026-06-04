@@ -6,6 +6,7 @@ import SongWorkspacePage from "@/pages/SongWorkspacePage";
 import CaptureFirstIdeaPage from "@/pages/onboarding/CaptureFirstIdeaPage";
 import VoiceMemoAddedPage from "@/pages/onboarding/VoiceMemoAddedPage";
 import NotFound from "@/pages/NotFound";
+import UpgradePage from "@/pages/UpgradePage";
 
 const setMobileViewport = () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -60,5 +61,12 @@ describe("Codex 390px mobile render smoke", () => {
 
     expect(screen.getByRole("heading", { name: /this song room is not here/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /go to songs/i })).toBeInTheDocument();
+  });
+
+  it("renders the upgrade page at the primary mobile width", () => {
+    renderRoute("/upgrade", "/upgrade", <UpgradePage />);
+
+    expect(screen.getByRole("heading", { name: /ready to build your catalog/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /go pro/i })).toBeInTheDocument();
   });
 });
