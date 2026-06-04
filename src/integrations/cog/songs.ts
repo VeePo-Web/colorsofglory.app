@@ -35,13 +35,13 @@ type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
 
 async function call<T = unknown>(fn: string, body: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error) throw new CogError("INTERNAL", error.message);
   const env = data as Envelope<T> | undefined;
   // New-shape envelope
   if (env && typeof env === "object" && "ok" in env) {
     if (!env.ok) throw new CogError(env.code ?? "INTERNAL", env.message);
     return (env.data ?? env) as T;
   }
+  if (error) throw new CogError("INTERNAL", error.message);
   // Legacy shape (function not yet migrated): pass through
   if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
   return data as T;
