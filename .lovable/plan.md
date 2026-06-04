@@ -16,3 +16,9 @@ Ship the in-depth onboarding scale + correctness pass exactly as presented:
 3. **Doc append** to `.lovable/plan.md`: monotonic-onboarding decision, shard-popular-codes guidance, no-rate-limiter rationale.
 
 No frontend changes, no `src/pages/**` or `src/components/**` edits.
+
+## Operational decisions (locked)
+
+- **Onboarding is monotonic.** `onboarding_step` only moves forward; deleting a song does NOT downgrade. Only explicit `dismissed` or `completed` are terminal.
+- **Popular campaign codes must be sharded.** A single `founder_codes` row with `max_uses > 10000` becomes a hot `FOR UPDATE` row under viral load. Mint N sibling codes (`LAUNCH-A`, `LAUNCH-B`, …) instead.
+- **No backend rate limiter for `redeem-founder-code`** until a generic primitive exists. Existing mitigations: JWT required, uppercase 4–32 char regex, per-user `UNIQUE(user_id)` redemption row, structured logging on every outcome for future abuse detection.
