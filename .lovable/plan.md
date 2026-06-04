@@ -55,3 +55,8 @@ One migration: `CREATE OR REPLACE FUNCTION public.accept_song_invite(...)` with 
    - Seed a 1-use invite, call `accept_song_invite` twice as same user → `use_count = 1`, `status = 'accepted'`, both calls return `OK`.
    - Seed a 2-use invite, call as user A then user B → `use_count = 2`, `status = 'accepted'`.
    - Replay user A again → `use_count` still 2, returns `OK`, no audit row added on replay.
+
+---
+## Execution log — Idempotent invite accept (2026-06-04)
+
+`accept_song_invite(_token, _user_id)` rewritten: after `FOR UPDATE` lock on the invite row, probes `song_members` for `(inv.song_id, _user_id)` and short-circuits with `OK` if already a member — no `use_count++`, no status flip, no audit row. New-user path unchanged. No edge function or SDK changes required; envelope still `{ ok:true, code:'OK', data:{ song_id, role } }`.
