@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" fill="none">
+  <defs>
+    <linearGradient id="aurora" x1="38" y1="160" x2="282" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8070C4"/><stop offset="0.25" stop-color="#4D8FD2"/><stop offset="0.50" stop-color="#53AB8B"/><stop offset="0.72" stop-color="#D4AE5C"/><stop offset="1" stop-color="#C26A95"/>
+    </linearGradient>
+  </defs>
+  <path d="M42 163C92 90 228 90 278 163" stroke="url(#aurora)" stroke-width="14" stroke-linecap="round"/>
+  <path d="M42 163C92 232 228 232 278 163" stroke="#B8953A" stroke-opacity="0.82" stroke-width="9" stroke-linecap="round"/>
+  <path d="M160 129C171 147 177 162 168 184C165 191 162 197 160 199C158 197 155 191 152 184C143 162 149 147 160 129Z" fill="#B8953A"/>
+  <path d="M163 143C170 160 167 177 157 188C153 176 149 163 163 143Z" fill="#E15E39"/>
+  <ellipse cx="160" cy="180" rx="4" ry="5" fill="#1C1A17" fill-opacity="0.62"/>
+  <text x="334" y="146" fill="#1C1A17" font-family="Playfair Display, Georgia, serif" font-size="78" font-weight="500">Colors of Glory</text>
+  <text x="340" y="205" fill="#6B6459" font-family="Inter, Arial, sans-serif" font-size="23">everything for this song stays connected here</text>
+</svg>

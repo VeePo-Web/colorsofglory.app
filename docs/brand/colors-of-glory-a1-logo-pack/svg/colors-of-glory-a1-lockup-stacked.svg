@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" fill="none">
+  <defs><linearGradient id="aurora" x1="100" y1="250" x2="620" y2="250" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8070C4"/><stop offset="0.25" stop-color="#4D8FD2"/><stop offset="0.50" stop-color="#53AB8B"/><stop offset="0.72" stop-color="#D4AE5C"/><stop offset="1" stop-color="#C26A95"/></linearGradient></defs>
+  <path d="M104 256C214 94 506 94 616 256" stroke="url(#aurora)" stroke-width="30" stroke-linecap="round"/>
+  <path d="M104 256C214 412 506 412 616 256" stroke="#B8953A" stroke-opacity="0.82" stroke-width="19" stroke-linecap="round"/>
+  <path d="M360 184C384 222 397 256 377 306C372 320 363 332 360 337C357 332 348 320 343 306C323 256 336 222 360 184Z" fill="#B8953A"/>
+  <path d="M366 213C382 249 373 285 355 306C345 279 336 253 366 213Z" fill="#E15E39"/>
+  <ellipse cx="360" cy="292" rx="8" ry="10" fill="#1C1A17" fill-opacity="0.62"/>
+  <text x="360" y="506" fill="#1C1A17" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="76" font-weight="500">Colors of Glory</text>
+  <text x="360" y="566" fill="#6B6459" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22">everything for this song stays connected here</text>
+</svg>

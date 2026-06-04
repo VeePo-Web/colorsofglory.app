@@ -1,0 +1,240 @@
+{
+  "generatedAt": "2026-06-04T03:06:03.735Z",
+  "routesChecked": [
+    {
+      "path": "/",
+      "label": "Song catalog"
+    },
+    {
+      "path": "/auth/login",
+      "label": "Phone login"
+    },
+    {
+      "path": "/auth/verify",
+      "label": "Code verification"
+    },
+    {
+      "path": "/onboarding/intent",
+      "label": "First intent"
+    },
+    {
+      "path": "/onboarding/start-song",
+      "label": "Start first song"
+    },
+    {
+      "path": "/onboarding/founder-code",
+      "label": "Founder code"
+    },
+    {
+      "path": "/invite/sample-token",
+      "label": "Invite preview"
+    },
+    {
+      "path": "/songs/1",
+      "label": "Song workspace"
+    },
+    {
+      "path": "/songs/1/capture",
+      "label": "Capture first idea"
+    },
+    {
+      "path": "/songs/1/voice-added",
+      "label": "Voice memo added"
+    },
+    {
+      "path": "/songs/1/lyrics",
+      "label": "Lyrics editor"
+    },
+    {
+      "path": "/songs/1/voice",
+      "label": "Voice memos"
+    },
+    {
+      "path": "/songs/1/notes",
+      "label": "Notes"
+    },
+    {
+      "path": "/songs/1/people",
+      "label": "People"
+    },
+    {
+      "path": "/songs/1/activity",
+      "label": "Activity"
+    },
+    {
+      "path": "/songs/1/credits",
+      "label": "Credits"
+    },
+    {
+      "path": "/settings/storage",
+      "label": "Storage settings"
+    },
+    {
+      "path": "/settings/referral",
+      "label": "Referral settings"
+    },
+    {
+      "path": "/upgrade",
+      "label": "Upgrade"
+    },
+    {
+      "path": "/not-a-real-song-room",
+      "label": "404 fallback"
+    }
+  ],
+  "mobileRenderRoutes": [
+    {
+      "path": "/",
+      "label": "Song catalog"
+    },
+    {
+      "path": "/auth/login",
+      "label": "Phone login"
+    },
+    {
+      "path": "/onboarding/start-song",
+      "label": "Start first song"
+    },
+    {
+      "path": "/songs/1",
+      "label": "Song workspace"
+    },
+    {
+      "path": "/songs/1/capture",
+      "label": "Capture first idea"
+    },
+    {
+      "path": "/songs/1/voice-added",
+      "label": "Voice memo added"
+    },
+    {
+      "path": "/upgrade",
+      "label": "Upgrade"
+    },
+    {
+      "path": "/not-a-real-song-room",
+      "label": "404 fallback"
+    }
+  ],
+  "results": [
+    {
+      "name": "lint",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "build",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "test",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "bundle budget",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "Old-brand content scan",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "Legacy asset filename scan",
+      "status": "warn",
+      "details": "15 filename hits"
+    },
+    {
+      "name": "basic accessibility source checks",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "instant-feel source checks",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "Placeholder route scan",
+      "status": "pass",
+      "details": ""
+    },
+    {
+      "name": "Production preview route smoke",
+      "status": "pass",
+      "details": "20 routes"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "P2",
+      "title": "Legacy asset filenames remain in src/public and should be removed before release.",
+      "details": [
+        {
+          "file": "src/assets/cs-canmore-1.jpg",
+          "hit": "cs-canmore"
+        },
+        {
+          "file": "src/assets/cs-canmore-2.jpg",
+          "hit": "cs-canmore"
+        },
+        {
+          "file": "src/assets/cs-canmore-hero.jpg",
+          "hit": "cs-canmore"
+        },
+        {
+          "file": "src/assets/cs-lake-1.jpg",
+          "hit": "cs-lake"
+        },
+        {
+          "file": "src/assets/cs-lake-2.jpg",
+          "hit": "cs-lake"
+        },
+        {
+          "file": "src/assets/cs-northern-1.jpg",
+          "hit": "cs-northern"
+        },
+        {
+          "file": "src/assets/cs-northern-2.jpg",
+          "hit": "cs-northern"
+        },
+        {
+          "file": "src/assets/cs-northern-roads-hero.jpg",
+          "hit": "cs-northern"
+        },
+        {
+          "file": "src/assets/glass-parking.jpg",
+          "hit": "glass-parking"
+        },
+        {
+          "file": "src/assets/hero-drone.jpg",
+          "hit": "hero-drone"
+        },
+        {
+          "file": "src/assets/veepo-logo.png",
+          "hit": "veepo-logo"
+        },
+        {
+          "file": "src/assets/work-01-mountain-road.jpg",
+          "hit": "work-01"
+        },
+        {
+          "file": "src/assets/work-02-architecture.jpg",
+          "hit": "work-02"
+        },
+        {
+          "file": "src/assets/work-03-lake-boat.jpg",
+          "hit": "work-03"
+        },
+        {
+          "file": "src/assets/work-04-industrial.jpg",
+          "hit": "work-04"
+        }
+      ],
+      "total": 15
+    }
+  ]
+}

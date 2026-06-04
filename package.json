@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "perf:budget": "node scripts/check-bundle-budget.mjs",
+    "qa:codex": "node scripts/codex-qa-gate.mjs",
+    "qa:mobile": "vitest run src/test/codex-mobile-render.test.tsx",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
