@@ -276,3 +276,12 @@ export async function cancelSubscription(opts: {
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
   return data as { ok: true; status: string; cancel_at_period_end: boolean };
 }
+
+// ---------- §7 brief aliases ----------
+// Thin re-exports under the exact names the v2 brief specified, so
+// consumers can import them verbatim. Implementation is unchanged.
+export const getMySubscription = getLatestSubscription;
+export const getMyFounderStats = canPurchaseFounderRate;
+export async function purchaseStorageAddon(addonPriceId: string, returnUrl: string, environment: "sandbox" | "live" = "sandbox") {
+  return createCheckoutSession({ priceId: addonPriceId, returnUrl, environment });
+}
