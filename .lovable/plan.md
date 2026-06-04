@@ -1,88 +1,81 @@
+## Payments v2 Audit — gaps found and the fix plan
 
-# Colors of Glory — Payment System v2
+I traced the spec against `plan_tiers`, `create-checkout`, `validate-code`, `payments-webhook`, `_shared/stripe.ts`, `redeem-founder-code`, `referral-attach`, and `config.toml`. The architecture is sound, but there are 10 concrete gaps — some of which will break checkout outright on the current Stripe API version. Fixing them is mostly small, surgical edits plus one Stripe action and one new endpoint.
 
-End-to-end audit + rebuild of payments, subscriptions, founder codes, and referrals. Backend-only work (Lovable scope); Claude Code builds the pricing page UI from the SDK + copy this plan exposes.
+---
 
-## Three plans (single source of truth)
+### Critical (will break checkout or webhooks today)
 
-| Plan | Price | Owned active songs | Storage | Founder code | Member referral |
-|------|-------|-------------------|---------|--------------|-----------------|
-| Free | $0 | 1 | base quota | — | — |
-| Starter | $5/mo | 4 | base quota | blocked | blocked |
-| Pro | $100/mo ($49 w/ founder code) | 50 | base + paid add-ons | yes, 50% off | $5/mo cash to referrer |
+1. **Stripe products were never actually created.** The prior summary proposed `payments--batch_create_product` for `cog_starter` / `cog_pro` / `cog_pro_referral` but the tool call was never executed. `create-checkout` will hit `price_not_found` on `stripe.prices.list({ lookup_keys: ['starter_monthly'] })`. → Run `payments--batch_create_product` for all three with `tax_code: 'txcd_10103001'`, quantity 1/1, monthly recurring.
 
-Free includes every product feature. Only catalog size and storage are gated. Invited memberships never count toward owner quota.
+2. **`invoice.subscription` is gone on API version `2026-03-25.dahlia`.** `payments-webhook` reads `invoice.subscription` in `handleInvoicePaid`, which is `null` on the pinned API version. Result: every renewal silently no-ops, founder payouts and $5 member-referral payouts never mint past month 1. → Read `invoice.parent.subscription_details.subscription` first, then fall back to `invoice.subscription` and to `invoice.lines.data[0].subscription` (legacy + safety net).
 
-## What I'll build (in this exact order — one migration per step)
+3. **`verify_jwt = false` missing in `supabase/config.toml`** for `create-checkout`, `validate-code`, and `redeem-founder-code`. Stripe knowledge says this is mandatory for any payment edge function — CORS preflight blows up with 401-no-CORS otherwise. Only `payments-webhook` is currently flagged. → Add three function blocks to `supabase/config.toml`.
 
-1. **`plan_tiers` + `pricing_copy` tables** (new). Seed data. GRANT SELECT to anon (pricing page is public). RLS read-anyone / write-service-role.
-2. **Stripe products** via `payments--batch_create_product`:
-   - `cog_starter` → `starter_monthly` @ 500 USD/mo, tax_code `txcd_10103001`
-   - `cog_pro` → `pro_monthly` @ 10000 USD/mo
-   - `cog_pro_referral` → `pro_monthly_referral_50` @ 4900 USD/mo (founder-code-only)
-3. **Schema extensions**:
-   - `songs.status` adds `'locked'` (alongside active/archived)
-   - `referral_attributions.kind` enum: `founder | member_referral`
-   - `reward_events.kind` mirror
-   - `profiles.plan_tier` recomputed by webhook
-4. **`create-song` edge fn**: enforce `plan_tiers.owned_song_limit` (reads from table, no magic numbers).
-5. **`validate-code` edge fn** (new, read-only): returns founder vs member_referral vs invalid + reason.
-6. **Rewrite `create-checkout`**: server-side code resolution order — Starter ignores codes → Pro tries founder first (routes to $49 price) → falls back to member referral → else invalid. Sets `subscription_data.metadata` with `{ userId, plan_key, attribution_kind, attribution_source_id }`.
-7. **Update `payments-webhook`**:
-   - Founder default reward profile `{ first6_cents: 2500, ongoing_cents: 1000, first6_months: 3 }` ($25/mo months 1–3, $10/mo thereafter, for life of the sub)
-   - Member referral: flat $5/mo per `invoice.paid` while referred sub is `active`; pauses on `past_due`, stops on `canceled`
-   - Lock-on-downgrade: when owned-active-song count exceeds new quota, mark excess `status='locked'` ordered by oldest `updated_at` first. No deletion.
-   - Idempotency via existing `billing_events` table.
-8. **Update `admin-payouts`** views to discriminate founder vs member_referral payouts.
-9. **Update `src/integrations/cog/billing.ts` SDK**:
-   ```
-   getPricingCatalog, getPricingPage, validateCode, startCheckout,
-   getMySubscription, getMyReferralStats, getMyFounderStats,
-   getStorageAddons, purchaseStorageAddon, openBillingPortal
-   ```
-   All return typed error codes (not free-text).
-10. **Regenerate `src/integrations/supabase/types.ts`**.
-11. **Run `supabase--linter`**; fix every warning introduced by these migrations.
-12. **Smoke test** each new/changed edge function via `supabase--curl_edge_functions`.
-13. **Write `.lovable/payments-v2.md`** handoff doc: every price ID, every new table/column, every new edge function, every SDK function, and any deviations.
+4. **Founder code `redemption_count` never increments.** `create-checkout` matches and routes to the $49 price but does not `update codes set redemption_count = redemption_count + 1`. `max_redemptions` caps are therefore never enforced after the first sale. → On successful Stripe session create, increment `codes.redemption_count` when `appliedCodeKind = 'founder'`.
 
-## Pricing copy contract (seeded into `pricing_copy`)
+### High (spec violations, not crashes)
 
-Ogilvy-grade voice, concrete and generous. Cards expose: `eyebrow, name, price_display, price_suffix, discounted_price_display?, discount_badge?, headline, subhead, bullets[], cta_label, cta_kind, trust_line?, most_popular?`. Full strings from your brief seeded verbatim:
+5. **Legacy attribution paths bypass the "one code per buyer" rule.** `referral-attach` and `redeem-founder-code` both call `attribute_referral` / `redeem_founder_code` RPCs that insert into `referral_attributions` *before* checkout. A user who lands on `/invite/:token` gets an attribution row written, then `create-checkout` rejects every subsequent code with `already_attributed`. → Either retire both functions (preferred — checkout now owns attribution writes) or change them to be advisory-only (store pending code on `profiles.pending_code`, do not insert into `referral_attributions`). I'll retire `referral-attach` and reshape `redeem-founder-code` to just stash the code on the session for the checkout flow.
 
-- **Free** — "Write your first song from start to finish — at no cost, ever." Trust: "No credit card. No trial. No 'upgrade to continue' wall."
-- **Starter** — "Four songs in motion at the same time, for less than a coffee." Trust: "Founder and referral codes don't apply on this plan."
-- **Pro** (most_popular) — "Run an entire songwriting catalog without it running you." Discount badge: "50% off when you sign up through a founder's code — that's $49/month, for as long as you stay."
+6. **Legacy `founder_code_required` gate in `create-checkout` uses dead price IDs.** Lines that check `priceId === 'cog_founder_pro_monthly'` are from v1 and never match v2 lookup keys, so the gate is dead code. With the new flow, gating happens via `stripe_referral_price_id` routing on the founder match path. → Delete the legacy block.
 
-Page H1, sub-H1, comparison caption, founder-code micro-section, and referral micro-section all stored in `pricing_copy` so non-engineers can edit later without redeploys.
+7. **Already-Pro user applying a founder code is unimplemented** (spec §6). Need a small endpoint `apply-founder-code-to-active-sub`: validates the code, swaps the subscription item to `pro_monthly_referral_50` via `stripe.subscriptions.update({ items: [{ id, price: 'pro_monthly_referral_50' }], proration_behavior: 'create_prorations' })`, writes the attribution row, increments redemption_count. Webhooks then pay the founder from the next `invoice.paid`.
 
-## Edge cases handled
+8. **Storage-addon purchase server-side gate.** Spec requires "block on non-Pro." Need to confirm the addon-purchase edge function reads `plan_tiers.allows_storage_addons` for the buyer's current plan and 403s otherwise. → Audit `storage-addon-*` function (or add the guard if missing).
 
-- **Downgrade with too many songs** → `status='locked'` (no deletion), oldest-first; RLS blocks edits on locked songs; `getReturningHomeFeed` returns a `songs_locked` banner. Re-upgrade unlocks oldest-first up to new quota.
-- **Founder code on already-Pro user** → applies on next renewal via Stripe sub update; founder earns from next `invoice.paid` onward. No retro credit.
-- **Founder + member referral on same checkout** → founder wins; response sets `applied_code_kind: 'founder', ignored_referrer: true` so UI explains it to the buyer.
-- **Free user with extra songs after Starter downgrade** → same lock mechanic, keeps 1 active.
-- **Idempotency** → `billing_events.stripe_event_id` dedupe on every webhook handler.
-- **Currency** → `plan_tiers.currency='USD'` for future-proofing.
-- **HIBP + email verification** stay ON.
+### Medium (correctness and clarity)
 
-## Non-negotiables (re-confirmed)
+9. **`plan_for_lookup_key` falls through to `'free'` on unknown keys.** A typo or new add-on would silently downgrade a paying user. → Throw / log loudly on unknown lookup keys for non-storage SKUs.
 
-- No magic numbers in frontend — everything via `plan_tiers` + `pricing_copy`.
-- No raw lyric/memo content in any payment payload, webhook, or analytics event.
-- No FK to `auth.users`. `user_id uuid` + profiles only.
-- GRANT + RLS in same migration as every new public-schema table.
-- Built-in Stripe connector + `_shared/stripe.ts` `createStripeClient(env)`. Never `new Stripe(...)` direct.
-- One referral code per buyer; founder always wins.
-- Free keeps every feature. Only catalog size gated.
-- Lovable does NOT touch `src/pages/**` or `src/components/**` — Claude builds the pricing page from `getPricingPage()`.
+10. **`pricing_copy` micro-section copy + FAQ payload not seeded.** `getPricingPage()` returns `page`, `cards`, but the spec also asks for founder-code micro-section, referral micro-section, and comparison caption. Verify those keys are present in `pricing_copy` rows; seed any missing ones with the exact Ogilvy copy from the brief.
 
-## What I will NOT do
+---
 
-- Build any UI / pages / React components
-- Edit `supabase/config.toml` project-level settings
-- Touch existing admin RPCs, song-membership helpers (`is_song_member`, `song_role`, `has_role`), or invite flow
-- Weaken auth (HIBP, email verification, Google OAuth)
-- Modify `src/integrations/supabase/client.ts` or `types.ts` by hand (regenerated post-migration)
+### Build sequence
 
-Approve and I'll execute steps 1→13 and end with the `.lovable/payments-v2.md` handoff.
+```text
+1.  Create Stripe products (cog_starter, cog_pro, cog_pro_referral)
+    via payments--batch_create_product, tax_code txcd_10103001.
+2.  Patch config.toml: add verify_jwt=false for create-checkout,
+    validate-code, redeem-founder-code.
+3.  Migration:
+      - Drop legacy founder_code_required block in create-checkout
+        (code change, not SQL).
+      - Add increment_founder_redemption(_code_id uuid) SECURITY DEFINER
+        helper for create-checkout to call.
+      - Loud-fail planForLookupKey on unknown non-storage keys.
+4.  Patch payments-webhook handleInvoicePaid:
+      sub = invoice.parent?.subscription_details?.subscription
+         ?? invoice.subscription
+         ?? invoice.lines?.data?.[0]?.subscription
+5.  Patch create-checkout: call increment_founder_redemption after
+    stripe.checkout.sessions.create succeeds with founder routing.
+6.  Retire referral-attach (delete edge function + remove SDK callers
+    that still hit it). Reshape redeem-founder-code to stash code on
+    profiles.pending_founder_code (new column) instead of writing
+    referral_attributions. Checkout reads pending_founder_code as a
+    fallback for `code`.
+7.  New edge function apply-founder-code-to-active-sub for the
+    already-Pro path (spec §6).
+8.  Audit storage-addon purchase function; add plan_tiers.allows_storage_addons
+    gate if missing.
+9.  Seed any missing pricing_copy rows (founder micro, referral micro,
+    comparison caption, FAQ array).
+10. Smoke test via supabase--curl_edge_functions:
+      - validate-code for valid founder, valid member, self, expired,
+        already_attributed
+      - create-checkout for starter, pro no code, pro+founder,
+        pro+referrer, pro+both (founder wins)
+      - simulate invoice.paid webhook with parent.subscription_details
+        shape → confirm reward_events row written.
+11. Update .lovable/payments-v2.md with the fixes and the new endpoint.
+```
+
+### Non-goals (out of scope for this pass)
+
+- Frontend pricing page — that's Claude Code's pass per the original handoff.
+- Currency expansion — stays USD.
+- Auth hardening — HIBP / email verification untouched.
+
+Confirm and I'll execute steps 1–11 end-to-end.
