@@ -22,7 +22,7 @@ function nextRouteFor(step: string | null | undefined): string {
     case 'founder_code_seen':
       return '/onboarding/start-song';
     case 'first_song_created':
-      return '/onboarding/capture';
+      return '/';
     default:
       return '/onboarding';
   }
@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
   const step = (onboarding.step as string | undefined) ?? null;
 
   if (envelope.ok) {
+    console.log(JSON.stringify({ event: 'redeem_founder_code', user_id: userId, code: parsed.data.code.toUpperCase(), result: 'OK' }));
     return json({
       ok: true,
       code: 'OK',
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
     });
   }
 
+  console.log(JSON.stringify({ event: 'redeem_founder_code', user_id: userId, code: parsed.data.code.toUpperCase(), result: envelope.code ?? 'UNKNOWN' }));
   return json({
     ok: false,
     code: envelope.code ?? 'UNKNOWN',

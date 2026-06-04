@@ -1350,7 +1350,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      onboarding_funnel_v1: {
+        Row: {
+          day: string | null
+          onboarding_step: Database["public"]["Enums"]["onboarding_step"] | null
+          users: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_song_invite: {
