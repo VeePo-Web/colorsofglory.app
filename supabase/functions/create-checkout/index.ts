@@ -194,6 +194,7 @@ Deno.serve(async (req) => {
     };
     if (planKey) sessionMetadata.plan_key = planKey;
     if (attributionFounderId) sessionMetadata.attribution_founder_id = attributionFounderId;
+    if (attributionCodeId) sessionMetadata.attribution_code_id = attributionCodeId;
     if (attributionReferrerUserId) sessionMetadata.attribution_referrer_user_id = attributionReferrerUserId;
 
     const subscriptionMetadata: Record<string, string> = { ...sessionMetadata };
@@ -213,6 +214,25 @@ Deno.serve(async (req) => {
         payment_intent_data: { description: productDescription },
       }),
     });
+
+    // Post-create bookkeeping: bump founder code redemption count and
+    // clear any pending_code so subsequent checkouts don't re-apply it.
+    if (appliedCodeKind === "founder" && attributionCodeId) {
+      try {
+        await supabaseAdmin.rpc("increment_founder_code_redemption", {
+          _code_id: attributionCodeId,
+        });
+      } catch (err) {
+        console.error("increment_founder_code_redemption failed", err);
+      }
+    }
+    if (appliedCodeKind !== "none") {
+      try {
+        await supabaseAdmin.rpc("clear_pending_code", { _user_id: user.id });
+      } catch (err) {
+        console.error("clear_pending_code failed", err);
+      }
+    }
 
     return json({
       clientSecret: session.client_secret,
