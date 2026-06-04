@@ -476,6 +476,47 @@ export type Database = {
         }
         Relationships: []
       }
+      invite_requests: {
+        Row: {
+          created_at: string
+          id: string
+          original_token: string
+          requested_by_phone: string | null
+          requested_by_user_id: string | null
+          song_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          original_token: string
+          requested_by_phone?: string | null
+          requested_by_user_id?: string | null
+          song_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          original_token?: string
+          requested_by_phone?: string | null
+          requested_by_user_id?: string | null
+          song_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_requests_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payouts: {
         Row: {
           amount_cents: number
@@ -550,12 +591,15 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_color: string | null
           avatar_url: string | null
           created_at: string
           display_name: string | null
           email: string | null
+          first_name: string | null
           first_song_id: string | null
           id: string
+          last_name: string | null
           onboarding_state: Json
           onboarding_step: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at: string
@@ -572,12 +616,15 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          avatar_color?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
+          first_name?: string | null
           first_song_id?: string | null
           id?: string
+          last_name?: string | null
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
@@ -594,12 +641,15 @@ export type Database = {
           user_id: string
         }
         Update: {
+          avatar_color?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
+          first_name?: string | null
           first_song_id?: string | null
           id?: string
+          last_name?: string | null
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
@@ -965,6 +1015,44 @@ export type Database = {
           },
         ]
       }
+      song_notification_prefs: {
+        Row: {
+          created_at: string
+          notify_on_contribution: boolean
+          notify_on_join: boolean
+          push_enabled: boolean
+          song_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          notify_on_contribution?: boolean
+          notify_on_join?: boolean
+          push_enabled?: boolean
+          song_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          notify_on_contribution?: boolean
+          notify_on_join?: boolean
+          push_enabled?: boolean
+          song_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_notification_prefs_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_sections: {
         Row: {
           created_at: string
@@ -1068,6 +1156,7 @@ export type Database = {
           is_locked: boolean
           key_signature: string | null
           last_activity_at: string
+          lyrics_snippet: string | null
           owner_user_id: string
           status: Database["public"]["Enums"]["song_status"]
           tags: string[]
@@ -1083,6 +1172,7 @@ export type Database = {
           is_locked?: boolean
           key_signature?: string | null
           last_activity_at?: string
+          lyrics_snippet?: string | null
           owner_user_id: string
           status?: Database["public"]["Enums"]["song_status"]
           tags?: string[]
@@ -1098,6 +1188,7 @@ export type Database = {
           is_locked?: boolean
           key_signature?: string | null
           last_activity_at?: string
+          lyrics_snippet?: string | null
           owner_user_id?: string
           status?: Database["public"]["Enums"]["song_status"]
           tags?: string[]
@@ -1709,6 +1800,20 @@ export type Database = {
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       expire_pending_invites: { Args: never; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
+      get_song_activity: {
+        Args: { _limit?: number; _offset?: number; _song_id: string }
+        Returns: {
+          action: string
+          actor_color: string
+          actor_name: string
+          actor_user_id: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          payload: Json
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -98,12 +98,94 @@ export const acceptInvite = (token: string) =>
 export type InvitePreview = {
   song_id: string;
   song_title: string;
+  lyrics_snippet: string | null;
   inviter_name: string;
+  inviter_first_name: string;
+  inviter_avatar_color: string | null;
   role: string;
   collaborator_count: number;
+  collaborators: Array<{
+    user_id: string;
+    role: string;
+    first_name: string | null;
+    avatar_color: string | null;
+    initials: string;
+  }>;
   expires_at: string;
   uses_remaining: number;
 };
 
 export const previewInvite = (token: string) =>
   call<InvitePreview>("song-invite-preview", { token });
+
+// --- Invite requests (expired/revoked link → "send me a new invite") ---
+
+export const requestNewInvite = (input: {
+  original_token: string;
+  song_id?: string | null;
+  phone?: string | null;
+}) =>
+  supabase.from("invite_requests").insert({
+    original_token: input.original_token,
+    song_id: input.song_id ?? null,
+    requested_by_phone: input.phone ?? null,
+  });
+
+// --- Song activity feed (members only, IDs+kinds only — no raw content) ---
+
+export type SongActivityRow = {
+  id: string;
+  created_at: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_color: string | null;
+  payload: Record<string, unknown>;
+};
+
+export const getSongActivity = async (song_id: string, limit = 50, offset = 0) => {
+  const { data, error } = await supabase.rpc("get_song_activity", {
+    _song_id: song_id,
+    _limit: limit,
+    _offset: offset,
+  });
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  return (data ?? []) as SongActivityRow[];
+};
+
+// --- Per-song notification preferences ---
+
+export type SongNotificationPrefs = {
+  user_id: string;
+  song_id: string;
+  notify_on_join: boolean;
+  notify_on_contribution: boolean;
+  push_enabled: boolean;
+};
+
+export const getNotificationPrefs = async (song_id: string) => {
+  const { data, error } = await supabase
+    .from("song_notification_prefs")
+    .select("*")
+    .eq("song_id", song_id)
+    .maybeSingle();
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  return (data ?? null) as SongNotificationPrefs | null;
+};
+
+export const upsertNotificationPrefs = async (
+  song_id: string,
+  patch: Partial<Pick<SongNotificationPrefs, "notify_on_join" | "notify_on_contribution" | "push_enabled">>,
+) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new CogError("UNAUTHENTICATED");
+  const { data, error } = await supabase
+    .from("song_notification_prefs")
+    .upsert({ user_id: user.id, song_id, ...patch }, { onConflict: "user_id,song_id" })
+    .select()
+    .maybeSingle();
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  return data as SongNotificationPrefs | null;
+};
