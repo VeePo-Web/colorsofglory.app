@@ -26,3 +26,7 @@ dist-ssr
 # Source document zips and extracted content
 *.zip
 zip_extracted/
+
+# Stress-test artifacts
+scripts/stress/phones.json
+/tmp/otp-stress-*.ndjson

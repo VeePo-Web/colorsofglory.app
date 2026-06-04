@@ -1,67 +1,86 @@
-## Internal Audit Log Search — Plan
+# Stress Test: Phone OTP Send (`signInWithOtp`)
 
-Per the 3-agent split, Lovable builds the **backend + SDK** only. The page itself (`/admin/audit`) is handed to Claude with a typed SDK ready to call.
+## Why we cannot just "send a ton"
 
-### Scope
-Admin-only search/filter over `public.audit_logs` for referral debugging. Filters: `invoice_id`, `referrer_user_id`, `referred_user_id`, `reversed_reason`, plus action kind and date range. Results paginated, newest first.
+`PhoneLoginPage.tsx` calls `supabase.auth.signInWithOtp({ phone })`. That endpoint is owned by **Supabase Auth's managed Twilio**, not a custom edge function. Hammering it naively will:
 
-### Where the data lives
-Referral audit rows we write today (`reward_skipped`, `reward_reversed`) store:
-- `actor_user_id` — usually the referred user
-- `target_type` = `'invoice'` or `'reward_event'`
-- `meta` jsonb — `{ reason, invoice, amount_cents, subscription_id, plan, status, count }`
+1. **Cost real money** — every successful call sends a real SMS (Twilio bills per segment, ~$0.0079+ each).
+2. **Trip rate limits fast** — Supabase Auth defaults: ~30 OTP/hour per IP, 1 send per phone per 60s, plus global hourly caps. We'll hit `over_sms_send_rate_limit` in seconds.
+3. **Risk SMS-pumping fraud flags** on the Twilio account, which can suspend the number.
 
-So the filters map to:
-- `invoice_id` → `meta->>'invoice' = $`
-- `reversed_reason` → `meta->>'reason' = $` (only `action='reward_reversed'`)
-- `referred_user_id` → `actor_user_id = $`
-- `referrer_user_id` → join `referral_attributions` on `actor_user_id` (the referred user) → match `referrer_user_id` OR `referrer_founder_id`
+So the test has to be designed around those gates, not against them.
 
-### Build steps
+## What we will measure
 
-**1. Migration — search helper + GIN index**
-- `CREATE INDEX idx_audit_meta_gin ON public.audit_logs USING GIN (meta jsonb_path_ops)`
-- `CREATE INDEX idx_audit_action_created ON public.audit_logs (action, created_at DESC)`
-- `admin_search_audit_logs(...)` SECURITY DEFINER function (`has_role(auth.uid(),'admin')` gate inside) that accepts all filters as nullable params and returns paginated rows with an enriched `referrer_user_id` resolved via `referral_attributions`.
+- **Throughput**: requests/sec the endpoint actually accepts before rate-limiting.
+- **Latency**: p50 / p95 / p99 of `signInWithOtp` round-trip.
+- **Rate-limit behavior**: which error codes return, at what RPS, with what `Retry-After`.
+- **Per-phone vs per-IP gates**: confirm 60s same-number cooldown and hourly IP cap.
+- **Concurrency safety**: 50 / 100 / 250 parallel callers — any 5xx, dropped responses, or socket errors?
+- **Cost ceiling**: every run prints estimated SMS spend before it starts and aborts if > $X.
 
-**2. Edge function — `admin-audit-search`**
-- POST, JWT-verified, admin role required (else 403)
-- Zod-validated body: `{ invoice_id?, referrer_user_id?, referred_user_id?, reversed_reason?, action?, since?, until?, limit?, offset? }`
-- Calls the RPC, returns `{ rows, total, has_more }`
+## How we send safely
 
-**3. SDK — `src/integrations/cog/admin.ts`** (Lovable-owned path)
-- `searchAuditLogs(filters) → Promise<AuditSearchResult>` with full TS types
+Three modes, selectable via `--mode` flag:
 
-**4. Hand-off doc — append to `.lovable/plan.md`**
-- Page spec for Claude: route `/admin/audit`, filter bar (4 inputs + action select + date range), results table (timestamp, action, actor, invoice, reason, expand-for-meta-JSON), CSV export button.
+1. **`test-numbers` (default, $0 cost)** — Use Supabase Auth's **Test Phone Numbers** feature (Auth → Phone Provider → Test OTP). Add 20 fake numbers like `+15555550100..0119` with fixed OTPs. These bypass Twilio entirely. **This is the mode we'll actually push hard.**
+2. **`canary` (small cost)** — 5 real numbers you own, 1 send each, used once to verify the real Twilio path still works end-to-end.
+3. **`dry-run`** — Hits a non-existent provider config or uses an invalid phone format to exercise the request path without sending. Measures pure API latency/validation.
 
-### Out of scope (this turn)
-- The actual `/admin/audit` React page and components — Claude builds those against the SDK
-- Editing/redacting audit rows (audit log is append-only)
-- Cross-environment (sandbox vs live) filter — add later if needed
+## Test script
 
-### Technical Details
-- Function is SECURITY DEFINER but re-checks `has_role(auth.uid(),'admin')` at top; revokes EXECUTE from `public`/`anon`, grants to `authenticated`
-- Default limit 50, max 500
-- Returns `meta` jsonb verbatim so the UI can render the full skip/reversal context
+New file (Codex-owned, since Codex handles perf): `scripts/stress/otp-send.ts`
 
-### Hand-off to Claude — `/admin/audit` page
+```ts
+// Deno script. Run: deno run -A scripts/stress/otp-send.ts --mode=test-numbers --rps=20 --duration=60
+```
 
-SDK is ready: `searchAuditLogs(filters)` from `src/integrations/cog/admin.ts`. Gate the route with `isCurrentUserAdmin()`.
+Features:
+- Reads `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` from `.env`.
+- Phone pool from `scripts/stress/phones.json` (gitignored; one list per mode).
+- Configurable: `--rps`, `--duration`, `--concurrency`, `--mode`.
+- Open-loop load generator (constant arrival rate, not closed-loop) so we measure server behavior, not client backpressure.
+- Per-request: timestamp, phone, status, error code, latency ms, response body hash.
+- Writes NDJSON results to `/tmp/otp-stress-<ts>.ndjson`.
+- Prints a summary table at the end: total, success%, p50/p95/p99, top 5 error codes with counts, and inferred rate-limit thresholds (first-failure RPS).
 
-Filter bar inputs (all optional, debounced submit):
-- `invoice_id` (text, e.g. `in_1QabcXYZ`)
-- `referrer_user_id` (uuid)
-- `referred_user_id` (uuid)
-- `reversed_reason` (select: `churned_before_maturity`, `invoice_refunded`, `no_subscription`, `storage_addon`, `zero_amount`, `wrong_plan`, `bad_status`, `user_mismatch`, `no_attribution`, `self_referral`, `fraud_hold` — plus free text)
-- `action` (select: `reward_skipped`, `reward_reversed`, `attribute_referral`, `redeem_code`, `approve_payout`, `mark_payout_paid`, `mark_payout_failed`, `override_attribution`, `admin_create_founder`, `admin_create_founder_code`, `admin_deactivate_code` — plus free text)
-- `since` / `until` (datetime-local)
+## Test scenarios (run in order)
 
-Results table columns: timestamp · action · entity (type+id) · actor (referred) · referrer (uuid or founder id) · invoice_id · reason / reversed_reason · "View JSON" expand row showing `before` + `after`.
+| # | Scenario | Mode | RPS | Duration | Expectation |
+|---|----------|------|-----|----------|-------------|
+| 1 | Baseline single | test-numbers | 1 | 30s | 100% success, p95 < 800ms |
+| 2 | Per-phone cooldown | test-numbers | 5 (same number) | 30s | First succeeds, rest = `over_sms_send_rate_limit` after 1/60s |
+| 3 | Ramp | test-numbers | 1→50 step 5 every 10s | 100s | Find knee where success% drops below 95% |
+| 4 | Sustained burst | test-numbers | 50 | 60s | Measure rate-limit recovery + tail latency |
+| 5 | Concurrency stress | test-numbers | 250 parallel, single tick | 5s | No 5xx, no dropped TCP, all responses returned |
+| 6 | Canary real SMS | canary | 1 | 5 sends total | All deliver; confirms prod path |
 
-Pagination: limit 50, page via `offset`; show `total` and `has_more`. CSV export button calls SDK with limit 500 and downloads client-side.
+## Reporting
 
-Notes:
-- `invoice_id` is extracted from `after.invoice` / `before.invoice` jsonb
-- `referrer_user_id` is resolved by joining `referral_attributions` on the row's `actor_user_id` (the referred user)
-- All access enforced server-side by `has_role(auth.uid(),'admin')` inside `admin_search_audit_logs` — front-end gate is UX only
+After the run, the script writes `docs/codex-stress/otp-send-<date>.md` with:
+- Config used
+- Summary table
+- Two ASCII charts: latency over time, RPS vs error-rate
+- Observed Supabase rate-limit thresholds
+- Recommended client-side guards (debounce window, retry-after honoring)
+
+## Code/config that will change
+
+- **Create** `scripts/stress/otp-send.ts` (Deno load-test script)
+- **Create** `scripts/stress/phones.example.json` (committed) + `scripts/stress/phones.json` (gitignored)
+- **Create** `docs/codex-stress/README.md` explaining how to run, prerequisites, and how to add test numbers in the Auth dashboard
+- **Update** `.gitignore` to exclude `scripts/stress/phones.json` and `/tmp/otp-stress-*.ndjson`
+- **No** app code changes. **No** edge function changes. **No** schema changes.
+
+## Out of scope
+
+- Auto-creating test phone numbers in the Auth provider config (requires manual dashboard step — script will print instructions).
+- Stress-testing `verifyOtp` (separate plan if you want it).
+- Building a Twilio-direct custom send function (separate plan).
+
+## Prereqs you must do once before run #1
+
+1. Open Cloud → Users → Auth Settings → Phone provider → **Test OTP** and add 20 numbers `+15555550100` through `+15555550119`, all with OTP `123456`.
+2. Confirm Lovable Cloud Auth is in **sandbox / dev** environment so we don't pollute prod metrics.
+
+After approval I'll create the script + docs, then run scenarios 1–5 and surface the report.
