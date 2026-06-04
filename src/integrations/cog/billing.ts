@@ -60,9 +60,9 @@ export type ValidateCodeResult =
 // remain for backwards compatibility with old subscription rows but
 // MUST NOT be used for new checkouts — use plan_key instead.
 export const PRICE_IDS = {
-  starter_monthly: "starter_monthly",
-  pro_monthly: "pro_monthly",
-  pro_monthly_referral_50: "pro_monthly_referral_50",
+  starter_monthly: "starter_monthly_cad",
+  pro_monthly: "pro_monthly_cad",
+  pro_monthly_referral_50: "pro_monthly_referral_50_cad",
   storage_25gb_monthly: "cog_storage_25gb_monthly_cad",
   storage_100gb_monthly: "cog_storage_100gb_monthly_cad",
   storage_500gb_monthly: "cog_storage_500gb_monthly_cad",
@@ -84,7 +84,9 @@ export async function getPricingCatalog(): Promise<PlanTier[]> {
 }
 
 /** Pricing page data: copy + cards in display order. Public-readable. */
-export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: PricingCard[] }> {
+export type FaqItem = { q: string; a: string };
+
+export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: PricingCard[]; faq: FaqItem[] }> {
   const { data, error } = await supabase.from("pricing_copy").select("key, payload");
   if (error) throw error;
   const map = new Map<string, any>((data ?? []).map((r) => [r.key, r.payload]));
@@ -93,7 +95,8 @@ export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: 
   const cards = order
     .map((k) => map.get(`card_${k}`) as PricingCard | undefined)
     .filter((c): c is PricingCard => !!c);
-  return { page, cards };
+  const faq = ((map.get("faq") as { items?: FaqItem[] } | undefined)?.items ?? []) as FaqItem[];
+  return { page, cards, faq };
 }
 
 /** Validate a code BEFORE checkout so the UI can show "Founder code applied — $49/mo". */
