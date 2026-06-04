@@ -15,6 +15,7 @@ export const qaRoutes = [
   { path: "/songs/1/people", label: "People" },
   { path: "/songs/1/activity", label: "Activity" },
   { path: "/songs/1/credits", label: "Credits" },
+  { path: "/settings", label: "Settings" },
   { path: "/settings/storage", label: "Storage settings" },
   { path: "/settings/referral", label: "Referral settings" },
   { path: "/upgrade", label: "Upgrade" },
@@ -28,6 +29,7 @@ export const mobileRenderRoutes = [
   { path: "/songs/1", label: "Song workspace" },
   { path: "/songs/1/capture", label: "Capture first idea" },
   { path: "/songs/1/voice-added", label: "Voice memo added" },
+  { path: "/settings", label: "Settings" },
   { path: "/upgrade", label: "Upgrade" },
   { path: "/not-a-real-song-room", label: "404 fallback" },
 ];

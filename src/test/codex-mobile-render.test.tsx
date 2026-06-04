@@ -7,6 +7,7 @@ import CaptureFirstIdeaPage from "@/pages/onboarding/CaptureFirstIdeaPage";
 import VoiceMemoAddedPage from "@/pages/onboarding/VoiceMemoAddedPage";
 import NotFound from "@/pages/NotFound";
 import UpgradePage from "@/pages/UpgradePage";
+import SettingsPage from "@/pages/settings/SettingsPage";
 
 const setMobileViewport = () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -68,5 +69,12 @@ describe("Codex 390px mobile render smoke", () => {
 
     expect(screen.getByRole("heading", { name: /ready to build your catalog/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /go pro/i })).toBeInTheDocument();
+  });
+
+  it("renders the settings page at the primary mobile width", () => {
+    renderRoute("/settings", "/settings", <SettingsPage />);
+
+    expect(screen.getByRole("heading", { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /storage/i })).toBeInTheDocument();
   });
 });

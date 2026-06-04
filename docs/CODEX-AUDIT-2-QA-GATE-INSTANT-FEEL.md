@@ -27,12 +27,12 @@ This audit turns Codex from an occasional reviewer into a repeatable quality gat
 | `npm.cmd run qa:codex` | Pass | Hard checks passed |
 | `npm.cmd run lint` | Pass | 0 errors, 4 inherited shadcn fast-refresh warnings |
 | `npm.cmd run build` | Pass | Production build completed |
-| `npm.cmd run test` | Pass | 4 files, 12 tests passed |
+| `npm.cmd run test` | Pass | 4 files, 13 tests passed |
 | `npm.cmd run perf:budget` | Pass | All current bundle budgets passed |
 | Old-brand content scan | Pass | No forbidden old-brand content in `src`, `public`, or `index.html` |
 | Legacy asset filename scan | Warn | 15 old asset filenames remain under `src/assets` |
-| 390px mobile render smoke | Pass | Catalog, workspace, capture, saved memo, upgrade, and 404 route covered through tests |
-| Production preview route smoke | Pass | 20 SPA routes returned HTTP 200 |
+| 390px mobile render smoke | Pass | Catalog, workspace, capture, saved memo, settings, upgrade, and 404 route covered through tests |
+| Production preview route smoke | Pass | 21 SPA routes returned HTTP 200 |
 | Placeholder route scan | Pass | No reachable `coming soon` placeholder files detected |
 | Basic accessibility source checks | Pass | Head metadata, route fallback label, 404 heading, and key form labels detected |
 | Instant-feel source checks | Pass | Route lazy-loading, skeleton fallback, stable card/touch target signals detected |

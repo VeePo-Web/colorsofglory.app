@@ -23,7 +23,7 @@ interface SettingsRow {
 
 const ROWS: SettingsRow[] = [
   { icon: User,      label: "Account",          sublabel: "officallulas@gmail.com", to: "#" },
-  { icon: Crown,     label: "Upgrade to Pro",   sublabel: "Unlock 50 songs · 100GB · exports", to: "/upgrade", accent: true },
+  { icon: Crown,     label: "Upgrade to Pro",   sublabel: "Unlock 50 songs - 100GB - exports", to: "/upgrade", accent: true },
   { icon: HardDrive, label: "Storage",          sublabel: "850MB of 1GB used", to: "/settings/storage" },
   { icon: Gift,      label: "Refer & Earn",     sublabel: "$10/month per active Pro referral", to: "/settings/referral" },
   { icon: Bell,      label: "Notifications",    to: "#" },
@@ -141,7 +141,7 @@ const SettingsPage = () => {
           className="text-xs text-center mt-8"
           style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
         >
-          Colors of Glory · v0.1.0-alpha
+          Colors of Glory - v0.1.0-alpha
         </p>
       </div>
 
