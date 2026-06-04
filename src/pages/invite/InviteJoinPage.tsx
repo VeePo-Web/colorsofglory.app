@@ -132,7 +132,11 @@ const InviteJoinPage = () => {
         msg.includes('invalid') ? 'Enter a valid US phone number.' :
         'We could not send the code. Check your connection.'
       );
-      setState({ type: 'input', preview: (state as { type: 'submitting'; preview: InvitePreview }).preview });
+      setState((prev) =>
+        prev.type === 'submitting' || prev.type === 'input'
+          ? { type: 'input', preview: prev.preview }
+          : prev
+      );
     }
   };
 
