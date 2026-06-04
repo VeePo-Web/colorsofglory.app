@@ -1360,6 +1360,7 @@ export type Database = {
       }
     }
     Functions: {
+      _assert_admin: { Args: never; Returns: undefined }
       accept_song_invite: {
         Args: { _token: string; _user_id: string }
         Returns: {
@@ -1367,6 +1368,121 @@ export type Database = {
           code: string
           role: Database["public"]["Enums"]["song_member_role"]
           song_id: string
+        }[]
+      }
+      admin_create_founder: {
+        Args: {
+          _display_name: string
+          _notes?: string
+          _reward_profile?: Json
+          _slug: string
+        }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          display_name: string
+          id: string
+          notes: string | null
+          paused_at: string | null
+          payout_method_status: string
+          revoked_at: string | null
+          reward_profile: Json
+          slug: string
+          status: Database["public"]["Enums"]["founder_status"]
+          tier: Database["public"]["Enums"]["founder_tier"]
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "founders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_create_founder_code: {
+        Args: {
+          _code: string
+          _expires_at?: string
+          _founder_id: string
+          _label?: string
+          _max_redemptions?: number
+        }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          discount_cents: number
+          expires_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions: number | null
+          owner_founder_id: string | null
+          owner_user_id: string | null
+          redemption_count: number
+          status: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id: string | null
+          updated_at: string
+          value: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_deactivate_code: {
+        Args: { _code_id: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          discount_cents: number
+          expires_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["code_kind"]
+          max_redemptions: number | null
+          owner_founder_id: string | null
+          owner_user_id: string | null
+          redemption_count: number
+          status: Database["public"]["Enums"]["code_status"]
+          stripe_promotion_code_id: string | null
+          updated_at: string
+          value: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_founder_detail: { Args: { _founder_id: string }; Returns: Json }
+      admin_founder_summary: {
+        Args: never
+        Returns: {
+          active_codes: number
+          attributed_users: number
+          code_count: number
+          display_name: string
+          founder_id: string
+          last_payout_at: string
+          paid_cents: number
+          payable_cents: number
+          pending_cents: number
+          slug: string
+          status: string
+          total_redemptions: number
+        }[]
+      }
+      admin_monthly_payouts: {
+        Args: { _month_start?: string }
+        Returns: {
+          display_name: string
+          founder_id: string
+          invoice_count: number
+          payable_cents: number
+          pending_cents: number
+          reward_event_ids: string[]
         }[]
       }
       admin_override_attribution: {
@@ -1395,6 +1511,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_referrals_recent: {
+        Args: { _limit?: number }
+        Returns: {
+          code_value: string
+          created_at: string
+          founder_name: string
+          referred_user_id: string
+          referrer_founder_id: string
+          referrer_type: string
+        }[]
       }
       advance_onboarding: {
         Args: {
