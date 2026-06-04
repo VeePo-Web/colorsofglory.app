@@ -1201,6 +1201,7 @@ export type Database = {
           byte_size: number
           created_at: string
           duration_ms: number | null
+          failure_reason: string | null
           id: string
           mime_type: string
           section_id: string | null
@@ -1216,6 +1217,7 @@ export type Database = {
           byte_size?: number
           created_at?: string
           duration_ms?: number | null
+          failure_reason?: string | null
           id?: string
           mime_type: string
           section_id?: string | null
@@ -1231,6 +1233,7 @@ export type Database = {
           byte_size?: number
           created_at?: string
           duration_ms?: number | null
+          failure_reason?: string | null
           id?: string
           mime_type?: string
           section_id?: string | null
@@ -1263,6 +1266,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_song_invite: {
+        Args: { _token: string; _user_id: string }
+        Returns: {
+          already_member: boolean
+          code: string
+          role: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+        }[]
+      }
       admin_override_attribution: {
         Args: {
           _new_referrer_id: string
@@ -1354,6 +1366,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      can_create_song: { Args: { _user_id: string }; Returns: boolean }
+      can_invite: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_unarchive_song: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_upload_bytes: {
+        Args: { _bytes: number; _owner_user_id: string }
+        Returns: boolean
+      }
       claim_transcript_attempt: {
         Args: { _memo_id: string }
         Returns: {
@@ -1373,6 +1398,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["sub_plan"]
       }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
+      expire_pending_invites: { Args: never; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -1383,6 +1409,10 @@ export type Database = {
       }
       is_admin: { Args: { _uid: string }; Returns: boolean }
       is_invite_valid: { Args: { _invite_id: string }; Returns: boolean }
+      is_last_owner: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_pro_user: { Args: { _user_id: string }; Returns: boolean }
       is_song_member: {
         Args: { _song_id: string; _user_id: string }
@@ -1391,6 +1421,10 @@ export type Database = {
       is_song_owner: {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
+      }
+      mark_memo_failed: {
+        Args: { _memo_id: string; _reason: string }
+        Returns: undefined
       }
       mark_memo_transcribed: { Args: { _memo_id: string }; Returns: undefined }
       mark_payout_failed: {
@@ -1451,6 +1485,7 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      owned_active_song_count: { Args: { _user_id: string }; Returns: number }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
       record_invoice_refunded: { Args: { _event: Json }; Returns: number }
@@ -1509,6 +1544,18 @@ export type Database = {
         }
       }
       reward_hold_days: { Args: never; Returns: number }
+      safe_leave_song: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: string
+      }
+      safe_transfer_song_owner: {
+        Args: { _actor: string; _new_owner: string; _song_id: string }
+        Returns: string
+      }
+      safe_unarchive_song: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: string
+      }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
