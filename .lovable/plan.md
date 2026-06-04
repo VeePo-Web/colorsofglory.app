@@ -1,38 +1,34 @@
 ## Goal
-On the Founder Detail page (`/admin/founders/:id`), let you select one of the founder's codes and drill into exactly which users that code referred and what payouts each of them has generated.
 
-## Where it lives
-Add a fourth tab to the existing `Tabs` in `src/pages/admin/FounderDetailPage.tsx`:
+When a user signs up using a founder's code and pays for Pro, the founder earns:
+- **$25/month for the first 3 months** of that subscriber
+- **$10/month** every month after that, for as long as the subscriber stays on Pro
 
-`Codes | Users | Rewards | By code` ← new
+## How it fits the existing system
 
-Keeping it inside FounderDetailPage means we reuse the data already loaded by `adminFounderDetail(id)` — no new RPC, no extra fetches.
+The reward engine already supports a per-founder reward profile with three knobs: `first6_cents`, `first6_months`, `ongoing_cents`. The `record_invoice_paid` function reads these from `founders.reward_profile` on every paid invoice and writes the correct cash reward into `reward_events` (which the admin Payouts page already aggregates). So this change is just updating the numbers — no new tables, no edge function changes, no UI changes.
 
-## Data wiring (all client-side, from the existing payload)
-`adminFounderDetail` already returns:
-- `codes[]` — `{ id, value, status, redemption_count, ... }`
-- `attributed_users[]` — `{ user_id, attributed_at, code_id }`
-- `reward_events[]` — `{ referred_user_id, amount_cents, status, reward_kind, created_at, invoice_external_id, ... }`
+Current defaults: $20 × 6 months, then $10. We are changing them to: **$25 × 3 months, then $10**.
 
-We build two lookup maps:
-- `usersByCode: Map<code_id, attributed_users[]>`
-- `rewardsByUser: Map<referred_user_id, reward_events[]>`
+## Single migration
 
-## The "By code" tab UI
-- Top: a `Select` listing the founder's codes (label: `CODE · N users · $payable`). Defaults to the code with most referrals.
-- Summary strip for the selected code: total referred users, total pending / payable / paid (sum of cash reward_events from those users).
-- Table of referred users for that code:
-  - User id (truncated, monospace, copy-on-click)
-  - Attributed at
-  - Reward events count
-  - Pending / Payable / Paid totals (money, monospace)
-  - Last invoice id (monospace, muted)
-- Empty state when a code has no referrals: "No users have signed up with this code yet."
+1. **Update app-wide defaults** in `app_settings`:
+   - `founder_reward_first6_cents` → 2500
+   - add `founder_reward_first6_months` → 3
+   - `founder_reward_ongoing_cents` stays 1000
+2. **Update the column default** on `public.founders.reward_profile` to `{"first6_cents": 2500, "first6_months": 3, "ongoing_cents": 1000}` so new founders inherit the new rule.
+3. **Backfill every existing founder** by setting their `reward_profile` to the new values (since current founders are pre-launch and should all use the new rule).
+4. **Leave `record_invoice_paid` untouched** — it already reads `first6_cents`, `first6_months`, `ongoing_cents` from each founder's profile, so the new values take effect on the very next paid invoice. Already-recorded `reward_events` are not retroactively changed (correct behaviour — past invoices keep their historical amounts).
 
-## Quick entry point from the Codes tab
-In the existing Codes tab, add a small "View referrals →" link in each row that switches the tab to "By code" and pre-selects that code (via local state lifted to the page).
+## What stays the same
+
+- 30-day hold before a reward becomes payable (`reward_hold_days`).
+- Refunds/chargebacks still reverse the matching reward.
+- Per-user referral credits ($10 service credit) are unchanged.
+- Admin dashboard, payouts CSV, and the "By code" drilldown all keep working — they just start showing $25 amounts for new subscribers' first three invoices.
 
 ## Out of scope
-- No new RPC, migration, or edge function — purely UI on existing data.
-- No per-user expand/sub-rows yet (can come later if needed).
-- No CSV export from this panel (Payouts page already exports monthly).
+
+- No change to the admin UI (the existing payable / pending / paid totals already reflect whatever amounts the engine writes).
+- No per-founder override UI yet. If you later want a specific founder on a different rate, we can edit `reward_profile` directly or add a small admin form.
+- No retroactive recalculation of historical rewards.
