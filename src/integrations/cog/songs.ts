@@ -35,7 +35,15 @@ type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
 
 async function call<T = unknown>(fn: string, body: unknown): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
-  const env = data as Envelope<T> | undefined;
+  let env = data as Envelope<T> | undefined;
+  // On non-2xx, supabase-js puts the Response on error.context; parse the body.
+  if (error && (error as any).context && typeof (error as any).context.json === "function") {
+    try {
+      env = (await (error as any).context.json()) as Envelope<T>;
+    } catch {
+      /* ignore parse failure, fall through to generic error */
+    }
+  }
   // New-shape envelope
   if (env && typeof env === "object" && "ok" in env) {
     if (!env.ok) throw new CogError(env.code ?? "INTERNAL", env.message);
