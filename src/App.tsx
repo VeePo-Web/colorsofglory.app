@@ -23,6 +23,7 @@ const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
+const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/songs/:id/credits" element={<CreditsPage />} />
 
             {/* Settings */}
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/storage" element={<StoragePage />} />
             <Route path="/settings/referral" element={<ReferralPage />} />
             <Route path="/upgrade" element={<UpgradePage />} />

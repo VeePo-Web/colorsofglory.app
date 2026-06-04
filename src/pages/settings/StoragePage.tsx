@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, HardDrive } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import BottomNav from "@/components/cog/BottomNav";
 
 interface StorageItem {
   label: string;
@@ -183,6 +184,7 @@ const StoragePage = () => {
           Your songs, lyrics, and memos will not be deleted.{"\n"}Only new uploads pause.
         </p>
       </div>
+      <BottomNav active="settings" />
     </div>
   );
 };

@@ -953,3 +953,76 @@
   .reveal { opacity: 1 !important; transform: none !important; }
   .cursor-ring { display: none !important; }
 }
+
+/* ===== COG PERFORMANCE + TOUCH LAYER ===== */
+
+/* GPU-composite only the elements that animate — reduces paint */
+.cog-will-animate {
+  will-change: transform, opacity;
+}
+
+/* Crisp 60fps touch response — eliminate 300ms click delay on iOS */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Buttons must never jitter during active state */
+button, a {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* Momentum scroll on all scrollable areas */
+.cog-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Page-level route transition — slides in from right, exits left */
+@keyframes cog-page-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes cog-page-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-12px); }
+}
+
+.cog-page-enter {
+  animation: cog-page-in 260ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Bottom sheet slide-up */
+@keyframes cog-sheet-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cog-sheet-enter {
+  animation: cog-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger children into view — used on list/card screens */
+@keyframes cog-stagger-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cog-stagger > * {
+  animation: cog-stagger-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.cog-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.cog-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.cog-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.cog-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.cog-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.cog-stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+/* Input focus ring — COG gold, accessible */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(184, 149, 58, 0.60);
+  outline-offset: 2px;
+}
+
+/* Safe area helpers */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import BackHeader from "@/components/cog/BackHeader";
 
 const WAVEFORM = [18, 32, 24, 42, 28, 52, 36, 26, 46, 34, 22, 38, 30, 48, 26, 36, 20, 30];
 
@@ -35,11 +36,13 @@ const VoiceMemoAddedPage = () => {
         }}
       />
 
+      <BackHeader to={`/songs/${songId}/capture`} label="Back" />
+
       <main
-        className="relative mx-auto flex min-h-screen w-full flex-col justify-center px-6 py-14"
-        style={{ maxWidth: "var(--max-w-app)" }}
+        className="relative mx-auto flex w-full flex-col justify-center px-6 pb-14 pt-4"
+        style={{ maxWidth: "var(--max-w-app)", minHeight: "calc(100vh - 60px)" }}
       >
-        <div className="flex justify-center mb-10">
+        <div className="flex justify-center mb-8">
           <CogLogo size="sm" />
         </div>
 

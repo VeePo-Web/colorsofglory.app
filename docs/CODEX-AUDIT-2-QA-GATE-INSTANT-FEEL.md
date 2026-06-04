@@ -39,9 +39,9 @@ This audit turns Codex from an occasional reviewer into a repeatable quality gat
 
 ## Bundle Snapshot
 
-- Main JS: `308.9 kB` raw, `99.7 kB` gzip
-- Main CSS: `80.5 kB` raw, `14.6 kB` gzip
-- Route chunks checked: `31`
+- Main JS: `309.3 kB` raw, `99.8 kB` gzip
+- Main CSS: `82.6 kB` raw, `15.0 kB` gzip
+- Route chunks checked: `37`
 - Largest route chunk: `PeoplePage`, `6.0 kB` raw
 
 Current bundle shape is healthy. The main JS budget has roughly 10 kB gzip of headroom before it hits the current Codex cap, so audio, editor, transcription, and canvas work must stay lazy-loaded.

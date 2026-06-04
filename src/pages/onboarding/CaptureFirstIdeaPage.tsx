@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Mic, PenLine } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import BackHeader from "@/components/cog/BackHeader";
 
 const CaptureFirstIdeaPage = () => {
   const navigate = useNavigate();
@@ -32,11 +33,13 @@ const CaptureFirstIdeaPage = () => {
         }}
       />
 
+      <BackHeader to={`/songs/${songId}`} label="Song" />
+
       <div
-        className="relative flex flex-col flex-1 items-center justify-center px-6 pb-16 pt-20"
+        className="relative flex flex-col flex-1 items-center justify-center px-6 pb-16 pt-2"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        <div className="flex justify-center mb-12">
+        <div className="flex justify-center mb-10">
           <CogLogo size="sm" />
         </div>
 

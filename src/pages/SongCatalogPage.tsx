@@ -1,6 +1,8 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
+import BottomNav from "@/components/cog/BottomNav";
 
 type SongStatus = "active" | "draft" | "collaborating" | "private" | "archived";
 type Tab = "Owned" | "Invited" | "Archived";
@@ -91,8 +93,19 @@ const SongCatalogPage = () => {
 
       {/* Header */}
       <div className="relative px-6 pt-14 pb-4" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto" }}>
+        <div className="flex items-center justify-between mb-1">
+          <CogLogo size="sm" />
+          <button
+            onClick={() => navigate("/settings/storage")}
+            className="flex items-center justify-center transition-all duration-150 active:scale-90"
+            style={{ width: 44, height: 44, color: "var(--cog-warm-gray)" }}
+            aria-label="Settings"
+          >
+            <Settings size={20} strokeWidth={1.5} />
+          </button>
+        </div>
         <h1
-          className="text-3xl font-semibold tracking-tight"
+          className="text-3xl font-semibold tracking-tight mt-3"
           style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
         >
           Your songs
@@ -118,7 +131,7 @@ const SongCatalogPage = () => {
       </div>
 
       {/* Song grid */}
-      <div className="relative px-6 pb-32" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto" }}>
+      <div className="relative px-6 pb-48" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto" }}>
         {filteredSongs.length === 0 ? (
           <div className="text-center pt-20">
             <p className="text-base" style={{ color: "var(--cog-warm-gray)" }}>
@@ -138,21 +151,24 @@ const SongCatalogPage = () => {
         )}
       </div>
 
-      {/* New song FAB */}
+      {/* New song FAB — sits above BottomNav */}
       <button
         onClick={() => navigate("/onboarding/start-song")}
-        className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 px-8 py-4 rounded-full font-medium text-white transition-transform duration-150 active:scale-95"
+        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-7 py-3.5 rounded-full font-medium text-white transition-transform duration-150 active:scale-95"
         style={{
+          bottom: 96,
           backgroundColor: "var(--cog-gold)",
           boxShadow: "0 4px 20px rgba(184,149,58,0.40)",
           fontFamily: "var(--font-body)",
           fontSize: "var(--t-body)",
-          zIndex: 400,
+          zIndex: 450,
         }}
       >
         <Plus size={18} strokeWidth={2.5} />
         New song
       </button>
+
+      <BottomNav active="songs" />
     </div>
   );
 };

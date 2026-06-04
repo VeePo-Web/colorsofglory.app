@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import BackHeader from "@/components/cog/BackHeader";
 
 interface PlanFeature {
   label: string;
@@ -39,11 +40,13 @@ const UpgradePage = () => {
         }}
       />
 
+      <BackHeader label="Back" />
+
       <div
-        className="relative flex flex-col flex-1 px-6 pt-24 pb-12"
+        className="relative flex flex-col flex-1 px-6 pt-4 pb-12"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        <div className="flex justify-center mb-10">
+        <div className="flex justify-center mb-8">
           <CogLogo size="sm" />
         </div>
 

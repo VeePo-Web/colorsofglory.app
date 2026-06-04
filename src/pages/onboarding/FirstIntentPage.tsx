@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
 import CogLogo from "@/components/cog/CogLogo";
+import BackHeader from "@/components/cog/BackHeader";
 
 const FirstIntentPage = () => {
   const navigate = useNavigate();
@@ -19,12 +20,14 @@ const FirstIntentPage = () => {
         }}
       />
 
+      <BackHeader to="/auth/verify" label="Back" />
+
       <div
-        className="relative flex flex-col flex-1 px-6 pt-24 pb-12"
+        className="relative flex flex-col flex-1 px-6 pt-4 pb-12"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
         {/* Brand */}
-        <div className="flex justify-center mb-12">
+        <div className="flex justify-center mb-10">
           <CogLogo size="sm" />
         </div>
 
