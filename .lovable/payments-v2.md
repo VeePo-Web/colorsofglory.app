@@ -127,3 +127,32 @@ Issues found while auditing the v2 build against Stripe API `2026-03-25.dahlia` 
 - Frontend `/pricing` page rendering `getPricingPage()` payload.
 - Optional `pricing_copy.faq` rows if a FAQ section is added to the page.
 - Currency expansion beyond USD (`plan_tiers.currency` already encodes for future).
+---
+
+## CAD switch (2026-06-04)
+
+All pricing switched from USD to CAD.
+
+### New Stripe products / prices (CAD)
+- `cog_starter_cad` → `starter_monthly_cad` @ $5.00 CAD/mo
+- `cog_pro_cad` → `pro_monthly_cad` @ $100.00 CAD/mo
+- `cog_pro_cad` → `pro_monthly_referral_50_cad` @ $49.00 CAD/mo
+
+All tax_code `txcd_10103001`, qty 1/1. Old USD products (`cog_starter`, `cog_pro`, `cog_pro_referral`) left in place but unreferenced by `plan_tiers` — they are stranded test-mode artifacts and can be archived from the Stripe dashboard at any time.
+
+### Data updates
+- `plan_tiers.currency` flipped to `CAD` for all rows.
+- `plan_tiers.stripe_price_id` / `stripe_referral_price_id` repointed to the `_cad` lookup keys.
+- `pricing_copy` card payloads now display `$5 CAD`, `$49 CAD`, `$100 CAD`. Page payload carries `currency_note: "All prices in Canadian dollars."`
+- New `pricing_copy.faq` row with 6 Q&A items consumed by `getPricingPage()`.
+
+### Code changes
+- `_shared/stripe.ts` `planForLookupKey` now accepts both the USD and CAD lookup keys for each plan (no breakage for in-flight USD subs).
+- `src/integrations/cog/billing.ts` `PRICE_IDS` constants point at the CAD lookup keys.
+- `getPricingPage()` now returns `{ page, cards, faq }` (was `{ page, cards }`).
+- New §7 SDK aliases: `getMySubscription`, `getMyFounderStats`, `purchaseStorageAddon` (thin re-exports / wrappers).
+
+### Verified
+- `validate-code` already returns `reason: 'wrong_plan'` when `plan_key !== 'pro'`.
+- `payments-webhook` already defaults `currency` to `cad` and reads `invoice.currency` through to `billing_events`.
+- `create-checkout` uses lookup-key resolution only (no `price_data` fallback), so CAD currency is enforced by the price object itself.
