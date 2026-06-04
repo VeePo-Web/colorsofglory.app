@@ -28,6 +28,26 @@ Deno.serve(async (req) => {
         })
         if (payoutId) createdPayouts++
       }
+
+      // Also create user-referrer monthly payout drafts
+      const { data: userReferrers } = await supabase
+        .from('reward_events')
+        .select('referrer_user_id')
+        .eq('reward_kind', 'cash')
+        .eq('status', 'payable')
+        .is('payout_id', null)
+        .not('referrer_user_id', 'is', null)
+        .gte('created_at', periodStart.toISOString())
+        .lt('created_at', periodEnd.toISOString())
+      const uniqUsers = Array.from(new Set((userReferrers ?? []).map((r: any) => r.referrer_user_id).filter(Boolean)))
+      for (const uid of uniqUsers) {
+        const { data: payoutId } = await supabase.rpc('create_user_payout_batch', {
+          _user: uid,
+          _period_start: periodStart.toISOString(),
+          _period_end: periodEnd.toISOString(),
+        })
+        if (payoutId) createdPayouts++
+      }
     }
 
     return new Response(JSON.stringify({ ok: true, matured, createdPayouts }), {

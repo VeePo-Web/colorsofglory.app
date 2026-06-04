@@ -484,7 +484,7 @@ export type Database = {
           created_at: string
           currency: string
           failure_reason: string | null
-          founder_id: string
+          founder_id: string | null
           id: string
           paid_at: string | null
           period_end: string
@@ -493,6 +493,7 @@ export type Database = {
           provider_payout_id: string | null
           status: Database["public"]["Enums"]["payout_status"]
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           amount_cents?: number
@@ -501,7 +502,7 @@ export type Database = {
           created_at?: string
           currency?: string
           failure_reason?: string | null
-          founder_id: string
+          founder_id?: string | null
           id?: string
           paid_at?: string | null
           period_end: string
@@ -510,6 +511,7 @@ export type Database = {
           provider_payout_id?: string | null
           status?: Database["public"]["Enums"]["payout_status"]
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           amount_cents?: number
@@ -518,7 +520,7 @@ export type Database = {
           created_at?: string
           currency?: string
           failure_reason?: string | null
-          founder_id?: string
+          founder_id?: string | null
           id?: string
           paid_at?: string | null
           period_end?: string
@@ -527,6 +529,7 @@ export type Database = {
           provider_payout_id?: string | null
           status?: Database["public"]["Enums"]["payout_status"]
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -535,6 +538,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "founders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -549,9 +559,15 @@ export type Database = {
           onboarding_state: Json
           onboarding_step: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at: string
+          payout_country: string | null
+          payout_email: string | null
+          payout_method:
+            | Database["public"]["Enums"]["payout_method_kind"]
+            | null
           phone_e164: string | null
           referral_code: string | null
           referred_by_user_id: string | null
+          stripe_connect_account_id: string | null
           updated_at: string
           user_id: string
         }
@@ -565,9 +581,15 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
+          payout_country?: string | null
+          payout_email?: string | null
+          payout_method?:
+            | Database["public"]["Enums"]["payout_method_kind"]
+            | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
+          stripe_connect_account_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -581,9 +603,15 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
+          payout_country?: string | null
+          payout_email?: string | null
+          payout_method?:
+            | Database["public"]["Enums"]["payout_method_kind"]
+            | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
+          stripe_connect_account_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -662,7 +690,9 @@ export type Database = {
           referrer_founder_id: string | null
           referrer_type: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id: string | null
+          reversed_at: string | null
           reversed_by_event_id: string | null
+          reversed_reason: string | null
           reward_kind: Database["public"]["Enums"]["reward_kind"]
           status: Database["public"]["Enums"]["reward_status"]
           subscription_id: string | null
@@ -682,7 +712,9 @@ export type Database = {
           referrer_founder_id?: string | null
           referrer_type: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id?: string | null
+          reversed_at?: string | null
           reversed_by_event_id?: string | null
+          reversed_reason?: string | null
           reward_kind: Database["public"]["Enums"]["reward_kind"]
           status?: Database["public"]["Enums"]["reward_status"]
           subscription_id?: string | null
@@ -702,7 +734,9 @@ export type Database = {
           referrer_founder_id?: string | null
           referrer_type?: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id?: string | null
+          reversed_at?: string | null
           reversed_by_event_id?: string | null
+          reversed_reason?: string | null
           reward_kind?: Database["public"]["Enums"]["reward_kind"]
           status?: Database["public"]["Enums"]["reward_status"]
           subscription_id?: string | null
@@ -1561,7 +1595,7 @@ export type Database = {
           created_at: string
           currency: string
           failure_reason: string | null
-          founder_id: string
+          founder_id: string | null
           id: string
           paid_at: string | null
           period_end: string
@@ -1570,6 +1604,7 @@ export type Database = {
           provider_payout_id: string | null
           status: Database["public"]["Enums"]["payout_status"]
           updated_at: string
+          user_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1631,6 +1666,10 @@ export type Database = {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
       }
+      create_user_payout_batch: {
+        Args: { _period_end: string; _period_start: string; _user: string }
+        Returns: string
+      }
       current_invite_expiry: { Args: never; Returns: string }
       current_plan: {
         Args: { _user_id: string }
@@ -1675,7 +1714,7 @@ export type Database = {
           created_at: string
           currency: string
           failure_reason: string | null
-          founder_id: string
+          founder_id: string | null
           id: string
           paid_at: string | null
           period_end: string
@@ -1684,6 +1723,7 @@ export type Database = {
           provider_payout_id: string | null
           status: Database["public"]["Enums"]["payout_status"]
           updated_at: string
+          user_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1701,7 +1741,7 @@ export type Database = {
           created_at: string
           currency: string
           failure_reason: string | null
-          founder_id: string
+          founder_id: string | null
           id: string
           paid_at: string | null
           period_end: string
@@ -1710,6 +1750,7 @@ export type Database = {
           provider_payout_id: string | null
           status: Database["public"]["Enums"]["payout_status"]
           updated_at: string
+          user_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1798,6 +1839,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reverse_reward_for_invoice: {
+        Args: { _invoice: string; _reason: string }
+        Returns: number
+      }
       reward_hold_days: { Args: never; Returns: number }
       safe_leave_song: {
         Args: { _song_id: string; _user_id: string }
@@ -1865,6 +1910,7 @@ export type Database = {
       onboarding_step:
         | "not_started"
         | "intent_selected"
+        | "referral_program_seen"
         | "founder_code_seen"
         | "first_song_created"
         | "first_idea_captured"
@@ -1873,6 +1919,7 @@ export type Database = {
         | "first_collaborator_invited"
         | "completed"
         | "dismissed"
+      payout_method_kind: "manual" | "paypal" | "stripe_connect"
       payout_status:
         | "draft"
         | "approved"
@@ -2065,6 +2112,7 @@ export const Constants = {
       onboarding_step: [
         "not_started",
         "intent_selected",
+        "referral_program_seen",
         "founder_code_seen",
         "first_song_created",
         "first_idea_captured",
@@ -2074,6 +2122,7 @@ export const Constants = {
         "completed",
         "dismissed",
       ],
+      payout_method_kind: ["manual", "paypal", "stripe_connect"],
       payout_status: [
         "draft",
         "approved",

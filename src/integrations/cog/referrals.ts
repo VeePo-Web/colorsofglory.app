@@ -1,5 +1,54 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export const REFERRAL_SHARE_BASE = "https://colorsofglory.app/r/";
+export function buildReferralShareUrl(code: string): string {
+  return `${REFERRAL_SHARE_BASE}${code}`;
+}
+
+export type MyReferralsSummary = {
+  code: string | null;
+  link: string | null;
+  attributed_count: number;
+  paying_count: number;
+  per_referral_cents: number;
+  monthly_recurring_cents: number;
+  earnings: {
+    pending_cents: number;
+    payable_cents: number;
+    paid_cents: number;
+    lifetime_cents: number;
+  };
+  next_payout_estimate_cents: number;
+  recent_referrals: Array<{
+    referred_at: string;
+    is_paying: boolean;
+    has_paid_before: boolean;
+    total_earned_cents: number;
+  }>;
+  payout_method: {
+    kind: "manual" | "paypal" | "stripe_connect" | null;
+    email: string | null;
+    country: string | null;
+  };
+};
+
+export async function getMyReferrals(): Promise<MyReferralsSummary> {
+  const { data, error } = await supabase.functions.invoke("me-referrals");
+  if (error) throw error;
+  return data as MyReferralsSummary;
+}
+
+export type PayoutMethodInput = {
+  method: "manual" | "paypal" | "stripe_connect";
+  email?: string | null;
+  country?: string | null;
+};
+export async function setMyPayoutMethod(input: PayoutMethodInput) {
+  const { data, error } = await supabase.functions.invoke("me-set-payout-method", { body: input });
+  if (error) throw error;
+  return data as { ok: true };
+}
+
 export type ResolvedCode = {
   ok: boolean;
   kind?: "founder" | "user_referral" | "internal";

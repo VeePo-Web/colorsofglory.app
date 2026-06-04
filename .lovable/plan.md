@@ -1,68 +1,127 @@
+## Referral Tracking Accuracy Audit — Pay-Only Enforcement Plan
 
-# Admin Dashboard — Founder Codes & Payout Tracking
+### Goal
+Guarantee a referrer earns $5/mo **only** when their referred user has actually paid a real, non-zero, plan-qualifying Stripe invoice for an active subscription. Zero tolerance for trial/discount/refund/test/self-referral leakage.
 
-Internal-only dashboard at `/admin/*`, gated by the existing `user_roles.role = 'admin'` check via `has_role()`. Never linked from public navigation, never indexed (noindex), and every page guards with a server-verified role check (not a client flag).
+---
 
-## 1. Access control
+### Tracking Flow (single source of truth)
 
-- New `RequireAdmin` route wrapper:
-  1. `supabase.auth.getUser()` (re-validates with auth server)
-  2. RPC call to `public.is_admin(auth.uid())` (already exists)
-  3. On false → redirect to `/` with no flash of admin UI
-- Add `<meta name="robots" content="noindex,nofollow">` on all `/admin/*` pages
-- Not linked from any nav, footer, or sitemap. Direct-URL only.
+```text
+Stripe invoice.paid
+   │
+   ▼
+[1] payments-webhook
+   ├─ verify signature
+   ├─ accept ONLY event type "invoice.paid" (drop invoice.payment_succeeded)
+   ├─ require invoice.status == "paid"
+   ├─ require invoice.amount_paid > 0
+   ├─ require subscription_id present (skip one-off / storage addon)
+   ├─ derive userId from public.subscriptions.user_id (NOT invoice.metadata)
+   └─ call rpc: record_invoice_paid(invoice_id, sub_id, user_id, amount_cents, plan_code)
+        │
+        ▼
+[2] record_invoice_paid()  — fail-closed gates, audit every skip
+   ├─ G1  subscription row exists & belongs to user_id   → else audit:user_mismatch, RETURN
+   ├─ G2  subscription.status IN (active, trialing, past_due) → else audit:bad_status, RETURN
+   ├─ G3  plan_code IN (pro, founder_pro)                → else audit:non_paid_plan, RETURN
+   ├─ G4  amount_cents > 0                                → else audit:zero_amount, RETURN
+   ├─ G5  not a storage_addon invoice                    → else audit:addon_invoice, RETURN
+   ├─ G6  referral_attribution exists for user_id        → else audit:no_referrer, RETURN
+   ├─ G7  referrer_id != user_id                          → else audit:self_referral, RETURN
+   ├─ G8  idempotency: unique(invoice_id) in reward_events → else audit:duplicate, RETURN
+   └─ INSERT reward_events (status=pending, amount=500, kind=cash, month_index=next_paid_month_index)
+        │
+        ▼
+[3] rewards-mature-worker (cron, daily)
+   ├─ select reward_events where status=pending AND mature_at <= now()
+   ├─ re-verify subscription STILL active/trialing/past_due (else mark reversed:churned)
+   ├─ re-verify invoice not refunded (else mark reversed:refunded)
+   └─ status → payable, batch into monthly payout draft
+        │
+        ▼
+[4] invoice.refunded / charge.refunded webhook
+   └─ reverse matching reward_event (status=reversed, reason=refund)
+        │
+        ▼
+[5] customer.subscription.deleted / status→canceled,unpaid,incomplete_expired
+   └─ STOP future rewards (no new events created on next billing cycle)
+   └─ existing pending events re-checked at maturity → reversed if churn
+        │
+        ▼
+[6] me-referrals (dashboard read)
+   ├─ paying_count = subscriptions where user_id IN (referred) AND status IN (active,trialing,past_due) AND current_period_end > now()
+   ├─ monthly_recurring_cents = paying_count * 500
+   ├─ lifetime_earned = sum(reward_events.amount where status IN (payable, paid))
+   └─ per-row is_paying = real-time subscription lookup (NOT earned>0)
+```
 
-## 2. Backend additions (single migration)
+---
 
-All SECURITY DEFINER, `has_role(auth.uid(),'admin')` guard inside each function. No new tables — reuses existing `founders`, `codes` (kind='founder'), `founder_codes`, `founder_redemptions`, `referral_attributions`, `reward_events`, `payouts`, `credit_ledger`.
+### What's already locked (from previous turn)
+- Gates G1–G7 implemented in `record_invoice_paid` with `write_audit` on every early return
+- Webhook routes only `invoice.paid`, derives user from `subscriptions` table
+- `me-referrals` uses real-time paying status + MRR
+- `next_paid_month_index` counts only pending/payable/paid (skips reversed)
+- CHECK `reward_events.amount_cents > 0`
 
-**New RPCs:**
+### What this plan adds (the remaining gaps)
 
-- `admin_create_founder(_display_name text, _email text, _reward_profile jsonb, _payout_method text, _payout_details jsonb)` → inserts into `founders`, returns row.
-- `admin_create_founder_code(_founder_id uuid, _code text, _max_redemptions int, _expires_at timestamptz, _notes text)` → inserts into both `codes` (kind='founder', owner_founder_id, value=upper code) and `founder_codes` (mirror for legacy reads). Validates `code ~ '^[A-Z0-9-]{4,32}$'` and uniqueness across `codes.value`.
-- `admin_deactivate_code(_code_id uuid)` → sets `codes.status='disabled'` + audit row.
-- `admin_founder_summary()` returns table: founder_id, display_name, email, code_count, active_codes, total_redemptions, attributed_users, paying_users, pending_cents, payable_cents, paid_cents, last_payout_at.
-- `admin_founder_detail(_founder_id uuid)` returns: founder row, all codes with redemption counts, attributed user list (id, signed_up_at, plan, lifetime_paid_cents), reward_events grouped by status, payouts list.
-- `admin_referrals_recent(_limit int)` for activity feed.
+**Migration C — refund + churn reversal**
+1. Add trigger / handler on `invoice.refunded` and `charge.refunded` → `reverse_reward_for_invoice(invoice_id, 'refund')` sets matching pending/payable event to `reversed`.
+2. `rewards-mature-worker` re-verifies at maturity:
+   - subscription status still in (active, trialing, past_due)
+   - invoice not refunded
+   - else: status → `reversed`, reason → `churned` | `refunded`, audit logged
+3. Add `reward_events.reversed_reason text` + `reversed_at timestamptz`.
 
-**New view (admin-only, service_role-only GRANT):**
-- `admin_monthly_payout_v1` — per founder, per calendar month: payable cash sum, pending cash sum, count of contributing invoices. Powers the "this month I owe" screen.
+**Migration D — anti-fraud guards**
+1. Unique partial index `(referred_user_id, month_index) WHERE status IN ('pending','payable','paid')` — prevents double-credit per month even if Stripe replays.
+2. `referrer_id != referred_user_id` enforced as CHECK on `reward_events`.
+3. Block rewards when `fraud_flags` has open flag on either user (audit:fraud_hold).
+4. Reject invoices where `subscription.created_at > invoice.created` (clock-skew sanity).
 
-**Audit:** every admin write calls `write_audit(auth.uid(), 'admin_*', ...)`.
+**Webhook hardening**
+1. Reject events older than 7 days (replay protection beyond signature freshness).
+2. Persist every received Stripe event_id in `billing_events` with unique constraint — second-level idempotency above record-level.
+3. Log every accepted/rejected event with the gate that rejected it.
 
-**Indexes (only if missing):** `codes(owner_founder_id) WHERE kind='founder'`, `reward_events(referrer_founder_id, status, created_at DESC)`, `referral_attributions(referrer_founder_id)`.
+**Dashboard truth (`me-referrals`)**
+1. Split counts: `signed_up`, `started_trial`, `paying_now`, `churned`.
+2. `monthly_recurring_cents` = paying_now × 500 (already done, confirm).
+3. Show `next_payout_date` and `pending_cents` separately from `lifetime_earned`.
 
-## 3. SDK (`src/integrations/cog/admin.ts`)
+**QA / verification script (`scripts/qa-referral-tracking.ts`)**
+Replays against Stripe sandbox:
+- $0 trial invoice → expect no reward, audit:zero_amount
+- one-off invoice (no sub) → expect skip
+- self-referral → expect skip
+- pro paid invoice → expect 1 pending reward
+- refund same invoice → expect reversal
+- subscription canceled before maturity → expect reversal at worker run
+- duplicate webhook delivery → expect single reward
+- 13th month → expect month_index=13 (infinite stacking confirmed)
 
-Thin typed wrappers around the RPCs above + a `useIsAdmin()` hook. This is the only `src/**` file Lovable owns for this task (per the 3-agent rule — pages/components are Claude's, but a typed SDK is allowed).
+---
 
-## 4. Admin pages (Claude builds the UI; Lovable scaffolds routes only)
+### Technical Details
+- All gates use SECURITY DEFINER + `set search_path = public`
+- `write_audit(actor, action, target, meta jsonb)` writes to `audit_logs` with `reason` key in meta
+- All amounts in integer cents; never floats
+- `reward_events.status`: `pending → payable → paid` or `→ reversed`
+- Worker is idempotent; safe to re-run hourly
+- No client ever writes to `reward_events` or `payouts` — service role only
 
-Per the project rule, Lovable does NOT build `src/pages/**` or `src/components/**`. This plan scaffolds **route registration only** in `src/App.tsx` (admin routes lazy-loaded), and leaves page implementation to Claude with a short brief:
+### Out of Scope
+- Stripe Connect payout onboarding UI (separate plan)
+- Tax/1099 reporting
+- Retroactive cleanup of any historical bad rewards (one-time SQL after this lands)
 
-- `/admin` — overview: totals, MTD payable, recent redemptions
-- `/admin/founders` — list + "New founder" button
-- `/admin/founders/:id` — detail: codes, redemptions, attributed users, reward events, payouts; "New code" + "Deactivate code" actions
-- `/admin/codes` — flat searchable list of all founder codes with redemption/payable totals
-- `/admin/payouts` — current month per-founder amounts owed, button to call `create_payout_batch` + `approve_payout` + `mark_payout_paid` (already exist)
-
-Each page is mobile-first cream/gold per design system but **utilitarian** — dense tables OK, this is internal.
-
-## 5. Out of scope (explicit)
-
-- Public founder landing pages
-- Stripe Connect / actual money movement (still manual via `mark_payout_paid` with provider txn id)
-- Editing reward_profile after creation (do in DB for now)
-- Rate limiting on admin RPCs (admin-only, low volume)
-
-## 6. Verification
-
-- `is_admin` returns false → `/admin` redirects
-- Create founder + code → row in `founders`, matching row in `codes` (kind=founder, owner_founder_id set) and `founder_codes`
-- New user redeems code → `referral_attributions` row links to founder
-- Simulated invoice via `record_invoice_paid` → reward_event appears in founder detail with correct cents per `reward_profile`
-- Monthly view sums match `reward_events` where `status='payable'` and `payout_id IS NULL`
-
-## Open question
-
-Should I scaffold the route registrations and SDK only (and hand UI to Claude per the 3-agent rule), or should I also build the admin page UIs myself this round? Default: SDK + migration + route stubs only.
+### Build Order
+1. Migration C (refund/churn reversal + columns)
+2. Migration D (unique index, CHECK, fraud guard)
+3. `payments-webhook` — add refund handlers, billing_events idempotency, age check
+4. `rewards-mature-worker` — re-verify gates at maturity
+5. `me-referrals` — split counts + next_payout_date
+6. QA script + sandbox replay
+7. Hand UI surfaces (referrals dashboard, onboarding referral page) to Claude
