@@ -469,7 +469,11 @@ export type Database = {
           created_at: string
           display_name: string | null
           email: string | null
+          first_song_id: string | null
           id: string
+          onboarding_state: Json
+          onboarding_step: Database["public"]["Enums"]["onboarding_step"]
+          onboarding_updated_at: string
           phone: string | null
           referral_code: string | null
           referred_by_user_id: string | null
@@ -481,7 +485,11 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          first_song_id?: string | null
           id?: string
+          onboarding_state?: Json
+          onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
+          onboarding_updated_at?: string
           phone?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -493,7 +501,11 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          first_song_id?: string | null
           id?: string
+          onboarding_state?: Json
+          onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
+          onboarding_updated_at?: string
           phone?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -1302,6 +1314,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      advance_onboarding: {
+        Args: {
+          _patch: Json
+          _source: string
+          _to: Database["public"]["Enums"]["onboarding_step"]
+          _user_id: string
+        }
+        Returns: string
+      }
+      advance_onboarding_for_song_owner: {
+        Args: {
+          _song_id: string
+          _source: string
+          _to: Database["public"]["Enums"]["onboarding_step"]
+        }
+        Returns: undefined
+      }
       apply_credit_to_invoice: {
         Args: {
           _invoice_amount_cents: number
@@ -1388,6 +1417,7 @@ export type Database = {
           song_id: string
         }[]
       }
+      complete_onboarding: { Args: { _user_id: string }; Returns: string }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
@@ -1485,6 +1515,14 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      onboarding_legal_next: {
+        Args: { _from: Database["public"]["Enums"]["onboarding_step"] }
+        Returns: Database["public"]["Enums"]["onboarding_step"][]
+      }
+      onboarding_step_rank: {
+        Args: { _s: Database["public"]["Enums"]["onboarding_step"] }
+        Returns: number
+      }
       owned_active_song_count: { Args: { _user_id: string }; Returns: number }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
@@ -1607,6 +1645,17 @@ export type Database = {
         | "uploaded"
         | "finalized"
         | "transcribed"
+      onboarding_step:
+        | "not_started"
+        | "intent_selected"
+        | "founder_code_seen"
+        | "first_song_created"
+        | "first_idea_captured"
+        | "first_voice_memo_added"
+        | "first_lyrics_added"
+        | "first_collaborator_invited"
+        | "completed"
+        | "dismissed"
       payout_status:
         | "draft"
         | "approved"
@@ -1795,6 +1844,18 @@ export const Constants = {
         "uploaded",
         "finalized",
         "transcribed",
+      ],
+      onboarding_step: [
+        "not_started",
+        "intent_selected",
+        "founder_code_seen",
+        "first_song_created",
+        "first_idea_captured",
+        "first_voice_memo_added",
+        "first_lyrics_added",
+        "first_collaborator_invited",
+        "completed",
+        "dismissed",
       ],
       payout_status: [
         "draft",
