@@ -1,64 +1,70 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminCreateFounderCode, adminFounderSummary } from "@/integrations/cog/admin";
-import { toast } from "@/hooks/use-toast";
 
-export default function CreateCodeDialog({ founderId }: { founderId?: string }) {
-  const qc = useQueryClient();
+const CODE_RE = /^[A-Z0-9-]{4,32}$/;
+
+export default function CreateCodeDialog({
+  trigger,
+  defaultFounderId,
+}: {
+  trigger?: React.ReactNode;
+  defaultFounderId?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(founderId ?? "");
+  const [founderId, setFounderId] = useState(defaultFounderId ?? "");
   const [code, setCode] = useState("");
-  const [maxRed, setMaxRed] = useState("");
-  const [expires, setExpires] = useState("");
   const [label, setLabel] = useState("");
+  const [maxRedemptions, setMaxRedemptions] = useState<string>("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const qc = useQueryClient();
 
-  const { data: founders = [] } = useQuery({
-    queryKey: ["admin", "founders"],
+  const { data: founders } = useQuery({
+    queryKey: ["admin", "founder-summary"],
     queryFn: adminFounderSummary,
-    enabled: open && !founderId,
+    enabled: open && !defaultFounderId,
   });
 
-  const mut = useMutation({
+  const upper = code.toUpperCase();
+  const valid = CODE_RE.test(upper) && (defaultFounderId || founderId);
+
+  const m = useMutation({
     mutationFn: () =>
       adminCreateFounderCode({
-        founder_id: founderId ?? selected,
-        code: code.trim().toUpperCase(),
-        max_redemptions: maxRed ? parseInt(maxRed, 10) : null,
-        expires_at: expires || null,
-        label: label.trim() || null,
+        founder_id: (defaultFounderId ?? founderId) as string,
+        code: upper,
+        max_redemptions: maxRedemptions ? Number(maxRedemptions) : null,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+        label: label || null,
       }),
     onSuccess: () => {
-      toast({ title: "Code created" });
+      toast.success("Code created");
       qc.invalidateQueries({ queryKey: ["admin"] });
       setOpen(false);
-      setCode(""); setMaxRed(""); setExpires(""); setLabel("");
+      setCode(""); setLabel(""); setMaxRedemptions(""); setExpiresAt("");
     },
-    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast.error(e.message),
   });
-
-  const validCode = /^[A-Z0-9-]{4,32}$/.test(code.trim().toUpperCase());
-  const targetFounder = founderId ?? selected;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm">New code</Button>
-      </DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? <Button>New code</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Create founder code</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          {!founderId && (
+        <div className="space-y-4">
+          {!defaultFounderId && (
             <div>
               <Label>Founder</Label>
-              <Select value={selected} onValueChange={setSelected}>
+              <Select value={founderId} onValueChange={setFounderId}>
                 <SelectTrigger><SelectValue placeholder="Pick a founder" /></SelectTrigger>
                 <SelectContent>
-                  {(founders as Array<{ founder_id: string; display_name: string; slug: string }>).map((f) => (
+                  {(founders ?? []).map((f) => (
                     <SelectItem key={f.founder_id} value={f.founder_id}>
                       {f.display_name} ({f.slug})
                     </SelectItem>
@@ -68,28 +74,29 @@ export default function CreateCodeDialog({ founderId }: { founderId?: string }) 
             </div>
           )}
           <div>
-            <Label>Code (A-Z, 0-9, dash; 4–32)</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="LAUNCH2026" />
+            <Label>Code</Label>
+            <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="GRACE-2026" />
+            <p className="text-xs text-[var(--cog-muted)] mt-1">A–Z, 0–9, dash. 4–32 chars.</p>
+          </div>
+          <div>
+            <Label>Label (optional)</Label>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Spring launch" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Max redemptions</Label>
-              <Input type="number" value={maxRed} onChange={(e) => setMaxRed(e.target.value)} placeholder="unlimited" />
+              <Input type="number" value={maxRedemptions} onChange={(e) => setMaxRedemptions(e.target.value)} placeholder="unlimited" />
             </div>
             <div>
               <Label>Expires at</Label>
-              <Input type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />
+              <Input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
             </div>
-          </div>
-          <div>
-            <Label>Label (optional)</Label>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={() => mut.mutate()} disabled={!validCode || !targetFounder || mut.isPending}>
-            {mut.isPending ? "Creating…" : "Create"}
+          <Button onClick={() => m.mutate()} disabled={m.isPending || !valid}>
+            {m.isPending ? "Creating…" : "Create code"}
           </Button>
         </DialogFooter>
       </DialogContent>

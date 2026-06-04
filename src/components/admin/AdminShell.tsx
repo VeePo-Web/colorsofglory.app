@@ -1,34 +1,43 @@
-import { Link, NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
-const navItem = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-    isActive
-      ? "bg-[var(--cog-charcoal)] text-[var(--cog-cream)]"
-      : "text-[var(--cog-warm-gray)] hover:text-[var(--cog-charcoal)]"
-  }`;
+const links = [
+  { to: "/admin", label: "Home", end: true },
+  { to: "/admin/founders", label: "Founders" },
+  { to: "/admin/codes", label: "Codes" },
+  { to: "/admin/payouts", label: "Payouts" },
+];
 
-export default function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <div className="min-h-screen bg-[var(--cog-cream)] text-[var(--cog-charcoal)]">
-      <header className="border-b border-[var(--cog-border)] bg-[var(--cog-cream-light)] sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="text-xs uppercase tracking-[0.18em] font-semibold text-[var(--cog-warm-gray)]">
-              Admin
-            </span>
-            <nav className="flex items-center gap-1">
-              <NavLink to="/admin" end className={navItem}>Home</NavLink>
-              <NavLink to="/admin/founders" className={navItem}>Founders</NavLink>
-              <NavLink to="/admin/codes" className={navItem}>Codes</NavLink>
-              <NavLink to="/admin/payouts" className={navItem}>Payouts</NavLink>
-            </nav>
-          </div>
-          <Link to="/" className="text-xs text-[var(--cog-warm-gray)] hover:text-[var(--cog-charcoal)]">
-            ← App
-          </Link>
+      <header className="border-b border-[var(--cog-border)] bg-[var(--cog-cream-light)]">
+        <div className="mx-auto max-w-7xl px-6 py-4 flex items-center gap-6">
+          <div className="font-semibold tracking-tight">COG Admin</div>
+          <nav className="flex gap-1 text-sm">
+            {links.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                end={l.end}
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-md transition-colors ${
+                    isActive
+                      ? "bg-[var(--cog-gold)] text-white"
+                      : "text-[var(--cog-warm-gray)] hover:bg-[rgba(184,149,58,0.10)]"
+                  }`
+                }
+              >
+                {l.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="ml-auto text-xs text-[var(--cog-muted)]">Internal · Not public</div>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        {title && <h1 className="text-2xl font-semibold mb-6">{title}</h1>}
+        {children}
+      </main>
     </div>
   );
 }

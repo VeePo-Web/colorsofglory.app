@@ -1,112 +1,127 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
-import { adminFounderDetail, adminDeactivateCode } from "@/integrations/cog/admin";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
+import { adminFounderDetail } from "@/integrations/cog/admin";
+
+const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 type Detail = {
-  founder?: { display_name?: string; slug?: string; status?: string; reward_profile?: unknown; notes?: string | null };
-  codes?: Array<{ id: string; code: string; status: string; redemptions: number; max_redemptions: number | null; expires_at: string | null }>;
-  attributions?: Array<{ referred_user_id: string; attributed_at: string; code_id: string | null }>;
-  reward_events?: Array<{ id: string; cents: number; status: string; created_at: string }>;
+  founder: { id: string; display_name: string; slug: string; status: string; reward_profile: { first6_cents: number; ongoing_cents: number; first6_months?: number }; notes?: string };
+  codes: { id: string; value: string; status: string; redemption_count: number; max_redemptions: number | null; expires_at: string | null; created_at: string }[];
+  attributed_users: { user_id: string; attributed_at: string; code_id: string | null }[];
+  reward_events: { id: string; amount_cents: number; status: string; reward_kind: string; created_at: string; invoice_external_id?: string }[];
+  totals: { pending_cents: number; payable_cents: number; paid_cents: number };
 };
 
-const fmt = (c: number) => `$${((c ?? 0) / 100).toFixed(2)}`;
-
 export default function FounderDetailPage() {
-  const { id = "" } = useParams();
-  const qc = useQueryClient();
+  const { id } = useParams<{ id: string }>();
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "founder", id],
-    queryFn: () => adminFounderDetail(id) as Promise<Detail>,
+    queryFn: () => adminFounderDetail(id!) as Promise<Detail>,
     enabled: !!id,
   });
 
-  const deactivate = useMutation({
-    mutationFn: (codeId: string) => adminDeactivateCode(codeId),
-    onSuccess: () => {
-      toast({ title: "Code deactivated" });
-      qc.invalidateQueries({ queryKey: ["admin"] });
-    },
-    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
-  });
-
-  if (isLoading) return <AdminShell><div className="text-sm text-[var(--cog-warm-gray)]">Loading…</div></AdminShell>;
-  if (!data?.founder) return <AdminShell><div>Not found. <Link to="/admin/founders" className="underline">Back</Link></div></AdminShell>;
+  if (isLoading || !data) {
+    return <AdminShell title="Founder"><p className="text-sm text-[var(--cog-muted)]">Loading…</p></AdminShell>;
+  }
 
   const f = data.founder;
+
   return (
     <AdminShell>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-2"><Link to="/admin/founders" className="text-sm text-[var(--cog-warm-gray)] hover:underline">← Founders</Link></div>
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <Link to="/admin/founders" className="text-xs text-[var(--cog-warm-gray)] hover:underline">← Founders</Link>
-          <h1 className="text-xl font-semibold mt-1">{f.display_name} <span className="text-sm text-[var(--cog-warm-gray)] font-mono">({f.slug})</span></h1>
-          {f.notes && <p className="text-sm text-[var(--cog-warm-gray)] mt-1">{f.notes}</p>}
+          <h1 className="text-2xl font-semibold">{f.display_name}</h1>
+          <p className="text-sm font-mono text-[var(--cog-muted)]">{f.slug}</p>
         </div>
-        <CreateCodeDialog founderId={id} />
+        <Badge>{f.status}</Badge>
       </div>
 
-      <Section title="Codes">
-        {(data.codes ?? []).length === 0 && <Empty label="No codes." />}
-        {(data.codes ?? []).map((c) => (
-          <Row key={c.id}>
-            <div className="font-mono">{c.code}</div>
-            <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
-            <div className="text-sm font-mono text-[var(--cog-warm-gray)]">
-              {c.redemptions}{c.max_redemptions ? `/${c.max_redemptions}` : ""} redeemed
-            </div>
-            <div className="text-sm font-mono text-[var(--cog-warm-gray)]">
-              {c.expires_at ? `exp ${new Date(c.expires_at).toLocaleDateString()}` : "no expiry"}
-            </div>
-            {c.status === "active" && (
-              <Button size="sm" variant="outline" onClick={() => {
-                if (confirm(`Deactivate code ${c.code}? New redemptions will be blocked.`)) deactivate.mutate(c.id);
-              }}>Deactivate</Button>
-            )}
-          </Row>
-        ))}
-      </Section>
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Stat label="Pending" value={money(data.totals.pending_cents)} />
+        <Stat label="Payable" value={money(data.totals.payable_cents)} tone="gold" />
+        <Stat label="Paid" value={money(data.totals.paid_cents)} />
+      </div>
 
-      <Section title={`Attributed users (${data.attributions?.length ?? 0})`}>
-        {(data.attributions ?? []).length === 0 && <Empty label="No referrals yet." />}
-        {(data.attributions ?? []).map((a) => (
-          <Row key={a.referred_user_id + a.attributed_at}>
-            <div className="font-mono text-xs truncate">{a.referred_user_id}</div>
-            <div className="text-sm text-[var(--cog-warm-gray)]">{new Date(a.attributed_at).toLocaleString()}</div>
-          </Row>
-        ))}
-      </Section>
+      <Tabs defaultValue="codes">
+        <TabsList>
+          <TabsTrigger value="codes">Codes ({data.codes.length})</TabsTrigger>
+          <TabsTrigger value="users">Users ({data.attributed_users.length})</TabsTrigger>
+          <TabsTrigger value="rewards">Rewards ({data.reward_events.length})</TabsTrigger>
+        </TabsList>
 
-      <Section title={`Reward events (${data.reward_events?.length ?? 0})`}>
-        {(data.reward_events ?? []).length === 0 && <Empty label="No events." />}
-        {(data.reward_events ?? []).map((e) => (
-          <Row key={e.id}>
-            <Badge variant="secondary">{e.status}</Badge>
-            <div className="font-mono">{fmt(e.cents)}</div>
-            <div className="text-sm text-[var(--cog-warm-gray)]">{new Date(e.created_at).toLocaleString()}</div>
-          </Row>
-        ))}
-      </Section>
+        <TabsContent value="codes">
+          <div className="mb-3"><CreateCodeDialog defaultFounderId={f.id} trigger={<Button size="sm">New code for this founder</Button>} /></div>
+          <SimpleTable
+            head={["Code", "Status", "Used", "Expires", "Created"]}
+            rows={data.codes.map((c) => [
+              <span className="font-mono font-semibold">{c.value}</span>,
+              <Badge variant={c.status === "active" ? "default" : "outline"}>{c.status}</Badge>,
+              <span className="font-mono">{c.redemption_count}{c.max_redemptions ? ` / ${c.max_redemptions}` : ""}</span>,
+              c.expires_at ? new Date(c.expires_at).toLocaleDateString() : "—",
+              new Date(c.created_at).toLocaleDateString(),
+            ])}
+          />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <SimpleTable
+            head={["User", "When", "Code"]}
+            rows={data.attributed_users.map((u) => [
+              <span className="font-mono text-xs">{u.user_id}</span>,
+              new Date(u.attributed_at).toLocaleString(),
+              <span className="font-mono text-xs text-[var(--cog-muted)]">{u.code_id?.slice(0, 8) ?? "—"}</span>,
+            ])}
+          />
+        </TabsContent>
+
+        <TabsContent value="rewards">
+          <SimpleTable
+            head={["When", "Kind", "Status", "Amount", "Invoice"]}
+            rows={data.reward_events.map((r) => [
+              new Date(r.created_at).toLocaleString(),
+              r.reward_kind,
+              <Badge variant="outline">{r.status}</Badge>,
+              <span className="font-mono">{money(r.amount_cents)}</span>,
+              <span className="font-mono text-xs text-[var(--cog-muted)]">{r.invoice_external_id ?? "—"}</span>,
+            ])}
+          />
+        </TabsContent>
+      </Tabs>
     </AdminShell>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "gold" }) {
   return (
-    <div className="mb-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--cog-warm-gray)] mb-2">{title}</h2>
-      <div className="border border-[var(--cog-border)] rounded-lg bg-[var(--cog-cream-light)] divide-y divide-[var(--cog-border)]">
-        {children}
-      </div>
+    <div className="rounded-lg border border-[var(--cog-border)] bg-[var(--cog-cream-light)] p-4">
+      <div className="text-xs uppercase tracking-wider text-[var(--cog-warm-gray)]">{label}</div>
+      <div className={`text-2xl font-semibold font-mono mt-1 ${tone === "gold" ? "text-[var(--cog-gold)]" : ""}`}>{value}</div>
     </div>
   );
 }
-function Row({ children }: { children: React.ReactNode }) {
-  return <div className="px-4 py-2 flex items-center gap-4 flex-wrap">{children}</div>;
-}
-function Empty({ label }: { label: string }) {
-  return <div className="px-4 py-6 text-sm text-[var(--cog-warm-gray)]">{label}</div>;
+
+function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+  return (
+    <div className="rounded-lg border border-[var(--cog-border)] bg-[var(--cog-cream-light)] overflow-hidden mt-3">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--cog-cream-dark)] text-xs uppercase tracking-wider text-[var(--cog-warm-gray)]">
+          <tr>{head.map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <tr><td colSpan={head.length} className="px-4 py-6 text-center text-[var(--cog-muted)]">Nothing yet.</td></tr>}
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-[var(--cog-border)]">
+              {r.map((cell, j) => <td key={j} className="px-4 py-2">{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }

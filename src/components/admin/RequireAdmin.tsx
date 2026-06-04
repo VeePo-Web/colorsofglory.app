@@ -7,28 +7,28 @@ export default function RequireAdmin({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     let cancelled = false;
-    isCurrentUserAdmin()
-      .then((ok) => !cancelled && setState(ok ? "ok" : "deny"))
-      .catch(() => !cancelled && setState("deny"));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
+    isCurrentUserAdmin().then((ok) => {
+      if (cancelled) return;
+      setState(ok ? "ok" : "deny");
+    });
+    // Add noindex meta
     const meta = document.createElement("meta");
     meta.name = "robots";
     meta.content = "noindex,nofollow";
     document.head.appendChild(meta);
+    const prevTitle = document.title;
+    document.title = "Admin · Colors of Glory";
     return () => {
-      document.head.removeChild(meta);
+      cancelled = true;
+      meta.remove();
+      document.title = prevTitle;
     };
   }, []);
 
   if (state === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--cog-cream)] text-sm text-[var(--cog-warm-gray)]">
-        Checking access…
+      <div className="min-h-screen flex items-center justify-center bg-[var(--cog-cream)]">
+        <p className="text-sm text-[var(--cog-warm-gray)]">Checking access…</p>
       </div>
     );
   }
