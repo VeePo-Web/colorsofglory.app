@@ -90,7 +90,10 @@ export function planForLookupKey(lookupKey: string | null | undefined): "free" |
   // Legacy keys
   if (lookupKey.startsWith("cog_founder")) return "founder_pro";
   if (lookupKey.startsWith("cog_pro")) return "pro";
-  return "free";
+  // Loud-fail on unknown SKUs — silently downgrading a paying user is
+  // far worse than a noisy webhook failure that gets retried.
+  console.error("planForLookupKey: unknown lookup_key", lookupKey);
+  throw new Error(`unknown_lookup_key:${lookupKey}`);
 }
 
 // Unit price (cents) for a given plan — used when seeding subscription rows.

@@ -139,7 +139,16 @@ async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | 
 }
 
 async function handleInvoicePaid(invoice: any) {
-  const subscriptionExternal = invoice.subscription ?? null;
+  // Stripe API 2025+ removed `invoice.subscription` in favor of
+  // `invoice.parent.subscription_details.subscription`. Read the new
+  // shape first, then fall back to the legacy field and to the line item
+  // (belt + suspenders for retried events from older API versions).
+  const subscriptionExternal: string | null =
+    invoice?.parent?.subscription_details?.subscription ??
+    invoice?.subscription ??
+    invoice?.lines?.data?.[0]?.subscription ??
+    invoice?.lines?.data?.[0]?.parent?.subscription_item_details?.subscription ??
+    null;
 
   // Reject anything not tied to a subscription we know about
   if (!subscriptionExternal) {
