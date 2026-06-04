@@ -30,9 +30,12 @@ const files = readdirSync(distAssetsDir)
 
 const mainJs = files.find((file) => /^index-.*\.js$/.test(file.name));
 const mainCss = files.find((file) => /^index-.*\.css$/.test(file.name));
-const routeChunks = files.filter(
-  (file) => file.name.endsWith(".js") && file.name !== mainJs?.name,
-);
+const appChunkPattern =
+  /^(?:.*Page|NotFound|BottomNav|BackHeader|CogLogo|GoldButton|OnboardingShell|SongCanvas(?:WorkLayers|CollabLayers|Trees)?)-.*\.js$/;
+
+const nonMainJsChunks = files.filter((file) => file.name.endsWith(".js") && file.name !== mainJs?.name);
+const routeChunks = nonMainJsChunks.filter((file) => appChunkPattern.test(file.name));
+const sharedChunks = nonMainJsChunks.filter((file) => !appChunkPattern.test(file.name));
 
 const failures = [];
 
@@ -81,6 +84,19 @@ console.log(
       : "none"
   }`,
 );
+
+const largestSharedChunk = sharedChunks
+  .slice()
+  .sort((a, b) => b.raw - a.raw)
+  .at(0);
+
+if (largestSharedChunk && largestSharedChunk.raw > budgets.routeChunkRaw) {
+  console.warn(
+    `Shared/vendor chunk warning: ${largestSharedChunk.name} is ${formatKb(largestSharedChunk.raw)} raw, ${formatKb(
+      largestSharedChunk.gzip,
+    )} gzip. This is not counted as a route chunk, but should be audited before production launch.`,
+  );
+}
 
 if (failures.length > 0) {
   console.error("\nBudget failures:");

@@ -7,12 +7,10 @@ import {
   Mic,
   Music,
   PenLine,
-  GitBranch,
-  Sparkles,
   StickyNote,
-  Users,
+  UserPlus,
 } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 
 interface Module {
   id: string;
@@ -28,12 +26,11 @@ interface StoredSong {
 }
 
 const MODULES: Module[] = [
-  { id: "lyrics", label: "Lyrics", icon: FileText, route: "canvas?layer=lyrics" },
-  { id: "voice", label: "Voice", icon: Mic, route: "canvas?layer=voice" },
-  { id: "chords", label: "Chords", icon: Music, route: "canvas?layer=chords" },
-  { id: "notes", label: "Notes", icon: StickyNote, route: "canvas?layer=notes" },
-  { id: "people", label: "People", icon: Users, route: "canvas?layer=people" },
-  { id: "canvas", label: "Canvas", icon: GitBranch, route: "canvas?layer=ideas" },
+  { id: "lyrics", label: "Lyrics",     icon: FileText,  route: "lyrics" },
+  { id: "voice",  label: "Voice Memo", icon: Mic,       route: "voice" },
+  { id: "chords", label: "Chords",     icon: Music,     route: "chords" },
+  { id: "notes",  label: "Notes",      icon: StickyNote, route: "notes" },
+  { id: "invite", label: "Invite",     icon: UserPlus,  route: "people" },
 ];
 
 const readFirstSong = (): StoredSong => {
@@ -56,116 +53,106 @@ const SongWorkspacePage = () => {
   const songTitle = rawTitle || (songId === "1" ? "Grace in the Waiting" : songId === "2" ? "Morning Prayer" : songId === "3" ? "Holy Fire" : "Untitled Song");
   const songMeta = [firstSong.key, firstSong.bpm ? `${firstSong.bpm} BPM` : null].filter(Boolean);
 
+  const sid = id ?? "1";
+
   return (
     <div
-      className="relative min-h-screen flex flex-col overflow-hidden"
-      style={{ backgroundColor: "var(--cog-cream)" }}
+      className="relative min-h-screen flex flex-col"
+      style={{ backgroundColor: "#FAFAF6", paddingBottom: 96 }}
     >
+      {/* Subtle bottom-right glow */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 60% 40% at 50% 85%, rgba(184,149,58,0.18) 0%, transparent 70%)",
+            "radial-gradient(ellipse 55% 40% at 85% 90%, rgba(181,147,90,0.10) 0%, transparent 65%)",
         }}
       />
 
+      {/* Back to catalog */}
       <div
-        className="relative px-6 pt-14"
-        style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
+        className="relative px-5 pt-14"
+        style={{ maxWidth: 430, margin: "0 auto", width: "100%" }}
       >
         <button
           onClick={() => navigate("/")}
-          className="flex min-h-11 items-center gap-1.5 text-sm transition-opacity duration-150 hover:opacity-70"
-          style={{ color: "var(--cog-warm-gray)" }}
+          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
+          style={{ color: "#999", minHeight: 44 }}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={16} strokeWidth={2} />
           Songs
         </button>
       </div>
 
       <main
-        className="relative mx-auto flex w-full flex-1 flex-col px-6 pb-12"
-        style={{ maxWidth: "var(--max-w-app)" }}
+        className="relative mx-auto flex w-full flex-1 flex-col px-5"
+        style={{ maxWidth: 430 }}
       >
-        <section className="text-center pt-5 pb-5">
-          <div className="flex justify-center mb-4">
-            <CogLogo size="sm" />
-          </div>
+        {/* Logo */}
+        <div className="flex justify-center pt-2 pb-5">
+          <CogBrand variant="stacked" size="md" />
+        </div>
 
-          {isFirstVisit && (
-            <div
-              className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium"
-              style={{
-                backgroundColor: "rgba(184,149,58,0.12)",
-                color: "var(--cog-gold-alt)",
-                border: "1px solid rgba(184,149,58,0.22)",
-              }}
-            >
-              <Sparkles size={13} strokeWidth={1.7} />
-              Your song space is ready
-            </div>
-          )}
-
-          <h1
-            className="font-semibold leading-tight mb-2"
-            style={{
-              fontFamily: "var(--font-display)",
-              color: "var(--cog-charcoal)",
-              fontSize: "clamp(2rem, 8vw, 2.75rem)",
-            }}
-          >
-            {songTitle}
-          </h1>
-
-          <p className="text-sm" style={{ color: "var(--cog-warm-gray)" }}>
-            Private song room{songMeta.length ? ` - ${songMeta.join(" - ")}` : ""}
+        {/* Song title — large Playfair bold */}
+        <h1
+          className="text-[2.25rem] font-bold text-center mb-1 leading-[1.1]"
+          style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+        >
+          {songTitle}
+        </h1>
+        <p className="text-[0.9375rem] text-center mb-1" style={{ color: "#666" }}>
+          Private song space
+        </p>
+        {songMeta.length > 0 && (
+          <p className="text-[0.8125rem] text-center mb-2" style={{ color: "#999" }}>
+            {songMeta.join(" · ")}
           </p>
-        </section>
+        )}
 
-        <section className="mb-6 grid grid-cols-3 gap-2.5" aria-label="First song actions">
+        {/* Supporting text */}
+        <p
+          className="text-[0.875rem] text-center mb-7 leading-relaxed mx-auto"
+          style={{ color: "#999", maxWidth: 300 }}
+        >
+          Start anywhere. Add a lyric, record a voice memo, or invite someone into the song.
+        </p>
+
+        {/* Module cards — 2-column grid matching reference */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {MODULES.map((module) => (
+            <ModuleCard
+              key={module.id}
+              module={module}
+              onClick={() => navigate(`/songs/${sid}/${module.route}`)}
+            />
+          ))}
+        </div>
+
+        {/* Bottom quick-action pill bar — matches reference image exactly */}
+        <div
+          className="fixed left-0 right-0 flex items-center justify-center gap-2 px-5 pb-4"
+          style={{
+            bottom: 0,
+            paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+          }}
+        >
           <QuickAction
-            label="Record"
+            label="Write lyric"
+            icon={PenLine}
+            onClick={() => navigate(`/songs/${sid}/lyrics`)}
+          />
+          <QuickAction
+            label="Record memo"
             icon={Mic}
-            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=voice`)}
+            onClick={() => navigate(`/songs/${sid}/capture`)}
             primary
           />
           <QuickAction
-            label="Write"
-            icon={PenLine}
-            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=lyrics`)}
-          />
-          <QuickAction
             label="Invite"
-            icon={Users}
-            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=people`)}
+            icon={UserPlus}
+            onClick={() => navigate(`/songs/${sid}/people`)}
           />
-        </section>
-
-        <section aria-label="Song room sections">
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            {MODULES.slice(0, 3).map((module) => (
-              <ModuleCard
-                key={module.id}
-                module={module}
-                onClick={() => navigate(`/songs/${id ?? "1"}/${module.route}`)}
-              />
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 mb-8">
-            {MODULES.slice(3, 6).map((module) => (
-              <ModuleCard
-                key={module.id}
-                module={module}
-                onClick={() => navigate(`/songs/${id ?? "1"}/${module.route}`)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <p className="text-center text-sm" style={{ color: "var(--cog-muted)", lineHeight: 1.6 }}>
-          Everything for this song stays connected here.
-        </p>
+        </div>
       </main>
     </div>
   );
@@ -178,19 +165,23 @@ interface QuickActionProps {
   primary?: boolean;
 }
 
+// Bottom pill bar buttons — match reference image: dark charcoal pills, gold when active
 const QuickAction = ({ label, icon: Icon, onClick, primary = false }: QuickActionProps) => (
   <button
     onClick={onClick}
-    className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-sm font-medium transition-all duration-150 active:scale-[0.97]"
+    className="flex flex-1 items-center justify-center gap-2 rounded-full text-[0.8125rem] font-semibold transition-all duration-150 active:scale-[0.97]"
     style={{
-      backgroundColor: primary ? "var(--cog-gold)" : "var(--cog-cream-light)",
-      border: primary ? "1px solid var(--cog-gold)" : "1px solid var(--cog-border)",
-      color: primary ? "#fff" : "var(--cog-charcoal)",
-      boxShadow: primary ? "0 4px 20px rgba(184,149,58,0.30)" : "var(--cog-shadow-sm)",
+      height: 44,
+      backgroundColor: primary ? "#B5935A" : "#1A1A1A",
+      color: "#FFFFFF",
       fontFamily: "var(--font-body)",
+      boxShadow: primary
+        ? "0 4px 16px rgba(181,147,90,0.40)"
+        : "0 2px 8px rgba(0,0,0,0.15)",
+      maxWidth: 145,
     }}
   >
-    <Icon size={18} strokeWidth={1.8} />
+    <Icon size={15} strokeWidth={2} />
     {label}
   </button>
 );
@@ -200,25 +191,33 @@ interface ModuleCardProps {
   onClick: () => void;
 }
 
+// Module cards — white cards with gold-tinted icon, label below
 const ModuleCard = ({ module, onClick }: ModuleCardProps) => {
   const Icon = module.icon;
-
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-[0.97]"
+      className="flex flex-col items-start gap-3 rounded-2xl p-4 transition-all duration-150 active:scale-[0.97]"
       style={{
-        backgroundColor: "var(--cog-cream-light)",
-        border: "1px solid var(--cog-border)",
-        boxShadow: "var(--cog-shadow-card)",
-        aspectRatio: "1",
-        padding: "var(--space-4)",
+        backgroundColor: "#FFFFFF",
+        border: "1px solid rgba(0,0,0,0.07)",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+        minHeight: 110,
       }}
     >
-      <Icon size={26} strokeWidth={1.5} style={{ color: "var(--cog-charcoal)" }} />
+      <div
+        className="flex items-center justify-center rounded-xl"
+        style={{
+          width: 36,
+          height: 36,
+          backgroundColor: "rgba(181,147,90,0.10)",
+        }}
+      >
+        <Icon size={18} strokeWidth={1.6} style={{ color: "#B5935A" }} />
+      </div>
       <span
-        className="text-sm font-medium"
-        style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+        className="text-[0.9375rem] font-semibold"
+        style={{ color: "#1A1A1A", fontFamily: "var(--font-body)" }}
       >
         {module.label}
       </span>

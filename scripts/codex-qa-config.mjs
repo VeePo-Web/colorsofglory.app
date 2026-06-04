@@ -142,7 +142,7 @@ export const instantFeelSourceChecks = [
     pattern: /minHeight:\s*"140px"/,
   },
   {
-    file: "src/pages/SongCanvasPage.tsx",
+    file: "src/components/cog/SongCanvasTrees.tsx",
     label: "Song canvas cards use memoized node rendering",
     pattern: /const\s+CanvasNode\s*=\s*memo\(/,
   },

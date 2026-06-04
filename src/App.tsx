@@ -10,6 +10,7 @@ const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
 const FirstIntentPage = lazy(() => import("./pages/onboarding/FirstIntentPage"));
 const StartFirstSongPage = lazy(() => import("./pages/onboarding/StartFirstSongPage"));
 const FounderCodePage = lazy(() => import("./pages/onboarding/FounderCodePage"));
+const EarnPage = lazy(() => import("./pages/onboarding/EarnPage"));
 const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstIdeaPage"));
 const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
@@ -71,6 +72,7 @@ const App = () => (
             <Route path="/onboarding/intent" element={<FirstIntentPage />} />
             <Route path="/onboarding/start-song" element={<StartFirstSongPage />} />
             <Route path="/onboarding/founder-code" element={<FounderCodePage />} />
+            <Route path="/onboarding/earn" element={<EarnPage />} />
 
             {/* Invite acceptance */}
             <Route path="/invite/:token" element={<InvitePreviewPage />} />

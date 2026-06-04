@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T07:07:47.900Z",
+  "generatedAt": "2026-06-04T07:17:59.631Z",
   "routesChecked": [
     {
       "path": "/",
@@ -158,8 +158,8 @@
     },
     {
       "name": "test",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "bundle budget",

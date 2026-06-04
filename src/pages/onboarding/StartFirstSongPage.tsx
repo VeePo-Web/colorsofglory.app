@@ -5,9 +5,20 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { setSong } from "@/lib/songContext";
-import CogLogo from "@/components/cog/CogLogo";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+const fieldStyle = (active: boolean): React.CSSProperties => ({
+  backgroundColor: "#FFFFFF",
+  border: active ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.10)",
+  color: "#1A1A1A",
+  boxShadow: active ? "0 0 0 3px rgba(181,147,90,0.10)" : "0 1px 3px rgba(0,0,0,0.04)",
+  outline: "none",
+  transition: "border 150ms, box-shadow 150ms",
+  fontFamily: "var(--font-body)",
+  fontSize: "0.9375rem",
+  caretColor: "#B5935A",
+});
 
 const StartFirstSongPage = () => {
   const navigate = useNavigate();
@@ -19,18 +30,8 @@ const StartFirstSongPage = () => {
   const handleCreate = (mode: "create" | "skip") => {
     const songTitle = mode === "skip" || !title.trim() ? "Untitled Song" : title.trim();
     setIsSubmitting(true);
-
-    sessionStorage.setItem(
-      "cog:first-song",
-      JSON.stringify({
-        id: "1",
-        title: songTitle,
-        key: key || null,
-        bpm: bpm || null,
-        createdFrom: "onboarding",
-      }),
-    );
-
+    setSong({ id: "1", title: songTitle, key: key || null, bpm: bpm || null });
+    sessionStorage.setItem("cog:first-song", JSON.stringify({ id: "1", title: songTitle, key, bpm }));
     setTimeout(() => {
       setIsSubmitting(false);
       navigate("/songs/1?first=1");
@@ -38,175 +39,114 @@ const StartFirstSongPage = () => {
   };
 
   return (
-    <div
-      className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: "var(--cog-cream)" }}
-    >
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 50% at 50% 90%, rgba(184,149,58,0.13) 0%, transparent 65%)",
-        }}
-      />
-
-      <div
-        className="relative flex flex-col flex-1 px-6"
-        style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
-      >
-        <div className="pt-14 pb-6">
-          <button
-            onClick={() => navigate("/onboarding/intent")}
-            className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-            style={{ color: "var(--cog-warm-gray)" }}
-          >
-            <ArrowLeft size={15} />
-            Back
-          </button>
-        </div>
-
-        <div className="flex justify-center mb-8">
-          <CogLogo size="sm" />
-        </div>
-
-        <h1
-          className="text-4xl font-semibold mb-2 text-center"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "var(--cog-charcoal)",
-            lineHeight: 1.1,
-          }}
+    <OnboardingShell>
+      {/* Back */}
+      <div className="pt-14 pb-2">
+        <button
+          onClick={() => navigate("/onboarding/intent")}
+          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
+          style={{ color: "#999", minHeight: 44 }}
         >
-          Let's start your first song
-        </h1>
+          <ArrowLeft size={16} strokeWidth={2} />
+          Back
+        </button>
+      </div>
 
-        <p className="text-base mb-10 text-center" style={{ color: "var(--cog-warm-gray)" }}>
-          Just the basics. You can add the rest inside.
-        </p>
+      {/* Logo */}
+      <div className="pb-8 flex justify-center">
+        <CogBrand variant="stacked" size="md" />
+      </div>
 
-        <div className="mb-4">
-          <label
-            htmlFor="song-title"
-            className="block text-sm font-medium mb-2"
-            style={{ color: "var(--cog-warm-gray)" }}
-          >
-            Song title
+      {/* Headline — matches reference image exactly */}
+      <h1
+        className="text-[2.4rem] font-bold text-center mb-2 leading-[1.05]"
+        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+      >
+        Let's start your first song
+      </h1>
+      <p className="text-[1rem] text-center mb-8" style={{ color: "#666" }}>
+        Just the basics. You can add the rest inside.
+      </p>
+
+      {/* Song title — large, dominant field */}
+      <div className="mb-4">
+        <label
+          htmlFor="song-title"
+          className="block text-[0.875rem] font-medium mb-2"
+          style={{ color: "#666" }}
+        >
+          Song title
+        </label>
+        <input
+          id="song-title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Name your song..."
+          className="w-full rounded-2xl px-4 text-[1.1875rem] font-semibold"
+          style={{
+            ...fieldStyle(!!title),
+            height: 72,
+            fontFamily: "var(--font-display)",
+          }}
+        />
+      </div>
+
+      {/* Key + BPM row */}
+      <div className="flex gap-3 mb-8">
+        <div className="flex-1">
+          <label htmlFor="song-key" className="block text-[0.875rem] font-medium mb-2" style={{ color: "#666" }}>
+            Key <span style={{ color: "#999", fontWeight: 400 }}>(optional)</span>
           </label>
-          <textarea
-            id="song-title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Name your song..."
-            rows={3}
-            className="w-full resize-none rounded-2xl px-4 py-4 text-xl font-semibold outline-none transition-all duration-150"
-            style={{
-              backgroundColor: "var(--cog-cream-light)",
-              border: title
-                ? "1.5px solid var(--cog-gold)"
-                : "1.5px solid var(--cog-border)",
-              color: "var(--cog-charcoal)",
-              fontFamily: "var(--font-display)",
-              boxShadow: title ? "0 0 0 3px rgba(184,149,58,0.10)" : "none",
-              lineHeight: 1.3,
-            }}
+          <select
+            id="song-key"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            className="w-full rounded-xl px-3 appearance-none"
+            style={{ ...fieldStyle(!!key), height: 52, color: key ? "#1A1A1A" : "#999" }}
+          >
+            <option value="">Key</option>
+            {KEYS.map((k) => <option key={k} value={k}>{k}</option>)}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label htmlFor="song-bpm" className="block text-[0.875rem] font-medium mb-2" style={{ color: "#666" }}>
+            BPM <span style={{ color: "#999", fontWeight: 400 }}>(optional)</span>
+          </label>
+          <input
+            id="song-bpm"
+            type="number"
+            inputMode="numeric"
+            min={40}
+            max={240}
+            value={bpm}
+            onChange={(e) => setBpm(e.target.value)}
+            placeholder="120"
+            className="w-full rounded-xl px-3"
+            style={{ ...fieldStyle(!!bpm), height: 52 }}
           />
         </div>
-
-        <div className="flex gap-3 mb-8">
-          <div className="flex-1">
-            <label
-              htmlFor="song-key"
-              className="block text-sm font-medium mb-2"
-              style={{ color: "var(--cog-warm-gray)" }}
-            >
-              Key{" "}
-              <span className="font-normal" style={{ color: "var(--cog-muted)" }}>
-                (optional)
-              </span>
-            </label>
-            <select
-              id="song-key"
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              className="w-full rounded-xl px-3 py-3.5 outline-none transition-all duration-150 appearance-none"
-              style={{
-                backgroundColor: "var(--cog-cream-light)",
-                border: key
-                  ? "1.5px solid var(--cog-gold)"
-                  : "1.5px solid var(--cog-border)",
-                color: key ? "var(--cog-charcoal)" : "var(--cog-muted)",
-                fontFamily: "var(--font-body)",
-                fontSize: "0.9375rem",
-              }}
-            >
-              <option value="">Key</option>
-              {KEYS.map((songKey) => (
-                <option key={songKey} value={songKey}>
-                  {songKey}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex-1">
-            <label
-              htmlFor="song-bpm"
-              className="block text-sm font-medium mb-2"
-              style={{ color: "var(--cog-warm-gray)" }}
-            >
-              BPM{" "}
-              <span className="font-normal" style={{ color: "var(--cog-muted)" }}>
-                (optional)
-              </span>
-            </label>
-            <input
-              id="song-bpm"
-              type="number"
-              inputMode="numeric"
-              min={40}
-              max={240}
-              value={bpm}
-              onChange={(event) => setBpm(event.target.value)}
-              placeholder="120"
-              className="w-full rounded-xl px-3 py-3.5 outline-none transition-all duration-150"
-              style={{
-                backgroundColor: "var(--cog-cream-light)",
-                border: bpm
-                  ? "1.5px solid var(--cog-gold)"
-                  : "1.5px solid var(--cog-border)",
-                color: "var(--cog-charcoal)",
-                fontFamily: "var(--font-body)",
-                fontSize: "0.9375rem",
-              }}
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={() => handleCreate("create")}
-          disabled={isSubmitting}
-          className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-50 mb-4"
-          style={{
-            backgroundColor: "var(--cog-gold)",
-            fontFamily: "var(--font-body)",
-            boxShadow: "0 4px 20px rgba(184,149,58,0.35)",
-          }}
-        >
-          {isSubmitting ? "Creating..." : "Create song"}
-        </button>
-
-        <button
-          onClick={() => handleCreate("skip")}
-          disabled={isSubmitting}
-          className="text-sm text-center w-full py-3 transition-opacity hover:opacity-70 disabled:opacity-40"
-          style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-        >
-          Skip for now
-        </button>
-
-        <div className="pb-10" />
       </div>
-    </div>
+
+      {/* Create song — pill CTA */}
+      <GoldButton
+        loading={isSubmitting}
+        loadingText="Creating..."
+        onClick={() => handleCreate("create")}
+      >
+        Create song
+      </GoldButton>
+
+      {/* Skip */}
+      <button
+        onClick={() => handleCreate("skip")}
+        disabled={isSubmitting}
+        className="text-[0.9375rem] text-center w-full py-4 transition-opacity hover:opacity-70 disabled:opacity-40 underline"
+        style={{ color: "#999", fontFamily: "var(--font-body)" }}
+      >
+        Skip for now
+      </button>
+    </OnboardingShell>
   );
 };
 
