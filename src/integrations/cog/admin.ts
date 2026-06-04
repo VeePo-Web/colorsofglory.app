@@ -140,3 +140,56 @@ export const markPayoutPaid = (payout_id: string, provider_id: string) =>
   callAdmin("admin-payouts", { action: "mark_paid", payout_id, provider_id });
 export const markPayoutFailed = (payout_id: string, reason: string) =>
   callAdmin("admin-payouts", { action: "mark_failed", payout_id, reason });
+
+// =========================================================================
+// Audit log search (admin only) — backed by admin-audit-search edge function.
+// =========================================================================
+
+export type AuditSearchFilters = {
+  invoice_id?: string;
+  referrer_user_id?: string;
+  referred_user_id?: string;
+  reversed_reason?: string;
+  action?: string;
+  entity_type?: string;
+  since?: string; // ISO timestamp
+  until?: string; // ISO timestamp
+  limit?: number;
+  offset?: number;
+};
+
+export type AuditLogRow = {
+  id: string;
+  created_at: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  actor_user_id: string | null;
+  referred_user_id: string | null;
+  referrer_user_id: string | null;
+  referrer_founder_id: string | null;
+  invoice_id: string | null;
+  reason: string | null;
+  reversed_reason: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+};
+
+export type AuditSearchResult = {
+  rows: AuditLogRow[];
+  total: number;
+  has_more: boolean;
+  limit: number;
+  offset: number;
+};
+
+export async function searchAuditLogs(filters: AuditSearchFilters = {}): Promise<AuditSearchResult> {
+  const body: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== null && v !== "") body[k] = v;
+  }
+  const { data, error } = await supabase.functions.invoke("admin-audit-search", { body });
+  if (error) throw error;
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  return data as AuditSearchResult;
+}

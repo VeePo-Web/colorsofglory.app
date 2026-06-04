@@ -1557,6 +1557,37 @@ export type Database = {
           referrer_type: string
         }[]
       }
+      admin_search_audit_logs: {
+        Args: {
+          _action?: string
+          _entity_type?: string
+          _invoice_id?: string
+          _limit?: number
+          _offset?: number
+          _referred_user_id?: string
+          _referrer_user_id?: string
+          _reversed_reason?: string
+          _since?: string
+          _until?: string
+        }
+        Returns: {
+          action: string
+          actor_user_id: string
+          after: Json
+          before: Json
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          invoice_id: string
+          reason: string
+          referred_user_id: string
+          referrer_founder_id: string
+          referrer_user_id: string
+          reversed_reason: string
+          total_count: number
+        }[]
+      }
       advance_onboarding: {
         Args: {
           _patch: Json
