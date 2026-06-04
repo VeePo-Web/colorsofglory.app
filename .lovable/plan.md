@@ -1,196 +1,143 @@
 ## Goal
 
-Every Colors of Glory account automatically gets a personal referral code. Anyone who signs up with that code and becomes a paying Pro subscriber earns the referrer **$5/month, every month, for as long as the referred user keeps paying**. Rewards stack with no cap (5,000 active referrals = $300k/yr). The referrer sees their code everywhere it matters (home, settings, onboarding, dedicated page) and can copy the link in one tap.
+Guarantee that referral rewards (founder tiered + $5/mo user cash) ONLY fire when the referred user has actually paid real money on a Pro / Founder Pro subscription invoice. No leaks on: trial invoices, $0 invoices, one-time charges, storage add-ons, free plan, refunded invoices, or self-referrals.
 
-## How this fits what already exists
+## Audit findings
 
-Most of the backend plumbing is already built for the founder program — we're reusing it and turning on the user side:
+The current `record_invoice_paid` + `payments-webhook` flow already covers most cases but has **5 confirmed leaks** and **3 hardening gaps**.
 
-- `profiles.referral_code` is already auto-generated for every user (8-char A–Z + 2–9 alphabet via `generate_referral_code()`).
-- `codes.kind = 'user_referral'` and `attribute_referral()` already handle user codes.
-- `record_invoice_paid()` already writes a reward event when a referred user's invoice is paid — it currently writes a $10 *service credit*. We change it to a **$5 cash reward** that flows into the existing founder-style payout pipeline.
-- `reward_events`, `mature_holds`, `payouts`, `approve_payout`, `mark_payout_paid`, the 30-day clawback hold, and refund/chargeback reversal all already work — we just teach the payout side that payouts can belong to either a founder or a user.
+### Confirmed leaks (must fix)
 
-So this is one schema migration, one webhook-path tweak, one cron extension, an admin payouts UI extension, and the user-facing surfaces.
+1. **$0 / trial invoices mint rewards.** Stripe sends `invoice.paid` with `amount_paid = 0` for trial-start, full-discount, and pure proration-credit invoices. `record_invoice_paid` reads `v_amount` but never checks it → a $5 reward is created for a non-paying user.
+2. **One-time invoices (no subscription) bypass the plan gate.** The `IF v_sub_id IS NOT NULL THEN ... plan check` block is skipped when an invoice has no subscription, then the function continues and mints a reward if attribution exists.
+3. **`invoice.paid` AND `invoice.payment_succeeded` both routed to `handleInvoicePaid`.** Stripe emits both for the same invoice. Idempotency key dedupes the reward row, but two billing_events / two function calls run. Should route only `invoice.paid`.
+4. **Subscription status not checked.** A `pro` row whose `status` is `incomplete`, `incomplete_expired`, `unpaid`, or `canceled` (with a delayed retry) can still satisfy the current plan-only check. Require `status IN ('active','trialing','past_due')`.
+5. **`me-referrals` `is_paying` per-row uses `earned > 0`.** A user who paid once and churned still shows `is_paying: true` forever. Wrong signal in the UI.
 
----
+### Hardening gaps
 
-## 1. Database migration
+6. **`next_paid_month_index` counts every reward_events row regardless of status.** A reversed (refunded) reward still consumes a "month slot" for tiered founder pricing. Should only count `status IN ('pending','payable','paid')`.
+7. **No explicit guard that the invoice's subscription belongs to the referred user.** Today `handleInvoicePaid` trusts `invoice.metadata.userId` then falls back to the subscription row's `user_id`. Add a strict check: the resolved user MUST equal `subscriptions.user_id` for the matched subscription.
+8. **No log row when a reward is intentionally skipped.** When a paid invoice arrives but is filtered out (free plan, $0, no attribution, etc.), nothing is recorded. Add a structured `audit_logs` entry so we can prove "we deliberately did not pay" for any invoice.
 
-### 1a. Settings + reward shape
-
-- Add `app_settings.user_referral_cash_cents = 500` (the new $5/mo).
-- Keep `user_credit_cents` around but unused by the new path (legacy service credits stay valid until consumed).
-
-### 1b. Each profile gets a real `codes` row
-
-`attribute_referral()` resolves through the `codes` table, so every user needs a matching `kind='user_referral'` row whose `value` equals their `profiles.referral_code`.
-
-- Trigger on `profiles` insert/update: upsert a `codes` row `{ value = referral_code, kind='user_referral', owner_user_id = user_id, status='active' }`.
-- Backfill: insert that row for every existing profile.
-- If `referral_code` changes, deactivate the old code row.
-
-### 1c. Payouts table supports user referrers
+## Process flow — the locked tracking pipeline
 
 ```text
-payouts:
-  founder_id  uuid NULL          (was NOT NULL)
-  user_id     uuid NULL          (new, FK profiles.user_id)
-  CHECK (founder_id IS NOT NULL) <> (user_id IS NOT NULL)
+Stripe invoice.paid
+        |
+        v
+payments-webhook (verify, dedupe via billing_events)
+        |
+        | only event.type === "invoice.paid"
+        v
+handleInvoicePaid
+   * resolve subscription row by external_id
+   * if it matches a storage_addon -> RETURN (no reward)
+   * if it matches NO subscription row -> RETURN (one-time / unknown)
+   * resolve user_id strictly from subscriptions.user_id
+        |
+        v
+record_invoice_paid(_event)   --- SECURITY DEFINER, single source of truth ---
+   GATE 1: v_invoice + v_user not null
+   GATE 2: v_sub_id NOT NULL                 (no subscription -> no reward)
+   GATE 3: v_amount > 0                       (kills trial / $0 / proration)
+   GATE 4: subscription.plan IN ('pro','founder_pro')
+   GATE 5: subscription.status IN ('active','trialing','past_due')
+   GATE 6: referral_attribution exists for v_user
+   GATE 7: attr.referrer_user_id != v_user    (self-referral kill)
+   GATE 8: idempotency_key unique per invoice (per referrer)
+        |
+        v
+INSERT reward_events (status='pending', hold_until = now()+30d)
+        |
+        v
+rewards-mature-worker (cron)
+   * pending -> payable when hold_until <= now()
+        |
+        v
+create_user_payout_batch / create_founder_payout_batch
+   * monthly draft -> admin approval -> paid
+
+Refund / chargeback path:
+Stripe charge.refunded / charge.dispute.created
+   -> record_invoice_refunded / record_chargeback
+   -> reward_events.status = 'reversed'
+   -> credit_ledger / payouts adjusted
 ```
 
-- New SECURITY DEFINER function `create_user_payout_batch(_user, _period_start, _period_end)` mirroring `create_payout_batch` but scoped by `referrer_user_id`.
-- New RLS policy: `Referrer user views own payouts` — `user_id = auth.uid()`.
-- Admin policies on `payouts` keep working unchanged.
+Every gate fails CLOSED. If any gate is uncertain, no reward is written.
 
-### 1d. `record_invoice_paid` — user branch becomes cash
+## Changes to ship
 
-In the `referrer_type = 'user'` branch:
+### Migration A — tighten `record_invoice_paid`
 
-- Read `user_referral_cash_cents` (default 500).
-- Insert `reward_events` with `reward_kind='cash'`, `referrer_user_id=…`, `hold_until = now()+30d`, `status='pending'`. **Stop writing to `credit_ledger`.**
-- Idempotency key unchanged.
-- Per-month dedupe is already handled because Stripe issues one invoice per billing period and `idempotency_key` keys on the invoice id, so a paying user generates exactly one $5 reward per month per referrer. Stacking is automatic — 5,000 paying referrals = 5,000 reward rows × $5 = $25,000 payable that month.
-
-### 1e. Self-referral and abuse guards
-
-- Already blocked: `attribute_referral` raises `self_referral_not_allowed`.
-- Add: if `referred_user_id = referrer_user_id` slips through (e.g. account merge), `record_invoice_paid` skips the insert.
-- Fraud signals already write to `fraud_flags` on chargebacks; same code path handles user referrals.
-
-### 1f. Payout method on the profile
-
-Add nullable columns on `profiles` so the user can tell us how to pay them:
-
-- `payout_method` enum (`'stripe_connect' | 'paypal' | 'manual'`)
-- `payout_email` text (used for PayPal or manual)
-- `payout_country` text
-- `stripe_connect_account_id` text (filled later when we wire Stripe Connect)
-
-For launch we mark all payouts as **manual** — admin marks them paid by hand from the dashboard. Stripe Connect onboarding is a follow-up; the schema is ready for it.
-
----
-
-## 2. Edge function changes
-
-### 2a. `rewards-mature-worker` (cron, daily)
-
-Already runs `mature_holds()` and, on day 1, creates monthly founder payout drafts. Extend the day-1 block:
-
-- After founders, loop over every `profiles.user_id` that has any `payable` cash `reward_events` for the prior month and call `create_user_payout_batch`.
-- One SQL query, no per-user fetch loop in JS.
-
-### 2b. New edge function: `me-referrals`
-
-Authenticated. Returns:
-
-```ts
-{
-  code: string;
-  link: string;                 // https://colorsofglory.app/r/<CODE>
-  attributed_count: number;     // total people who signed up with the code
-  paying_count: number;         // currently Pro
-  earnings: {
-    pending_cents: number;      // in hold
-    payable_cents: number;      // matured, not yet paid out
-    paid_cents: number;         // already paid
-    lifetime_cents: number;     // pending + payable + paid
-  };
-  next_payout_estimate_cents: number;  // sum of payable as of today
-  recent_referrals: Array<{
-    referred_at: string;
-    is_paying: boolean;
-    months_active: number;
-    total_earned_cents: number;
-  }>;
-  payout_method: { kind: string | null; email: string | null; country: string | null };
-}
+```text
+- Add: IF v_sub_id IS NULL THEN RETURN NULL; END IF;
+- Add: IF v_amount <= 0 THEN RETURN NULL; END IF;
+- Change plan check to also require status IN ('active','trialing','past_due')
+- On every early RETURN NULL, call write_audit(v_user,'reward_skipped','invoice',
+  NULL, NULL, jsonb_build_object('reason', <reason>, 'invoice', v_invoice), NULL)
+- Update next_paid_month_index to count only status IN ('pending','payable','paid')
 ```
 
-Pure read RPC, no writes. Used by the dashboard, the home card, and the settings panel.
+### Migration B — explicit guard view + constraint
 
-### 2c. New edge function: `me-set-payout-method`
+```text
+- Add CHECK on reward_events: amount_cents > 0
+- Add partial unique index reinforcing idempotency_key (already unique; verify)
+- Add comment columns documenting each gate
+```
 
-POST `{ method, email, country }`. Zod-validated. Writes to `profiles`.
+### Edge function — `payments-webhook`
 
-### 2d. Public landing redirect
+```text
+- Drop "invoice.payment_succeeded" from the switch (still log to billing_events
+  as ignored_duplicate, mark processed).
+- In handleInvoicePaid: if no subRowId AND no addon -> log + return (no RPC call).
+- Pass invoice.status to the RPC; reject if status != 'paid'.
+- Always derive userId from subscriptions.user_id, never trust invoice.metadata
+  unless it matches.
+```
 
-Light edge function (or simple SPA route) for `/r/:code` that captures the code into `localStorage` (or sets a `Set-Cookie`) and redirects to `/` so the existing signup flow attaches the attribution after sign-up. The attribution step itself is already implemented by the `referral-attach` function.
+### Edge function — `me-referrals`
 
-### 2e. Admin payouts UI
+```text
+- Replace per-row is_paying = earned>0 with a real lookup:
+  is_paying = subscriptions row exists for that user with
+              plan in (pro,founder_pro) AND
+              status in (active,trialing,past_due) AND
+              (current_period_end is null OR > now()).
+- Add: monthly_recurring_cents = paying_count * 500 (display the user's MRR).
+```
 
-`admin-payouts` RPC + page already render a list per period. Extend the payload so each row carries either `founder_id` or `user_id` plus a display name pulled from `founders` or `profiles`. The existing approve / mark-paid actions work unchanged because they key on `payout_id`.
+### QA script (one-off, run after deploy)
 
----
+```text
+1. Backfill audit: for every invoice in billing_events with kind='invoice_paid'
+   in the last 30d, assert that reward_events either has a row OR audit_logs
+   has a 'reward_skipped' row with a reason. Output any orphans.
+2. Sanity SQL:
+   - Any reward_events with amount_cents=0?  expected 0
+   - Any reward_events whose subscription is not pro/founder_pro? expected 0
+   - Any reward_events where referrer_user_id = referred_user_id? expected 0
+   - Any reward_events linked to a storage_addon external_id? expected 0
+3. Stripe sandbox replay: trigger trial start ($0 invoice), free plan checkout,
+   storage-addon purchase, full-discount coupon -> none should produce rewards.
+   Trigger normal pro $9 invoice -> exactly one $5 cash reward (status=pending).
+   Trigger refund -> reward flips to reversed.
+```
 
-## 3. Typed SDK (`src/integrations/cog/*`)
+## Out of scope
 
-Add three thin helpers Claude's pages will consume:
+- Stripe Connect onboarding for user payouts (still manual / PayPal at launch).
+- Retroactively reversing any rewards already minted under the old looser gates (none exist in prod yet).
+- Multi-currency conversion in `me-referrals` MRR display.
 
-- `getMyReferrals()` → calls `me-referrals`.
-- `setMyPayoutMethod(input)` → calls `me-set-payout-method`.
-- `buildReferralShareUrl(code)` → returns `https://colorsofglory.app/r/<code>`.
+## Build order
 
-All input validated with Zod.
-
----
-
-## 4. User-facing surfaces (handed to Claude — Lovable does not touch `src/pages/**` / `src/components/**`)
-
-Spec for Claude to build, all using the existing cream + gold tokens:
-
-### 4a. `/referrals` — dedicated dashboard
-
-Mobile-first. Sections in order:
-1. Hero: serif "Invite. Earn $5/month. Forever."
-2. Big code card — code in large mono, one-tap "Copy code" + "Copy link" buttons + native Web Share.
-3. Earnings strip — Pending / Payable / Lifetime, with a small "Next payout (1st of month)" line.
-4. Math callout — "1 friend = $5/mo · 100 friends = $6,000/yr · 5,000 friends = $300,000/yr."
-5. Referred users list — anonymized rows (initial + month joined + status pill: Free / Pro / Lapsed) + months active + lifetime $.
-6. Payout method card — current method + "Set up payouts" CTA. While unset, banner: "Your $X is waiting — add a payout method to release it."
-7. FAQ accordion (self-referral, hold period, refunds reverse rewards, taxes are the referrer's responsibility).
-
-### 4b. Settings panel section
-
-Compact: code, copy button, link to `/referrals`, lifetime earned.
-
-### 4c. Persistent share card on Home/Catalog
-
-Small dismissible-for-the-session gold-bordered card with code + "Copy link · Earn $5/mo per friend." Tapping opens `/referrals`.
-
-### 4d. Onboarding screen — new step `referral_program_seen`
-
-Inserted into the onboarding ladder after `intent_selected` (or right before `first_song_created`). Single screen:
-- Headline: "Your code earns $5/month — forever."
-- Subhead explaining: anyone who joins Pro with your code pays you $5/mo for as long as they stay subscribed.
-- Their code, prominent, with Copy + Share buttons.
-- Math line: "5,000 people = $300,000/year potential."
-- Continue button advances the step.
-
-Add `'referral_program_seen'` to the `onboarding_step` enum and to `onboarding_legal_next` / `onboarding_step_rank`, slotted between `intent_selected` and `founder_code_seen`. Existing users at later steps are unaffected.
-
----
-
-## 5. What stays the same
-
-- 30-day clawback hold before a reward becomes payable.
-- Refunds and chargebacks reverse the matching reward via existing functions.
-- Direct-only attribution (no MLM chain) — already enforced.
-- Founder rewards rule from the previous change ($25 × 3 then $10) is untouched.
-- Service credit applied to invoices keeps working for any legacy `credit_ledger` rows; we just stop creating new ones.
-
-## 6. Out of scope (explicit)
-
-- Stripe Connect onboarding flow. Schema is ready; first payouts go out manually.
-- Multi-currency. All rewards are in the project's existing currency (CAD).
-- Leaderboards / public bragging surfaces.
-- A "minimum payout threshold" (Stripe Connect will introduce one naturally later).
-- Retroactive conversion of existing $10 service-credit rewards into cash. Anything earned before this ships stays a credit.
-
-## 7. Build order (one PR each, in this order)
-
-1. Migration: settings, codes auto-row trigger + backfill, `payouts.user_id`, `create_user_payout_batch`, RLS policy, `record_invoice_paid` user branch → cash, profile payout columns.
-2. Edge functions: `me-referrals`, `me-set-payout-method`, extend `rewards-mature-worker` and `admin-payouts`.
-3. Typed SDK helpers.
-4. Onboarding enum + ladder update.
-5. Hand off to Claude: `/referrals` page, settings section, home card, onboarding screen.
+1. Migration A (tighten record_invoice_paid + audit logging).
+2. Migration B (CHECK + comments).
+3. Update payments-webhook (drop duplicate event, strict user check).
+4. Update me-referrals (real is_paying + MRR).
+5. Run QA script in sandbox, verify all assertions pass.
+6. Hand UI changes (MRR pill on /referrals) to Claude.

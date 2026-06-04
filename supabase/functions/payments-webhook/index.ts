@@ -131,46 +131,52 @@ async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | 
 
 async function handleInvoicePaid(invoice: any) {
   const subscriptionExternal = invoice.subscription ?? null;
-  const userId = invoice.metadata?.userId
-    ?? invoice.subscription_details?.metadata?.userId
-    ?? null;
 
-  let subRowId: string | null = null;
-  if (subscriptionExternal) {
-    const { data } = await db()
-      .from("subscriptions")
-      .select("id, user_id")
-      .eq("external_id", subscriptionExternal)
-      .maybeSingle();
-    subRowId = data?.id ?? null;
-
-    // Storage-addon invoices never produce referral rewards.
-    if (!subRowId) {
-      const { data: addon } = await db()
-        .from("storage_addons")
-        .select("id")
-        .eq("external_id", subscriptionExternal)
-        .maybeSingle();
-      if (addon) return;
-    }
-  }
-
-  const effectiveUser = userId
-    ?? (subRowId
-      ? (await db().from("subscriptions").select("user_id").eq("id", subRowId).maybeSingle()).data?.user_id
-      : null);
-
-  if (!effectiveUser) {
-    console.warn("invoice.paid without resolvable user", invoice.id);
+  // Reject anything not tied to a subscription we know about
+  if (!subscriptionExternal) {
+    console.log("invoice.paid skipped: no subscription on invoice", invoice.id);
     return;
   }
 
+  // Storage-addon invoices never produce referral rewards
+  const { data: addon } = await db()
+    .from("storage_addons")
+    .select("id")
+    .eq("external_id", subscriptionExternal)
+    .maybeSingle();
+  if (addon) return;
+
+  const { data: sub } = await db()
+    .from("subscriptions")
+    .select("id, user_id, plan, status")
+    .eq("external_id", subscriptionExternal)
+    .maybeSingle();
+  if (!sub) {
+    console.log("invoice.paid skipped: subscription row not found", subscriptionExternal);
+    return;
+  }
+
+  // Only mint when Stripe says the invoice itself is paid
+  if (invoice.status && invoice.status !== "paid") {
+    console.log("invoice.paid skipped: invoice.status not paid", invoice.id, invoice.status);
+    return;
+  }
+
+  const amountPaid = invoice.amount_paid ?? 0;
+  if (amountPaid <= 0) {
+    console.log("invoice.paid skipped: amount_paid <= 0", invoice.id);
+    return;
+  }
+
+  // Strict: derive user from the subscription row, never trust invoice metadata.
+  // If metadata.userId is present and disagrees, the RPC's user_mismatch gate
+  // will reject; here we always send the subscription's user.
   await db().rpc("record_invoice_paid", {
     _event: {
-      user_id: effectiveUser,
+      user_id: sub.user_id,
       invoice_external_id: invoice.id,
-      subscription_id: subRowId,
-      amount_cents: invoice.amount_paid ?? invoice.amount_due ?? 0,
+      subscription_id: sub.id,
+      amount_cents: amountPaid,
       currency: invoice.currency ?? "cad",
     },
   });
@@ -269,10 +275,12 @@ Deno.serve(async (req) => {
         break;
       }
       case "invoice.paid":
-      case "invoice.payment_succeeded": {
         await handleInvoicePaid(obj);
         break;
-      }
+      case "invoice.payment_succeeded":
+        // Duplicate of invoice.paid for subscription invoices — ignore.
+        console.log("ignored duplicate event invoice.payment_succeeded", event.id);
+        break;
       case "charge.refunded": {
         await handleInvoiceRefunded(obj);
         break;

@@ -10,6 +10,8 @@ export type MyReferralsSummary = {
   link: string | null;
   attributed_count: number;
   paying_count: number;
+  per_referral_cents: number;
+  monthly_recurring_cents: number;
   earnings: {
     pending_cents: number;
     payable_cents: number;
@@ -20,6 +22,7 @@ export type MyReferralsSummary = {
   recent_referrals: Array<{
     referred_at: string;
     is_paying: boolean;
+    has_paid_before: boolean;
     total_earned_cents: number;
   }>;
   payout_method: {
