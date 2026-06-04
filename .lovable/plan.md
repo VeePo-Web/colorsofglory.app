@@ -1,47 +1,18 @@
-## Plan: Onboarding backend gap-fixes (A + B + C)
+Ship the in-depth onboarding scale + correctness pass exactly as presented:
 
-Ship one migration that closes the three top audit gaps. Backend only — no frontend or edge-function changes.
+1. **Migration:**
+   - Recreate `on_auth_user_confirmed` trigger with `WHEN` clause (only fire on confirmation transitions).
+   - Add indexes: `profiles(onboarding_step)`, `profiles(onboarding_updated_at DESC)`, `founder_redemptions(code)`, partial `founder_codes(expires_at) WHERE active`.
+   - Fix history-reversal bug in `advance_onboarding` trim (keep last 20 in oldest→newest order).
+   - Rewrite `advance_onboarding_for_song_owner`: lock-free fast path (plain SELECT first, FOR UPDATE only if a transition is needed), trim history to 20, write audit log.
+   - Wrap `handle_new_user` referral lookup + `user_roles` insert in `BEGIN…EXCEPTION WHEN OTHERS THEN NULL`.
+   - Add `founder_codes` CHECK constraint: `code = upper(code) AND code ~ '^[A-Z0-9-]{4,32}$'`.
+   - Create `public.onboarding_funnel_v1` view, grant SELECT to service_role only.
 
-### A. Auto-advance onboarding on email or phone confirmation
+2. **Edge function edits:**
+   - `onboarding-set-step/index.ts`: stop prefixing source (`_source: source`); fix `NEXT_ROUTE.first_song_created` to `/songs/${id}`.
+   - `redeem-founder-code/index.ts`: fix `nextRouteFor` for `first_song_created` (no `/onboarding/capture`); add structured log line on every outcome.
 
-- New SECURITY DEFINER helper `public.on_auth_user_confirmed(_user_id uuid)`:
-  - Re-syncs `profiles.phone_e164` from `auth.users.phone` (E.164-normalized) so phone-only late confirmations still populate the column.
-  - Calls `advance_onboarding(_user_id, 'intent_selected', '{"confirmed_via":"auth"}', 'trigger:auth_confirmed')` **only when** current step is `not_started`. Swallows `INVALID_TRANSITION` / `TERMINAL` so re-confirmation or already-advanced users are no-ops.
-- New trigger `on_auth_user_confirmed` on `auth.users` `AFTER UPDATE`, fired when either `email_confirmed_at` or `phone_confirmed_at` transitions `NULL → NOT NULL`. Calls the helper with `NEW.id`.
-- One-shot backfill in the same migration: for every `profiles` row where `onboarding_step = 'not_started'` AND the matching `auth.users` row has `email_confirmed_at IS NOT NULL OR phone_confirmed_at IS NOT NULL`, advance to `intent_selected` with source `trigger:auth_confirmed_backfill`.
+3. **Doc append** to `.lovable/plan.md`: monotonic-onboarding decision, shard-popular-codes guidance, no-rate-limiter rationale.
 
-### B. Seed founder codes
-
-Insert three live codes into `public.founder_codes` so `redeem-founder-code` returns real results:
-
-| code | label | max_uses | expires_at | perks |
-|---|---|---|---|---|
-| `FOUNDER-LAUNCH` | Launch founders | 100 | NULL | `{"plan_tier":"founder","storage_bonus_mb":500}` |
-| `WORSHIP-2026` | 2026 worship leaders | 250 | `2026-12-31` | `{"plan_tier":"founder","storage_bonus_mb":250}` |
-| `SEED-FOUNDER-1` | QA / smoke test | 5 | NULL | `{}` |
-
-(Perks are stored only — actual entitlement application is Phase D, per existing plan.)
-
-### C. Collapse duplicate phone columns on `profiles`
-
-- Backfill: `UPDATE profiles SET phone_e164 = '+' || regexp_replace(phone, '^\+', '') WHERE phone_e164 IS NULL AND phone IS NOT NULL AND phone <> ''`.
-- Drop legacy `profiles.phone` column.
-- Update `public.handle_new_user()` to write `NEW.phone` directly into `phone_e164` (E.164-normalized — Supabase already stores phone in `+E.164` once confirmed, but normalize defensively).
-- `sync_profile_phone` trigger already targets `phone_e164` only — no change needed there.
-
-### Not included (deferred, called out in audit)
-
-- D rate-limit, E route-map sanity, F Deno tests, G dismissal audit logging — separate follow-up if you want them.
-
-### Risk / rollback
-
-- Trigger is idempotent and swallows transition errors; safe to re-run.
-- Dropping `profiles.phone` is irreversible in this migration but no edge function or RLS policy currently reads it (audited via grep over `supabase/functions` + `src/integrations/cog`).
-- Backfill statements are bounded by `WHERE` clauses and safe on an empty dataset.
-
-### Verification after migration
-
-- `SELECT code, max_uses, uses FROM founder_codes;` → 3 rows.
-- `\d profiles` → no `phone` column, `phone_e164` still unique.
-- New trigger visible: `SELECT tgname FROM pg_trigger WHERE tgrelid = 'auth.users'::regclass;`.
-- Smoke from frontend: sign up via email, confirm → `profiles.onboarding_step` lands on `intent_selected` automatically.
+No frontend changes, no `src/pages/**` or `src/components/**` edits.
