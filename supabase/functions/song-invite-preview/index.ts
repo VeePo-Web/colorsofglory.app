@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   try {
     const { token } = await req.json().catch(() => ({}));
     if (typeof token !== "string" || token.length < 8) {
-      return jsonResponse({ ok: false, code: "INVALID_INPUT", message: "Invite token required" }, 400);
+      return jsonResponse({ ok: false, code: "INVALID_INPUT", message: "Invite token required" }, 200);
     }
 
     const admin = adminClient();
@@ -24,15 +24,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, code: "INTERNAL", message: invErr.message }, 500);
     }
     if (!invite) {
-      return jsonResponse({ ok: false, code: "INVITE_NOT_FOUND", message: "Invite not found" }, 404);
+      return jsonResponse({ ok: false, code: "INVITE_NOT_FOUND", message: "Invite not found" }, 200);
     }
 
     const now = Date.now();
     if (invite.status === "revoked") {
-      return jsonResponse({ ok: false, code: "INVITE_REVOKED", message: "Invite revoked" }, 410);
+      return jsonResponse({ ok: false, code: "INVITE_REVOKED", message: "Invite revoked" }, 200);
     }
     if (invite.status === "expired" || new Date(invite.expires_at).getTime() <= now) {
-      return jsonResponse({ ok: false, code: "INVITE_EXPIRED", message: "Invite expired" }, 410);
+      return jsonResponse({ ok: false, code: "INVITE_EXPIRED", message: "Invite expired" }, 200);
     }
     if (invite.status === "accepted" || invite.use_count >= invite.max_uses) {
       // Still return preview metadata so an already-accepted user can be guided in.
