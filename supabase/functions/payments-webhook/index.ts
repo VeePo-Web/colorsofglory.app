@@ -49,14 +49,19 @@ function periodFromSubscription(sub: any): { start: string | null; end: string |
 }
 
 async function recordBillingEvent(eventId: string, kind: string, userId: string | null, amountCents: number, currency: string, payload: unknown) {
-  await db().from("billing_events").insert({
-    kind,
-    external_event_id: eventId,
-    user_id: userId,
-    amount_cents: amountCents,
-    currency,
-    payload,
-  });
+  // Idempotent: a concurrent retry can land before this row's
+  // processed_at is set. ignoreDuplicates avoids a 500 + log spam.
+  await db().from("billing_events").upsert(
+    {
+      kind,
+      external_event_id: eventId,
+      user_id: userId,
+      amount_cents: amountCents,
+      currency: (currency ?? "cad").toLowerCase(),
+      payload,
+    },
+    { onConflict: "external_event_id", ignoreDuplicates: true },
+  );
 }
 
 async function markBillingEventProcessed(eventId: string, error?: string) {
@@ -83,7 +88,12 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
   // Storage add-ons live in their own table and never affect plan/quota math
   // beyond the bytes they grant.
   if (isStorageLookupKey(lookupKey)) {
-    await upsertStorageAddon(sub, userId, lookupKey);
+    const bytes = bytesForStorageLookupKey(lookupKey);
+    if (bytes <= 0) {
+      console.error("storage addon with unknown/zero bytes lookup_key — skipping upsert", lookupKey, sub.id);
+      return;
+    }
+    await upsertStorageAddon(sub, userId, lookupKey, bytes);
     return;
   }
 
@@ -91,7 +101,7 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
   const { start, end } = periodFromSubscription(sub);
   const item = sub.items?.data?.[0];
   const unitAmount = item?.price?.unit_amount ?? defaultUnitAmountForPlan(plan);
-  const currency = item?.price?.currency ?? "cad";
+  const currency = (item?.price?.currency ?? "cad").toLowerCase();
 
   await db().from("subscriptions").upsert(
     {
@@ -119,14 +129,13 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
   }
 }
 
-async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | null) {
+async function upsertStorageAddon(sub: any, userId: string, lookupKey: string, bytes: number) {
   const { start, end } = periodFromSubscription(sub);
-  const bytes = bytesForStorageLookupKey(lookupKey);
   await db().from("storage_addons").upsert(
     {
       user_id: userId,
       external_id: sub.id,
-      lookup_key: lookupKey ?? "",
+      lookup_key: lookupKey,
       bytes_granted: bytes,
       status: sub.status,
       current_period_start: start,
@@ -195,7 +204,7 @@ async function handleInvoicePaid(invoice: any) {
       invoice_external_id: invoice.id,
       subscription_id: sub.id,
       amount_cents: amountPaid,
-      currency: invoice.currency ?? "cad",
+      currency: (invoice.currency ?? "cad").toLowerCase(),
     },
   });
 }
@@ -328,7 +337,9 @@ Deno.serve(async (req) => {
       }
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
+      case "customer.subscription.deleted":
+      case "customer.subscription.paused":
+      case "customer.subscription.resumed": {
         await upsertSubscription(obj, stripe);
         break;
       }

@@ -63,6 +63,15 @@ Deno.serve(async (req) => {
     const environment: StripeEnv = body.environment === "live" ? "live" : "sandbox";
     const returnUrl: string | undefined = body.returnUrl ?? body.return_url;
 
+    // Embedded mode requires the {CHECKOUT_SESSION_ID} placeholder
+    // so the post-payment redirect can resolve the session.
+    if (!returnUrl || !/^https?:\/\//.test(returnUrl)) {
+      return json({ error: "invalid_return_url" }, 400);
+    }
+    if (!returnUrl.includes("{CHECKOUT_SESSION_ID}")) {
+      return json({ error: "return_url_missing_session_template" }, 400);
+    }
+
     // Fallback: if the client didn't pass a code, see if onboarding stashed
     // one on the profile (from /invite/:token or the founder-code screen).
     if (!rawCode && !rawReferrerCode) {
@@ -80,6 +89,8 @@ Deno.serve(async (req) => {
     let attributionCodeId: string | null = null;
     let attributionReferrerUserId: string | null = null;
     let ignoredReferrer = false;
+    let ignoredCode = false;
+    let claimedCodeId: string | null = null;
 
     if (planKey) {
       const { data: tier, error: tierErr } = await supabaseAdmin
@@ -91,6 +102,12 @@ Deno.serve(async (req) => {
       if (!tier.stripe_price_id) return json({ error: "plan_not_purchasable" }, 400);
 
       priceId = tier.stripe_price_id;
+
+      // Starter (and any tier that blocks both code types) silently swallows
+      // codes today. Surface that explicitly so the UI can warn.
+      if ((rawCode || rawReferrerCode) && !tier.allows_founder_code && !tier.allows_member_referral) {
+        ignoredCode = true;
+      }
 
       // Single-code-per-buyer enforcement
       if (rawCode || rawReferrerCode) {
@@ -119,11 +136,19 @@ Deno.serve(async (req) => {
             .eq("id", founderCode.owner_founder_id)
             .maybeSingle();
           if (founder && founder.status === "active" && founder.user_id !== user.id) {
-            appliedCodeKind = "founder";
-            attributionFounderId = founder.id;
-            attributionCodeId = founderCode.id;
-            if (tier.stripe_referral_price_id) priceId = tier.stripe_referral_price_id;
-            if (rawReferrerCode) ignoredReferrer = true;
+            // Atomically claim a redemption slot before Stripe is touched.
+            const { data: claimed } = await supabaseAdmin
+              .rpc("claim_founder_code_redemption", { _code_id: founderCode.id });
+            if (claimed === true) {
+              appliedCodeKind = "founder";
+              attributionFounderId = founder.id;
+              attributionCodeId = founderCode.id;
+              claimedCodeId = founderCode.id;
+              if (tier.stripe_referral_price_id) priceId = tier.stripe_referral_price_id;
+              if (rawReferrerCode) ignoredReferrer = true;
+            } else {
+              return json({ error: "code_exhausted" }, 409);
+            }
           }
         }
       }
@@ -168,23 +193,30 @@ Deno.serve(async (req) => {
 
     const stripe = createStripeClient(environment);
 
-    const prices = await stripe.prices.list({ lookup_keys: [priceId], expand: ["data.product"] });
-    if (!prices.data.length) return json({ error: "price_not_found" }, 404);
-    const stripePrice = prices.data[0];
-    const isRecurring = stripePrice.type === "recurring";
+    let session: any;
+    try {
+      const prices = await stripe.prices.list({ lookup_keys: [priceId], expand: ["data.product"] });
+      if (!prices.data.length) {
+        if (claimedCodeId) {
+          await supabaseAdmin.rpc("release_founder_code_redemption", { _code_id: claimedCodeId }).catch(() => {});
+        }
+        return json({ error: "price_not_found" }, 404);
+      }
+      const stripePrice = prices.data[0];
+      const isRecurring = stripePrice.type === "recurring";
 
-    const customerId = await resolveOrCreateCustomer(stripe, {
-      email: user.email ?? undefined,
-      userId: user.id,
-    });
+      const customerId = await resolveOrCreateCustomer(stripe, {
+        email: user.email ?? undefined,
+        userId: user.id,
+      });
 
-    let productDescription: string | undefined;
-    if (!isRecurring) {
-      const product = typeof stripePrice.product === "string"
-        ? await stripe.products.retrieve(stripePrice.product)
-        : (stripePrice.product as any);
-      productDescription = product?.name;
-    }
+      let productDescription: string | undefined;
+      if (!isRecurring) {
+        const product = typeof stripePrice.product === "string"
+          ? await stripe.products.retrieve(stripePrice.product)
+          : (stripePrice.product as any);
+        productDescription = product?.name;
+      }
 
     const sessionMetadata: Record<string, string> = {
       userId: user.id,
@@ -199,10 +231,10 @@ Deno.serve(async (req) => {
 
     const subscriptionMetadata: Record<string, string> = { ...sessionMetadata };
 
-    const session = await stripe.checkout.sessions.create({
+    session = await stripe.checkout.sessions.create({
       line_items: [{ price: stripePrice.id, quantity: 1 }],
       mode: isRecurring ? "subscription" : "payment",
-      ui_mode: "embedded_page",
+      ui_mode: "embedded",
       return_url: returnUrl,
       customer: customerId,
       managed_payments: { enabled: true },
@@ -214,24 +246,20 @@ Deno.serve(async (req) => {
         payment_intent_data: { description: productDescription },
       }),
     });
-
-    // Post-create bookkeeping: bump founder code redemption count and
-    // clear any pending_code so subsequent checkouts don't re-apply it.
-    if (appliedCodeKind === "founder" && attributionCodeId) {
-      try {
-        await supabaseAdmin.rpc("increment_founder_code_redemption", {
-          _code_id: attributionCodeId,
-        });
-      } catch (err) {
-        console.error("increment_founder_code_redemption failed", err);
+    } catch (stripeErr) {
+      if (claimedCodeId) {
+        await supabaseAdmin.rpc("release_founder_code_redemption", { _code_id: claimedCodeId }).catch(() => {});
       }
+      throw stripeErr;
     }
-    if (appliedCodeKind !== "none") {
-      try {
-        await supabaseAdmin.rpc("clear_pending_code", { _user_id: user.id });
-      } catch (err) {
-        console.error("clear_pending_code failed", err);
-      }
+
+    // Always clear any pending_code after a successful session create —
+    // even when no code was applied (e.g. Starter), so stale codes don't
+    // linger on the profile forever.
+    try {
+      await supabaseAdmin.rpc("clear_pending_code", { _user_id: user.id });
+    } catch (err) {
+      console.error("clear_pending_code failed", err);
     }
 
     return json({
@@ -239,6 +267,7 @@ Deno.serve(async (req) => {
       url: (session as any).url ?? null,
       applied_code_kind: appliedCodeKind,
       ignored_referrer: ignoredReferrer,
+      ignored_code: ignoredCode,
     });
   } catch (e) {
     console.error("create-checkout error", e);

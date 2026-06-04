@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({} as any));
     const code = String(body.code ?? "").trim().toUpperCase();
     const environment: StripeEnv = body.environment === "live" ? "live" : "sandbox";
-    if (!/^[A-Z0-9_-]{4,32}$/.test(code)) return json({ error: "invalid_code" }, 400);
+    if (!/^[A-Z0-9_-]{1,64}$/.test(code)) return json({ error: "invalid_code" }, 400);
 
     // One code per buyer.
     const { data: existingAttr } = await admin
@@ -86,7 +86,15 @@ Deno.serve(async (req) => {
 
     // Resolve target price via lookup_key.
     const stripe = createStripeClient(environment);
-    const prices = await stripe.prices.list({ lookup_keys: ["pro_monthly_referral_50"] });
+    // Source the lookup key from plan_tiers so the CAD/USD switch is the
+    // only place we have to maintain.
+    const { data: tier } = await admin
+      .from("plan_tiers")
+      .select("stripe_referral_price_id")
+      .eq("key", "pro")
+      .maybeSingle();
+    const referralLookupKey = tier?.stripe_referral_price_id || "pro_monthly_referral_50_cad";
+    const prices = await stripe.prices.list({ lookup_keys: [referralLookupKey] });
     if (!prices.data.length) return json({ error: "referral_price_missing" }, 500);
     const targetPriceId = prices.data[0].id;
 
@@ -117,7 +125,9 @@ Deno.serve(async (req) => {
     await admin.rpc("increment_founder_code_redemption", { _code_id: founderCode.id });
     await admin.rpc("clear_pending_code", { _user_id: user.id });
 
-    return json({ ok: true, effective_cents: 4900, applied_code_kind: "founder" });
+    // Best-effort effective_cents from the Stripe price (already in cents).
+    const effectiveCents = prices.data[0].unit_amount ?? 4900;
+    return json({ ok: true, effective_cents: effectiveCents, applied_code_kind: "founder" });
   } catch (e) {
     console.error("apply-founder-code-to-active-sub error", e);
     return json({ error: (e as Error).message }, 500);
