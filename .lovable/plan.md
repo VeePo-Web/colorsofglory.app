@@ -1,87 +1,90 @@
+# Payments v2 audit — findings + fix plan
 
-## Audit findings (what's still wrong or missing)
+Audited `validate-code`, `create-checkout`, `payments-webhook`, plus the closely-coupled `apply-founder-code-to-active-sub` and `_shared/stripe.ts`. Most of the v2 brief is satisfied. The issues below are real bugs or spec gaps, ordered by severity.
 
-I re-read the v2 implementation (migrations, `_shared/stripe.ts`, `create-checkout`, `validate-code`, `payments-webhook`, `apply-founder-code-to-active-sub`, `billing.ts`, `plan_tiers`, `pricing_copy`) and re-ran the brief against it. Most of the heavy lifting is done. The remaining gaps:
+## Critical (will break flows today)
 
-### Currency (the new ask)
-- `plan_tiers.currency = 'USD'` for all three rows.
-- Stripe products `cog_starter`, `cog_pro`, `cog_pro_referral` were created with **`currency: 'usd'`** via `payments--batch_create_product`. Stripe prices are immutable — you cannot change a price's currency. Must create **new CAD prices** alongside.
-- `pricing_copy` strings reference "$5", "$49", "$100" without a currency marker. Should read "$5 CAD" (or be CAD-labeled in the page copy) so a US visitor isn't confused.
+1. **`apply-founder-code-to-active-sub` uses the dead USD lookup key.** After the CAD switch, `plan_tiers.stripe_referral_price_id = 'pro_monthly_referral_50_cad'`, but this function still calls `stripe.prices.list({ lookup_keys: ["pro_monthly_referral_50"] })`. The old USD price was archived — the call returns empty and the function 500s with `referral_price_missing`. Fix: read `plan_tiers` (key='pro') and use `stripe_referral_price_id`.
 
-### Stripe price lookup-key collision
-- Lookup keys are unique per active price. Re-creating `starter_monthly` / `pro_monthly` / `pro_monthly_referral_50` in CAD requires either (a) archiving the USD prices and reusing the keys, or (b) using new keys (`starter_monthly_cad`, etc.). Option (a) is cleaner — the USD prices have zero subscribers (test mode, just created) so archiving is safe. We'll go with (a) and reuse the same lookup keys, so no edge-function code has to change.
+2. **`create-checkout` uses `ui_mode: "embedded_page"`.** Stripe Checkout's accepted values for `ui_mode` are `hosted`, `embedded`, `custom`. `embedded_page` is not a documented value and will be rejected by the Stripe API (or silently fall back). The Lovable checkout knowledge file (stripe-checkout) uses `ui_mode: "embedded"`. Fix: change to `"embedded"`.
 
-### Real gaps from the brief that are still open
-1. **`getPricingPage()` SDK return shape doesn't include the FAQ array** the brief specified (`{ page, cards, faq }`). Currently returns `{ page, cards }`. Need to add a `faq` JSONB row in `pricing_copy` and surface it.
-2. **`getMySubscription`, `getMyFounderStats`, `purchaseStorageAddon`** named aliases from §7 of the brief still don't exist on the SDK (only the older `getLatestSubscription`, `canPurchaseFounderRate`, etc.). Add thin alias exports so Claude can consume the brief's exact names.
-3. **`validate-code` doesn't check `wrong_plan`** when a founder code is presented with `plan_key !== 'pro'` — it returns generic `not_found`. Tighten to return `reason: 'wrong_plan'`.
-4. **`payments-webhook` does not pass `currency`** from the Stripe invoice into `record_invoice_paid` calls — `billing_events.currency` will silently be wrong for CAD invoices. Read `invoice.currency` and pass through.
-5. **`create-checkout` doesn't set `currency: 'cad'`** on `mode: 'subscription'` sessions. Stripe will use the price's currency, but for any safety net (e.g. `price_data` fallbacks) we should explicitly pin CAD. Audit and pin.
-6. **Smoke tests** (`supabase--curl_edge_functions`) were proposed but never run end-to-end against `validate-code`, `create-checkout` (all three branches), and `apply-founder-code-to-active-sub`. Run them after currency switch.
+3. **`return_url` not validated for the embedded `{CHECKOUT_SESSION_ID}` template.** Embedded mode requires the placeholder; without it the post-payment redirect breaks. Fix: when `ui_mode='embedded'`, require `returnUrl` to contain `{CHECKOUT_SESSION_ID}`.
 
-### Things I verified are fine (no change needed)
-- `invoice.subscription` deprecation fix is in place.
-- `verify_jwt = false` set on `create-checkout`, `validate-code`, `redeem-founder-code`, `payments-webhook`, `apply-founder-code-to-active-sub`.
-- `referral-attach` rewritten to stash on `profiles.pending_code`, no premature attribution writes.
-- One-code-per-buyer enforced in `create-checkout`.
-- Founder redemption count increments on successful session create.
-- Storage-addon Pro-gate in place.
-- `_shared/stripe.ts` `planForLookupKey` throws on unknown keys (loud-fail).
-- `is_song_member` policies + `songs.status='locked'` lock-on-downgrade logic working via `apply_song_lock_for_quota`.
+## High (silent data corruption / race conditions)
 
----
+4. **Founder code `max_redemptions` race.** `create-checkout` reads `redemption_count`, creates the Stripe session, then calls `increment_founder_code_redemption`. Two concurrent buyers can both pass the cap. Fix: move the increment + cap check into a single SECURITY DEFINER RPC that does `UPDATE … WHERE redemption_count < max_redemptions RETURNING …` atomically, called *before* `stripe.checkout.sessions.create`. Roll back (decrement) if Stripe throws.
 
-## Plan to fix (CAD switch + remaining gaps)
+5. **`billing_events` insert is not idempotent.** The handler reads `billing_events` by `external_event_id`, and only short-circuits when `processed_at IS NOT NULL`. If two webhook retries land concurrently (Stripe does retry), the second `INSERT` violates the unique constraint and the function 500s — Stripe then retries again, log noise compounds. Fix: change to `upsert({ ... }, { onConflict: 'external_event_id', ignoreDuplicates: true })`, or wrap the existing check + insert in `ON CONFLICT DO NOTHING`.
 
-### Step 1 — Stripe: recreate prices in CAD, reuse lookup keys
-1. Archive the existing USD prices on `cog_starter`, `cog_pro`, `cog_pro_referral` (zero subscribers, safe).
-2. Create new CAD prices via `payments--create_price` with the **same `id` / lookup-key** values: `starter_monthly` ($5 CAD), `pro_monthly` ($100 CAD), `pro_monthly_referral_50` ($49 CAD). Recurring monthly, qty 1/1.
-3. No edge-function changes required — `_shared/stripe.ts` resolves prices by lookup key.
+6. **`upsertStorageAddon` accepts a null lookup_key.** When `lookupKey` is null/empty the row is written with `lookup_key=''` and `bytes_granted=0`. Pro user's add-on silently grants nothing. Fix: if `bytesForStorageLookupKey()` returns 0, log + skip (don't write the row), and surface the unknown key the same way `planForLookupKey` does.
 
-### Step 2 — Migration: flip `plan_tiers.currency` to `CAD`
-```sql
-UPDATE public.plan_tiers SET currency = 'CAD' WHERE key IN ('free','starter','pro');
-```
-(Using `supabase--insert` since this is a data update on an existing table, no schema change.)
+7. **`record_invoice_paid` currency casing.** Webhook passes `invoice.currency ?? "cad"` (Stripe returns lowercase `cad`); `plan_tiers.currency` is stored as uppercase `CAD`. Anywhere downstream that joins or compares these will mismatch. Fix: normalize one direction — store lowercase everywhere (Stripe convention), update `plan_tiers` rows to `cad`.
 
-### Step 3 — Update `pricing_copy` strings to read CAD
-Update the three card payloads + page payload so prices display as "$5 CAD", "$49 CAD", "$100 CAD", and add a one-line trust marker on the page header: "All prices in Canadian dollars." Done via `supabase--insert` UPDATE.
+## Medium (spec drift, not user-facing yet)
 
-### Step 4 — Add `faq` row to `pricing_copy` + surface in SDK
-- Insert a `faq` row with a JSONB array of `{q, a}` items (e.g. "Why is the first song free?", "What happens if I downgrade?", "How do founder codes work?", "Do referral codes stack with founder codes?").
-- Update `getPricingPage()` in `src/integrations/cog/billing.ts` to return `{ page, cards, faq }`.
+8. **`validate-code` hardcodes `effective_cents: 4900`.** Brief says all pricing flows through `plan_tiers`. After a future price change this returns the wrong number. Fix: read `plan_tiers` (key='pro') and compute from `monthly_cents * 0.5` or read a new column for the referral price.
 
-### Step 5 — SDK alias exports (§7 names)
-Add to `src/integrations/cog/billing.ts`:
-- `export const getMySubscription = getLatestSubscription;`
-- `export const getMyFounderStats = ...` (compose from existing helpers)
-- `export const purchaseStorageAddon = createStorageAddonCheckout;` (or matching name)
+9. **`validate-code` doesn't check founder code `max_redemptions` and `expires_at` consistently with create-checkout.** It does check both — good. But it doesn't check the founder code is still active *and* the founder's `user_id != user.id` for the member-referral branch (it does for founder branch). Fix: add `self` check on member referral (already done — confirmed). False alarm.
 
-### Step 6 — Tighten `validate-code`
-Return `reason: 'wrong_plan'` when a founder code is presented with `plan_key !== 'pro'`. (Currently the function only accepts `plan_key='pro'` in its schema, but the error message is generic — make it explicit so the UI can show the right copy.)
+10. **`apply-founder-code-to-active-sub` regex `^[A-Z0-9_-]{4,32}$`** rejects codes shorter than 4 chars; the codes table has no such constraint. Fix: relax to `{1,64}` or remove and rely on the DB lookup to fail.
 
-### Step 7 — Pass invoice currency through `payments-webhook`
-In `handleInvoicePaid`, read `invoice.currency` (lowercased) and pass it into `record_invoice_paid` / `billing_events` writes so CAD invoices store `currency='cad'`, not USD.
+11. **`create-checkout` "invalid_code" branch only fires when `tier.allows_founder_code`.** On Starter (`allows_founder_code=false`, `allows_member_referral=false`) any user-supplied code is silently swallowed. Brief §6 says Starter blocks codes, but should surface `code_ignored_on_starter` so the UI can warn. Fix: when `planKey='starter'` and any code is present, set `ignored_code=true` in the response.
 
-### Step 8 — Pin `currency: 'cad'` defensively in `create-checkout`
-Audit the `stripe.checkout.sessions.create({...})` payload — if any `price_data` fallback exists, pin `currency: 'cad'`. (Lookup-key path already uses the price's own currency.)
+12. **`pending_code` not cleared on successful Starter checkout** (since `appliedCodeKind === 'none'`). A stale code sits on the profile forever. Fix: always clear `pending_code` after a successful session create, regardless of attribution kind.
 
-### Step 9 — Smoke tests via `supabase--curl_edge_functions`
-- `validate-code` with: valid founder code, valid member referral code, invalid code, starter plan_key.
-- `create-checkout` with: starter / pro-no-code / pro-with-founder-code / pro-with-referrer / pro-with-both.
-- `apply-founder-code-to-active-sub` with a mocked active sub.
-- `payments-webhook` not directly callable; verify by checking `billing_events` after a sandbox `checkout.session.completed` is replayed.
+## Low (cosmetic / future-proofing)
 
-### Step 10 — Update `.lovable/payments-v2.md`
-Add a "CAD switch" section: new Stripe price IDs (same lookup keys, new internal Stripe IDs), currency column flip, pricing_copy edits, FAQ row, SDK alias exports.
+13. **No `customer.subscription.paused` handling.** Stripe can pause subs; we'd still treat them as active. Add an explicit case that marks the row `status='paused'`.
 
----
+14. **`charge.dispute.created` reads `charge.invoice` directly** — newer Stripe API may not include it; expand the lookup the way `handleInvoicePaid` does (via `payment_intent` → invoice).
+
+15. **`plan_tiers` lookup keys still reference removed price IDs from `_shared/stripe.ts`** — `planForLookupKey` keeps both USD and CAD aliases. Fine as a safety net; flag the USD keys with a `// TODO remove after no in-flight USD subs` comment so they're cleanable later.
 
 ## Out of scope
-- Multi-currency support (USD + CAD side-by-side). CAD-only for now per spec.
-- Frontend pricing page (Claude's pass).
-- Anything in `src/pages/**` or `src/components/**`.
 
-## Risk notes
-- Archiving Stripe prices is reversible (un-archive), but anyone mid-checkout in a stale session would fail. Safe in sandbox.
-- If you've already shared the USD checkout link anywhere, those links break. Confirm none are live.
+- Frontend pricing page, embedded checkout mount, error copy — Claude's pass.
+- Multi-currency (USD + CAD side-by-side).
+- `src/pages/**`, `src/components/**`.
+
+---
+
+## Fix plan (execution order)
+
+### Step 1 — Critical bugs
+- **`apply-founder-code-to-active-sub`**: fetch `plan_tiers` row for `pro`, use `stripe_referral_price_id` as the lookup key (fallback to `pro_monthly_referral_50_cad`).
+- **`create-checkout`**: change `ui_mode: "embedded_page"` → `"embedded"`; validate `returnUrl` contains `{CHECKOUT_SESSION_ID}` when embedded.
+
+### Step 2 — Idempotency + race conditions
+- New migration: SECURITY DEFINER RPC `claim_founder_code_redemption(_code_id uuid)` that atomically increments only if under cap, returns boolean. Grant to `service_role`.
+- `create-checkout`: call the new RPC *before* `stripe.checkout.sessions.create`; if false → return `code_exhausted`. On Stripe failure, call a `release_founder_code_redemption` RPC to decrement.
+- `payments-webhook`: replace `recordBillingEvent` insert with `upsert(..., { onConflict: 'external_event_id', ignoreDuplicates: true })`.
+
+### Step 3 — Storage add-on + currency hygiene
+- `payments-webhook` `upsertStorageAddon`: if `bytesForStorageLookupKey()` returns 0, log + skip the insert; surface error like `planForLookupKey`.
+- Migration: `UPDATE plan_tiers SET currency='cad'` (lowercase to match Stripe).
+
+### Step 4 — Spec drift cleanup
+- `validate-code`: read `plan_tiers` for Pro and compute `effective_cents` from `monthly_cents * 0.5` (or add a column).
+- `create-checkout`: always call `clear_pending_code` after a successful session create; add `ignored_code` to response when Starter receives any code.
+- `apply-founder-code-to-active-sub`: relax code regex.
+
+### Step 5 — Future-proofing (low priority, batch in same PR)
+- Add `customer.subscription.paused` case.
+- Expand `charge.dispute.created` invoice lookup.
+- Comment the USD lookup-key aliases in `_shared/stripe.ts`.
+
+### Step 6 — Verify
+- `supabase--curl_edge_functions` smoke tests:
+  - `validate-code` happy + `wrong_plan` + `self` + `already_attributed`
+  - `create-checkout` Pro-no-code / Pro-founder / Pro-referrer / Pro-both / Starter-with-code (should set `ignored_code`)
+  - `apply-founder-code-to-active-sub` with a live Pro sub (sandbox)
+- Replay a Stripe `checkout.session.completed` and confirm `billing_events` row + `referral_attributions` row + idempotent re-replay.
+
+### Step 7 — Doc
+- Append "v2 audit fixes 2 (2026-06-04)" section to `.lovable/payments-v2.md` listing each fix above.
+
+## Risk
+
+- Atomic redemption RPC change requires a migration; once deployed, a Stripe session-create failure must trigger the release RPC or the count drifts. Mitigation: try/catch around `sessions.create`.
+- Lowercasing `plan_tiers.currency` requires updating any frontend that string-matches on `CAD`; Claude's pricing page reads `pricing_copy` directly, so safe.
+- `ui_mode` change requires Claude's embedded mount to use the same string — confirm before shipping if frontend is already wired.

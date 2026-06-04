@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         kind: "founder",
         discount_pct: 50,
-        effective_cents: 4900,
+        effective_cents: await proReferralCents(admin),
         founder_display_name: founder.display_name,
         code_id: founderCode.id,
       });
@@ -94,3 +94,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ kind: "invalid", reason: "not_found" }, 200);
   }
 });
+
+// Read the Pro tier's monthly price from plan_tiers and apply the
+// founder 50% discount. Falls back to 4900 if anything is off.
+async function proReferralCents(admin: ReturnType<typeof adminClient>): Promise<number> {
+  try {
+    const { data } = await admin
+      .from("plan_tiers")
+      .select("monthly_cents")
+      .eq("key", "pro")
+      .maybeSingle();
+    if (data?.monthly_cents && data.monthly_cents > 0) {
+      return Math.round(data.monthly_cents * 0.5);
+    }
+  } catch (_) { /* fall through */ }
+  return 4900;
+}
