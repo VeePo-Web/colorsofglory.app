@@ -275,10 +275,12 @@ Deno.serve(async (req) => {
         break;
       }
       case "invoice.paid":
-      case "invoice.payment_succeeded": {
         await handleInvoicePaid(obj);
         break;
-      }
+      case "invoice.payment_succeeded":
+        // Duplicate of invoice.paid for subscription invoices — ignore.
+        console.log("ignored duplicate event invoice.payment_succeeded", event.id);
+        break;
       case "charge.refunded": {
         await handleInvoiceRefunded(obj);
         break;
