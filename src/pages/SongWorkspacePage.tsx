@@ -28,12 +28,12 @@ interface StoredSong {
 }
 
 const MODULES: Module[] = [
-  { id: "lyrics", label: "Lyrics", icon: FileText, route: "lyrics" },
-  { id: "voice", label: "Voice", icon: Mic, route: "voice" },
-  { id: "chords", label: "Chords", icon: Music, route: "chords" },
-  { id: "notes", label: "Notes", icon: StickyNote, route: "notes" },
-  { id: "people", label: "People", icon: Users, route: "people" },
-  { id: "canvas", label: "Canvas", icon: GitBranch, route: "canvas" },
+  { id: "lyrics", label: "Lyrics", icon: FileText, route: "canvas?layer=lyrics" },
+  { id: "voice", label: "Voice", icon: Mic, route: "canvas?layer=voice" },
+  { id: "chords", label: "Chords", icon: Music, route: "canvas?layer=chords" },
+  { id: "notes", label: "Notes", icon: StickyNote, route: "canvas?layer=notes" },
+  { id: "people", label: "People", icon: Users, route: "canvas?layer=people" },
+  { id: "canvas", label: "Canvas", icon: GitBranch, route: "canvas?layer=ideas" },
 ];
 
 const readFirstSong = (): StoredSong => {
@@ -126,18 +126,18 @@ const SongWorkspacePage = () => {
           <QuickAction
             label="Record"
             icon={Mic}
-            onClick={() => navigate(`/songs/${id ?? "1"}/capture`)}
+            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=voice`)}
             primary
           />
           <QuickAction
             label="Write"
             icon={PenLine}
-            onClick={() => navigate(`/songs/${id ?? "1"}/lyrics`)}
+            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=lyrics`)}
           />
           <QuickAction
             label="Invite"
             icon={Users}
-            onClick={() => navigate(`/songs/${id ?? "1"}/people`)}
+            onClick={() => navigate(`/songs/${id ?? "1"}/canvas?layer=people`)}
           />
         </section>
 

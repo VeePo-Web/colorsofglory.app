@@ -1,133 +1,99 @@
 import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
-import BackHeader from "@/components/cog/BackHeader";
+import CogBrand from "@/components/cog/CogBrand";
+import OnboardingShell from "@/components/cog/OnboardingShell";
+
+interface IntentCardProps {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  onClick: () => void;
+  accent?: boolean;
+}
+
+const IntentCard = ({ icon: Icon, title, description, onClick, accent }: IntentCardProps) => (
+  <button
+    onClick={onClick}
+    className="w-full text-left rounded-2xl p-5 transition-all duration-150 active:scale-[0.98] active:shadow-none"
+    style={{
+      backgroundColor: "#FFFFFF",
+      border: accent ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.08)",
+      boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+    }}
+  >
+    <div className="flex items-start gap-4">
+      <div
+        className="flex items-center justify-center rounded-xl flex-shrink-0"
+        style={{
+          width: 44,
+          height: 44,
+          backgroundColor: accent ? "rgba(181,147,90,0.12)" : "rgba(0,0,0,0.04)",
+        }}
+      >
+        <Icon
+          size={20}
+          strokeWidth={1.6}
+          style={{ color: accent ? "#B5935A" : "#666" }}
+        />
+      </div>
+      <div className="pt-0.5">
+        <p
+          className="text-[1.0625rem] font-semibold mb-1 leading-snug"
+          style={{ color: "#1A1A1A", fontFamily: "var(--font-display)" }}
+        >
+          {title}
+        </p>
+        <p className="text-[0.875rem] leading-relaxed" style={{ color: "#666" }}>
+          {description}
+        </p>
+      </div>
+    </div>
+  </button>
+);
 
 const FirstIntentPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div
-      className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: "var(--cog-cream)" }}
-    >
-      {/* Warm glow */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 85%, rgba(184,149,58,0.14) 0%, transparent 65%)",
-        }}
-      />
-
-      <BackHeader to="/auth/verify" label="Back" />
-
-      <div
-        className="relative flex flex-col flex-1 px-6 pt-4 pb-12"
-        style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
-      >
-        {/* Brand */}
-        <div className="flex justify-center mb-10">
-          <CogLogo size="sm" />
-        </div>
-
-        {/* Headline */}
-        <h1
-          className="text-4xl font-semibold mb-2 text-center"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "var(--cog-charcoal)",
-            lineHeight: 1.1,
-          }}
-        >
-          What are you working on?
-        </h1>
-
-        <p className="text-base mb-10 text-center" style={{ color: "var(--cog-warm-gray)" }}>
-          Choose where to begin. You can always do both later.
-        </p>
-
-        {/* Intent cards */}
-        <div className="flex flex-col gap-4 mb-10">
-          {/* Start a song */}
-          <button
-            onClick={() => navigate("/onboarding/start-song")}
-            className="w-full text-left rounded-2xl p-5 transition-all duration-200 active:scale-[0.98]"
-            style={{
-              backgroundColor: "var(--cog-cream-light)",
-              border: "1.5px solid var(--cog-border)",
-              boxShadow: "var(--cog-shadow-card)",
-            }}
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="flex items-center justify-center rounded-xl flex-shrink-0"
-                style={{
-                  width: 48,
-                  height: 48,
-                  backgroundColor: "rgba(184,149,58,0.12)",
-                  border: "1px solid rgba(184,149,58,0.20)",
-                }}
-              >
-                <PenLine size={22} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
-              </div>
-              <div>
-                <p
-                  className="text-lg font-semibold mb-1"
-                  style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}
-                >
-                  Start a song
-                </p>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--cog-warm-gray)" }}>
-                  Create a private space for lyrics, voice memos, chords, and ideas.
-                </p>
-              </div>
-            </div>
-          </button>
-
-          {/* Join a song */}
-          <button
-            onClick={() => navigate("/invite/demo")}
-            className="w-full text-left rounded-2xl p-5 transition-all duration-200 active:scale-[0.98]"
-            style={{
-              backgroundColor: "var(--cog-cream-light)",
-              border: "1.5px solid var(--cog-border)",
-              boxShadow: "var(--cog-shadow-card)",
-            }}
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="flex items-center justify-center rounded-xl flex-shrink-0"
-                style={{
-                  width: 48,
-                  height: 48,
-                  backgroundColor: "rgba(107,100,89,0.08)",
-                  border: "1px solid rgba(107,100,89,0.14)",
-                }}
-              >
-                <Users size={22} strokeWidth={1.5} style={{ color: "var(--cog-warm-gray)" }} />
-              </div>
-              <div>
-                <p
-                  className="text-lg font-semibold mb-1"
-                  style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}
-                >
-                  Join a song
-                </p>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--cog-warm-gray)" }}>
-                  Use an invite from someone you are writing with.
-                </p>
-              </div>
-            </div>
-          </button>
-        </div>
-
-        {/* Microcopy */}
-        <p className="text-xs text-center" style={{ color: "var(--cog-muted)" }}>
-          You can always do both later.
-        </p>
+    <OnboardingShell>
+      {/* Logo */}
+      <div className="pt-16 pb-10 flex justify-center">
+        <CogBrand variant="stacked" size="md" />
       </div>
-    </div>
+
+      {/* Headline */}
+      <h1
+        className="text-[2.6rem] font-bold text-center mb-2 leading-[1.05]"
+        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+      >
+        What are you working on?
+      </h1>
+      <p className="text-[1rem] text-center mb-10" style={{ color: "#666" }}>
+        Choose where to begin.
+      </p>
+
+      {/* Intent cards */}
+      <div className="flex flex-col gap-4 mb-8">
+        <IntentCard
+          icon={PenLine}
+          title="Start a song"
+          description="Create a private space for lyrics, voice memos, chords, and ideas."
+          onClick={() => navigate("/onboarding/start-song")}
+          accent
+        />
+        <IntentCard
+          icon={Users}
+          title="Join a song"
+          description="Use an invite from someone you are writing with."
+          onClick={() => navigate("/invite/demo")}
+        />
+      </div>
+
+      {/* Microcopy */}
+      <p className="text-[13px] text-center" style={{ color: "#999" }}>
+        You can always do both later.
+      </p>
+    </OnboardingShell>
   );
 };
 

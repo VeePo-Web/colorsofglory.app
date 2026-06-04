@@ -1,4 +1,4 @@
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useNavigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { FileText, GitBranch, Mic, Music, StickyNote, Users } from "lucide-react";
 
 interface SongTab {
@@ -31,9 +31,13 @@ const SongTabBar = ({ activeTab }: SongTabBarProps) => {
   const navigate = useNavigate();
   const { id: songId } = useParams<{ id: string }>();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const getActive = () => {
     if (activeTab) return activeTab;
+    if (location.pathname.endsWith("/canvas")) {
+      return searchParams.get("layer") ?? "canvas";
+    }
     const path = location.pathname;
     const found = TABS.find((t) => path.endsWith(`/${t.segment}`));
     return found?.id ?? null;
@@ -62,7 +66,13 @@ const SongTabBar = ({ activeTab }: SongTabBarProps) => {
         return (
           <button
             key={tab.id}
-            onClick={() => navigate(`/songs/${songId}/${tab.segment}`)}
+            onClick={() => {
+              const destination =
+                tab.id === "canvas"
+                  ? `/songs/${songId}/canvas`
+                  : `/songs/${songId}/canvas?layer=${tab.segment}`;
+              navigate(destination);
+            }}
             aria-label={tab.label}
             aria-current={isActive ? "page" : undefined}
             className="flex flex-col items-center justify-center flex-1 gap-1 relative transition-all duration-150 active:scale-90"

@@ -1,217 +1,180 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import { supabase } from "@/integrations/supabase/client";
+import CogBrand from "@/components/cog/CogBrand";
+import GoldButton from "@/components/cog/GoldButton";
+import OTPInput from "@/components/cog/OTPInput";
+import OnboardingShell from "@/components/cog/OnboardingShell";
 
-const formatPhoneDisplay = (raw: string | null) => {
-  const digits = (raw ?? "").replace(/\D/g, "").slice(0, 10);
-  if (digits.length !== 10) return "+1 (555) 555-5555";
-  return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-};
+const RESEND_SECONDS = 30;
+const CODE_LENGTH = 6;
+
+function toFriendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("Invalid") || msg.includes("expired") || msg.includes("incorrect"))
+    return "That code didn't work. Check it and try again.";
+  if (msg.includes("rate")) return "Too many attempts. Please wait a moment.";
+  if (msg.includes("network") || msg.includes("fetch"))
+    return "We could not verify the code. Check your connection.";
+  return "Something went wrong. Please try again.";
+}
 
 const CodeVerifyPage = () => {
   const navigate = useNavigate();
-  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const e164 = sessionStorage.getItem("cog:phone-e164") ?? "";
+  const displayPhone = sessionStorage.getItem("cog:phone-display") ?? "your number";
+
+  const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resendCountdown, setResendCountdown] = useState(30);
-  const [phoneDisplay] = useState(() =>
-    formatPhoneDisplay(sessionStorage.getItem("cog:onboarding-phone")),
-  );
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [countdown, setCountdown] = useState(RESEND_SECONDS);
 
-  // Focus first box on mount
   useEffect(() => {
-    inputRefs.current[0]?.focus();
-  }, []);
-
-  // Resend countdown
-  useEffect(() => {
-    if (resendCountdown <= 0) return;
-    const t = setTimeout(() => setResendCountdown((c) => c - 1), 1000);
+    if (countdown <= 0) return;
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [resendCountdown]);
+  }, [countdown]);
 
-  const handleDigit = (idx: number, value: string) => {
-    const char = value.replace(/\D/g, "").slice(-1);
-    const next = [...digits];
-    next[idx] = char;
-    setDigits(next);
-    setError(null);
+  useEffect(() => {
+    if (!e164) navigate("/auth/login", { replace: true });
+  }, [e164, navigate]);
 
-    if (char && idx < 5) {
-      inputRefs.current[idx + 1]?.focus();
+  const routeAfterAuth = useCallback(async () => {
+    const inviteToken = sessionStorage.getItem("cog:invite-token");
+    if (inviteToken) {
+      navigate(`/invite/${inviteToken}`, { replace: true });
+      return;
     }
-
-    // Auto-submit when all 6 filled
-    if (char && idx === 5) {
-      const code = [...next].join("");
-      if (code.length === 6) handleVerify(code);
+    try {
+      const { data } = await supabase.from("songs").select("id").limit(1);
+      if (data && data.length > 0) {
+        navigate("/", { replace: true });
+      } else {
+        navigate("/onboarding/intent", { replace: true });
+      }
+    } catch {
+      navigate("/onboarding/intent", { replace: true });
     }
-  };
+  }, [navigate]);
 
-  const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
-      inputRefs.current[idx - 1]?.focus();
+  const handleVerify = useCallback(async (code: string) => {
+    if (!e164 || code.length < CODE_LENGTH || isVerifying) return;
+    setIsVerifying(true);
+    setError(null);
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        phone: e164,
+        token: code,
+        type: "sms",
+      });
+      if (verifyError) throw verifyError;
+      await routeAfterAuth();
+    } catch (err) {
+      setError(toFriendlyError(err));
+      setDigits(Array(CODE_LENGTH).fill(""));
+    } finally {
+      setIsVerifying(false);
     }
-  };
+  }, [e164, isVerifying, routeAfterAuth]);
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (!pasted) return;
-    const next = ["", "", "", "", "", ""];
-    pasted.split("").forEach((c, i) => { next[i] = c; });
-    setDigits(next);
+  const handleResend = async () => {
+    if (!e164 || isResending || countdown > 0) return;
+    setIsResending(true);
     setError(null);
-    const focusIdx = Math.min(pasted.length, 5);
-    inputRefs.current[focusIdx]?.focus();
-    if (pasted.length === 6) handleVerify(pasted);
-  };
-
-  const handleVerify = (codeOverride?: string) => {
-    const code = codeOverride ?? digits.join("");
-    if (code.length < 6) return;
-    setIsSubmitting(true);
-    setError(null);
-    // Simulated OTP verify — Lovable wires real Supabase auth
-    setTimeout(() => {
-      setIsSubmitting(false);
-      navigate("/onboarding/intent");
-    }, 900);
+    setDigits(Array(CODE_LENGTH).fill(""));
+    setCountdown(RESEND_SECONDS);
+    try {
+      await supabase.auth.signInWithOtp({ phone: e164 });
+    } catch {
+      setError("We could not resend the code. Please try again.");
+    } finally {
+      setIsResending(false);
+    }
   };
 
   const allFilled = digits.every((d) => d !== "");
 
   return (
-    <div
-      className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: "var(--cog-cream)" }}
-    >
-      {/* Warm glow */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 50% at 50% 100%, rgba(184,149,58,0.12) 0%, transparent 60%)",
-        }}
-      />
-
-      <div
-        className="relative flex flex-col flex-1 px-8 pt-16 pb-12"
-        style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
-      >
-        {/* Back */}
-        <button
-          onClick={() => navigate("/auth/login")}
-          className="flex items-center gap-1.5 text-sm mb-10 transition-opacity hover:opacity-70 w-fit"
-          style={{ color: "var(--cog-warm-gray)" }}
-        >
-          <ArrowLeft size={15} />
-          Back
-        </button>
-
-        {/* Brand */}
-        <div className="flex justify-center mb-10">
-          <CogLogo size="sm" />
-        </div>
-
-        {/* Headline */}
-        <h1
-          className="text-4xl font-semibold mb-2 text-center"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "var(--cog-charcoal)",
-            lineHeight: 1.1,
-          }}
-        >
-          Check your phone
-        </h1>
-
-        <p className="text-base mb-10 text-center" style={{ color: "var(--cog-warm-gray)" }}>
-          We sent a 6-digit code to
-          <br />
-          <span style={{ color: "var(--cog-charcoal)", fontWeight: 500 }}>{phoneDisplay}</span>
-        </p>
-
-        {/* OTP boxes */}
-        <div className="flex gap-2.5 justify-center mb-3" onPaste={handlePaste}>
-          {digits.map((d, idx) => (
-            <input
-              key={idx}
-              ref={(el) => { inputRefs.current[idx] = el; }}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={d}
-              onChange={(e) => handleDigit(idx, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(idx, e)}
-              aria-label={`Code digit ${idx + 1}`}
-              className="text-center text-2xl font-semibold rounded-2xl transition-all duration-150 outline-none"
-              style={{
-                width: 48,
-                height: 64,
-                backgroundColor: "var(--cog-cream-light)",
-                border: d
-                  ? "1.5px solid var(--cog-gold)"
-                  : "1.5px solid var(--cog-border)",
-                color: "var(--cog-charcoal)",
-                fontFamily: "var(--font-body)",
-                boxShadow: d ? "0 0 0 3px rgba(184,149,58,0.12)" : "none",
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Microcopy */}
-        <p className="text-sm text-center mb-8" style={{ color: "var(--cog-muted)" }}>
-          Codes usually arrive within a few seconds.
-        </p>
-
-        {/* Error */}
-        {error && (
-          <p
-            className="text-sm text-center mb-4"
-            style={{ color: "#8B3A3A" }}
-            aria-live="polite"
-          >
-            {error}
-          </p>
-        )}
-
-        {/* Verify CTA */}
-        <button
-          onClick={() => handleVerify()}
-          disabled={!allFilled || isSubmitting}
-          className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40 mb-4"
-          style={{
-            backgroundColor: "var(--cog-gold)",
-            fontFamily: "var(--font-body)",
-            boxShadow: allFilled ? "0 4px 20px rgba(184,149,58,0.35)" : "none",
-          }}
-        >
-          {isSubmitting ? "Verifying..." : "Verify"}
-        </button>
-
-        {/* Secondary actions */}
-        <div className="flex justify-between text-sm mt-2">
-          <button
-            disabled={resendCountdown > 0}
-            className="transition-opacity hover:opacity-70 disabled:opacity-40"
-            style={{ color: "var(--cog-gold-alt)", fontFamily: "var(--font-body)" }}
-          >
-            {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : "Resend code"}
-          </button>
-          <button
-            onClick={() => navigate("/auth/login")}
-            className="transition-opacity hover:opacity-70"
-            style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-          >
-            Change number
-          </button>
-        </div>
+    <OnboardingShell>
+      {/* Logo */}
+      <div className="pt-16 pb-10 flex justify-center">
+        <CogBrand variant="stacked" size="md" />
       </div>
-    </div>
+
+      {/* Headline */}
+      <h1
+        className="text-[2.6rem] font-bold text-center mb-2 leading-[1.05]"
+        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+      >
+        Check your phone
+      </h1>
+      <p className="text-[1rem] text-center mb-10" style={{ color: "#666" }}>
+        We sent a 6-digit code to{" "}
+        <span style={{ color: "#1A1A1A", fontWeight: 500 }}>+1 ({displayPhone})</span>
+      </p>
+
+      {/* OTP boxes */}
+      <div className="mb-3">
+        <OTPInput
+          length={CODE_LENGTH}
+          value={digits}
+          onChange={setDigits}
+          onComplete={handleVerify}
+          disabled={isVerifying}
+          error={!!error}
+        />
+      </div>
+
+      {/* Microcopy */}
+      <p className="text-[13px] text-center mb-6" style={{ color: "#999" }}>
+        Codes usually arrive within a few seconds.
+      </p>
+
+      {/* Error */}
+      {error && (
+        <p
+          className="text-sm text-center mb-5"
+          style={{ color: "#E05440" }}
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      )}
+
+      {/* Verify CTA */}
+      <GoldButton
+        disabled={!allFilled}
+        loading={isVerifying}
+        loadingText="Verifying..."
+        onClick={() => handleVerify(digits.join(""))}
+      >
+        Verify
+      </GoldButton>
+
+      {/* Resend + Change */}
+      <div className="flex justify-between mt-5 text-sm">
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={countdown > 0 || isResending}
+          className="transition-opacity hover:opacity-70 disabled:opacity-40 underline"
+          style={{ color: "#B5935A", fontFamily: "var(--font-body)" }}
+        >
+          {countdown > 0 ? `Resend code (${countdown}s)` : "Resend code"}
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/auth/login")}
+          className="transition-opacity hover:opacity-70"
+          style={{ color: "#999", fontFamily: "var(--font-body)" }}
+        >
+          Change number
+        </button>
+      </div>
+    </OnboardingShell>
   );
 };
 

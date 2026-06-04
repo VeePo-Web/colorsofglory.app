@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import CogBrand from "@/components/cog/CogBrand";
+import GoldButton from "@/components/cog/GoldButton";
+import OnboardingShell from "@/components/cog/OnboardingShell";
+import { setSong } from "@/lib/songContext";
 import CogLogo from "@/components/cog/CogLogo";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

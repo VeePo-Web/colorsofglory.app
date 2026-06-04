@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T06:40:19.400Z",
+  "generatedAt": "2026-06-04T07:07:47.900Z",
   "routesChecked": [
     {
       "path": "/",
@@ -163,8 +163,8 @@
     },
     {
       "name": "bundle budget",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "Old-brand content scan",

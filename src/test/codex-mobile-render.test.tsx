@@ -87,13 +87,21 @@ describe("Codex 390px mobile render smoke", () => {
     expect(screen.getByText(/chord chart/i)).toBeInTheDocument();
   });
 
-  it("renders the song whiteboard at the primary mobile width", () => {
+  it("renders the song whiteboard at the primary mobile width", async () => {
     renderRoute("/songs/1/canvas", "/songs/:id/canvas", <SongCanvasPage />);
 
-    expect(screen.getByRole("heading", { name: /song whiteboard/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add idea/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/song whiteboard canvas/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
+    expect(screen.getByText(/everything for this song stays connected here/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /lyrics/i }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /voice memos/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /chord map/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /song notes/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /ideas tree/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /final tree/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /in this room/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /what changed/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add idea/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record idea/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/song whiteboard canvas/i)).toBeInTheDocument();
   });
 });

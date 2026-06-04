@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 
 const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
@@ -15,14 +15,7 @@ const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedP
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
-const LyricsEditorPage = lazy(() => import("./pages/LyricsEditorPage"));
-const ChordsPage = lazy(() => import("./pages/ChordsPage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
-const VoiceMemosPage = lazy(() => import("./pages/VoiceMemosPage"));
-const NotesPage = lazy(() => import("./pages/NotesPage"));
-const PeoplePage = lazy(() => import("./pages/PeoplePage"));
-const ActivityPage = lazy(() => import("./pages/ActivityPage"));
-const CreditsPage = lazy(() => import("./pages/CreditsPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
@@ -54,6 +47,12 @@ const RouteFallback = () => (
   </div>
 );
 
+const CanvasLayerRedirect = ({ layer }: { layer: string }) => {
+  const { id } = useParams<{ id: string }>();
+  const songId = id ?? "1";
+  return <Navigate to={`/songs/${songId}/canvas?layer=${layer}`} replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -81,14 +80,14 @@ const App = () => (
             <Route path="/songs/:id" element={<SongWorkspacePage />} />
             <Route path="/songs/:id/capture" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
-            <Route path="/songs/:id/lyrics" element={<LyricsEditorPage />} />
-            <Route path="/songs/:id/chords" element={<ChordsPage />} />
+            <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
+            <Route path="/songs/:id/chords" element={<CanvasLayerRedirect layer="chords" />} />
             <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
-            <Route path="/songs/:id/voice" element={<VoiceMemosPage />} />
-            <Route path="/songs/:id/notes" element={<NotesPage />} />
-            <Route path="/songs/:id/people" element={<PeoplePage />} />
-            <Route path="/songs/:id/activity" element={<ActivityPage />} />
-            <Route path="/songs/:id/credits" element={<CreditsPage />} />
+            <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
+            <Route path="/songs/:id/notes" element={<CanvasLayerRedirect layer="notes" />} />
+            <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
+            <Route path="/songs/:id/activity" element={<CanvasLayerRedirect layer="room" />} />
+            <Route path="/songs/:id/credits" element={<CanvasLayerRedirect layer="people" />} />
 
             {/* Settings */}
             <Route path="/settings" element={<SettingsPage />} />
