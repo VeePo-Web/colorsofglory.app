@@ -2,16 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import { adminFounderSummary, adminReferralsRecent, adminMonthlyPayouts } from "@/integrations/cog/admin";
 
-type Founder = { founder_id: string; display_name: string; attributed_users: number };
-type Referral = { created_at: string; code: string | null; founder_name: string | null; referred_user_id: string };
-type Payout = { founder_id: string; payable_cents: number; month: string };
-
 const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 export default function AdminHomePage() {
-  const { data: founders = [] } = useQuery<Founder[]>({ queryKey: ["admin", "founders"], queryFn: adminFounderSummary as () => Promise<Founder[]> });
-  const { data: recent = [] } = useQuery<Referral[]>({ queryKey: ["admin", "recent"], queryFn: () => adminReferralsRecent(25) as Promise<Referral[]> });
-  const { data: payouts = [] } = useQuery<Payout[]>({ queryKey: ["admin", "payouts"], queryFn: () => adminMonthlyPayouts() as Promise<Payout[]> });
+  const { data: founders = [] } = useQuery({ queryKey: ["admin", "founders"], queryFn: adminFounderSummary });
+  const { data: recent = [] } = useQuery({ queryKey: ["admin", "recent"], queryFn: () => adminReferralsRecent(25) });
+  const { data: payouts = [] } = useQuery({ queryKey: ["admin", "payouts"], queryFn: () => adminMonthlyPayouts() });
 
   const totalUsers = founders.reduce((s, f) => s + (f.attributed_users || 0), 0);
   const thisMonthCents = payouts.reduce((s, p) => s + (p.payable_cents || 0), 0);
@@ -28,7 +24,7 @@ export default function AdminHomePage() {
         {recent.length === 0 && <div className="px-4 py-6 text-sm text-[var(--cog-warm-gray)]">No referrals yet.</div>}
         {recent.map((r, i) => (
           <div key={i} className="px-4 py-2 text-sm flex items-center justify-between font-mono">
-            <span>{r.code ?? "—"} → {r.founder_name ?? "—"}</span>
+            <span>{r.code_value ?? "—"} → {r.founder_name ?? "—"}</span>
             <span className="text-[var(--cog-warm-gray)]">{new Date(r.created_at).toLocaleString()}</span>
           </div>
         ))}
