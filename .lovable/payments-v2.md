@@ -156,3 +156,25 @@ All tax_code `txcd_10103001`, qty 1/1. Old USD products (`cog_starter`, `cog_pro
 - `validate-code` already returns `reason: 'wrong_plan'` when `plan_key !== 'pro'`.
 - `payments-webhook` already defaults `currency` to `cad` and reads `invoice.currency` through to `billing_events`.
 - `create-checkout` uses lookup-key resolution only (no `price_data` fallback), so CAD currency is enforced by the price object itself.
+
+---
+
+## v2 audit fixes 2 (2026-06-04)
+
+Second-pass audit against Stripe Dahlia + the v2 brief. Fixes shipped:
+
+- **`create-checkout` `ui_mode`** changed from the invalid `embedded_page` to the correct `embedded`. Also now requires `returnUrl` to contain `{CHECKOUT_SESSION_ID}` (Stripe embedded requirement) and rejects with `return_url_missing_session_template` otherwise.
+- **Atomic founder-code redemption claim.** New SECURITY DEFINER RPCs `claim_founder_code_redemption(_code_id)` / `release_founder_code_redemption(_code_id)`. `create-checkout` now claims a slot *before* calling Stripe; if Stripe errors out we release the slot. Eliminates the prior TOCTOU race that could overshoot `max_redemptions` under concurrent buyers. New error: `code_exhausted` (409).
+- **`pending_code` always cleared** on successful session create, including Starter and no-code paths. Previously stale codes lingered on the profile.
+- **`ignored_code` flag** added to `create-checkout` response when a tier (e.g. Starter) blocks both code kinds but the buyer supplied one — gives the UI an explicit reason to warn instead of silently swallowing.
+- **`apply-founder-code-to-active-sub` lookup key** sourced from `plan_tiers.stripe_referral_price_id` (was hard-coded to the archived USD `pro_monthly_referral_50`, which 500'd post-CAD switch). `effective_cents` now read from the live Stripe price. Code regex relaxed from `{4,32}` to `{1,64}` so short codes aren't rejected before the DB lookup.
+- **`validate-code` `effective_cents`** computed from `plan_tiers.monthly_cents * 0.5` instead of hard-coded `4900`, so future price changes flow through automatically.
+- **`payments-webhook` idempotency.** `billing_events` insert switched to `upsert(..., { onConflict: 'external_event_id', ignoreDuplicates: true })` so concurrent Stripe retries no longer 500 on the unique-constraint collision.
+- **Storage add-on hardening.** Webhook now refuses to write a `storage_addons` row when the lookup key resolves to 0 bytes (previously silently inserted `lookup_key=''`, `bytes_granted=0`).
+- **Currency casing normalized to lowercase** everywhere: `plan_tiers.currency` updated to `cad`, and webhook helpers `.toLowerCase()` the value before persisting to `billing_events` / `subscriptions`. Matches Stripe convention.
+- **New subscription events handled.** `customer.subscription.paused` and `customer.subscription.resumed` now route through `upsertSubscription`, so paused subs reflect correctly in the local table.
+
+### Not fixed (deferred)
+
+- `charge.dispute.created` invoice lookup still reads `charge.invoice` directly. Acceptable; widen later if disputes start landing without it.
+- USD lookup-key aliases in `_shared/stripe.ts` (`starter_monthly`, `pro_monthly`, `pro_monthly_referral_50`) kept as a safety net for any in-flight USD subscription. Remove once Stripe shows zero active USD subs.
