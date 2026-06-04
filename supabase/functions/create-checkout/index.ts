@@ -56,9 +56,86 @@ Deno.serve(async (req) => {
     if (authErr || !user) return json({ error: "unauthorized" }, 401);
 
     const body = await req.json().catch(() => ({} as any));
-    const priceId: string = body.priceId;
+    const planKey: string | undefined = body.plan_key;
+    const rawCode: string = (body.code ?? "").toString().trim().toUpperCase();
+    const rawReferrerCode: string = (body.referrer_code ?? "").toString().trim().toUpperCase();
+    let priceId: string | undefined = body.priceId;
     const environment: StripeEnv = body.environment === "live" ? "live" : "sandbox";
-    const returnUrl: string | undefined = body.returnUrl;
+    const returnUrl: string | undefined = body.returnUrl ?? body.return_url;
+
+    // Plan-key path (new v2 API). Resolve server-side, never trust client priceId.
+    let appliedCodeKind: "founder" | "member_referral" | "none" = "none";
+    let attributionFounderId: string | null = null;
+    let attributionReferrerUserId: string | null = null;
+    let ignoredReferrer = false;
+
+    if (planKey) {
+      const { data: tier, error: tierErr } = await supabaseAdmin
+        .from("plan_tiers")
+        .select("key, stripe_price_id, stripe_referral_price_id, allows_founder_code, allows_member_referral")
+        .eq("key", planKey)
+        .maybeSingle();
+      if (tierErr || !tier) return json({ error: "invalid_plan_key" }, 400);
+      if (!tier.stripe_price_id) return json({ error: "plan_not_purchasable" }, 400);
+
+      priceId = tier.stripe_price_id;
+
+      // Single-code-per-buyer enforcement
+      if (rawCode || rawReferrerCode) {
+        const { data: existingAttr } = await supabaseAdmin
+          .from("referral_attributions")
+          .select("id")
+          .eq("referred_user_id", user.id)
+          .maybeSingle();
+        if (existingAttr) return json({ error: "already_attributed" }, 409);
+      }
+
+      // Try founder code first (Pro only)
+      if (tier.allows_founder_code && rawCode) {
+        const { data: founderCode } = await supabaseAdmin
+          .from("codes")
+          .select("id, owner_founder_id, status, expires_at, max_redemptions, redemption_count")
+          .eq("value", rawCode)
+          .eq("kind", "founder")
+          .maybeSingle();
+        if (founderCode && founderCode.owner_founder_id && founderCode.status === "active" &&
+            (!founderCode.expires_at || new Date(founderCode.expires_at) > new Date()) &&
+            (founderCode.max_redemptions === null || founderCode.redemption_count < founderCode.max_redemptions)) {
+          const { data: founder } = await supabaseAdmin
+            .from("founders")
+            .select("id, user_id, status")
+            .eq("id", founderCode.owner_founder_id)
+            .maybeSingle();
+          if (founder && founder.status === "active" && founder.user_id !== user.id) {
+            appliedCodeKind = "founder";
+            attributionFounderId = founder.id;
+            if (tier.stripe_referral_price_id) priceId = tier.stripe_referral_price_id;
+            if (rawReferrerCode) ignoredReferrer = true;
+          }
+        }
+      }
+
+      // Fall through to member referral if no founder match
+      if (appliedCodeKind === "none" && tier.allows_member_referral) {
+        const candidate = rawCode || rawReferrerCode;
+        if (candidate) {
+          const { data: referrer } = await supabaseAdmin
+            .from("profiles")
+            .select("user_id")
+            .eq("referral_code", candidate)
+            .maybeSingle();
+          if (referrer && referrer.user_id !== user.id) {
+            appliedCodeKind = "member_referral";
+            attributionReferrerUserId = referrer.user_id;
+          }
+        }
+      }
+
+      // If client supplied a code that didn't resolve to anything, reject
+      if (rawCode && appliedCodeKind === "none" && tier.allows_founder_code) {
+        return json({ error: "invalid_code" }, 400);
+      }
+    }
 
     if (!priceId || !/^[a-zA-Z0-9_-]+$/.test(priceId)) {
       return json({ error: "invalid_price_id" }, 400);
@@ -70,7 +147,10 @@ Deno.serve(async (req) => {
     // Founder-rate gating: only users with an active founder-code attribution
     // may purchase the discounted Founder Pro plan. The frontend should prompt
     // for a code (calling `referral-attach`) before retrying checkout.
-    if (priceId === "cog_founder_pro_monthly" || priceId === "cog_founder_pro_monthly_cad") {
+    if (
+      (priceId === "cog_founder_pro_monthly" || priceId === "cog_founder_pro_monthly_cad") &&
+      appliedCodeKind !== "founder"
+    ) {
       const { data: attr, error: attrErr } = await supabaseAdmin
         .from("referral_attributions")
         .select("id, referrer_type")
@@ -102,6 +182,18 @@ Deno.serve(async (req) => {
       productDescription = product?.name;
     }
 
+    const sessionMetadata: Record<string, string> = {
+      userId: user.id,
+      lookup_key: priceId,
+      managed_payments: "true",
+      applied_code_kind: appliedCodeKind,
+    };
+    if (planKey) sessionMetadata.plan_key = planKey;
+    if (attributionFounderId) sessionMetadata.attribution_founder_id = attributionFounderId;
+    if (attributionReferrerUserId) sessionMetadata.attribution_referrer_user_id = attributionReferrerUserId;
+
+    const subscriptionMetadata: Record<string, string> = { ...sessionMetadata };
+
     const session = await stripe.checkout.sessions.create({
       line_items: [{ price: stripePrice.id, quantity: 1 }],
       mode: isRecurring ? "subscription" : "payment",
@@ -109,16 +201,21 @@ Deno.serve(async (req) => {
       return_url: returnUrl,
       customer: customerId,
       managed_payments: { enabled: true },
-      metadata: { userId: user.id, lookup_key: priceId, managed_payments: "true" },
+      metadata: sessionMetadata,
       ...(isRecurring && {
-        subscription_data: { metadata: { userId: user.id, lookup_key: priceId } },
+        subscription_data: { metadata: subscriptionMetadata },
       }),
       ...(!isRecurring && productDescription && {
         payment_intent_data: { description: productDescription },
       }),
     });
 
-    return json({ clientSecret: session.client_secret });
+    return json({
+      clientSecret: session.client_secret,
+      url: (session as any).url ?? null,
+      applied_code_kind: appliedCodeKind,
+      ignored_referrer: ignoredReferrer,
+    });
   } catch (e) {
     console.error("create-checkout error", e);
     return json({ error: (e as Error).message }, 500);
