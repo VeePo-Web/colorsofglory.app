@@ -63,10 +63,32 @@ export async function resolveCode(input: { code?: string; slug?: string }): Prom
   return data as ResolvedCode;
 }
 
-export async function attachReferral(code: string, source: "founder_code" | "user_referral_code" | "invite_link" = "founder_code") {
-  const { data, error } = await supabase.functions.invoke("referral-attach", { body: { code, source } });
+/**
+ * v2: stashes a code on the user's profile for checkout to consume.
+ * No longer writes a permanent attribution row — that happens in the
+ * payments webhook once Stripe confirms the subscription.
+ *
+ * Returns `{ ok: true, kind: 'founder' | 'member_referral', pending_code }`.
+ * The `source` arg is accepted for backwards compatibility but ignored.
+ */
+export async function attachReferral(code: string, _source?: string) {
+  const { data, error } = await supabase.functions.invoke("referral-attach", { body: { code } });
   if (error) throw error;
   return data;
+}
+
+/** v2: paste a founder code while already on a paid Pro subscription. */
+export async function applyFounderCodeToActiveSub(code: string, environment?: "sandbox" | "live") {
+  const { data, error } = await supabase.functions.invoke("apply-founder-code-to-active-sub", {
+    body: { code, environment },
+  });
+  if (error) throw error;
+  return data as {
+    ok?: boolean;
+    error?: string;
+    effective_cents?: number;
+    applied_code_kind?: "founder";
+  };
 }
 
 export async function getMyAttribution() {

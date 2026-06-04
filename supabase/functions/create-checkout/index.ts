@@ -57,15 +57,27 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({} as any));
     const planKey: string | undefined = body.plan_key;
-    const rawCode: string = (body.code ?? "").toString().trim().toUpperCase();
+    let rawCode: string = (body.code ?? "").toString().trim().toUpperCase();
     const rawReferrerCode: string = (body.referrer_code ?? "").toString().trim().toUpperCase();
     let priceId: string | undefined = body.priceId;
     const environment: StripeEnv = body.environment === "live" ? "live" : "sandbox";
     const returnUrl: string | undefined = body.returnUrl ?? body.return_url;
 
+    // Fallback: if the client didn't pass a code, see if onboarding stashed
+    // one on the profile (from /invite/:token or the founder-code screen).
+    if (!rawCode && !rawReferrerCode) {
+      const { data: prof } = await supabaseAdmin
+        .from("profiles")
+        .select("pending_code")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (prof?.pending_code) rawCode = prof.pending_code.toUpperCase();
+    }
+
     // Plan-key path (new v2 API). Resolve server-side, never trust client priceId.
     let appliedCodeKind: "founder" | "member_referral" | "none" = "none";
     let attributionFounderId: string | null = null;
+    let attributionCodeId: string | null = null;
     let attributionReferrerUserId: string | null = null;
     let ignoredReferrer = false;
 
@@ -109,6 +121,7 @@ Deno.serve(async (req) => {
           if (founder && founder.status === "active" && founder.user_id !== user.id) {
             appliedCodeKind = "founder";
             attributionFounderId = founder.id;
+            attributionCodeId = founderCode.id;
             if (tier.stripe_referral_price_id) priceId = tier.stripe_referral_price_id;
             if (rawReferrerCode) ignoredReferrer = true;
           }
@@ -144,21 +157,12 @@ Deno.serve(async (req) => {
       return json({ error: "invalid_return_url" }, 400);
     }
 
-    // Founder-rate gating: only users with an active founder-code attribution
-    // may purchase the discounted Founder Pro plan. The frontend should prompt
-    // for a code (calling `referral-attach`) before retrying checkout.
-    if (
-      (priceId === "cog_founder_pro_monthly" || priceId === "cog_founder_pro_monthly_cad") &&
-      appliedCodeKind !== "founder"
-    ) {
-      const { data: attr, error: attrErr } = await supabaseAdmin
-        .from("referral_attributions")
-        .select("id, referrer_type")
-        .eq("referred_user_id", user.id)
-        .maybeSingle();
-      if (attrErr) return json({ error: "attribution_lookup_failed" }, 500);
-      if (!attr || attr.referrer_type !== "founder") {
-        return json({ error: "founder_code_required" }, 403);
+    // Storage add-on gate: only Pro users may purchase storage add-ons.
+    if (priceId.startsWith("cog_storage")) {
+      const { data: planRow } = await supabaseAdmin
+        .rpc("plan_tier_key_for_user", { _user_id: user.id });
+      if (planRow !== "pro") {
+        return json({ error: "storage_addons_require_pro" }, 403);
       }
     }
 
@@ -190,6 +194,7 @@ Deno.serve(async (req) => {
     };
     if (planKey) sessionMetadata.plan_key = planKey;
     if (attributionFounderId) sessionMetadata.attribution_founder_id = attributionFounderId;
+    if (attributionCodeId) sessionMetadata.attribution_code_id = attributionCodeId;
     if (attributionReferrerUserId) sessionMetadata.attribution_referrer_user_id = attributionReferrerUserId;
 
     const subscriptionMetadata: Record<string, string> = { ...sessionMetadata };
@@ -209,6 +214,25 @@ Deno.serve(async (req) => {
         payment_intent_data: { description: productDescription },
       }),
     });
+
+    // Post-create bookkeeping: bump founder code redemption count and
+    // clear any pending_code so subsequent checkouts don't re-apply it.
+    if (appliedCodeKind === "founder" && attributionCodeId) {
+      try {
+        await supabaseAdmin.rpc("increment_founder_code_redemption", {
+          _code_id: attributionCodeId,
+        });
+      } catch (err) {
+        console.error("increment_founder_code_redemption failed", err);
+      }
+    }
+    if (appliedCodeKind !== "none") {
+      try {
+        await supabaseAdmin.rpc("clear_pending_code", { _user_id: user.id });
+      } catch (err) {
+        console.error("clear_pending_code failed", err);
+      }
+    }
 
     return json({
       clientSecret: session.client_secret,

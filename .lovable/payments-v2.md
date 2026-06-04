@@ -103,3 +103,27 @@ Backend rebuild of the payment / subscription / founder-code / referral system. 
 3. On checkout submit, call `startCheckout({ plan_key, code, return_url: '/checkout/return?session_id={CHECKOUT_SESSION_ID}' })`. Mount `<EmbeddedCheckoutProvider>` with the returned `clientSecret`.
 4. If `applied_code_kind='founder'` and the buyer also passed `referrer_code`, surface a calm one-line notice: "Founder code applied — your referrer won't earn on this signup."
 5. Build a Settings → Referrals page consuming `getMyReferralStats()` to show the user's code, share link, active referrals, and lifetime cash earned.
+
+---
+
+## v2 audit fixes (2026-06-04 follow-up)
+
+Issues found while auditing the v2 build against Stripe API `2026-03-25.dahlia` and the original brief, and what was fixed:
+
+- **Stripe products now exist.** `payments--batch_create_product` was executed for `cog_starter` (`starter_monthly` @ $5/mo), `cog_pro` (`pro_monthly` @ $100/mo) and `cog_pro_referral` (`pro_monthly_referral_50` @ $49/mo), all tax_code `txcd_10103001`, qty 1/1. Previously these only existed in `plan_tiers` rows — checkout would have failed with `price_not_found`.
+- **`invoice.subscription` deprecation fixed.** `payments-webhook` now resolves the subscription via `invoice.parent.subscription_details.subscription` first, falling back to `invoice.subscription` and `invoice.lines.data[0].subscription`. Without this fix, every renewal silently no-op'd and referral/founder payouts stopped after month 1.
+- **`profiles.pending_code` column added** + helpers `stash_pending_code`, `clear_pending_code`, `increment_founder_code_redemption` (all SECURITY DEFINER, scoped GRANTs). Lets onboarding/invite flows stash a code on the profile without writing a permanent `referral_attributions` row before checkout.
+- **`referral-attach` retired in v2 shape.** It no longer calls `attribute_referral` / `redeem_code`. It validates the code lightly (founder or member referral) and stashes it on `profiles.pending_code`. Authoritative attribution is still written by `payments-webhook` after Stripe confirms. SDK signature unchanged (`attachReferral(code, source?)`); the `source` arg is now ignored.
+- **`create-checkout` reads `profiles.pending_code`** as a fallback when the client didn't pass `code` or `referrer_code`. After a successful Stripe session create with founder routing, it calls `increment_founder_code_redemption(code_id)` and `clear_pending_code(user_id)`. Both calls are best-effort and logged on failure.
+- **Storage add-on gate.** `create-checkout` now 403s `storage_addons_require_pro` when a `cog_storage*` price is requested by a non-Pro user (checked via `plan_tier_key_for_user(user_id)` RPC).
+- **Dead legacy gate removed.** The `priceId === 'cog_founder_pro_monthly'` block in `create-checkout` was v1 dead code; it never matched v2 lookup keys. Replaced by the storage-addon gate above.
+- **`planForLookupKey` loud-fails on unknown keys.** Previously it silently returned `'free'` for any unrecognized lookup_key — a typo or new SKU would silently downgrade a paying user. Now it throws `unknown_lookup_key:<key>`, which the webhook surfaces as a retryable handler error.
+- **New edge function `apply-founder-code-to-active-sub`** (spec §6). Validates a founder code for an already-Pro user, swaps the Stripe subscription item to `pro_monthly_referral_50` with `proration_behavior: 'create_prorations'`, writes the attribution row, increments redemption count, and clears `pending_code`. The next `invoice.paid` pays the founder via the normal webhook path. Errors: `already_attributed`, `no_active_pro_subscription`, `already_on_founder_rate`, `expired`, `exhausted`, `self`, `referral_price_missing`.
+- **SDK additions.** `applyFounderCodeToActiveSub(code, environment?)` in `src/integrations/cog/referrals.ts`. `PRICE_IDS` map updated to v2 lookup keys (`starter_monthly`, `pro_monthly`, `pro_monthly_referral_50`) plus the existing storage keys.
+- **`config.toml` left at defaults.** Lovable's edge-function default is already `verify_jwt = false`, so per-function blocks are only added when overriding. `payments-webhook` and `referral-resolve` keep their explicit blocks; `create-checkout`, `validate-code`, `redeem-founder-code`, and `apply-founder-code-to-active-sub` rely on the default.
+
+### Remaining out-of-scope (Claude / future passes)
+
+- Frontend `/pricing` page rendering `getPricingPage()` payload.
+- Optional `pricing_copy.faq` rows if a FAQ section is added to the page.
+- Currency expansion beyond USD (`plan_tiers.currency` already encodes for future).

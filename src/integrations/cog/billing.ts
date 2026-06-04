@@ -66,11 +66,15 @@ type CheckoutResponse = {
   error?: string;
 };
 
-// Single canonical price IDs the app ships with. Add more here as you
-// create new products via the payments tool.
+// Canonical Stripe price lookup_keys the app ships with. v2 keys
+// (starter_monthly, pro_monthly, pro_monthly_referral_50) are the
+// authoritative pricing for the new payments system. Legacy CAD keys
+// remain for backwards compatibility with old subscription rows but
+// MUST NOT be used for new checkouts. Use plan_key instead.
 export const PRICE_IDS = {
-  pro_monthly: "cog_pro_monthly_cad",
-  founder_pro_monthly: "cog_founder_pro_monthly_cad",
+  starter_monthly: "starter_monthly",
+  pro_monthly: "pro_monthly",
+  pro_monthly_referral_50: "pro_monthly_referral_50",
   storage_25gb_monthly: "cog_storage_25gb_monthly_cad",
   storage_100gb_monthly: "cog_storage_100gb_monthly_cad",
   storage_500gb_monthly: "cog_storage_500gb_monthly_cad",
