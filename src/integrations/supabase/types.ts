@@ -589,6 +589,75 @@ export type Database = {
           },
         ]
       }
+      plan_tiers: {
+        Row: {
+          allows_founder_code: boolean
+          allows_member_referral: boolean
+          allows_storage_addons: boolean
+          created_at: string
+          currency: string
+          display_name: string
+          key: string
+          monthly_cents: number
+          owned_song_limit: number
+          sort_order: number
+          storage_bytes_included: number
+          stripe_price_id: string | null
+          stripe_referral_price_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          allows_founder_code?: boolean
+          allows_member_referral?: boolean
+          allows_storage_addons?: boolean
+          created_at?: string
+          currency?: string
+          display_name: string
+          key: string
+          monthly_cents: number
+          owned_song_limit: number
+          sort_order?: number
+          storage_bytes_included: number
+          stripe_price_id?: string | null
+          stripe_referral_price_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          allows_founder_code?: boolean
+          allows_member_referral?: boolean
+          allows_storage_addons?: boolean
+          created_at?: string
+          currency?: string
+          display_name?: string
+          key?: string
+          monthly_cents?: number
+          owned_song_limit?: number
+          sort_order?: number
+          storage_bytes_included?: number
+          stripe_price_id?: string | null
+          stripe_referral_price_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pricing_copy: {
+        Row: {
+          key: string
+          payload: Json
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          payload: Json
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          payload?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_color: string | null
@@ -2078,8 +2147,8 @@ export type Database = {
         | "tag"
         | "other"
       song_member_role: "owner" | "collaborator" | "viewer"
-      song_status: "active" | "archived" | "deleted"
-      sub_plan: "free" | "pro" | "founder_pro"
+      song_status: "active" | "archived" | "deleted" | "locked"
+      sub_plan: "free" | "starter" | "pro" | "founder_pro"
       transcription_status:
         | "pending"
         | "processing"
@@ -2283,8 +2352,8 @@ export const Constants = {
         "other",
       ],
       song_member_role: ["owner", "collaborator", "viewer"],
-      song_status: ["active", "archived", "deleted"],
-      sub_plan: ["free", "pro", "founder_pro"],
+      song_status: ["active", "archived", "deleted", "locked"],
+      sub_plan: ["free", "starter", "pro", "founder_pro"],
       transcription_status: [
         "pending",
         "processing",
