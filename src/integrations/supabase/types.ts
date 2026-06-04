@@ -677,6 +677,7 @@ export type Database = {
           payout_method:
             | Database["public"]["Enums"]["payout_method_kind"]
             | null
+          pending_code: string | null
           phone_e164: string | null
           referral_code: string | null
           referred_by_user_id: string | null
@@ -702,6 +703,7 @@ export type Database = {
           payout_method?:
             | Database["public"]["Enums"]["payout_method_kind"]
             | null
+          pending_code?: string | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -727,6 +729,7 @@ export type Database = {
           payout_method?:
             | Database["public"]["Enums"]["payout_method_kind"]
             | null
+          pending_code?: string | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -1853,6 +1856,7 @@ export type Database = {
           song_id: string
         }[]
       }
+      clear_pending_code: { Args: { _user_id: string }; Returns: undefined }
       complete_onboarding: { Args: { _user_id: string }; Returns: string }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
@@ -1891,6 +1895,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_founder_code_redemption: {
+        Args: { _code_id: string }
+        Returns: undefined
       }
       is_admin: { Args: { _uid: string }; Returns: boolean }
       is_invite_valid: { Args: { _invite_id: string }; Returns: boolean }
@@ -2067,6 +2075,10 @@ export type Database = {
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
+      }
+      stash_pending_code: {
+        Args: { _code: string; _user_id: string }
+        Returns: undefined
       }
       unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
