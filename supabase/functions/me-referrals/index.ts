@@ -45,8 +45,10 @@ Deno.serve(async (req) => {
 
     const referredIds = (attrs ?? []).map((a: any) => a.referred_user_id);
 
-    // Currently-paying count among those users
-    let payingCount = 0;
+    // Currently-paying set among those users — single source of truth: the
+    // subscriptions table. Only active/trialing/past_due on pro/founder_pro
+    // with a future (or null) current_period_end count as "paying right now".
+    const payingSet = new Set<string>();
     if (referredIds.length > 0) {
       const { data: subs } = await supabase
         .from("subscriptions")
@@ -54,15 +56,14 @@ Deno.serve(async (req) => {
         .in("user_id", referredIds)
         .in("plan", ["pro", "founder_pro"]);
       const nowMs = Date.now();
-      const paying = new Set<string>();
       for (const s of subs ?? []) {
-        const okStatus = ["active", "trialing", "past_due"].includes(s.status as string)
-          || (s.status === "canceled");
-        const future = !s.current_period_end || new Date(s.current_period_end as string).getTime() > nowMs;
-        if (okStatus && future) paying.add(s.user_id as string);
+        const okStatus = ["active", "trialing", "past_due"].includes(s.status as string);
+        const future = !s.current_period_end
+          || new Date(s.current_period_end as string).getTime() > nowMs;
+        if (okStatus && future) payingSet.add(s.user_id as string);
       }
-      payingCount = paying.size;
     }
+    const payingCount = payingSet.size;
 
     // Reward totals for this referrer
     const { data: rewards } = await supabase
@@ -96,16 +97,29 @@ Deno.serve(async (req) => {
         const earned = earnedByUser.get(a.referred_user_id) ?? 0;
         return {
           referred_at: a.created_at,
-          is_paying: earned > 0, // proxy: any cash reward => was paying at some point
+          // Real-time signal from the subscriptions table — not "ever paid".
+          is_paying: payingSet.has(a.referred_user_id),
+          has_paid_before: earned > 0,
           total_earned_cents: earned,
         };
       });
+
+    // $5/mo per currently-paying referral = the user's referral MRR
+    const { data: settingRow } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "user_referral_cash_cents")
+      .maybeSingle();
+    const perReferralCents = Number(settingRow?.value ?? 500) || 500;
+    const monthly_recurring_cents = payingCount * perReferralCents;
 
     return json({
       code,
       link,
       attributed_count: referredIds.length,
       paying_count: payingCount,
+      per_referral_cents: perReferralCents,
+      monthly_recurring_cents,
       earnings: { pending_cents, payable_cents, paid_cents, lifetime_cents },
       next_payout_estimate_cents: payable_cents,
       recent_referrals,
