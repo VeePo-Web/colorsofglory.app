@@ -265,6 +265,7 @@ Deno.serve(async (req) => {
             expand: ["items.data.price"],
           });
           await upsertSubscription(sub, stripe);
+          await ensureAttributionFromMetadata(obj, sub);
         }
         break;
       }
