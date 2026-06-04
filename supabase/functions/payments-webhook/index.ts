@@ -108,6 +108,15 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
     },
     { onConflict: "external_id" },
   );
+
+  // Apply quota changes server-side so downgrades lock excess songs
+  // and upgrades / re-subscribes unlock oldest-first up to the new cap.
+  try {
+    await db().rpc("apply_song_lock_for_quota", { _user_id: userId });
+    await db().rpc("unlock_songs_up_to_quota", { _user_id: userId });
+  } catch (e) {
+    console.error("quota reconciliation failed", userId, e);
+  }
 }
 
 async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | null) {
