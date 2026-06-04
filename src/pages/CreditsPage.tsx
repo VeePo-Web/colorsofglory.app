@@ -1,6 +1,6 @@
-import { useNavigate, useParams } from "react-router-dom";
+﻿import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Crown, Download } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 
 interface CreditEntry {
   initials: string;
@@ -72,7 +72,7 @@ const CreditsPage = () => {
         </div>
 
         <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <h1
@@ -182,3 +182,4 @@ const CreditsPage = () => {
 };
 
 export default CreditsPage;
+

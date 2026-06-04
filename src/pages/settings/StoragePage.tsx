@@ -1,6 +1,6 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
 import { ArrowLeft, HardDrive } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 
 interface StorageItem {
@@ -53,7 +53,7 @@ const StoragePage = () => {
         </div>
 
         <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         {/* Warning icon */}
@@ -190,3 +190,4 @@ const StoragePage = () => {
 };
 
 export default StoragePage;
+

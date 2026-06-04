@@ -1,262 +1,426 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import { ArrowLeft, Copy, Check, Share2, Crown, Pencil, X } from "lucide-react";
+import CogBrand from "@/components/cog/CogBrand";
+import GoldButton from "@/components/cog/GoldButton";
 import SongTabBar from "@/components/cog/SongTabBar";
-import { useSongTitle } from "@/lib/songContext";
+import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import { useSongTitle, getAvatarColor } from "@/lib/songContext";
+import { generateInviteToken, revokeInviteToken, type GeneratedInvite } from "@/lib/invite/inviteApi";
 
-type CollabRole = "Viewer" | "Contributor" | "Reviewer";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Collaborator {
-  initials: string;
-  name: string;
-  role: string;
-  color: string;
-}
+type InviteRole = "viewer" | "contributor" | "reviewer";
 
-const COLLABORATORS: Collaborator[] = [
-  { initials: "PK", name: "Parker", role: "Owner", color: "#B8953A" },
-  { initials: "SM", name: "Sarah M.", role: "Contributor", color: "#53AB8B" },
-  { initials: "CR", name: "Caleb R.", role: "Reviewer", color: "#8070C4" },
-];
-
-const ROLES: CollabRole[] = ["Viewer", "Contributor", "Reviewer"];
-
-const roleDescriptions: Record<CollabRole, string> = {
-  Viewer: "Can listen and read only",
-  Contributor: "Can add lyrics, memos, and ideas",
-  Reviewer: "Can comment and approve changes",
+const ROLE_DETAILS: Record<InviteRole, { label: string; desc: string }> = {
+  viewer:      { label: "Viewer",      desc: "Can listen and read." },
+  contributor: { label: "Contributor", desc: "Can add lyrics, memos, comments, and ideas." },
+  reviewer:    { label: "Reviewer",    desc: "Can comment and approve changes." },
 };
 
-const PeoplePage = () => {
-  const navigate = useNavigate();
-  const { id } = useParams();
-  const songId = id ?? "1";
-  const [selectedRole, setSelectedRole] = useState<CollabRole>("Contributor");
-  const [contact, setContact] = useState("");
-  const [isSent, setIsSent] = useState(false);
+interface Collab {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isOwner: boolean;
+  avatarColor: string;
+  avatarInitials: string;
+}
 
-  const handleSend = () => {
-    if (!contact.trim()) return;
-    setIsSent(true);
+// Mock collaborators — Lovable replaces with live Supabase query
+const MOCK_COLLABS: Collab[] = [
+  { userId: "u1", firstName: "Parker", lastName: "Kim",    role: "Owner",       isOwner: true,  avatarColor: "#D4AE5C", avatarInitials: "PK" },
+  { userId: "u2", firstName: "Sarah",  lastName: "Miller", role: "Contributor", isOwner: false, avatarColor: "#53AB8B", avatarInitials: "SM" },
+  { userId: "u3", firstName: "Caleb",  lastName: "Rivera", role: "Reviewer",    isOwner: false, avatarColor: "#8070C4", avatarInitials: "CR" },
+];
+
+// ─── Role selection card ─────────────────────────────────────────────────────
+
+const RoleCard = ({
+  role,
+  selected,
+  onSelect,
+}: {
+  role: InviteRole;
+  selected: boolean;
+  onSelect: () => void;
+}) => {
+  const { label, desc } = ROLE_DETAILS[role];
+  return (
+    <button
+      onClick={onSelect}
+      className="flex-1 rounded-2xl p-4 text-left transition-all duration-150 active:scale-[0.97]"
+      style={{
+        backgroundColor: selected ? "rgba(181,147,90,0.06)" : "#FFFFFF",
+        border: selected ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.08)",
+        boxShadow: selected
+          ? "0 0 0 3px rgba(181,147,90,0.12), 0 2px 12px rgba(0,0,0,0.06)"
+          : "0 2px 8px rgba(0,0,0,0.05)",
+      }}
+      aria-pressed={selected}
+    >
+      <p
+        className="text-[0.9375rem] font-semibold mb-1"
+        style={{ color: selected ? "#B5935A" : "#1A1A1A", fontFamily: "var(--font-body)" }}
+      >
+        {label}
+      </p>
+      <p className="text-[0.75rem] leading-snug" style={{ color: "#666" }}>
+        {desc}
+      </p>
+    </button>
+  );
+};
+
+// ─── Generated link panel ────────────────────────────────────────────────────
+
+const GeneratedLinkPanel = ({
+  invite,
+  onRevoke,
+  onClose,
+}: {
+  invite: GeneratedInvite;
+  onRevoke: () => void;
+  onClose: () => void;
+}) => {
+  const [copied, setCopied] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(invite.inviteUrl); } catch { /* fallback */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      await navigator.share({
+        title: "Join my song on Colors of Glory",
+        text: "I'm writing a song and want you to collaborate with me.",
+        url: invite.inviteUrl,
+      });
+    } else {
+      handleCopy();
+    }
+  };
+
+  const handleRevoke = async () => {
+    setRevoking(true);
+    await revokeInviteToken(invite.tokenId);
+    onRevoke();
+  };
+
+  return (
+    <div
+      className="rounded-2xl p-5 mb-5"
+      style={{
+        backgroundColor: "#FFFFFF",
+        border: "1.5px solid rgba(181,147,90,0.35)",
+        boxShadow: "0 4px 20px rgba(181,147,90,0.12)",
+      }}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: "#53AB8B" }}
+            aria-hidden="true"
+          />
+          <p className="text-[0.8125rem] font-semibold uppercase tracking-wide" style={{ color: "#666" }}>
+            Link ready to share
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="transition-opacity hover:opacity-60 active:scale-90 p-1"
+          aria-label="Close"
+          style={{ color: "#999" }}
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* Role label */}
+      <span
+        className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.75rem] font-semibold mb-4"
+        style={{
+          backgroundColor: "rgba(181,147,90,0.10)",
+          color: "#B5935A",
+          border: "1px solid rgba(181,147,90,0.25)",
+        }}
+      >
+        {ROLE_DETAILS[invite.assignedRole as InviteRole]?.label ?? invite.assignedRole}
+      </span>
+
+      {/* URL display */}
+      <div
+        className="rounded-xl px-3 py-2.5 mb-4 flex items-center gap-2"
+        style={{
+          backgroundColor: "#F8F7F4",
+          border: "1px solid rgba(0,0,0,0.07)",
+        }}
+      >
+        <p
+          className="flex-1 text-[0.8125rem] truncate font-medium"
+          style={{ color: "#1A1A1A", fontFamily: "monospace" }}
+        >
+          {invite.inviteUrl}
+        </p>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-3">
+        <GoldButton onClick={handleCopy} className="flex-1">
+          {copied ? (
+            <><Check size={16} strokeWidth={2} /> Copied!</>
+          ) : (
+            <><Copy size={16} strokeWidth={1.5} /> Copy link</>
+          )}
+        </GoldButton>
+        <button
+          onClick={handleShare}
+          className="flex items-center justify-center gap-1.5 rounded-full font-semibold text-[0.9375rem] transition-all duration-150 active:scale-[0.97] px-4"
+          style={{
+            height: 56,
+            backgroundColor: "#1A1A1A",
+            color: "#FFFFFF",
+            fontFamily: "var(--font-body)",
+            flexShrink: 0,
+          }}
+          aria-label="Share link"
+        >
+          <Share2 size={16} strokeWidth={1.5} />
+          Share
+        </button>
+      </div>
+
+      {/* Paste tip */}
+      <p className="text-[0.75rem] text-center mt-3" style={{ color: "#999" }}>
+        Paste this link in iMessage, WhatsApp, or email.
+      </p>
+
+      {/* Revoke */}
+      <button
+        onClick={handleRevoke}
+        disabled={revoking}
+        className="text-[0.75rem] text-center w-full mt-3 transition-opacity hover:opacity-70 disabled:opacity-40"
+        style={{ color: "#999" }}
+      >
+        {revoking ? "Revoking..." : "Revoke this link"}
+      </button>
+    </div>
+  );
+};
+
+// ─── Collaborator row ────────────────────────────────────────────────────────
+
+const CollabRow = ({ collab }: { collab: Collab }) => (
+  <div
+    className="flex items-center gap-3 py-3"
+    style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+  >
+    <div
+      className="rounded-full flex items-center justify-center text-white font-bold text-[0.75rem] flex-shrink-0"
+      style={{ width: 38, height: 38, backgroundColor: collab.avatarColor }}
+    >
+      {collab.avatarInitials}
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[0.9375rem] font-medium leading-snug" style={{ color: "#1A1A1A" }}>
+        {collab.firstName} {collab.lastName}
+      </p>
+      <p className="text-[0.8125rem]" style={{ color: "#999" }}>
+        {collab.role}
+      </p>
+    </div>
+    {collab.isOwner && (
+      <Crown size={14} strokeWidth={1.5} style={{ color: "#B5935A", flexShrink: 0 }} />
+    )}
+    {!collab.isOwner && (
+      <button
+        className="transition-opacity hover:opacity-70 active:scale-90 p-1"
+        aria-label={`Edit ${collab.firstName}'s role`}
+        style={{ color: "#CCC" }}
+      >
+        <Pencil size={13} strokeWidth={1.5} />
+      </button>
+    )}
+  </div>
+);
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+const PeoplePage = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const songId = id ?? "1";
+  const songTitle = useSongTitle(songId);
+
+  const [selectedRole, setSelectedRole] = useState<InviteRole>("contributor");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedInvite, setGeneratedInvite] = useState<GeneratedInvite | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const invite = await generateInviteToken(songId, selectedRole, 5);
+      setGeneratedInvite(invite);
+    } catch {
+      setError("Couldn't create the link. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
     <div
       className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: "var(--cog-cream)" }}
+      style={{ backgroundColor: "#FAFAF6", paddingBottom: 88 }}
     >
-      {/* Warm glow */}
+      {/* Subtle glow */}
       <div
         className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 50% at 50% 85%, rgba(184,149,58,0.12) 0%, transparent 60%)",
-        }}
+        style={{ background: "radial-gradient(ellipse 55% 40% at 85% 90%, rgba(181,147,90,0.08) 0%, transparent 65%)" }}
       />
 
+      {/* Back */}
+      <div className="relative px-5 pt-14" style={{ maxWidth: 430, margin: "0 auto", width: "100%" }}>
+        <button
+          onClick={() => navigate(`/songs/${songId}`)}
+          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
+          style={{ color: "#999", minHeight: 44 }}
+        >
+          <ArrowLeft size={16} strokeWidth={2} />
+          Song
+        </button>
+      </div>
+
       <div
-        className="relative flex flex-col flex-1 px-6 pb-12"
-        style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
+        className="relative flex flex-col flex-1 px-5"
+        style={{ maxWidth: 430, margin: "0 auto", width: "100%" }}
       >
-        {/* Header */}
-        <div className="pt-14 pb-6">
-          <button
-            onClick={() => navigate(`/songs/${songId}`)}
-            className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-            style={{ color: "var(--cog-warm-gray)" }}
+        {/* Logo + title */}
+        <div className="flex justify-center pt-3 pb-4">
+          <CogBrand variant="stacked" size="sm" />
+        </div>
+        <h1
+          className="text-[1.5rem] font-bold text-center mb-1 leading-snug"
+          style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+        >
+          {songTitle}
+        </h1>
+        <p className="text-[0.875rem] text-center mb-6" style={{ color: "#666" }}>
+          People in this song
+        </p>
+
+        {/* Collaborator stack overview */}
+        <div className="flex justify-center mb-3">
+          <CollaboratorAvatarStack
+            collaborators={MOCK_COLLABS.map((c) => ({
+              userId: c.userId,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              avatarColor: c.avatarColor,
+              avatarInitials: c.avatarInitials,
+            }))}
+            size={44}
+            maxVisible={5}
+          />
+        </div>
+        <p className="text-[0.8125rem] text-center mb-6" style={{ color: "#999" }}>
+          {MOCK_COLLABS.length} collaborator{MOCK_COLLABS.length !== 1 ? "s" : ""}
+        </p>
+
+        {/* ── INVITE SECTION ──────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl p-5 mb-5"
+          style={{
+            backgroundColor: "#FFFFFF",
+            border: "1px solid rgba(0,0,0,0.08)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+          }}
+        >
+          <h2
+            className="text-[1.0625rem] font-semibold mb-1"
+            style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
           >
-            <ArrowLeft size={15} />
-            Back
-          </button>
-        </div>
+            Invite someone into this song
+          </h2>
+          <p className="text-[0.8125rem] mb-5" style={{ color: "#666" }}>
+            They can listen, write, comment, or review depending on the role you choose.
+          </p>
 
-        <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
-        </div>
-
-        {/* Invite form or Success */}
-        {isSent ? (
-          <div className="flex flex-col items-center text-center py-8 mb-8">
-            <div
-              className="flex items-center justify-center rounded-full mb-6"
-              style={{
-                width: 72,
-                height: 72,
-                backgroundColor: "rgba(184,149,58,0.12)",
-                border: "1.5px solid rgba(184,149,58,0.30)",
-              }}
-            >
-              <CheckCircle2 size={34} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
-            </div>
-
-            <h1
-              className="text-3xl font-semibold mb-2"
-              style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", lineHeight: 1.1 }}
-            >
-              Invitation Sent!
-            </h1>
-            <p className="text-sm mb-8" style={{ color: "var(--cog-warm-gray)" }}>
-              Grace in the Waiting · {selectedRole}
-            </p>
-
-            <button
-              onClick={() => navigate(`/songs/${songId}`)}
-              className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97]"
-              style={{
-                backgroundColor: "var(--cog-gold)",
-                fontFamily: "var(--font-body)",
-                boxShadow: "0 4px 20px rgba(184,149,58,0.35)",
-              }}
-            >
-              Return to song
-            </button>
-          </div>
-        ) : (
-          <>
-            <h1
-              className="text-3xl font-semibold mb-2"
-              style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", lineHeight: 1.1 }}
-            >
-              Invite someone into this song
-            </h1>
-
-            <p className="text-base mb-8" style={{ color: "var(--cog-warm-gray)" }}>
-              They can listen, write, comment, or review depending on the role you choose.
-            </p>
-
-            {/* Contact input */}
-            <div className="mb-6">
-              <input
-                type="text"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="Phone or email"
-                className="w-full rounded-2xl px-4 py-4 text-base outline-none transition-all duration-150"
-                style={{
-                  backgroundColor: "var(--cog-cream-light)",
-                  border: contact
-                    ? "1.5px solid var(--cog-gold)"
-                    : "1.5px solid var(--cog-border)",
-                  color: "var(--cog-charcoal)",
-                  fontFamily: "var(--font-body)",
-                  boxShadow: contact ? "0 0 0 3px rgba(184,149,58,0.10)" : "none",
-                }}
+          {/* Role cards */}
+          <div className="flex gap-2 mb-5">
+            {(["viewer", "contributor", "reviewer"] as InviteRole[]).map((r) => (
+              <RoleCard
+                key={r}
+                role={r}
+                selected={selectedRole === r}
+                onSelect={() => { setSelectedRole(r); setGeneratedInvite(null); }}
               />
-            </div>
+            ))}
+          </div>
 
-            {/* Role chips */}
-            <p
-              className="text-sm font-medium mb-3"
-              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+          {/* Error */}
+          {error && (
+            <p className="text-[0.8125rem] text-center mb-3" style={{ color: "#E05440" }} role="alert">
+              {error}
+            </p>
+          )}
+
+          {/* Generate link button */}
+          {!generatedInvite && (
+            <GoldButton
+              loading={isGenerating}
+              loadingText="Creating link..."
+              onClick={handleGenerate}
             >
-              Their role
-            </p>
-            <div className="flex gap-2.5 mb-2">
-              {ROLES.map((role) => {
-                const isSelected = selectedRole === role;
-                return (
-                  <button
-                    key={role}
-                    onClick={() => setSelectedRole(role)}
-                    className="flex-1 py-3 rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.97]"
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      backgroundColor: isSelected ? "rgba(184,149,58,0.08)" : "var(--cog-cream-light)",
-                      border: isSelected
-                        ? "1.5px solid var(--cog-gold)"
-                        : "1.5px solid var(--cog-border)",
-                      color: isSelected ? "var(--cog-gold)" : "var(--cog-warm-gray)",
-                      boxShadow: isSelected ? "0 0 0 3px var(--cog-gold-glow)" : "none",
-                    }}
-                  >
-                    {role}
-                  </button>
-                );
-              })}
-            </div>
+              Create invite link
+            </GoldButton>
+          )}
 
-            {/* Role description */}
-            <p className="text-xs mb-8" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
-              {roleDescriptions[selectedRole]}
-            </p>
+          {/* Microcopy */}
+          <p className="text-[0.75rem] text-center mt-3" style={{ color: "#999" }}>
+            Invited songs don't use their free song.
+          </p>
+        </div>
 
-            {/* CTA */}
-            <button
-              onClick={handleSend}
-              disabled={!contact.trim()}
-              className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97] disabled:opacity-40 mb-3"
-              style={{
-                backgroundColor: "var(--cog-gold)",
-                fontFamily: "var(--font-body)",
-                boxShadow: contact.trim() ? "0 4px 20px rgba(184,149,58,0.35)" : "none",
-              }}
-            >
-              Send invite
-            </button>
-
-            <p className="text-xs text-center mb-8" style={{ color: "var(--cog-muted)" }}>
-              Invited songs do not use their free song.
-            </p>
-          </>
+        {/* ── GENERATED LINK ───────────────────────────────────────────────── */}
+        {generatedInvite && (
+          <GeneratedLinkPanel
+            invite={generatedInvite}
+            onRevoke={() => setGeneratedInvite(null)}
+            onClose={() => setGeneratedInvite(null)}
+          />
         )}
 
-        {/* Current collaborators */}
-        <div>
-          <h2
-            className="text-sm font-semibold uppercase tracking-wider mb-4"
-            style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-          >
-            In this song
-          </h2>
-
-          <div className="flex flex-col gap-3">
-            {COLLABORATORS.map((collab) => (
-              <div
-                key={collab.name}
-                className="flex items-center gap-3 rounded-2xl px-4 py-3.5"
-                style={{
-                  backgroundColor: "var(--cog-cream-light)",
-                  border: "1.5px solid var(--cog-border)",
-                }}
-              >
-                {/* Avatar */}
-                <div
-                  className="flex items-center justify-center rounded-full text-sm font-semibold flex-shrink-0"
-                  style={{
-                    width: 40,
-                    height: 40,
-                    backgroundColor: `${collab.color}20`,
-                    color: collab.color,
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  {collab.initials}
-                </div>
-
-                <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
-                    {collab.name}
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
-                    {collab.role}
-                  </p>
-                </div>
-
-                {collab.role !== "Owner" && (
-                  <button
-                    className="flex items-center justify-center transition-opacity hover:opacity-70"
-                    style={{ color: "var(--cog-gold)" }}
-                    aria-label={`Edit ${collab.name}'s role`}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                )}
-              </div>
+        {/* ── CURRENT MEMBERS ──────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            backgroundColor: "#FFFFFF",
+            border: "1px solid rgba(0,0,0,0.08)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+          }}
+        >
+          <div className="px-4 pt-4 pb-2">
+            <p className="text-[0.75rem] font-semibold uppercase tracking-wide" style={{ color: "#999" }}>
+              In this song
+            </p>
+          </div>
+          <div className="px-4 pb-2">
+            {MOCK_COLLABS.map((c) => (
+              <CollabRow key={c.userId} collab={c} />
             ))}
           </div>
         </div>
       </div>
+
       <SongTabBar activeTab="people" />
     </div>
   );

@@ -1,7 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Mic, Pause, Play } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
 
@@ -75,7 +75,7 @@ const MemoCard = ({ memo }: { memo: VoiceMemo }) => {
               {memo.name}
             </p>
             <p className="text-xs mt-0.5" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
-              {memo.duration} · {memo.section} · {memo.age}
+              {memo.duration} Â· {memo.section} Â· {memo.age}
             </p>
           </div>
         </div>
@@ -155,7 +155,7 @@ const VoiceMemosPage = () => {
         </div>
 
         <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <h1
@@ -206,3 +206,4 @@ const VoiceMemosPage = () => {
 };
 
 export default VoiceMemosPage;
+

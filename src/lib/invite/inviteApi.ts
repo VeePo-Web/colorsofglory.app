@@ -177,3 +177,57 @@ export async function requestNewInvite(token: string, phone?: string): Promise<v
   // ── REAL ────────────────────────────────────────────────────────────────────
   // await supabase.rpc('request_new_invite', { p_token: token, p_phone: phone ?? null });
 }
+
+export interface GeneratedInvite {
+  tokenId: string;
+  token: string;
+  inviteUrl: string;       // https://colorsofglory.app/join/[token]
+  assignedRole: string;
+  maxUses: number;
+}
+
+/**
+ * Generate an invite link for a song — called by the song owner.
+ * REAL: await supabase.rpc('generate_invite_token', { p_song_id, p_role, p_max_uses })
+ */
+export async function generateInviteToken(
+  songId: string,
+  role: string,
+  maxUses: number
+): Promise<GeneratedInvite> {
+  if (USE_MOCK) {
+    await delay(600);
+    const mockToken = `cog-${Math.random().toString(36).slice(2, 10)}`;
+    return {
+      tokenId: crypto.randomUUID(),
+      token: mockToken,
+      inviteUrl: `https://colorsofglory.app/join/${mockToken}`,
+      assignedRole: role,
+      maxUses,
+    };
+  }
+
+  // ── REAL ────────────────────────────────────────────────────────────────────
+  // const { data, error } = await supabase.rpc('generate_invite_token', {
+  //   p_song_id: songId, p_role: role, p_max_uses: maxUses,
+  // });
+  // if (error) throw error;
+  // return data as GeneratedInvite;
+  throw new Error('Real backend not yet available');
+}
+
+/**
+ * Revoke an invite token — called by the song owner.
+ * REAL: await supabase.from('invite_tokens').update({ is_revoked: true }).eq('id', tokenId)
+ */
+export async function revokeInviteToken(tokenId: string): Promise<void> {
+  if (USE_MOCK) {
+    await delay(300);
+    return;
+  }
+  // ── REAL ────────────────────────────────────────────────────────────────────
+  // const { error } = await supabase.from('invite_tokens')
+  //   .update({ is_revoked: true }).eq('id', tokenId);
+  // if (error) throw error;
+  void tokenId;
+}

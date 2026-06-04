@@ -1,12 +1,12 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
 
 const SAVED_NOTES = [
-  "Inspired by Psalm 46 — 'Be still and know'",
+  "Inspired by Psalm 46 â€” 'Be still and know'",
   "Bridge idea: needs more space emotionally",
   "Key change on final chorus works",
 ];
@@ -56,7 +56,7 @@ const NotesPage = () => {
         </div>
 
         <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <h1
@@ -148,3 +148,4 @@ const NotesPage = () => {
 };
 
 export default NotesPage;
+

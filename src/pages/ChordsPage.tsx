@@ -1,7 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
@@ -49,7 +49,7 @@ const ChordsPage = () => {
       >
         {/* Logo + title */}
         <div className="flex justify-center mt-1 mb-4">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <h1
@@ -193,3 +193,4 @@ const ChordsPage = () => {
 };
 
 export default ChordsPage;
+

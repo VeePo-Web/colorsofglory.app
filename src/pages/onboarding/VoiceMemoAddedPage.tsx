@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 
 const WAVEFORM = [18, 32, 24, 42, 28, 52, 36, 26, 46, 34, 22, 38, 30, 48, 26, 36, 20, 30];
@@ -43,7 +43,7 @@ const VoiceMemoAddedPage = () => {
         style={{ maxWidth: "var(--max-w-app)", minHeight: "calc(100vh - 60px)" }}
       >
         <div className="flex justify-center mb-8">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <div
@@ -168,3 +168,4 @@ const VoiceMemoAddedPage = () => {
 };
 
 export default VoiceMemoAddedPage;
+

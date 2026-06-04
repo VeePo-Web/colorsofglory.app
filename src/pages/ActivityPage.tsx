@@ -1,6 +1,6 @@
-import { useNavigate, useParams } from "react-router-dom";
+﻿import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MessageSquare } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
 
@@ -21,7 +21,7 @@ const ACTIVITY: ActivityItem[] = [
     initials: "SM",
     avatarColor: "#53AB8B",
     action: "Sarah added a voice memo",
-    sub: "Verse 2 · First melody idea · 0:12",
+    sub: "Verse 2 Â· First melody idea Â· 0:12",
     timestamp: "2 hours ago",
   },
   {
@@ -37,7 +37,7 @@ const ACTIVITY: ActivityItem[] = [
     initials: "CR",
     avatarColor: "#8070C4",
     action: "Caleb suggested a chord change",
-    sub: "Verse 1: Am → Em suggestion pending",
+    sub: "Verse 1: Am â†’ Em suggestion pending",
     timestamp: "Yesterday",
     isPending: true,
   },
@@ -79,7 +79,7 @@ const ActivityPage = () => {
         </div>
 
         <div className="flex justify-center mb-6">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         {/* Headline */}
@@ -90,7 +90,7 @@ const ActivityPage = () => {
           What changed since you left
         </h1>
         <p className="text-sm mb-8" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
-          Grace in the Waiting · 3 changes
+          Grace in the Waiting Â· 3 changes
         </p>
 
         {/* Activity cards */}
@@ -226,3 +226,4 @@ const ActivityPage = () => {
 };
 
 export default ActivityPage;
+

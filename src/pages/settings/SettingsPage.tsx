@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
 import {
   HardDrive,
   Gift,
@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   LogOut,
 } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 
 interface SettingsRow {
@@ -54,7 +54,7 @@ const SettingsPage = () => {
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <CogLogo size="sm" />
+          <CogBrand variant="stacked" size="sm" />
         </div>
 
         <h1
@@ -151,3 +151,4 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
+

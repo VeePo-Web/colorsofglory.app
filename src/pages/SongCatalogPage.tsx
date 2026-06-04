@@ -1,7 +1,7 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Settings } from "lucide-react";
-import CogLogo from "@/components/cog/CogLogo";
+import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 
 type SongStatus = "active" | "draft" | "collaborating" | "private" | "archived";
@@ -81,60 +81,72 @@ const SongCatalogPage = () => {
   });
 
   return (
-    <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream)" }}>
-      {/* Warm top glow */}
+    <div className="relative min-h-screen" style={{ backgroundColor: "#FAFAF6" }}>
+
+      {/* ── DARK HEADER — matches reference image exactly ──────────────── */}
       <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(184,149,58,0.10) 0%, transparent 60%)",
-        }}
-      />
-
-      {/* Header */}
-      <div className="relative px-6 pt-14 pb-4" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto" }}>
-        <div className="flex items-center justify-between mb-1">
-          <CogLogo size="sm" />
-          <button
-            onClick={() => navigate("/settings/storage")}
-            className="flex items-center justify-center transition-all duration-150 active:scale-90"
-            style={{ width: 44, height: 44, color: "var(--cog-warm-gray)" }}
-            aria-label="Settings"
-          >
-            <Settings size={20} strokeWidth={1.5} />
-          </button>
-        </div>
-        <h1
-          className="text-3xl font-semibold tracking-tight mt-3"
-          style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
+        className="sticky top-0 z-40"
+        style={{ backgroundColor: "#1C1A17" }}
+      >
+        <div
+          className="px-5 pt-14 pb-0"
+          style={{ maxWidth: 430, margin: "0 auto" }}
         >
-          Your songs
-        </h1>
-
-        {/* Tab switcher */}
-        <div className="flex gap-1 mt-4 rounded-full p-1 w-fit" style={{ backgroundColor: "rgba(255,255,255,0.60)" }}>
-          {(["Owned", "Invited", "Archived"] as Tab[]).map((tab) => (
+          {/* Crown + wordmark + settings icon */}
+          <div className="flex items-center justify-between mb-4">
+            <CogBrand variant="horizontal" size="sm" theme="dark" />
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200"
-              style={{
-                backgroundColor: activeTab === tab ? "#ffffff" : "transparent",
-                color: activeTab === tab ? "var(--cog-charcoal)" : "var(--cog-warm-gray)",
-                boxShadow: activeTab === tab ? "0 1px 4px rgba(28,26,23,0.12)" : "none",
-              }}
+              onClick={() => navigate("/settings")}
+              className="flex items-center justify-center transition-all duration-150 active:scale-90"
+              style={{ width: 44, height: 44, color: "rgba(255,255,255,0.50)" }}
+              aria-label="Settings"
             >
-              {tab}
+              <Settings size={19} strokeWidth={1.5} />
             </button>
-          ))}
+          </div>
+
+          {/* "Your songs" heading */}
+          <h1
+            className="text-[2rem] font-bold mb-5"
+            style={{ fontFamily: "var(--font-display)", color: "#FFFFFF", lineHeight: 1.1 }}
+          >
+            Your songs
+          </h1>
+
+          {/* Tab row — underline style on dark bg */}
+          <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.10)" }}>
+            {(["Owned", "Invited", "Archived"] as Tab[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150"
+                style={{
+                  color: activeTab === tab ? "#FFFFFF" : "rgba(255,255,255,0.40)",
+                  fontFamily: "var(--font-body)",
+                }}
+                aria-selected={activeTab === tab}
+              >
+                {tab}
+                {activeTab === tab && (
+                  <span
+                    className="absolute bottom-0 left-0 right-0 rounded-t-full"
+                    style={{ height: 2, backgroundColor: "#B5935A" }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Song grid */}
-      <div className="relative px-6 pb-48" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto" }}>
+      {/* ── SONG CARD GRID ─────────────────────────────────────────────── */}
+      <div
+        className="px-4 pt-4 pb-44"
+        style={{ maxWidth: 430, margin: "0 auto" }}
+      >
         {filteredSongs.length === 0 ? (
-          <div className="text-center pt-20">
-            <p className="text-base" style={{ color: "var(--cog-warm-gray)" }}>
+          <div className="text-center pt-16">
+            <p className="text-[0.9375rem]" style={{ color: "#999", fontFamily: "var(--font-body)" }}>
               {activeTab === "Owned"
                 ? "No owned songs yet. Start your first song room."
                 : activeTab === "Invited"
@@ -151,20 +163,20 @@ const SongCatalogPage = () => {
         )}
       </div>
 
-      {/* New song FAB — sits above BottomNav */}
+      {/* "+ New song" FAB — gold pill, above BottomNav */}
       <button
         onClick={() => navigate("/onboarding/start-song")}
-        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-7 py-3.5 rounded-full font-medium text-white transition-transform duration-150 active:scale-95"
+        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-3.5 rounded-full font-semibold text-white transition-all duration-150 active:scale-95"
         style={{
-          bottom: 96,
-          backgroundColor: "var(--cog-gold)",
-          boxShadow: "0 4px 20px rgba(184,149,58,0.40)",
+          bottom: 88,
+          backgroundColor: "#B5935A",
+          boxShadow: "0 4px 20px rgba(181,147,90,0.45)",
           fontFamily: "var(--font-body)",
-          fontSize: "var(--t-body)",
+          fontSize: "0.9375rem",
           zIndex: 450,
         }}
       >
-        <Plus size={18} strokeWidth={2.5} />
+        <Plus size={17} strokeWidth={2.5} />
         New song
       </button>
 
@@ -178,57 +190,61 @@ interface SongCardProps {
   onClick: () => void;
 }
 
+// SongCard — white card matching reference image: title + status dot + avatars + "Last activity"
 const SongCard = ({ song, onClick }: SongCardProps) => (
   <button
     onClick={onClick}
     className="text-left w-full rounded-2xl p-4 transition-all duration-200 active:scale-[0.97] flex flex-col justify-between"
     style={{
-      background: "linear-gradient(145deg, var(--cog-cream-light) 0%, rgba(232,213,160,0.20) 100%)",
-      border: "1px solid var(--cog-border)",
-      boxShadow: "var(--cog-shadow-card)",
-      minHeight: "140px",
+      backgroundColor: "#FFFFFF",
+      border: "1px solid rgba(0,0,0,0.07)",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      minHeight: 140,
     }}
   >
     <div>
+      {/* Song title */}
       <p
-        className="font-semibold text-base leading-snug mb-2"
-        style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
+        className="font-bold text-[0.9375rem] leading-snug mb-2"
+        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
       >
         {song.title}
       </p>
-      <span
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-        style={{
-          backgroundColor:
-            song.status === "active"
-              ? "rgba(184,149,58,0.15)"
-              : "rgba(160,150,137,0.15)",
-          color: song.status === "active" ? "var(--cog-gold-alt)" : "var(--cog-warm-gray)",
-        }}
-      >
-        {STATUS_LABELS[song.status]}
-      </span>
+
+      {/* Status chip — dot + label */}
+      <div className="flex items-center gap-1.5">
+        <span
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{
+            backgroundColor:
+              song.status === "active" ? "#53AB8B"
+              : song.status === "collaborating" ? "#D4AE5C"
+              : "#CCC",
+          }}
+        />
+        <span className="text-[0.75rem] font-medium" style={{ color: "#999" }}>
+          {STATUS_LABELS[song.status]}
+        </span>
+      </div>
     </div>
 
     <div className="flex items-end justify-between mt-3">
-      <div className="flex -space-x-1.5">
+      {/* Avatar stack */}
+      <div className="flex -space-x-2">
         {song.collaborators.slice(0, 3).map((c, i) => (
           <div
             key={i}
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
-            style={{
-              backgroundColor: c.color,
-              border: "2px solid var(--cog-cream-light)",
-            }}
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
+            style={{ backgroundColor: c.color, border: "2px solid #FFFFFF" }}
           >
             {c.initials}
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-right" style={{ color: "var(--cog-muted)" }}>
-        Last edited:
-        <br />
-        {song.lastEdited}
+
+      {/* Last edited */}
+      <p className="text-[0.6875rem]" style={{ color: "#999" }}>
+        Last activity {song.lastEdited}
       </p>
     </div>
   </button>
