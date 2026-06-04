@@ -54,6 +54,18 @@ export type ValidateCodeResult =
   | { kind: "member_referral"; referrer_display_name: string; referrer_user_id: string }
   | { kind: "invalid"; reason: "expired" | "not_found" | "wrong_plan" | "self" | "already_attributed" };
 
+type PricingCopyRow = {
+  key: string;
+  payload: unknown;
+};
+
+type CheckoutResponse = {
+  clientSecret?: string;
+  applied_code_kind?: "founder" | "member_referral" | "none";
+  ignored_referrer?: boolean;
+  error?: string;
+};
+
 // Single canonical price IDs the app ships with. Add more here as you
 // create new products via the payments tool.
 export const PRICE_IDS = {
@@ -83,7 +95,8 @@ export async function getPricingCatalog(): Promise<PlanTier[]> {
 export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: PricingCard[] }> {
   const { data, error } = await supabase.from("pricing_copy").select("key, payload");
   if (error) throw error;
-  const map = new Map<string, any>((data ?? []).map((r) => [r.key, r.payload]));
+  const rows = (data ?? []) as PricingCopyRow[];
+  const map = new Map<string, unknown>(rows.map((r) => [r.key, r.payload]));
   const page = map.get("page") as PricingPageCopy;
   const order: PlanKey[] = ["free", "starter", "pro"];
   const cards = order
@@ -119,12 +132,13 @@ export async function startCheckout(input: {
     },
   });
   if (error) throw error;
-  if ((data as any)?.error) throw new Error((data as any).error);
-  if (!data?.clientSecret) throw new Error("checkout_session_failed");
-  return data as {
-    clientSecret: string;
-    applied_code_kind: "founder" | "member_referral" | "none";
-    ignored_referrer: boolean;
+  const result = data as CheckoutResponse | null;
+  if (result?.error) throw new Error(result.error);
+  if (!result?.clientSecret) throw new Error("checkout_session_failed");
+  return {
+    clientSecret: result.clientSecret,
+    applied_code_kind: result.applied_code_kind ?? "none",
+    ignored_referrer: result.ignored_referrer ?? false,
   };
 }
 
