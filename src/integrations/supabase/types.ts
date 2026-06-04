@@ -690,7 +690,9 @@ export type Database = {
           referrer_founder_id: string | null
           referrer_type: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id: string | null
+          reversed_at: string | null
           reversed_by_event_id: string | null
+          reversed_reason: string | null
           reward_kind: Database["public"]["Enums"]["reward_kind"]
           status: Database["public"]["Enums"]["reward_status"]
           subscription_id: string | null
@@ -710,7 +712,9 @@ export type Database = {
           referrer_founder_id?: string | null
           referrer_type: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id?: string | null
+          reversed_at?: string | null
           reversed_by_event_id?: string | null
+          reversed_reason?: string | null
           reward_kind: Database["public"]["Enums"]["reward_kind"]
           status?: Database["public"]["Enums"]["reward_status"]
           subscription_id?: string | null
@@ -730,7 +734,9 @@ export type Database = {
           referrer_founder_id?: string | null
           referrer_type?: Database["public"]["Enums"]["referrer_type"]
           referrer_user_id?: string | null
+          reversed_at?: string | null
           reversed_by_event_id?: string | null
+          reversed_reason?: string | null
           reward_kind?: Database["public"]["Enums"]["reward_kind"]
           status?: Database["public"]["Enums"]["reward_status"]
           subscription_id?: string | null
@@ -1832,6 +1838,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      reverse_reward_for_invoice: {
+        Args: { _invoice: string; _reason: string }
+        Returns: number
       }
       reward_hold_days: { Args: never; Returns: number }
       safe_leave_song: {
