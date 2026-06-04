@@ -84,9 +84,9 @@ export function planForLookupKey(lookupKey: string | null | undefined): "free" |
   if (!lookupKey) return "free";
   if (lookupKey.startsWith("cog_storage")) return "free"; // storage addons don't change plan
   // v2 lookup keys (set by payments--batch_create_product)
-  if (lookupKey === "starter_monthly") return "starter";
-  if (lookupKey === "pro_monthly_referral_50") return "founder_pro";
-  if (lookupKey === "pro_monthly") return "pro";
+  if (lookupKey === "starter_monthly" || lookupKey === "starter_monthly_cad") return "starter";
+  if (lookupKey === "pro_monthly_referral_50" || lookupKey === "pro_monthly_referral_50_cad") return "founder_pro";
+  if (lookupKey === "pro_monthly" || lookupKey === "pro_monthly_cad") return "pro";
   // Legacy keys
   if (lookupKey.startsWith("cog_founder")) return "founder_pro";
   if (lookupKey.startsWith("cog_pro")) return "pro";
