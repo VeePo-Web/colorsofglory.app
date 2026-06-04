@@ -1,86 +1,57 @@
-# Stress Test: Phone OTP Send (`signInWithOtp`)
+## Goal
+Adapt the Claude/Lovable invite-flow spec onto the existing Colors of Glory backend. Reuse `song_invites`, `song_members`, `audit_logs`, and the `song-invite-*` edge functions. Add only what is genuinely missing. Respect all locked rules (no FK to `auth.users`, `profiles.user_id`, role enum, email+Google auth, storage tool for buckets).
 
-## Why we cannot just "send a ton"
+## Spec → existing mapping
 
-`PhoneLoginPage.tsx` calls `supabase.auth.signInWithOtp({ phone })`. That endpoint is owned by **Supabase Auth's managed Twilio**, not a custom edge function. Hammering it naively will:
+| Spec asks for | Existing equivalent | Action |
+|---|---|---|
+| `invite_tokens` table | `song_invites` (token, role, max_uses, use_count, status, expires_at, message, anon preview policy) | Reuse. Skip. |
+| `invite_acceptances` table | `song_invites.accepted_by_user_id` + `song_members` row | Reuse. Skip. |
+| `song_members` (text role, `invited_by`) | `song_members` (enum `song_member_role`, `invited_by_user_id`) | Reuse. Skip. |
+| `accept_invite()` RPC | `song-invite-accept` edge function (already atomic) | Reuse. Frontend calls edge function. |
+| `preview_invite()` RPC (anon) | `song-invite-preview` edge function + anon SELECT policy | Reuse. Extend preview payload (see below). |
+| `generate_invite_token()` RPC | `song-invite-create` edge function | Reuse. |
+| `activity_feed` table | `audit_logs` (actor, action, entity, before/after jsonb) | Add a thin **`activity_feed` view** over `audit_logs` filtered to song-scoped events, with `is_song_member` RLS. No duplicate table. |
+| `check_phone_registered()` | n/a, auth = email+Google | Skip. Confirmed not phone-OTP. |
+| `profiles.first_name`/`last_name` | `profiles.display_name` | Add nullable `first_name`/`last_name` columns; keep `display_name` as source of truth (derived if both missing). |
+| `profiles.avatar_color` | n/a | Add column + trigger to assign one of 5 aurora colors on profile insert. |
+| `songs.lyrics_snippet` for blurred preview | n/a | Add nullable column; populate via trigger on `song_lyrics` insert/update (first ~150 chars, sanitized). Surfaced only through `song-invite-preview` (never raw to analytics). |
+| `invite_requests` table (request new invite when expired/revoked) | n/a | Add new table + RLS (owner reads, anon/auth inserts). |
+| `song_notification_prefs` table | n/a | Add new table + RLS (own rows only). |
+| `avatars` bucket | already exists (public) | Skip. |
+| Realtime on `song_members` / activity | `song_members` realtime status TBD; audit log is private | Add `song_members` to `supabase_realtime` publication. Activity stream stays via edge function / view subscription on `audit_logs` filtered server-side. |
 
-1. **Cost real money** — every successful call sends a real SMS (Twilio bills per segment, ~$0.0079+ each).
-2. **Trip rate limits fast** — Supabase Auth defaults: ~30 OTP/hour per IP, 1 send per phone per 60s, plus global hourly caps. We'll hit `over_sms_send_rate_limit` in seconds.
-3. **Risk SMS-pumping fraud flags** on the Twilio account, which can suspend the number.
+## Migration plan (single file)
 
-So the test has to be designed around those gates, not against them.
+1. `ALTER TABLE public.profiles ADD COLUMN first_name text, last_name text, avatar_color text;`
+2. Trigger `assign_avatar_color` BEFORE INSERT on `profiles` — hashes `user_id` to one of `#8070C4 #4D8FD2 #53AB8B #D4AE5C #C26A95`.
+3. `ALTER TABLE public.songs ADD COLUMN lyrics_snippet text;`
+4. Trigger `sync_lyrics_snippet` AFTER INSERT/UPDATE on `song_lyrics` — writes `LEFT(content, 150)` to parent song. SECURITY DEFINER, `search_path=public`.
+5. New table `public.invite_requests` (id, original_token, song_id nullable, requested_by_user_id nullable, requested_by_phone text, status enum/text, created_at). GRANTs + RLS:
+   - `authenticated` INSERT self; `anon` INSERT allowed (no user_id).
+   - Song owners SELECT via `song_role(song_id, auth.uid()) = 'owner'`.
+6. New table `public.song_notification_prefs` (user_id, song_id, notify_on_join bool, notify_on_contribution bool, push_enabled bool, updated_at). PK (user_id, song_id). GRANTs + RLS: own rows only. Updated_at trigger.
+7. New view `public.activity_feed` over `audit_logs` filtered to song entity types (`song`, `song_lyrics`, `song_voice_memo`, `song_invite`, `song_member`, etc.), exposing `song_id` extracted from `after->>'song_id'` / `before->>'song_id'`. Security invoker so existing `audit_logs` policy + `is_song_member` gate apply. Frontend reads `from('activity_feed').select().eq('song_id', …)`.
+8. `ALTER PUBLICATION supabase_realtime ADD TABLE public.song_members;` (activity_feed is a view — frontend subscribes to `audit_logs` filtered, or we add a thin trigger that mirrors into a realtime-enabled table later if needed; defer).
+9. Extend `song-invite-preview` edge function response to include: `lyrics_snippet`, inviter `first_name`/`avatar_color`, up to 5 collaborators (`first_name`, `avatar_color`, initials), `collaborator_count`, `uses_remaining`. Keep existing error codes.
+10. Document the API contract for Claude in `.lovable/plan.md` (preview/accept/create edge function names + payloads; new view name; new tables).
 
-## What we will measure
+## Explicitly NOT building
+- `invite_tokens`, `invite_acceptances`, parallel `accept_invite`/`preview_invite`/`generate_invite_token` RPCs (duplicates).
+- `check_phone_registered` — auth is email+Google, no phone lookup needed.
+- Direct `INSERT INTO storage.buckets` SQL — `avatars` already exists; storage changes go through the storage tool.
+- Splitting `display_name` into required first/last — kept optional, additive only.
+- FKs to `auth.users` — all new FKs go to `profiles.user_id` or via `uuid` columns per project rules.
+- `WITH CHECK (false)` lockouts on existing tables — current policies already correctly gate writes; not touching `song_members` RLS.
 
-- **Throughput**: requests/sec the endpoint actually accepts before rate-limiting.
-- **Latency**: p50 / p95 / p99 of `signInWithOtp` round-trip.
-- **Rate-limit behavior**: which error codes return, at what RPS, with what `Retry-After`.
-- **Per-phone vs per-IP gates**: confirm 60s same-number cooldown and hourly IP cap.
-- **Concurrency safety**: 50 / 100 / 250 parallel callers — any 5xx, dropped responses, or socket errors?
-- **Cost ceiling**: every run prints estimated SMS spend before it starts and aborts if > $X.
+## Verification after migration
+- `SELECT preview` via existing `song-invite-preview` edge function with a seeded token → confirm extended payload.
+- `pg_publication_tables` confirms `song_members` in `supabase_realtime`.
+- `SELECT * FROM activity_feed WHERE song_id = …` as a member → returns rows; as non-member → empty.
+- Linter clean on new objects.
 
-## How we send safely
-
-Three modes, selectable via `--mode` flag:
-
-1. **`test-numbers` (default, $0 cost)** — Use Supabase Auth's **Test Phone Numbers** feature (Auth → Phone Provider → Test OTP). Add 20 fake numbers like `+15555550100..0119` with fixed OTPs. These bypass Twilio entirely. **This is the mode we'll actually push hard.**
-2. **`canary` (small cost)** — 5 real numbers you own, 1 send each, used once to verify the real Twilio path still works end-to-end.
-3. **`dry-run`** — Hits a non-existent provider config or uses an invalid phone format to exercise the request path without sending. Measures pure API latency/validation.
-
-## Test script
-
-New file (Codex-owned, since Codex handles perf): `scripts/stress/otp-send.ts`
-
-```ts
-// Deno script. Run: deno run -A scripts/stress/otp-send.ts --mode=test-numbers --rps=20 --duration=60
-```
-
-Features:
-- Reads `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` from `.env`.
-- Phone pool from `scripts/stress/phones.json` (gitignored; one list per mode).
-- Configurable: `--rps`, `--duration`, `--concurrency`, `--mode`.
-- Open-loop load generator (constant arrival rate, not closed-loop) so we measure server behavior, not client backpressure.
-- Per-request: timestamp, phone, status, error code, latency ms, response body hash.
-- Writes NDJSON results to `/tmp/otp-stress-<ts>.ndjson`.
-- Prints a summary table at the end: total, success%, p50/p95/p99, top 5 error codes with counts, and inferred rate-limit thresholds (first-failure RPS).
-
-## Test scenarios (run in order)
-
-| # | Scenario | Mode | RPS | Duration | Expectation |
-|---|----------|------|-----|----------|-------------|
-| 1 | Baseline single | test-numbers | 1 | 30s | 100% success, p95 < 800ms |
-| 2 | Per-phone cooldown | test-numbers | 5 (same number) | 30s | First succeeds, rest = `over_sms_send_rate_limit` after 1/60s |
-| 3 | Ramp | test-numbers | 1→50 step 5 every 10s | 100s | Find knee where success% drops below 95% |
-| 4 | Sustained burst | test-numbers | 50 | 60s | Measure rate-limit recovery + tail latency |
-| 5 | Concurrency stress | test-numbers | 250 parallel, single tick | 5s | No 5xx, no dropped TCP, all responses returned |
-| 6 | Canary real SMS | canary | 1 | 5 sends total | All deliver; confirms prod path |
-
-## Reporting
-
-After the run, the script writes `docs/codex-stress/otp-send-<date>.md` with:
-- Config used
-- Summary table
-- Two ASCII charts: latency over time, RPS vs error-rate
-- Observed Supabase rate-limit thresholds
-- Recommended client-side guards (debounce window, retry-after honoring)
-
-## Code/config that will change
-
-- **Create** `scripts/stress/otp-send.ts` (Deno load-test script)
-- **Create** `scripts/stress/phones.example.json` (committed) + `scripts/stress/phones.json` (gitignored)
-- **Create** `docs/codex-stress/README.md` explaining how to run, prerequisites, and how to add test numbers in the Auth dashboard
-- **Update** `.gitignore` to exclude `scripts/stress/phones.json` and `/tmp/otp-stress-*.ndjson`
-- **No** app code changes. **No** edge function changes. **No** schema changes.
-
-## Out of scope
-
-- Auto-creating test phone numbers in the Auth provider config (requires manual dashboard step — script will print instructions).
-- Stress-testing `verifyOtp` (separate plan if you want it).
-- Building a Twilio-direct custom send function (separate plan).
-
-## Prereqs you must do once before run #1
-
-1. Open Cloud → Users → Auth Settings → Phone provider → **Test OTP** and add 20 numbers `+15555550100` through `+15555550119`, all with OTP `123456`.
-2. Confirm Lovable Cloud Auth is in **sandbox / dev** environment so we don't pollute prod metrics.
-
-After approval I'll create the script + docs, then run scenarios 1–5 and surface the report.
+## Deliverables
+- 1 migration file (steps 1–8).
+- 1 edge function edit (`song-invite-preview`).
+- `.lovable/plan.md` updated with API contract for Claude.
+- Short note back to user listing what was skipped vs the original spec, so Claude can adjust the 5 frontend screens to call existing edge functions instead of inventing RPCs.
