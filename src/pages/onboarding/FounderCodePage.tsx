@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const FounderCodePage = () => {
   const navigate = useNavigate();
@@ -52,12 +53,9 @@ const FounderCodePage = () => {
           style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
         >
           {/* Brand */}
-          <p
-            className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
-            style={{ color: "var(--cog-muted)" }}
-          >
-            Colors of Glory
-          </p>
+          <div className="flex justify-center mb-12">
+            <CogLogo size="sm" />
+          </div>
 
           {/* Success icon */}
           <div
@@ -137,12 +135,9 @@ const FounderCodePage = () => {
         </div>
 
         {/* Brand */}
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-10 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-10">
+          <CogLogo size="sm" />
+        </div>
 
         {/* Headline */}
         <h1

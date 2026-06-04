@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -60,12 +61,9 @@ const StartFirstSongPage = () => {
           </button>
         </div>
 
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-8 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-8">
+          <CogLogo size="sm" />
+        </div>
 
         <h1
           className="text-4xl font-semibold mb-2 text-center"

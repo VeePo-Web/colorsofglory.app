@@ -11,6 +11,7 @@ import {
   StickyNote,
   Users,
 } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 interface Module {
   id: string;
@@ -83,12 +84,9 @@ const SongWorkspacePage = () => {
         style={{ maxWidth: "var(--max-w-app)" }}
       >
         <section className="text-center pt-5 pb-5">
-          <p
-            className="text-xs font-medium tracking-widest uppercase mb-4"
-            style={{ color: "var(--cog-muted)" }}
-          >
-            Colors of Glory
-          </p>
+          <div className="flex justify-center mb-4">
+            <CogLogo size="sm" />
+          </div>
 
           {isFirstVisit && (
             <div

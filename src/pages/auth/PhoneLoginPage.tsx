@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import CogLogo from "@/components/cog/CogLogo";
 
 const formatPhone = (raw: string) => {
   const digits = raw.replace(/\D/g, "").slice(0, 10);
@@ -41,12 +42,9 @@ const PhoneLoginPage = () => {
         className="relative flex flex-col flex-1 px-8 pt-24 pb-12 md:justify-center md:pt-12"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-12">
+          <CogLogo size="sm" />
+        </div>
 
         <h1
           className="text-4xl font-semibold mb-2"

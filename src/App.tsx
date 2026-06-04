@@ -23,6 +23,7 @@ const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
+const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -87,6 +88,7 @@ const App = () => (
             {/* Settings */}
             <Route path="/settings/storage" element={<StoragePage />} />
             <Route path="/settings/referral" element={<ReferralPage />} />
+            <Route path="/upgrade" element={<UpgradePage />} />
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />

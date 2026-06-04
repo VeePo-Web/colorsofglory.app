@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { Music, Users } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const MOCK_INVITE = {
   songTitle: "Grace in the Waiting",
@@ -32,12 +33,9 @@ const InvitePreviewPage = () => {
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
         {/* Brand */}
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-12">
+          <CogLogo size="sm" />
+        </div>
 
         {/* Headline */}
         <h1

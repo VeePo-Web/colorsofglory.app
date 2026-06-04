@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const FirstIntentPage = () => {
   const navigate = useNavigate();
@@ -23,12 +24,9 @@ const FirstIntentPage = () => {
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
         {/* Brand */}
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-12">
+          <CogLogo size="sm" />
+        </div>
 
         {/* Headline */}
         <h1

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const WAVEFORM = [18, 32, 24, 42, 28, 52, 36, 26, 46, 34, 22, 38, 30, 48, 26, 36, 20, 30];
 
@@ -38,12 +39,9 @@ const VoiceMemoAddedPage = () => {
         className="relative mx-auto flex min-h-screen w-full flex-col justify-center px-6 py-14"
         style={{ maxWidth: "var(--max-w-app)" }}
       >
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-10 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-10">
+          <CogLogo size="sm" />
+        </div>
 
         <div
           className="mx-auto mb-8 flex items-center justify-center rounded-full"

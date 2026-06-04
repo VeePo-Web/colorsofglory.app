@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const formatPhoneDisplay = (raw: string | null) => {
   const digits = (raw ?? "").replace(/\D/g, "").slice(0, 10);
@@ -111,12 +112,9 @@ const CodeVerifyPage = () => {
         </button>
 
         {/* Brand */}
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-10 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-10">
+          <CogLogo size="sm" />
+        </div>
 
         {/* Headline */}
         <h1

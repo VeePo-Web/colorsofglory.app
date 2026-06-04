@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Mic, PenLine } from "lucide-react";
+import CogLogo from "@/components/cog/CogLogo";
 
 const CaptureFirstIdeaPage = () => {
   const navigate = useNavigate();
@@ -35,12 +36,9 @@ const CaptureFirstIdeaPage = () => {
         className="relative flex flex-col flex-1 items-center justify-center px-6 pb-16 pt-20"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        <p
-          className="text-sm font-medium tracking-widest uppercase mb-12 text-center"
-          style={{ color: "var(--cog-muted)" }}
-        >
-          Colors of Glory
-        </p>
+        <div className="flex justify-center mb-12">
+          <CogLogo size="sm" />
+        </div>
 
         <h1
           className="text-4xl font-semibold mb-3 text-center"
