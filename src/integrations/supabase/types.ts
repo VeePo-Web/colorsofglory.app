@@ -1847,6 +1847,10 @@ export type Database = {
         Args: { _bytes: number; _owner_user_id: string }
         Returns: boolean
       }
+      claim_founder_code_redemption: {
+        Args: { _code_id: string }
+        Returns: boolean
+      }
       claim_transcript_attempt: {
         Args: { _memo_id: string }
         Returns: {
@@ -2025,6 +2029,10 @@ export type Database = {
       redeem_founder_code: {
         Args: { _code: string; _user_id: string }
         Returns: Json
+      }
+      release_founder_code_redemption: {
+        Args: { _code_id: string }
+        Returns: undefined
       }
       reset_transcript_attempts: {
         Args: { _memo_id: string }
