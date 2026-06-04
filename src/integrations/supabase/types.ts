@@ -549,7 +549,6 @@ export type Database = {
           onboarding_state: Json
           onboarding_step: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at: string
-          phone: string | null
           phone_e164: string | null
           referral_code: string | null
           referred_by_user_id: string | null
@@ -566,7 +565,6 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
-          phone?: string | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -583,7 +581,6 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
-          phone?: string | null
           phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
@@ -1593,6 +1590,10 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      on_auth_user_confirmed: {
+        Args: { _phone: string; _user_id: string }
+        Returns: undefined
+      }
       onboarding_legal_next: {
         Args: { _from: Database["public"]["Enums"]["onboarding_step"] }
         Returns: Database["public"]["Enums"]["onboarding_step"][]
