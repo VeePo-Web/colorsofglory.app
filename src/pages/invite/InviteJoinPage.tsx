@@ -116,7 +116,8 @@ const InviteJoinPage = () => {
       return;
     }
 
-    setState({ type: 'submitting', preview: state.preview });
+    const preview = state.preview;
+    setState({ type: 'submitting', preview });
     setPhoneError(null);
 
     try {
@@ -132,7 +133,7 @@ const InviteJoinPage = () => {
         msg.includes('invalid') ? 'Enter a valid US phone number.' :
         'We could not send the code. Check your connection.'
       );
-      setState({ type: 'input', preview: (state as { type: 'submitting'; preview: InvitePreview }).preview });
+      setState({ type: 'input', preview });
     }
   };
 

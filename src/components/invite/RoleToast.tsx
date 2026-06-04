@@ -5,12 +5,14 @@ const ROLE_COPY: Record<InviteRole, string> = {
   viewer: "You can listen and read.",
   contributor: "You can write lyrics, add voice memos, and comment.",
   reviewer: "You can comment and approve changes.",
+  collaborator: "You can write lyrics, add voice memos, and comment.",
 };
 
 const ROLE_LABEL: Record<InviteRole, string> = {
   viewer: "Viewer",
   contributor: "Contributor",
   reviewer: "Reviewer",
+  collaborator: "Contributor",
 };
 
 interface RoleToastProps {

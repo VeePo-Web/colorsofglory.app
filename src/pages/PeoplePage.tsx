@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, Check, Share2, Crown, Pencil, X } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
-import { useSongTitle, getAvatarColor } from "@/lib/songContext";
-import { generateInviteToken, revokeInviteToken, type GeneratedInvite } from "@/lib/invite/inviteApi";
+import { useSongTitle } from "@/lib/songContext";
+import { generateInviteToken, revokeInviteToken, type GeneratedInvite, updateOnboardingStep } from "@/lib/invite/inviteApi";
+import { supabase } from "@/integrations/supabase/client";
+import { getAvatarColor, getAvatarInitials } from "@/lib/invite/inviteContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -261,6 +263,50 @@ const PeoplePage = () => {
   const [selectedRole, setSelectedRole] = useState<InviteRole>("contributor");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedInvite, setGeneratedInvite] = useState<GeneratedInvite | null>(null);
+
+  // Load real collaborators from Supabase
+  const [collabs, setCollabs] = useState<Collab[]>(MOCK_COLLABS);
+  useEffect(() => {
+    let active = true;
+
+    const loadCollaborators = async () => {
+      try {
+        const { data } = await supabase
+          .from("song_members")
+          .select("user_id, role, profiles!inner(display_name, avatar_url)")
+          .eq("song_id", songId);
+
+        if (!active) return;
+        if (!data?.length) return;
+        setCollabs(
+          data.map((m) => {
+            const profile = (m as { profiles?: { display_name?: string } }).profiles;
+            const name = profile?.display_name ?? "Unknown";
+            const parts = name.trim().split(/\s+/);
+            const first = parts[0] ?? name;
+            const last = parts.slice(1).join(" ");
+            return {
+              userId: m.user_id,
+              firstName: first,
+              lastName: last,
+              role: m.role === "owner" ? "Owner" : m.role === "collaborator" ? "Contributor" : "Viewer",
+              isOwner: m.role === "owner",
+              avatarColor: getAvatarColor(m.user_id),
+              avatarInitials: getAvatarInitials(first, last),
+            } satisfies Collab;
+          })
+        );
+      } catch {
+        // Keep mock collaborators on error.
+      }
+    };
+
+    void loadCollaborators();
+
+    return () => {
+      active = false;
+    };
+  }, [songId]);
   const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
@@ -320,7 +366,7 @@ const PeoplePage = () => {
         {/* Collaborator stack overview */}
         <div className="flex justify-center mb-3">
           <CollaboratorAvatarStack
-            collaborators={MOCK_COLLABS.map((c) => ({
+            collaborators={collabs.map((c) => ({
               userId: c.userId,
               firstName: c.firstName,
               lastName: c.lastName,
@@ -332,7 +378,7 @@ const PeoplePage = () => {
           />
         </div>
         <p className="text-[0.8125rem] text-center mb-6" style={{ color: "#999" }}>
-          {MOCK_COLLABS.length} collaborator{MOCK_COLLABS.length !== 1 ? "s" : ""}
+          {collabs.length} collaborator{collabs.length !== 1 ? "s" : ""}
         </p>
 
         {/* ── INVITE SECTION ──────────────────────────────────────────────── */}
@@ -414,7 +460,7 @@ const PeoplePage = () => {
             </p>
           </div>
           <div className="px-4 pb-2">
-            {MOCK_COLLABS.map((c) => (
+            {collabs.map((c) => (
               <CollabRow key={c.userId} collab={c} />
             ))}
           </div>

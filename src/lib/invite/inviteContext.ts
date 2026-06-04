@@ -4,7 +4,12 @@
  * Lovable replaces the mock implementations in inviteApi.ts when backend is ready.
  */
 
-export type InviteRole = 'viewer' | 'contributor' | 'reviewer';
+/**
+ * UI role labels used across invite screens.
+ * DB mapping: viewer→viewer, contributor→collaborator, reviewer→collaborator
+ * (Lovable's song_member_role enum is: owner | collaborator | viewer)
+ */
+export type InviteRole = 'viewer' | 'contributor' | 'reviewer' | 'collaborator';
 
 export interface InviteCollaborator {
   userId: string;

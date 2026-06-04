@@ -5,6 +5,8 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { setSong } from "@/lib/songContext";
+import { supabase } from "@/integrations/supabase/client";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -26,16 +28,65 @@ const StartFirstSongPage = () => {
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleCreate = (mode: "create" | "skip") => {
+  const handleCreate = async (mode: "create" | "skip") => {
     const songTitle = mode === "skip" || !title.trim() ? "Untitled Song" : title.trim();
     setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        // Create the song in Supabase
+        const { data: song, error: songErr } = await supabase
+          .from("songs")
+          .insert({
+            title: songTitle,
+            owner_user_id: user.id,
+            key_signature: key || null,
+            tempo_bpm: bpm ? parseInt(bpm, 10) : null,
+            status: "active",
+          })
+          .select("id, title")
+          .single();
+
+        if (songErr) throw songErr;
+
+        // Add owner to song_members
+        await supabase.from("song_members").insert({
+          song_id: song.id,
+          user_id: user.id,
+          role: "owner",
+        });
+
+        // Update profile with first_song_id and onboarding step
+        await supabase.from("profiles").update({
+          first_song_id: song.id,
+          updated_at: new Date().toISOString(),
+        }).eq("user_id", user.id);
+
+        // Non-blocking onboarding step update
+        updateOnboardingStep("first_song_created").catch(() => {});
+
+        // Cache locally for UI
+        setSong({ id: song.id, title: song.title, key: key || null, bpm: bpm || null });
+        sessionStorage.setItem("cog:first-song", JSON.stringify({ id: song.id, title: song.title, key, bpm }));
+
+        navigate(`/songs/${song.id}?first=1`);
+        return;
+      }
+    } catch (err) {
+      // Auth not available or song creation failed — fall back to local demo mode
+      console.warn("[StartFirstSong] Supabase unavailable, using local mode:", err);
+    }
+
+    // Local fallback (no auth session — demo/preview mode)
     setSong({ id: "1", title: songTitle, key: key || null, bpm: bpm || null });
     sessionStorage.setItem("cog:first-song", JSON.stringify({ id: "1", title: songTitle, key, bpm }));
-    setTimeout(() => {
-      setIsSubmitting(false);
-      navigate("/songs/1?first=1");
-    }, 650);
+    setIsSubmitting(false);
+    navigate("/songs/1?first=1");
   };
 
   return (

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T16:16:29.463Z",
+  "generatedAt": "2026-06-04T16:47:53.322Z",
   "routesChecked": [
     {
       "path": "/",
@@ -148,8 +148,8 @@
     },
     {
       "name": "typecheck",
-      "status": "fail",
-      "details": "exit 2"
+      "status": "pass",
+      "details": ""
     },
     {
       "name": "build",
@@ -158,13 +158,13 @@
     },
     {
       "name": "test",
-      "status": "fail",
-      "details": "exit 1"
+      "status": "pass",
+      "details": ""
     },
     {
       "name": "bundle budget",
-      "status": "fail",
-      "details": "exit 1"
+      "status": "pass",
+      "details": ""
     },
     {
       "name": "Old-brand content scan",

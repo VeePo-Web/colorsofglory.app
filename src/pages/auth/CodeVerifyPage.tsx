@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import OTPInput from "@/components/cog/OTPInput";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 
@@ -70,6 +71,8 @@ const CodeVerifyPage = () => {
         type: "sms",
       });
       if (verifyError) throw verifyError;
+      // Non-blocking — update onboarding step for new users
+      updateOnboardingStep('intent_selected').catch(() => {});
       await routeAfterAuth();
     } catch (err) {
       setError(toFriendlyError(err));

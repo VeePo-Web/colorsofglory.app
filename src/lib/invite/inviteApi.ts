@@ -1,18 +1,31 @@
 /**
- * Invite API layer.
- * MOCK MODE: all functions return realistic fake data with simulated latency.
- * When Lovable delivers the Supabase backend, swap each mock for the real call.
- * Swap pattern: replace the body of each function with the supabase.rpc() call
- * documented in docs/LOVABLE-INVITE-BACKEND-PROMPT.md.
+ * Invite API — REAL Supabase implementation.
+ * Maps Claude's invite flow to Lovable's actual database schema.
+ *
+ * Key schema facts (from src/integrations/supabase/types.ts):
+ *   table:   song_invites   (not invite_tokens)
+ *   roles:   "owner" | "collaborator" | "viewer"  (no "reviewer" or "contributor")
+ *   status:  "pending" | "accepted" | "revoked" | "expired"
+ *   use_count (not current_uses), created_by_user_id (not created_by)
+ *   accept:  accept_song_invite(_token: string, _user_id: string)  →  array result
+ *   profile: profiles.display_name (single field, not first_name + last_name)
+ *            profiles.phone_e164   (e164 format)
+ *            profiles.user_id      (PK linking to auth.users)
+ *
+ * Role mapping (UI label → DB value):
+ *   "Viewer"      → "viewer"
+ *   "Contributor" → "collaborator"
+ *   "Reviewer"    → "collaborator"  (DB has no reviewer — collapse for now)
  */
 
+import { supabase } from '@/integrations/supabase/client';
 import type { InviteContext } from './inviteContext';
-import { InviteError } from './inviteErrors';
-
-// ─── Toggle ──────────────────────────────────────────────────────────────────
-const USE_MOCK = true; // ← set to false when Lovable backend is ready
+import { InviteError, parseSupabaseError } from './inviteErrors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export type DbRole = 'owner' | 'collaborator' | 'viewer';
+export type UiRole = InviteContext['assignedRole']; // 'viewer' | 'contributor' | 'reviewer'
 
 export interface InvitePreview {
   status: 'valid';
@@ -22,7 +35,7 @@ export interface InvitePreview {
   inviterFirstName: string;
   inviterLastName: string;
   inviterAvatarColor: string;
-  assignedRole: InviteContext['assignedRole'];
+  assignedRole: UiRole;
   lyricsSnippet: string | null;
   collaborators: InviteContext['collaborators'];
   collaboratorCount: number;
@@ -39,195 +52,294 @@ export interface AcceptResult {
   status: 'success' | 'already_member';
   songId: string;
   songTitle: string;
-  role: InviteContext['assignedRole'];
-}
-
-// ─── Mock helpers ─────────────────────────────────────────────────────────────
-
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-const MOCK_COLLABORATORS: InviteContext['collaborators'] = [
-  { userId: 'u1', firstName: 'Parker',  lastName: 'Kim',    avatarColor: '#D4AE5C', avatarInitials: 'PK' },
-  { userId: 'u2', firstName: 'Sarah',   lastName: 'Miller', avatarColor: '#53AB8B', avatarInitials: 'SM' },
-  { userId: 'u3', firstName: 'Caleb',   lastName: 'Rivera', avatarColor: '#8070C4', avatarInitials: 'CR' },
-];
-
-const MOCK_LYRICS_SNIPPET =
-  "Lord, I wait for You...\nIn this stillness, I find my strength.\nGrace in the waiting, peace in the storm.";
-
-// ─── API functions ─────────────────────────────────────────────────────────────
-
-/**
- * Preview an invite by token — safe to call before authentication.
- * Throws InviteError on invalid/expired/capacity tokens.
- *
- * REAL: await supabase.rpc('preview_invite', { p_token: token })
- */
-export async function previewInvite(token: string): Promise<InvitePreview> {
-  if (USE_MOCK) {
-    await delay(700);
-    // Special test tokens for error states
-    if (token === 'expired' || token === 'revoked')  throw new InviteError('INVITE_REVOKED');
-    if (token === 'full')                             throw new InviteError('INVITE_EXHAUSTED');
-    if (token === 'invalid')                          throw new InviteError('INVITE_NOT_FOUND');
-    if (token === 'joined')                           throw new InviteError('INVITE_ALREADY_MEMBER');
-    // All other tokens → valid invite
-    return {
-      status: 'valid',
-      token,
-      songId: '1',
-      songTitle: 'Grace in the Waiting',
-      inviterFirstName: 'Parker',
-      inviterLastName: 'Kim',
-      inviterAvatarColor: '#D4AE5C',
-      assignedRole: 'contributor',
-      lyricsSnippet: MOCK_LYRICS_SNIPPET,
-      collaborators: MOCK_COLLABORATORS,
-      collaboratorCount: MOCK_COLLABORATORS.length,
-      maxUses: 5,
-      currentUses: 2,
-    };
-  }
-
-  // ── REAL (uncomment when Lovable backend is ready) ──────────────────────────
-  // const { data, error } = await supabase.rpc('preview_invite', { p_token: token });
-  // if (error) throw new InviteError(parseSupabaseError(error));
-  // if (data.status === 'error' || data.status === 'invalid') throw new InviteError(data.error_code);
-  // if (data.status === 'already_member') throw new InviteError('INVITE_ALREADY_MEMBER');
-  // return data as InvitePreview;
-  throw new Error('Real backend not yet available');
-}
-
-/**
- * Check if a phone number already has a COG account.
- * Used to detect existing users and show the 1-tap "Welcome back" path.
- *
- * REAL: await supabase.rpc('check_phone_registered', { p_phone: e164 })
- */
-export async function checkPhoneRegistered(e164: string): Promise<PhoneCheckResult> {
-  if (USE_MOCK) {
-    await delay(300);
-    // Simulate existing user for a specific number
-    if (e164 === '+15555550001') return { exists: true, firstName: 'Parker' };
-    return { exists: false, firstName: null };
-  }
-
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // const { data, error } = await supabase.rpc('check_phone_registered', { p_phone: e164 });
-  // if (error) return { exists: false, firstName: null };
-  // return data as PhoneCheckResult;
-  throw new Error('Real backend not yet available');
-}
-
-/**
- * Accept an invite — atomically joins the song and logs the activity.
- * Must be called after the user is authenticated.
- *
- * REAL: await supabase.rpc('accept_invite', { p_token: token })
- */
-export async function acceptInvite(token: string): Promise<AcceptResult> {
-  if (USE_MOCK) {
-    await delay(500);
-    return {
-      status: 'success',
-      songId: '1',
-      songTitle: 'Grace in the Waiting',
-      role: 'contributor',
-    };
-  }
-
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
-  // if (error) throw new InviteError(parseSupabaseError(error));
-  // return data as AcceptResult;
-  throw new Error('Real backend not yet available');
-}
-
-/**
- * Save first + last name to the user's profile after accepting.
- *
- * REAL: await supabase.from('profiles').upsert({ id: userId, first_name, last_name })
- */
-export async function saveName(firstName: string, lastName: string): Promise<void> {
-  if (USE_MOCK) {
-    await delay(300);
-    return;
-  }
-
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // const { data: { user } } = await supabase.auth.getUser();
-  // if (!user) throw new InviteError('UNAUTHENTICATED');
-  // const { error } = await supabase.from('profiles').upsert({
-  //   id: user.id, first_name: firstName, last_name: lastName, updated_at: new Date().toISOString()
-  // });
-  // if (error) throw new Error('Failed to save name');
-}
-
-/**
- * Request a new invite from the song owner when the link is expired/full.
- *
- * REAL: await supabase.rpc('request_new_invite', { p_token: token, p_phone: phone })
- */
-export async function requestNewInvite(token: string, phone?: string): Promise<void> {
-  if (USE_MOCK) {
-    await delay(400);
-    return;
-  }
-
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // await supabase.rpc('request_new_invite', { p_token: token, p_phone: phone ?? null });
+  role: UiRole;
 }
 
 export interface GeneratedInvite {
   tokenId: string;
   token: string;
-  inviteUrl: string;       // https://colorsofglory.app/join/[token]
+  inviteUrl: string;
   assignedRole: string;
   maxUses: number;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Map DB role → UI label */
+export function dbRoleToUi(dbRole: string): UiRole {
+  if (dbRole === 'viewer') return 'viewer';
+  return 'contributor';  // owner + collaborator both map to contributor for display
+}
+
+/** Map UI label → DB role */
+export function uiRoleToDb(uiRole: string): DbRole {
+  if (uiRole === 'viewer') return 'viewer';
+  return 'collaborator';  // contributor + reviewer both → collaborator
+}
+
+/** Aurora palette colors assigned by user_id hash */
+const AVATAR_COLORS = ['#8070C4', '#4D8FD2', '#53AB8B', '#D4AE5C', '#C26A95'];
+function avatarColor(userId: string): string {
+  let h = 0;
+  for (let i = 0; i < userId.length; i++) h = userId.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+
+function avatarInitials(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return displayName.slice(0, 2).toUpperCase();
+}
+
+// ─── previewInvite ────────────────────────────────────────────────────────────
+
 /**
- * Generate an invite link for a song — called by the song owner.
- * REAL: await supabase.rpc('generate_invite_token', { p_song_id, p_role, p_max_uses })
+ * Preview an invite by token — safe before authentication.
+ * Queries song_invites → songs → profiles → song_members.
+ */
+export async function previewInvite(token: string): Promise<InvitePreview> {
+  // 1. Fetch the invite record
+  const { data: invite, error: inviteErr } = await supabase
+    .from('song_invites')
+    .select('id, token, song_id, role, status, max_uses, use_count, created_by_user_id')
+    .eq('token', token)
+    .maybeSingle();
+
+  if (inviteErr || !invite) throw new InviteError('INVITE_NOT_FOUND');
+  if (invite.status === 'revoked') throw new InviteError('INVITE_REVOKED');
+  if (invite.status === 'expired') throw new InviteError('INVITE_REVOKED');
+  if (invite.use_count >= invite.max_uses) throw new InviteError('INVITE_EXHAUSTED');
+
+  // Check if current user is already a member
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: existing } = await supabase
+      .from('song_members')
+      .select('id')
+      .eq('song_id', invite.song_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (existing) throw new InviteError('INVITE_ALREADY_MEMBER');
+  }
+
+  // 2. Fetch song
+  const { data: song } = await supabase
+    .from('songs')
+    .select('id, title')
+    .eq('id', invite.song_id)
+    .single();
+
+  // 3. Fetch inviter profile
+  const { data: inviterProfile } = await supabase
+    .from('profiles')
+    .select('display_name, avatar_url')
+    .eq('user_id', invite.created_by_user_id)
+    .maybeSingle();
+
+  const inviterName = inviterProfile?.display_name ?? 'Someone';
+  const [inviterFirst, ...inviterRest] = inviterName.split(' ');
+  const inviterColor = avatarColor(invite.created_by_user_id);
+
+  // 4. Fetch existing collaborators (max 5)
+  const { data: members } = await supabase
+    .from('song_members')
+    .select('user_id, role, profiles!inner(display_name, avatar_url)')
+    .eq('song_id', invite.song_id)
+    .limit(5);
+
+  const collaborators: InviteContext['collaborators'] = (members ?? []).map((m) => {
+    const profile = (m as { profiles?: { display_name?: string } }).profiles;
+    const name = profile?.display_name ?? 'Unknown';
+    return {
+      userId: m.user_id,
+      firstName: name.split(' ')[0] ?? name,
+      lastName: name.split(' ').slice(1).join(' '),
+      avatarColor: avatarColor(m.user_id),
+      avatarInitials: avatarInitials(name),
+    };
+  });
+
+  return {
+    status: 'valid',
+    token,
+    songId: song?.id ?? invite.song_id,
+    songTitle: song?.title ?? 'Untitled Song',
+    inviterFirstName: inviterFirst ?? inviterName,
+    inviterLastName: inviterRest.join(' '),
+    inviterAvatarColor: inviterColor,
+    assignedRole: dbRoleToUi(invite.role),
+    lyricsSnippet: null,  // Lovable schema has no lyrics_snippet on songs — fetch separately if needed
+    collaborators,
+    collaboratorCount: members?.length ?? 0,
+    maxUses: invite.max_uses,
+    currentUses: invite.use_count,
+  };
+}
+
+// ─── checkPhoneRegistered ─────────────────────────────────────────────────────
+
+/**
+ * Check if a phone number already has a COG profile.
+ * Queries profiles.phone_e164.
+ */
+export async function checkPhoneRegistered(e164: string): Promise<PhoneCheckResult> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('user_id, display_name')
+    .eq('phone_e164', e164)
+    .maybeSingle();
+
+  if (!data) return { exists: false, firstName: null };
+
+  const firstName = data.display_name?.split(' ')[0] ?? null;
+  return { exists: true, firstName };
+}
+
+// ─── acceptInvite ─────────────────────────────────────────────────────────────
+
+/**
+ * Accept an invite — calls Lovable's accept_song_invite RPC.
+ * Signature: accept_song_invite(_token: string, _user_id: string)
+ * Returns an ARRAY: { already_member, code, role, song_id }[]
+ */
+export async function acceptInvite(token: string): Promise<AcceptResult> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new InviteError('UNAUTHENTICATED');
+
+  const { data, error } = await supabase.rpc('accept_song_invite', {
+    _token: token,
+    _user_id: user.id,
+  });
+
+  if (error) throw new InviteError(parseSupabaseError(error));
+
+  // RPC returns an array — take the first element
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result) throw new InviteError('ACCEPT_FAILED');
+
+  // Fetch song title for the result
+  const { data: song } = await supabase
+    .from('songs')
+    .select('title')
+    .eq('id', result.song_id)
+    .maybeSingle();
+
+  // Update onboarding step if first collaborator invite interaction
+  updateOnboardingStep('first_collaborator_invited').catch(() => {});
+
+  return {
+    status: result.already_member ? 'already_member' : 'success',
+    songId: result.song_id,
+    songTitle: song?.title ?? 'the song',
+    role: dbRoleToUi(result.role),
+  };
+}
+
+// ─── saveName ────────────────────────────────────────────────────────────────
+
+/**
+ * Save display name to the user's profile.
+ * Lovable uses display_name (single field), not first_name + last_name.
+ */
+export async function saveName(firstName: string, lastName: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new InviteError('UNAUTHENTICATED');
+
+  const displayName = `${firstName} ${lastName}`.trim();
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ display_name: displayName, updated_at: new Date().toISOString() })
+    .eq('user_id', user.id);
+
+  if (error) throw new Error(`Failed to save name: ${error.message}`);
+}
+
+// ─── generateInviteToken ──────────────────────────────────────────────────────
+
+/**
+ * Generate an invite token — inserts into song_invites.
+ * No RPC exists, so we INSERT directly.
  */
 export async function generateInviteToken(
   songId: string,
-  role: string,
+  uiRole: string,
   maxUses: number
 ): Promise<GeneratedInvite> {
-  if (USE_MOCK) {
-    await delay(600);
-    const mockToken = `cog-${Math.random().toString(36).slice(2, 10)}`;
-    return {
-      tokenId: crypto.randomUUID(),
-      token: mockToken,
-      inviteUrl: `https://colorsofglory.app/join/${mockToken}`,
-      assignedRole: role,
-      maxUses,
-    };
-  }
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new InviteError('UNAUTHENTICATED');
 
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // const { data, error } = await supabase.rpc('generate_invite_token', {
-  //   p_song_id: songId, p_role: role, p_max_uses: maxUses,
-  // });
-  // if (error) throw error;
-  // return data as GeneratedInvite;
-  throw new Error('Real backend not yet available');
+  const dbRole = uiRoleToDb(uiRole);
+
+  // Generate a URL-safe random token
+  const tokenBytes = new Uint8Array(18);
+  crypto.getRandomValues(tokenBytes);
+  const token = btoa(String.fromCharCode(...tokenBytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+  const { data, error } = await supabase
+    .from('song_invites')
+    .insert({
+      token,
+      song_id: songId,
+      created_by_user_id: user.id,
+      role: dbRole,
+      max_uses: maxUses,
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(`Failed to create invite: ${error.message}`);
+
+  return {
+    tokenId: data.id,
+    token,
+    inviteUrl: `https://colorsofglory.app/join/${token}`,
+    assignedRole: uiRole,
+    maxUses,
+  };
 }
 
-/**
- * Revoke an invite token — called by the song owner.
- * REAL: await supabase.from('invite_tokens').update({ is_revoked: true }).eq('id', tokenId)
- */
+// ─── revokeInviteToken ────────────────────────────────────────────────────────
+
 export async function revokeInviteToken(tokenId: string): Promise<void> {
-  if (USE_MOCK) {
-    await delay(300);
-    return;
-  }
-  // ── REAL ────────────────────────────────────────────────────────────────────
-  // const { error } = await supabase.from('invite_tokens')
-  //   .update({ is_revoked: true }).eq('id', tokenId);
-  // if (error) throw error;
-  void tokenId;
+  const { error } = await supabase
+    .from('song_invites')
+    .update({ status: 'revoked', updated_at: new Date().toISOString() })
+    .eq('id', tokenId);
+
+  if (error) throw new Error(`Failed to revoke invite: ${error.message}`);
+}
+
+// ─── requestNewInvite ─────────────────────────────────────────────────────────
+
+/**
+ * Request a new invite when a link is expired/full.
+ * No table for this in Lovable's schema — currently a no-op that can be wired
+ * to a notification system later.
+ */
+export async function requestNewInvite(token: string, phone?: string): Promise<void> {
+  // Lovable schema has no invite_requests table yet.
+  // Log intent for now — owner sees this via activity feed when wired.
+  console.info('[invite] Request new invite for token:', token, 'phone:', phone);
+}
+
+// ─── Onboarding step updater ──────────────────────────────────────────────────
+
+/**
+ * Update the user's onboarding step — non-blocking, fire-and-forget.
+ * Steps: not_started → intent_selected → ... → completed
+ */
+export async function updateOnboardingStep(step: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase
+    .from('profiles')
+    .update({
+      onboarding_step: step as never,
+      onboarding_updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', user.id);
 }
