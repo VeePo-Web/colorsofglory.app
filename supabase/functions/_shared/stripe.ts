@@ -80,18 +80,24 @@ export async function verifyWebhook(
 }
 
 // Map a Stripe price lookup_key (e.g. "cog_pro_monthly") to our sub_plan enum.
-export function planForLookupKey(lookupKey: string | null | undefined): "free" | "pro" | "founder_pro" {
+export function planForLookupKey(lookupKey: string | null | undefined): "free" | "starter" | "pro" | "founder_pro" {
   if (!lookupKey) return "free";
-  if (lookupKey.startsWith("cog_founder")) return "founder_pro";
   if (lookupKey.startsWith("cog_storage")) return "free"; // storage addons don't change plan
+  // v2 lookup keys (set by payments--batch_create_product)
+  if (lookupKey === "starter_monthly") return "starter";
+  if (lookupKey === "pro_monthly_referral_50") return "founder_pro";
+  if (lookupKey === "pro_monthly") return "pro";
+  // Legacy keys
+  if (lookupKey.startsWith("cog_founder")) return "founder_pro";
   if (lookupKey.startsWith("cog_pro")) return "pro";
   return "free";
 }
 
 // Unit price (cents) for a given plan — used when seeding subscription rows.
-export function defaultUnitAmountForPlan(plan: "free" | "pro" | "founder_pro"): number {
+export function defaultUnitAmountForPlan(plan: "free" | "starter" | "pro" | "founder_pro"): number {
+  if (plan === "starter") return 500;
   if (plan === "pro") return 10000;
-  if (plan === "founder_pro") return 5000;
+  if (plan === "founder_pro") return 4900;
   return 0;
 }
 

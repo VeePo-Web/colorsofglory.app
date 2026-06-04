@@ -1773,6 +1773,7 @@ export type Database = {
         }
         Returns: number
       }
+      apply_song_lock_for_quota: { Args: { _user_id: string }; Returns: number }
       apply_storage_delta: {
         Args: { _delta: number; _owner_user_id: string }
         Returns: undefined
@@ -1866,6 +1867,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["sub_plan"]
       }
+      effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       expire_pending_invites: { Args: never; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
@@ -1983,6 +1985,7 @@ export type Database = {
         Returns: number
       }
       owned_active_song_count: { Args: { _user_id: string }; Returns: number }
+      plan_tier_key_for_user: { Args: { _user_id: string }; Returns: string }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
       record_invoice_refunded: { Args: { _event: Json }; Returns: number }
@@ -2065,6 +2068,7 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
       }
+      unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
         Args: {
           _action: string

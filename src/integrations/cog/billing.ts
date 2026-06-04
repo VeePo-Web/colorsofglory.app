@@ -3,7 +3,56 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type StorageAddon = Database["public"]["Tables"]["storage_addons"]["Row"];
-export type PlanId = "free" | "pro" | "founder_pro";
+export type PlanId = "free" | "starter" | "pro" | "founder_pro";
+export type PlanKey = "free" | "starter" | "pro";
+
+export type PlanTier = {
+  key: PlanKey;
+  display_name: string;
+  monthly_cents: number;
+  currency: string;
+  owned_song_limit: number;
+  storage_bytes_included: number;
+  allows_founder_code: boolean;
+  allows_member_referral: boolean;
+  allows_storage_addons: boolean;
+  stripe_price_id: string | null;
+  stripe_referral_price_id: string | null;
+  sort_order: number;
+};
+
+export type PricingCard = {
+  plan_key: PlanKey;
+  eyebrow: string;
+  name: string;
+  price_display: string;
+  price_suffix: string;
+  discounted_price_display?: string;
+  discount_badge?: string;
+  headline: string;
+  subhead: string;
+  bullets: string[];
+  cta_label: string;
+  cta_label_with_code?: string;
+  cta_kind: "free" | "subscribe" | "subscribe_with_code";
+  trust_line?: string;
+  most_popular?: boolean;
+};
+
+export type PricingPageCopy = {
+  h1: string;
+  sub_h1: string;
+  comparison_caption: string;
+  founder_section_heading: string;
+  founder_section_body: string;
+  referral_section_heading: string;
+  referral_section_body: string;
+};
+
+export type ValidateCodeResult =
+  | { kind: "founder"; discount_pct: 50; effective_cents: 4900; founder_display_name: string; code_id: string }
+  | { kind: "member_referral"; referrer_display_name: string; referrer_user_id: string }
+  | { kind: "invalid"; reason: "expired" | "not_found" | "wrong_plan" | "self" | "already_attributed" };
 
 // Single canonical price IDs the app ships with. Add more here as you
 // create new products via the payments tool.
@@ -17,6 +66,104 @@ export const PRICE_IDS = {
 } as const;
 
 export type PriceId = (typeof PRICE_IDS)[keyof typeof PRICE_IDS];
+
+// ---------- v2 SDK ----------
+
+/** Server-side authoritative plan catalog. Public-readable (anon OK). */
+export async function getPricingCatalog(): Promise<PlanTier[]> {
+  const { data, error } = await supabase
+    .from("plan_tiers")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PlanTier[];
+}
+
+/** Pricing page data: copy + cards in display order. Public-readable. */
+export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: PricingCard[] }> {
+  const { data, error } = await supabase.from("pricing_copy").select("key, payload");
+  if (error) throw error;
+  const map = new Map<string, any>((data ?? []).map((r) => [r.key, r.payload]));
+  const page = map.get("page") as PricingPageCopy;
+  const order: PlanKey[] = ["free", "starter", "pro"];
+  const cards = order
+    .map((k) => map.get(`card_${k}`) as PricingCard | undefined)
+    .filter((c): c is PricingCard => !!c);
+  return { page, cards };
+}
+
+/** Validate a code BEFORE checkout so the UI can show "Founder code applied — $49/mo". */
+export async function validateCode(code: string, plan_key: PlanKey = "pro"): Promise<ValidateCodeResult> {
+  const { data, error } = await supabase.functions.invoke("validate-code", {
+    body: { code, plan_key },
+  });
+  if (error) throw error;
+  return data as ValidateCodeResult;
+}
+
+/** Open an embedded checkout session for the chosen plan, optionally with a code. */
+export async function startCheckout(input: {
+  plan_key: PlanKey;
+  code?: string;
+  referrer_code?: string;
+  return_url: string;
+  environment?: "sandbox" | "live";
+}): Promise<{ clientSecret: string; applied_code_kind: "founder" | "member_referral" | "none"; ignored_referrer: boolean }> {
+  const { data, error } = await supabase.functions.invoke("create-checkout", {
+    body: {
+      plan_key: input.plan_key,
+      code: input.code,
+      referrer_code: input.referrer_code,
+      returnUrl: input.return_url,
+      environment: input.environment ?? "sandbox",
+    },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  if (!data?.clientSecret) throw new Error("checkout_session_failed");
+  return data as {
+    clientSecret: string;
+    applied_code_kind: "founder" | "member_referral" | "none";
+    ignored_referrer: boolean;
+  };
+}
+
+/** Caller's referral stats (their code + lifetime member-referral cash earned). */
+export async function getMyReferralStats(): Promise<{
+  code: string | null;
+  active_refs: number;
+  lifetime_paid_cents: number;
+  pending_cents: number;
+}> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("unauthorized");
+
+  const [{ data: profile }, { data: rewards }, { data: activeAttrs }] = await Promise.all([
+    supabase.from("profiles").select("referral_code").eq("user_id", user.id).maybeSingle(),
+    supabase
+      .from("reward_events")
+      .select("amount_cents, status")
+      .eq("referrer_user_id", user.id),
+    supabase
+      .from("referral_attributions")
+      .select("id")
+      .eq("referrer_user_id", user.id),
+  ]);
+
+  let lifetime = 0;
+  let pending = 0;
+  for (const r of rewards ?? []) {
+    if (r.status === "paid") lifetime += r.amount_cents;
+    else if (r.status === "pending" || r.status === "payable") pending += r.amount_cents;
+  }
+
+  return {
+    code: profile?.referral_code ?? null,
+    active_refs: activeAttrs?.length ?? 0,
+    lifetime_paid_cents: lifetime,
+    pending_cents: pending,
+  };
+}
 
 /** Reads the effective plan for the signed-in user via the SECURITY DEFINER helper. */
 export async function getCurrentPlan(userId: string): Promise<PlanId> {

@@ -108,6 +108,15 @@ async function upsertSubscription(sub: any, stripe: ReturnType<typeof createStri
     },
     { onConflict: "external_id" },
   );
+
+  // Apply quota changes server-side so downgrades lock excess songs
+  // and upgrades / re-subscribes unlock oldest-first up to the new cap.
+  try {
+    await db().rpc("apply_song_lock_for_quota", { _user_id: userId });
+    await db().rpc("unlock_songs_up_to_quota", { _user_id: userId });
+  } catch (e) {
+    console.error("quota reconciliation failed", userId, e);
+  }
 }
 
 async function upsertStorageAddon(sub: any, userId: string, lookupKey: string | null) {
@@ -180,6 +189,45 @@ async function handleInvoicePaid(invoice: any) {
       currency: invoice.currency ?? "cad",
     },
   });
+}
+
+// Write a referral_attributions row for member referrals (or founder fallback) based
+// on metadata stamped by create-checkout. Idempotent: bails if any attribution row
+// already exists for this referred user.
+async function ensureAttributionFromMetadata(session: any, sub: any) {
+  try {
+    const meta = { ...(session?.metadata ?? {}), ...(sub?.metadata ?? {}) };
+    const userId = meta.userId || sub?.metadata?.userId;
+    const kind = meta.applied_code_kind;
+    if (!userId || !kind || kind === "none") return;
+
+    const { data: existing } = await db()
+      .from("referral_attributions")
+      .select("id")
+      .eq("referred_user_id", userId)
+      .maybeSingle();
+    if (existing) return;
+
+    if (kind === "member_referral" && meta.attribution_referrer_user_id) {
+      await db().from("referral_attributions").insert({
+        referred_user_id: userId,
+        referrer_type: "user",
+        referrer_user_id: meta.attribution_referrer_user_id,
+        source: "user_referral_code",
+        locked: true,
+      });
+    } else if (kind === "founder" && meta.attribution_founder_id) {
+      await db().from("referral_attributions").insert({
+        referred_user_id: userId,
+        referrer_type: "founder",
+        referrer_founder_id: meta.attribution_founder_id,
+        source: "founder_code",
+        locked: true,
+      });
+    }
+  } catch (e) {
+    console.error("ensureAttributionFromMetadata error", e);
+  }
 }
 
 async function handleInvoiceRefunded(invoice: any) {
@@ -265,6 +313,7 @@ Deno.serve(async (req) => {
             expand: ["items.data.price"],
           });
           await upsertSubscription(sub, stripe);
+          await ensureAttributionFromMetadata(obj, sub);
         }
         break;
       }
