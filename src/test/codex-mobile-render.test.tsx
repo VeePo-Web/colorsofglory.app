@@ -18,7 +18,7 @@ const setMobileViewport = () => {
 
 const renderRoute = (initialPath: string, routePath: string, element: React.ReactElement) =>
   render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={[initialPath]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <Routes>
         <Route path={routePath} element={element} />
       </Routes>

@@ -29,11 +29,16 @@ function record(name, status, details = "") {
 
 function runCommand(name, args) {
   console.log(`\n> ${npmCommand} ${args.join(" ")}`);
-  const result = spawnSync(npmCommand, args, {
-    cwd: process.cwd(),
-    stdio: "inherit",
-    shell: isWindows,
-  });
+  const result = isWindows
+    ? spawnSync([npmCommand, ...args].join(" "), {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        shell: true,
+      })
+    : spawnSync(npmCommand, args, {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      });
 
   if (result.status === 0) {
     record(name, "pass");
@@ -176,7 +181,6 @@ function stopPreviewServer(child) {
     spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
       cwd: process.cwd(),
       stdio: "ignore",
-      shell: true,
     });
     return;
   }
@@ -203,11 +207,17 @@ async function waitForPreview(baseUrl, child) {
 async function runRouteSmoke() {
   const port = 4177;
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(npmCommand, ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-    cwd: process.cwd(),
-    stdio: ["ignore", "pipe", "pipe"],
-    shell: isWindows,
-  });
+  const previewArgs = ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"];
+  const child = isWindows
+    ? spawn([npmCommand, ...previewArgs].join(" "), {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+        shell: true,
+      })
+    : spawn(npmCommand, previewArgs, {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
   const logs = [];
   child.stdout.on("data", (chunk) => logs.push(String(chunk)));

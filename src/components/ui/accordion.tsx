@@ -48,7 +48,7 @@ const CrossIndicator = () => (
     />
     {/* Vertical bar — rotates to 0 on open, creating the plus → minus morph */}
     <span
-      className="absolute w-[1.2px] h-3 rounded-full transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-[state=open]/accordion:rotate-90 group-data-[state=open]/accordion:opacity-0"
+      className="absolute w-[1.2px] h-3 rounded-full transition-all duration-500 ease-cog group-data-[state=open]/accordion:rotate-90 group-data-[state=open]/accordion:opacity-0"
       style={{ background: "hsl(var(--muted-foreground) / 0.35)" }}
     />
     {/* Subtle glow dot at intersection — appears on open */}

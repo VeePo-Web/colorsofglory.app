@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T05:03:33.887Z",
+  "generatedAt": "2026-06-04T06:04:36.313Z",
   "routesChecked": [
     {
       "path": "/",
@@ -165,8 +165,8 @@
     },
     {
       "name": "Legacy asset filename scan",
-      "status": "warn",
-      "details": "15 filename hits"
+      "status": "pass",
+      "details": ""
     },
     {
       "name": "basic accessibility source checks",
@@ -189,73 +189,5 @@
       "details": "22 routes"
     }
   ],
-  "findings": [
-    {
-      "severity": "P2",
-      "title": "Legacy asset filenames remain in src/public and should be removed before release.",
-      "details": [
-        {
-          "file": "src/assets/cs-canmore-1.jpg",
-          "hit": "cs-canmore"
-        },
-        {
-          "file": "src/assets/cs-canmore-2.jpg",
-          "hit": "cs-canmore"
-        },
-        {
-          "file": "src/assets/cs-canmore-hero.jpg",
-          "hit": "cs-canmore"
-        },
-        {
-          "file": "src/assets/cs-lake-1.jpg",
-          "hit": "cs-lake"
-        },
-        {
-          "file": "src/assets/cs-lake-2.jpg",
-          "hit": "cs-lake"
-        },
-        {
-          "file": "src/assets/cs-northern-1.jpg",
-          "hit": "cs-northern"
-        },
-        {
-          "file": "src/assets/cs-northern-2.jpg",
-          "hit": "cs-northern"
-        },
-        {
-          "file": "src/assets/cs-northern-roads-hero.jpg",
-          "hit": "cs-northern"
-        },
-        {
-          "file": "src/assets/glass-parking.jpg",
-          "hit": "glass-parking"
-        },
-        {
-          "file": "src/assets/hero-drone.jpg",
-          "hit": "hero-drone"
-        },
-        {
-          "file": "src/assets/veepo-logo.png",
-          "hit": "veepo-logo"
-        },
-        {
-          "file": "src/assets/work-01-mountain-road.jpg",
-          "hit": "work-01"
-        },
-        {
-          "file": "src/assets/work-02-architecture.jpg",
-          "hit": "work-02"
-        },
-        {
-          "file": "src/assets/work-03-lake-boat.jpg",
-          "hit": "work-03"
-        },
-        {
-          "file": "src/assets/work-04-industrial.jpg",
-          "hit": "work-04"
-        }
-      ],
-      "total": 15
-    }
-  ]
+  "findings": []
 }

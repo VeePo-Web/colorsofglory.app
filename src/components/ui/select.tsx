@@ -17,7 +17,7 @@ const SelectTrigger = React.forwardRef<
   <div className="relative group/select">
     {/* Left accent bar — appears on focus (matches Input/Textarea) */}
     <div
-      className="absolute left-0 top-1/2 -translate-y-1/2 w-0 h-0 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-focus-within/select:w-[2px] group-focus-within/select:h-[60%] rounded-full"
+      className="absolute left-0 top-1/2 -translate-y-1/2 w-0 h-0 transition-all duration-500 ease-cog group-focus-within/select:w-[2px] group-focus-within/select:h-[60%] rounded-full"
       style={{ background: "linear-gradient(to bottom, hsl(var(--primary) / 0.5), hsl(var(--gold-warm) / 0.3))" }}
       aria-hidden="true"
     />
@@ -36,7 +36,7 @@ const SelectTrigger = React.forwardRef<
     </SelectPrimitive.Trigger>
     {/* Focus accent line — slides in from center */}
     <div
-      className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.5px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] w-0 group-focus-within/select:w-full rounded-full"
+      className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.5px] transition-all duration-500 ease-cog w-0 group-focus-within/select:w-full rounded-full"
       style={{ background: "linear-gradient(90deg, hsl(var(--gold-warm) / 0.3), hsl(var(--primary) / 0.2))" }}
       aria-hidden="true"
     />

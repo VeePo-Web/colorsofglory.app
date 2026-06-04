@@ -43,7 +43,7 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
   >
     {/* Gold left accent bar */}
     <div
-      className="absolute left-0 top-0 bottom-0 w-0 group-hover/card:w-[2px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] z-10"
+      className="absolute left-0 top-0 bottom-0 w-0 group-hover/card:w-[2px] transition-all duration-500 ease-cog z-10"
       style={{ background: "linear-gradient(to bottom, hsl(var(--primary) / 0.4), hsl(var(--gold-warm) / 0.2))" }}
       aria-hidden="true"
     />
