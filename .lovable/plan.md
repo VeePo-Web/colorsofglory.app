@@ -55,3 +55,36 @@ Adapt the Claude/Lovable invite-flow spec onto the existing Colors of Glory back
 - 1 edge function edit (`song-invite-preview`).
 - `.lovable/plan.md` updated with API contract for Claude.
 - Short note back to user listing what was skipped vs the original spec, so Claude can adjust the 5 frontend screens to call existing edge functions instead of inventing RPCs.
+
+---
+
+## Invite Flow API Contract (for Claude)
+
+Backend ships these primitives. Frontend should call these only — do NOT create parallel `invite_tokens`/`invite_acceptances`/RPC names.
+
+**Edge functions** (via `supabase.functions.invoke` or `cog/songs.ts` helpers):
+- `song-invite-create` → `createInvite({ song_id, role?, max_uses?, message? })`
+- `song-invite-preview` (anon-safe) → `previewInvite(token)` returns `{ song_id, song_title, lyrics_snippet, inviter_name, inviter_first_name, inviter_avatar_color, role, collaborator_count, collaborators[], expires_at, uses_remaining }`
+- `song-invite-accept` → `acceptInvite(token)` returns `{ song_id, role, already_member }`
+
+**RPC**:
+- `get_song_activity(_song_id, _limit?, _offset?)` → member-only; returns `{id, created_at, action, entity_type, entity_id, actor_user_id, actor_name, actor_color, payload}` rows derived from `audit_logs`. No raw lyric/memo content.
+
+**Tables (direct read/write via RLS)**:
+- `invite_requests` — insert from anon or auth when a link is dead (`original_token`, optional `song_id`, optional `requested_by_phone`). Owners can read.
+- `song_notification_prefs` — own rows only; helpers `getNotificationPrefs(song_id)` / `upsertNotificationPrefs(song_id, patch)`.
+
+**Profile additions** (optional, additive):
+- `profiles.first_name`, `profiles.last_name` — optional split of `display_name`.
+- `profiles.avatar_color` — auto-assigned aurora color (`#8070C4 #4D8FD2 #53AB8B #D4AE5C #C26A95`).
+
+**Songs**:
+- `songs.lyrics_snippet` — first ~200 chars across sections, auto-synced via trigger. Used only by `song-invite-preview` for the blurred preview.
+
+**Realtime**:
+- `song_members` is published — subscribe for live collaborator joins.
+
+**NOT built (vs original Claude spec)**:
+- Parallel `invite_tokens` / `invite_acceptances` tables and `accept_invite` / `preview_invite` / `generate_invite_token` RPCs — existing `song-invite-*` edge functions already cover them.
+- `check_phone_registered` — auth is email + Google; no phone OTP.
+- Manual storage bucket SQL — `avatars` already exists.
