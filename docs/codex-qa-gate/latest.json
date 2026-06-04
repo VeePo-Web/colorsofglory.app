@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T15:59:25.956Z",
+  "generatedAt": "2026-06-04T16:09:13.175Z",
   "routesChecked": [
     {
       "path": "/",
@@ -143,23 +143,23 @@
   "results": [
     {
       "name": "lint",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "typecheck",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 2"
     },
     {
       "name": "build",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "test",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "bundle budget",

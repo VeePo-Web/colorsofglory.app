@@ -14,6 +14,15 @@ const EarnPage = lazy(() => import("./pages/onboarding/EarnPage"));
 const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstIdeaPage"));
 const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
+
+// Invite flow — new frictionless join screens
+const InviteJoinPage     = lazy(() => import("./pages/invite/InviteJoinPage"));
+const InviteWelcomePage  = lazy(() => import("./pages/invite/InviteWelcomeBackPage"));
+const InviteVerifyPage   = lazy(() => import("./pages/invite/InviteVerifyPage"));
+const InviteNamePage     = lazy(() => import("./pages/invite/InviteNamePage"));
+const InviteTeamPage     = lazy(() => import("./pages/invite/InviteTeamIntroPage"));
+const ReturningHomePage  = lazy(() => import("./pages/ReturningHomePage"));
+
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
@@ -82,8 +91,18 @@ const App = () => (
             <Route path="/onboarding/founder-code" element={<FounderCodePage />} />
             <Route path="/onboarding/earn" element={<EarnPage />} />
 
-            {/* Invite acceptance */}
+            {/* Legacy invite preview */}
             <Route path="/invite/:token" element={<InvitePreviewPage />} />
+
+            {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
+            <Route path="/join/:token"    element={<InviteJoinPage />} />
+            <Route path="/invite/welcome" element={<InviteWelcomePage />} />
+            <Route path="/invite/verify"  element={<InviteVerifyPage />} />
+            <Route path="/invite/name"    element={<InviteNamePage />} />
+            <Route path="/invite/team"    element={<InviteTeamPage />} />
+
+            {/* Returning user smart home */}
+            <Route path="/home"           element={<ReturningHomePage />} />
 
             {/* Core app */}
             <Route path="/" element={<SongCatalogPage />} />
