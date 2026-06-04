@@ -75,4 +75,20 @@ export const createInvite = (input: {
 }) => call<{ invite: any }>("song-invite-create", input);
 
 export const acceptInvite = (token: string) =>
-  call<{ song_id: string; role: string }>("song-invite-accept", { token });
+  call<{ song_id: string; role: string; already_member: boolean }>(
+    "song-invite-accept",
+    { token },
+  );
+
+export type InvitePreview = {
+  song_id: string;
+  song_title: string;
+  inviter_name: string;
+  role: string;
+  collaborator_count: number;
+  expires_at: string;
+  uses_remaining: number;
+};
+
+export const previewInvite = (token: string) =>
+  call<InvitePreview>("song-invite-preview", { token });
