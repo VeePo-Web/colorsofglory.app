@@ -314,6 +314,81 @@ export type Database = {
           },
         ]
       }
+      founder_codes: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          label: string | null
+          max_uses: number
+          perks: Json
+          updated_at: string
+          uses: number
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          label?: string | null
+          max_uses: number
+          perks?: Json
+          updated_at?: string
+          uses?: number
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          label?: string | null
+          max_uses?: number
+          perks?: Json
+          updated_at?: string
+          uses?: number
+        }
+        Relationships: []
+      }
+      founder_redemptions: {
+        Row: {
+          code: string
+          perks_snapshot: Json
+          redeemed_at: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          perks_snapshot: Json
+          redeemed_at?: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          perks_snapshot?: Json
+          redeemed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "founder_redemptions_code_fkey"
+            columns: ["code"]
+            isOneToOne: false
+            referencedRelation: "founder_codes"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "founder_redemptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       founders: {
         Row: {
           created_at: string
@@ -474,7 +549,7 @@ export type Database = {
           onboarding_state: Json
           onboarding_step: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at: string
-          phone: string | null
+          phone_e164: string | null
           referral_code: string | null
           referred_by_user_id: string | null
           updated_at: string
@@ -490,7 +565,7 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
-          phone?: string | null
+          phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
           updated_at?: string
@@ -506,7 +581,7 @@ export type Database = {
           onboarding_state?: Json
           onboarding_step?: Database["public"]["Enums"]["onboarding_step"]
           onboarding_updated_at?: string
-          phone?: string | null
+          phone_e164?: string | null
           referral_code?: string | null
           referred_by_user_id?: string | null
           updated_at?: string
@@ -1515,6 +1590,10 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      on_auth_user_confirmed: {
+        Args: { _phone: string; _user_id: string }
+        Returns: undefined
+      }
       onboarding_legal_next: {
         Args: { _from: Database["public"]["Enums"]["onboarding_step"] }
         Returns: Database["public"]["Enums"]["onboarding_step"][]
@@ -1551,6 +1630,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      redeem_founder_code: {
+        Args: { _code: string; _user_id: string }
+        Returns: Json
       }
       reset_transcript_attempts: {
         Args: { _memo_id: string }
