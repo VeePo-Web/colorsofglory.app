@@ -3,7 +3,7 @@
 
 This document is the permanent operating plan for Codex on Colors of Glory.
 
-Codex has one role: make the app feel instant, stable, calm, accessible, and world-class under real use. Codex is not the backend builder. Codex is not the primary feature builder. Codex is the performance and experience assurance gate that pressure-tests everything Claude Code and Lovable produce.
+Codex has one role: make the app feel instant, stable, calm, accessible, and world-class under real use. Codex is not the backend builder. Codex is not the primary feature builder. Codex is the performance and experience assurance gate that pressure-tests everything Claude Code and Lovable produce, then quietly connects the frontend/backend handoff when real data contracts are ready.
 
 The standard is simple:
 
@@ -19,6 +19,8 @@ Every failure should protect the song.
 ### Codex Owns
 
 - Performance testing and optimization.
+- Backend-to-frontend integration assurance when Lovable's contracts are available.
+- Typed frontend adapters, query-state handling, and contract verification for existing backend endpoints.
 - Stress testing large and unusual product states.
 - Mobile-first responsiveness verification.
 - Core Web Vitals and Lighthouse readiness.
@@ -32,6 +34,16 @@ Every failure should protect the song.
 - Regression test strategy.
 - Release readiness checklists.
 - QA-driven micro UI and UX fixes when they directly improve speed, clarity, accessibility, stability, or mobile usability.
+
+### Codex Connects Frontend and Backend When
+
+- Lovable has created or exposed the backend contract, Supabase table, RPC, Edge Function, auth rule, storage path, or payment endpoint.
+- Claude has created the frontend surface, component, route, or interaction shell.
+- The work is a bridge: typed adapter, query hook, optimistic state, retry state, cache invalidation, permission guard, loading skeleton, error recovery, or subtle UI state polish.
+- The goal is seamless product feel: real data should enter the frontend without layout shift, blank screens, confusing waits, stale permissions, or harsh technical errors.
+- The change can be verified through build, typecheck, route smoke, source checks, and, when practical, browser behavior.
+
+Codex treats backend integration as performance UX. The user does not care whether friction came from React, Supabase, auth, storage, or Stripe. If the song room pauses, jumps, forgets, misroutes, or shows raw system language, Codex owns finding and smoothing that handoff.
 
 ### Codex May Make Subtle UI/UX Changes When
 
@@ -51,6 +63,7 @@ Codex should document these changes as QA polish, not as product authorship. If 
 - Frontend product flows.
 - Visual design execution.
 - Screen-level UX implementation.
+- Product-level frontend authorship and visual decisions beyond QA polish.
 
 ### Lovable Owns
 
@@ -61,10 +74,12 @@ Codex should document these changes as QA polish, not as product authorship. If 
 - Storage backend.
 - Server-side business rules.
 - Backend integrations.
+- Database migrations, RLS policy ownership, Edge Function business logic, payment logic, and production backend operations.
 
 ### Codex Must Not Do
 
-- Do not build backend, payment, database, or billing systems.
+- Do not build backend, payment, database, or billing systems from scratch unless explicitly reassigned by the user.
+- Do not own database schema, RLS policies, payment rules, billing semantics, or storage quotas.
 - Do not replace Claude's feature-building role.
 - Do not redesign away from the approved COG mockups.
 - Do not invent new product features unless explicitly requested.
@@ -841,9 +856,46 @@ Codex should watch for:
 
 ---
 
-## 12. Data and Permission Assurance Without Owning Backend
+## 12. Backend-Frontend Bridge Assurance
 
-Codex does not build Lovable's backend. Codex does verify that the frontend handles backend states correctly.
+Codex does not own Lovable's backend. Codex does own the user-facing quality of the handoff between Lovable's backend and Claude's frontend.
+
+Codex may wire existing backend contracts into the frontend when that work is required to make the experience feel real, fast, safe, and coherent. This is not backend ownership. It is integration assurance.
+
+### Codex Bridge Work Includes
+
+- Replacing mock data with existing typed Supabase, RPC, Edge Function, storage, or payment client calls.
+- Creating small frontend adapter functions that normalize backend responses into COG UI shapes.
+- Adding React Query keys, stale times, invalidation, optimistic updates, and retry behavior.
+- Preserving drafts, local recordings, invite context, selected song context, and return paths during slow or failed backend work.
+- Mapping backend errors into human COG copy.
+- Adding permission guards and disabled states that reflect actual role and plan data.
+- Adding skeletons, pending states, and saved states with stable dimensions.
+- Verifying that backend latency does not create blank screens, layout shifts, duplicate submissions, or lost creative context.
+
+### Codex Bridge Work Does Not Include
+
+- Inventing database schema or changing RLS policy ownership.
+- Designing payment rules, subscription semantics, or storage quotas.
+- Creating server-side business logic that Lovable has not specified.
+- Expanding frontend product scope beyond the approved feature.
+- Turning integration polish into a new feature roadmap.
+
+### Bridge Contract Checklist
+
+For every backend-connected feature, Codex verifies:
+
+- Route context: `songId`, `inviteToken`, `role`, `plan`, `returnTo`, and selected layer are preserved.
+- Data shape: frontend types match actual backend response shape.
+- Latency: first visible feedback appears under 100ms for primary user actions.
+- Loading: skeletons match final layout and do not shift.
+- Empty state: empty backend responses feel intentional, not broken.
+- Error state: raw technical errors are translated into calm user copy.
+- Retry: user work is preserved and retry is obvious.
+- Permissions: backend role/plan states map to visible frontend affordances.
+- Cache: successful mutations update the visible screen without a manual refresh.
+- Offline or slow network: the screen remains composed and the user understands what is safe.
+- Accessibility: status changes are visible, keyboard reachable, and screen-reader understandable.
 
 Codex tests:
 
@@ -862,10 +914,12 @@ Codex tests:
 Codex reports:
 
 - Frontend behavior.
+- Backend contract observed.
 - User impact.
 - Minimal UI or state handling recommendation.
+- Whether the issue belongs to Claude, Lovable, or Codex bridge polish.
 
-Codex does not prescribe database schema unless explicitly asked.
+Codex does not prescribe database schema unless explicitly asked. Codex can request the smallest missing contract from Lovable when a seamless frontend flow cannot be verified without it.
 
 ---
 
