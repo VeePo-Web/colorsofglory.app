@@ -30,7 +30,18 @@ Deno.serve(async (req) => {
     const row = Array.isArray(data) ? data[0] : data;
     const code = row?.code ?? "INTERNAL";
     if (code === "OK") {
-      return jsonResponse({ ok: true, code, data: { song_id: row.song_id, role: row.role } }, 200);
+      return jsonResponse(
+        {
+          ok: true,
+          code,
+          data: {
+            song_id: row.song_id,
+            role: row.role,
+            already_member: row.already_member === true,
+          },
+        },
+        200,
+      );
     }
     return jsonResponse({ ok: false, code, message: code }, STATUS[code] ?? 400);
   } catch (e) {
