@@ -31,6 +31,17 @@ Every failure should protect the song.
 - Canvas performance checks.
 - Regression test strategy.
 - Release readiness checklists.
+- QA-driven micro UI and UX fixes when they directly improve speed, clarity, accessibility, stability, or mobile usability.
+
+### Codex May Make Subtle UI/UX Changes When
+
+- The change is small, reversible, and tied to a Codex finding.
+- The change improves instant feedback, tap clarity, layout stability, accessibility, reduced-motion behavior, or mobile ergonomics.
+- The approved Colors of Glory brand language, warmth, and product metaphor remain intact.
+- The change does not create new product scope, backend requirements, payment behavior, or database ownership.
+- The change helps a feature become usable enough for real QA before Claude Code or Lovable continue deeper implementation.
+
+Codex should document these changes as QA polish, not as product authorship. If a fix becomes a new feature or changes the product model, Codex stops and hands it back to Claude Code or Lovable.
 
 ### Claude Code Owns
 

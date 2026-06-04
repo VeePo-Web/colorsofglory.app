@@ -9,6 +9,7 @@ import NotFound from "@/pages/NotFound";
 import UpgradePage from "@/pages/UpgradePage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import ChordsPage from "@/pages/ChordsPage";
+import SongCanvasPage from "@/pages/SongCanvasPage";
 
 const setMobileViewport = () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -84,5 +85,15 @@ describe("Codex 390px mobile render smoke", () => {
 
     expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
     expect(screen.getByText(/chord chart/i)).toBeInTheDocument();
+  });
+
+  it("renders the song whiteboard at the primary mobile width", () => {
+    renderRoute("/songs/1/canvas", "/songs/:id/canvas", <SongCanvasPage />);
+
+    expect(screen.getByRole("heading", { name: /song whiteboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add idea/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/song whiteboard canvas/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ideas tree/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /final tree/i })).toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import {
   Mic,
   Music,
   PenLine,
+  GitBranch,
   Sparkles,
   StickyNote,
   Users,
@@ -29,9 +30,10 @@ interface StoredSong {
 const MODULES: Module[] = [
   { id: "lyrics", label: "Lyrics", icon: FileText, route: "lyrics" },
   { id: "voice", label: "Voice", icon: Mic, route: "voice" },
-  { id: "chords", label: "Chords", icon: Music, route: "lyrics" },
+  { id: "chords", label: "Chords", icon: Music, route: "chords" },
   { id: "notes", label: "Notes", icon: StickyNote, route: "notes" },
   { id: "people", label: "People", icon: Users, route: "people" },
+  { id: "canvas", label: "Canvas", icon: GitBranch, route: "canvas" },
 ];
 
 const readFirstSong = (): StoredSong => {
@@ -151,8 +153,7 @@ const SongWorkspacePage = () => {
           </div>
 
           <div className="grid grid-cols-3 gap-3 mb-8">
-            <div aria-hidden />
-            {MODULES.slice(3, 5).map((module) => (
+            {MODULES.slice(3, 6).map((module) => (
               <ModuleCard
                 key={module.id}
                 module={module}

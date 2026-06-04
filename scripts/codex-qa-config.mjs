@@ -12,6 +12,7 @@ export const qaRoutes = [
   { path: "/songs/1/lyrics", label: "Lyrics editor" },
   { path: "/songs/1/voice", label: "Voice memos" },
   { path: "/songs/1/chords", label: "Chords" },
+  { path: "/songs/1/canvas", label: "Song canvas" },
   { path: "/songs/1/notes", label: "Notes" },
   { path: "/songs/1/people", label: "People" },
   { path: "/songs/1/activity", label: "Activity" },
@@ -31,6 +32,7 @@ export const mobileRenderRoutes = [
   { path: "/songs/1/capture", label: "Capture first idea" },
   { path: "/songs/1/voice-added", label: "Voice memo added" },
   { path: "/songs/1/chords", label: "Chords" },
+  { path: "/songs/1/canvas", label: "Song canvas" },
   { path: "/settings", label: "Settings" },
   { path: "/upgrade", label: "Upgrade" },
   { path: "/not-a-real-song-room", label: "404 fallback" },
@@ -138,6 +140,16 @@ export const instantFeelSourceChecks = [
     file: "src/pages/SongCatalogPage.tsx",
     label: "Song catalog cards have stable minimum height",
     pattern: /minHeight:\s*"140px"/,
+  },
+  {
+    file: "src/pages/SongCanvasPage.tsx",
+    label: "Song canvas cards use memoized node rendering",
+    pattern: /const\s+CanvasNode\s*=\s*memo\(/,
+  },
+  {
+    file: "src/pages/SongCanvasPage.tsx",
+    label: "Song canvas exposes a named canvas region",
+    pattern: /aria-label="Song whiteboard canvas"/,
   },
 ];
 

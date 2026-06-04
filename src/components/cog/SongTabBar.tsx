@@ -1,5 +1,5 @@
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { FileText, Mic, Music, StickyNote, Users } from "lucide-react";
+import { FileText, GitBranch, Mic, Music, StickyNote, Users } from "lucide-react";
 
 interface SongTab {
   id: string;
@@ -14,6 +14,7 @@ const TABS: SongTab[] = [
   { id: "chords", label: "Chords",  icon: Music,       segment: "chords" },
   { id: "notes",  label: "Notes",   icon: StickyNote,  segment: "notes" },
   { id: "people", label: "People",  icon: Users,       segment: "people" },
+  { id: "canvas", label: "Canvas",  icon: GitBranch,   segment: "canvas" },
 ];
 
 interface SongTabBarProps {

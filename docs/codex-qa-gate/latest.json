@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T06:19:16.280Z",
+  "generatedAt": "2026-06-04T06:35:31.522Z",
   "routesChecked": [
     {
       "path": "/",
@@ -52,6 +52,10 @@
     {
       "path": "/songs/1/chords",
       "label": "Chords"
+    },
+    {
+      "path": "/songs/1/canvas",
+      "label": "Song canvas"
     },
     {
       "path": "/songs/1/notes",
@@ -120,6 +124,10 @@
       "label": "Chords"
     },
     {
+      "path": "/songs/1/canvas",
+      "label": "Song canvas"
+    },
+    {
       "path": "/settings",
       "label": "Settings"
     },
@@ -186,7 +194,7 @@
     {
       "name": "Production preview route smoke",
       "status": "pass",
-      "details": "22 routes"
+      "details": "23 routes"
     }
   ],
   "findings": []
