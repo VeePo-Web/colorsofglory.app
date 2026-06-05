@@ -44,7 +44,7 @@ const PLAN_FEATURES: Record<string, string[]> = {
     "Unlimited exports (PDF, audio)",
     "Priority support",
     "Advanced version history",
-    "Founder code: 50% off forever",
+    "50% off with referral code (limited time)",
   ],
 };
 
@@ -100,8 +100,8 @@ const ReferredBanner = ({ referrerName }: { referrerName?: string }) => (
       {referrerName
         ? <><span style={{ fontWeight: 600 }}>{referrerName}</span> invited you. </>
         : "You were referred. "}
-      <span style={{ color: "#B5935A", fontWeight: 600 }}>50% off Pro is yours</span>
-      {" "}- $49/month instead of $100.
+      <span style={{ color: "#B5935A", fontWeight: 600 }}>50% off Pro with your referral code</span>
+      {" "}- $49/month instead of $100. Limited time.
     </p>
   </div>
 );
@@ -534,7 +534,7 @@ const UpgradePage = () => {
               className="flex items-center gap-1.5 text-sm w-full justify-center transition-opacity hover:opacity-70 py-2"
               style={{ color: "#B5935A" }}
             >
-              {referralCode ? "Have a founder code instead?" : "Have a founder code?"}
+              {referralCode ? "Have a founder code instead?" : "Have a founder or referral code?"}
               {showCodeInput
                 ? <ChevronUp size={14} strokeWidth={2} />
                 : <ChevronDown size={14} strokeWidth={2} />
@@ -552,7 +552,7 @@ const UpgradePage = () => {
                       setCodeError(null);
                       setCodeResult(null);
                     }}
-                    placeholder="FOUNDER-XXXXXX"
+                    placeholder="FOUNDER-XXXXXX or REFERRAL"
                     autoCapitalize="characters"
                     autoCorrect="off"
                     className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
@@ -581,7 +581,7 @@ const UpgradePage = () => {
                 )}
                 {codeResult?.kind === "member_referral" && (
                   <p className="text-xs font-medium" style={{ color: "#53AB8B" }}>
-                    Referral code applied - 50% off Pro is yours.
+                    Referral code applied - 50% off Pro is yours. Limited time.
                   </p>
                 )}
                 {codeError && (
@@ -591,7 +591,7 @@ const UpgradePage = () => {
                 )}
 
                 <p className="text-xs mt-2" style={{ color: "#999" }}>
-                  Founder codes apply to Pro only, not Starter.
+                  Founder and referral codes apply to Pro only, not Starter.
                 </p>
               </div>
             )}

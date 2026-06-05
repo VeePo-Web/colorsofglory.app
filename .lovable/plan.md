@@ -1,73 +1,116 @@
-# Checkout Flow Audit Plan
+# Payments verification + referral copy update
 
-Goal: clicking a paid tier on `/upgrade` reliably opens Stripe Embedded Checkout and a successful payment lands on `/checkout/success` with the subscription persisted. The current 401 (`bad_jwt / missing sub`) confirms the flow is broken before Stripe is ever called.
+Two tracks. Track A is copy (small, deterministic). Track B is a full payments audit (verify every link from "click Upgrade" through Stripe webhook to subscription row).
 
-## 1. Reproduce + classify the current failure
-- Confirm in network log: `POST /functions/v1/create-checkout` → 401 `{"error":"unauthorized"}` with anon JWT bearer (no `sub`).
-- Confirm auth log: `bad_jwt / invalid claim: missing sub claim` → user is signed out on `/upgrade`.
-- Conclusion: not a backend bug. UI lets unauthenticated users press "Go Pro".
+---
 
-## 2. Fix the auth gap on /upgrade (root cause of today's 401)
-File: `src/pages/pricing/UpgradePage.tsx` (`handleSelectTier`).
-- Call `supabase.auth.getUser()` (or read from an auth context) before `createCheckout`.
-- If no user: `navigate("/login?next=/upgrade&plan=" + tier.key + (refCode ? "&ref=" + refCode : ""))` instead of invoking the function.
-- After login, restore the intent: read `?next` + `?plan` and resume checkout automatically.
-- Add a visible "Sign in to subscribe" CTA state on the cards so users aren't surprised.
+## Track A — Copy change (UpgradePage.tsx)
 
-## 3. Audit `createCheckout` request contract (frontend ↔ edge function)
-File: `src/lib/pricing/pricingApi.ts` + `supabase/functions/create-checkout/index.ts`.
-- `returnUrl` MUST contain `{CHECKOUT_SESSION_ID}` (server validates this; today the page sends `/checkout/success` with no template → would 400 even after auth is fixed). Change to:
-  `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`.
-- `environment`: `import.meta.env.PROD ? 'live' : 'sandbox'` is wrong for Lovable preview (preview is built `PROD` but uses the sandbox token). Derive from the token prefix via `getStripeEnvironment()` per the Stripe knowledge.
-- Ensure `Authorization: Bearer <user JWT>` is attached. `supabase.functions.invoke` does this automatically when a session exists — verify after step 2 fix.
-- Surface `ignored_code` from the response in the UI (today only `ignored_referrer` is read).
+Update three strings so the discount is framed as a **referral code (limited time)**, not a "founder code forever". `$100` language stays in the price-anchor sentence but is no longer tied to "founder".
 
-## 4. Audit the edge function itself (`create-checkout`)
-- `getUser(token)` path uses service-role client with the user's bearer — verify it actually decodes user JWTs (preferred pattern: separate anon-keyed client with `global.headers.Authorization`). Today's 401 happened because the bearer was the anon key itself; once a real user JWT arrives, confirm `auth.getUser(token)` returns a user. Add a debug log on failure with the JWT `sub` for one-off diagnosis (then remove).
-- Confirm `config.toml` does NOT require `verify_jwt = false` for `create-checkout` (gateway-level JWT check was passing today — the 401 was from the in-function `getUser`). Leave as-is.
-- Re-test the validation branches we already hardened: `{CHECKOUT_SESSION_ID}` required, invalid plan_key, claim_founder_code_redemption atomicity, release on Stripe error, pending_code cleared.
-- Verify `plan_tiers.stripe_price_id` rows have the `_cad` lookup keys present in Stripe (`prices.list({ lookup_keys })` returns ≥1). If Stripe lacks them → checkout returns 404 `price_not_found`. Action: call `payments--get_go_live_status` + list prices to confirm the three CAD prices exist in sandbox.
+1. **Line 43** — feature bullet inside Pro tier
+   - From: `"Founder code: 50% off forever"`
+   - To: `"50% off with referral code (limited time)"`
 
-## 5. Audit `CheckoutModal` mount
-File: `src/components/pricing/CheckoutModal.tsx`.
-- Modal is rendered behind a `Suspense` boundary but `UpgradePage` never actually mounts it — `clientSecret` state is set but no `<Suspense><CheckoutModal …/></Suspense>` exists in JSX (verify lines 500–522 of UpgradePage that weren't read yet). If missing, add it with `onClose={() => setClientSecret(null)}`.
-- Confirm `VITE_PAYMENTS_CLIENT_TOKEN` is present in `.env.development` (sandbox `pk_test_…`). Show the `PaymentTestModeBanner` pattern so unconfigured builds fail loudly.
-- `loadStripe` is called at module scope — fine, but guard `null` token to avoid silent breakage.
+2. **Lines 99–100** — referred banner
+   - From: `50% off Pro is yours – $49/month instead of $100.`
+   - To: `50% off Pro with your referral code – $49/month instead of $100. Limited time.`
 
-## 6. Audit return / success flow
-File: `src/pages/pricing/CheckoutSuccessPage.tsx`.
-- Stripe will append `?session_id=…` once step 3's `returnUrl` is fixed. Read it, optionally call a `checkout-session-status` lookup to confirm `paid`, then navigate home. At minimum, log it so we can verify in network panel.
-- Verify route `/checkout/success` is registered in `src/App.tsx` (read to confirm; if not → user lands on 404 after paying).
+3. **Line 473** — code-entry header
+   - From: `"Have a founder code?"`
+   - To: `"Have a referral code?"`
 
-## 7. Verify the webhook persists the subscription
-- After a sandbox test payment, query `subscriptions` for the test user: expect one row with `environment='sandbox'`, `status='active'`, correct `price_id` lookup key, and `current_period_end` in the future.
-- Spot-check `billing_events` idempotency (re-trigger the same event from Stripe CLI / Dashboard → no duplicate row).
-- Check `referral_attributions` row was inserted for founder/member code paths; `codes.redemption_count` incremented for founder.
+4. **Line 520** — applied confirmation
+   - Already says `Referral code applied - 50% off Pro is yours.` → append ` Limited time.`
 
-## 8. End-to-end smoke test matrix
-Run each with `supabase--curl_edge_functions` + a manual browser pass:
-1. Signed-out user clicks Pro → redirected to /login (no 401).
-2. Signed-in user, no code → checkout opens, pays with `4242…`, lands on success, subscription row appears.
-3. Signed-in user, valid founder code → checkout shows $49 CAD, success, `referral_attributions.referrer_type='founder'`, redemption incremented.
-4. Signed-in user, valid member referral code → checkout at $49 CAD, attribution row with `referrer_type='member'`.
-5. Signed-in user, code on Starter → `ignored_code=true` in response, UI shows a note, checkout proceeds at $5.
-6. Already-attributed user → 409 `already_attributed` surfaced as friendly error.
-7. Exhausted founder code → 409 `code_exhausted`, no Stripe call (verify redemption count unchanged via `release_founder_code_redemption`).
-8. Decline card `4000…0002` → modal stays, redemption released, no orphan attribution.
+No logic changes. `codeResult.kind === "founder"` and `"member_referral"` discount paths stay intact server-side; only user-facing copy moves to "referral code".
 
-## 9. Logging + observability pass
-- Add structured `console.log` in `create-checkout` for: resolved plan_key, priceId, applied_code_kind, customer id, session id. Keep concise; these surface in `edge_function_logs`.
-- Frontend: log `clientSecret` presence (boolean only) + any error from `createCheckout` to the browser console with a `[checkout]` prefix.
+---
 
-## 10. Documentation + handoff
-- Update `.lovable/payments-v2.md` "Known gaps" section with the auth-guard + returnUrl-template fixes and the smoke test results.
-- Note the live-vs-sandbox env-derivation rule so future edits don't reintroduce the `import.meta.env.PROD` shortcut.
+## Track B — Payments audit (does checkout actually work?)
 
-## Out of scope (this audit)
-- Visual redesign of the Upgrade page (Claude owns).
-- Multi-currency (CAD-only per memory).
-- New plan tiers / pricing changes.
-- Stripe go-live (separate workflow via `payments--get_go_live_status`).
+Goal: prove that a real signed-in user can click **Upgrade → Pro**, complete Stripe sandbox checkout, and end up with an `active` row in `public.subscriptions` filtered by `environment='sandbox'`, with the app reflecting Pro tier on next render.
 
-## Deliverable
-A passing run of the 8 smoke tests above, with screenshots of: signed-out redirect, embedded checkout modal, successful `/checkout/success?session_id=…`, and a `subscriptions` row in the DB.
+### B1. Static audit (read-only, no edits)
+
+Read and cross-check:
+
+- `src/pages/pricing/UpgradePage.tsx` — `handleSelectTier` flow, auth-gate, `sessionStorage` resume.
+- `src/lib/pricing/pricingApi.ts` — `createCheckout`, `getBillingPortalUrl`, env passed (`getStripeEnvironment()`).
+- `src/lib/stripe.ts` — `getStripeEnvironment` derivation.
+- `supabase/functions/create-checkout/index.ts` — JWT validation, env routing, `lookup_key` resolution, `managed_payments`/`automatic_tax`, `return_url` shape.
+- `supabase/functions/payments-webhook/index.ts` — signature verification, `?env=` parsing, upsert into `subscriptions`, `price_id` resolution order (`lookup_key` → `lovable_external_id` → `price.id`).
+- `supabase/functions/validate-code/index.ts` — discount math + `kind` returned.
+- `supabase/functions/apply-founder-code-to-active-sub/index.ts` — post-purchase discount path.
+- `subscriptions` table policies + `has_active_subscription` function.
+- `src/pages/pricing/CheckoutSuccessPage.tsx` — session_id handling, refetch + nav.
+
+Confirm:
+- Every server read of `subscriptions` includes `.eq('environment', getStripeEnvironment())`.
+- Tier gating keys off `price_id` (lookup_key), never `product_id`.
+- No `STRIPE_SECRET_KEY` references; all Stripe calls go through `createStripeClient(env)`.
+- Webhook is registered (it is — managed by `enable_stripe_payments`).
+
+### B2. Confirm products + prices exist
+
+Check via `payments-` tooling that the following prices exist with the expected `lookup_key`s referenced in `create-checkout`:
+- `pro_monthly` ($100/mo)
+- `pro_yearly` (if shown)
+- any add-on / storage SKUs the UI exposes
+
+If missing or mis-priced, recreate via `payments--create_price` (sandbox auto-syncs to live on publish).
+
+### B3. Edge function smoke (sandbox)
+
+Using `supabase--curl_edge_functions` while signed in to preview:
+
+1. `POST /create-checkout` with `{ tierKey: "pro_monthly", code: null }` → expect `{ url, sessionId }`.
+2. `POST /create-checkout` with a known valid referral code → expect discounted line item or coupon attached.
+3. `POST /validate-code` with valid + invalid + expired codes → expect correct `kind` + `discountPercent`.
+4. `POST /create-checkout` unauthenticated → expect 401 (matches the earlier bug we fixed).
+
+### B4. Manual browser pass (operator)
+
+In preview, signed in as a fresh test account:
+
+1. `/upgrade` → click **Pro** with no code → Stripe sandbox checkout opens with $100/mo.
+2. Pay with `4242 4242 4242 4242`, any future date, any CVC, any ZIP.
+3. Land on `/checkout/success?session_id=…` → success copy renders, redirect after 3s.
+4. Realtime: `subscriptions` row appears (`status=active`, `environment=sandbox`, `price_id=pro_monthly`).
+5. `/upgrade` now shows Pro as current plan, **Manage billing** opens portal in new tab.
+6. Repeat with a referral code → checkout shows 50% off → row stores discount metadata.
+7. Repeat the entire flow logged out → auth gate redirects to `/auth/login`, OTP verify, then auto-resumes checkout via `cog:pending-checkout`.
+
+### B5. Edge cases to verify
+
+- User already has active sub → "Upgrade" CTA is replaced with "Manage billing" (no duplicate sub created).
+- Webhook arrives before user lands on success page → row is upserted; success page refetch picks it up.
+- Webhook with bad signature → 400; nothing inserted.
+- `?env=live` webhook in preview → ignored cleanly (200 + `ignored:"invalid env"`), nothing inserted.
+- `apply-founder-code-to-active-sub` on an active sub → coupon applied, `current_period_end` unchanged.
+
+### B6. Failure-mode triage
+
+If any step in B4 breaks, the most likely culprits in order:
+1. Missing `lookup_key` on price → `create-checkout` returns 400.
+2. `return_url` missing `{CHECKOUT_SESSION_ID}` template → success page can't show details.
+3. Webhook handler not reading `?env=` → row inserted with default `'sandbox'` but client filters by `'live'` (or vice-versa).
+4. RLS on `subscriptions` blocking client `select` (should allow `auth.uid() = user_id`).
+5. `getStripeEnvironment()` mismatch with the env the webhook stamps.
+
+Each is fixable without schema changes — fixes go into the relevant edge function or `src/lib/stripe.ts`.
+
+---
+
+## What lands as code (after plan approval)
+
+- **Frontend only** for Track A: 4 string edits in `src/pages/pricing/UpgradePage.tsx`.
+- **No edits** for Track B until the audit finds a concrete defect; then fixes are scoped to the exact edge function or pricing helper, never schema.
+- Track B report posted back here as a green/red checklist.
+
+## Out of scope
+
+- Going live on Stripe (separate go-live flow).
+- New plan tiers, currencies, or seat-based pricing.
+- Visual redesign of the upgrade page.
+- Twilio / OTP work (already covered).
