@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Mic, Plus } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
@@ -24,6 +24,7 @@ import RecordingSheet from "@/components/voice/RecordingSheet";
 import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { loadVoiceMemosForCanvas, mergeDBCardsIntoCanvas } from "@/lib/canvas/canvasLoader";
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -79,6 +80,14 @@ const SongCanvasExperience = () => {
   const voiceMemoCountRef = useRef(0);
 
   const permissions = useMemo(() => getCanvasPermissions(role), [role]);
+
+  // Load real voice memos from Supabase and merge into canvas on mount
+  useEffect(() => {
+    loadVoiceMemosForCanvas(songId).then((db) => {
+      setCanvas((prev) => mergeDBCardsIntoCanvas(prev, db));
+    }).catch(() => { /* non-fatal — canvas works without DB cards */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songId]);
   const nodesById = useMemo(() => new Map(canvas.nodes.map((node) => [node.id, node])), [canvas.nodes]);
   const rootNode = canvas.nodes.find((node) => node.objectType === "root_song");
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) : undefined;
