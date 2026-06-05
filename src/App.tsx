@@ -28,6 +28,7 @@ const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
+const BillingPage = lazy(() => import("./pages/settings/BillingPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 
 // Pricing + checkout (new)
@@ -127,6 +128,7 @@ const App = () => (
 
             {/* Settings */}
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/billing" element={<BillingPage />} />
             <Route path="/settings/storage" element={<StoragePage />} />
             <Route path="/settings/referral" element={<ReferralPage />} />
 

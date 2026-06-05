@@ -3,6 +3,7 @@ import {
   HardDrive,
   Gift,
   Crown,
+  CreditCard,
   ChevronRight,
   User,
   Bell,
@@ -24,6 +25,7 @@ interface SettingsRow {
 const ROWS: SettingsRow[] = [
   { icon: User,      label: "Account",          sublabel: "officallulas@gmail.com", to: "#" },
   { icon: Crown,     label: "Upgrade to Pro",   sublabel: "Unlock 50 songs - 100GB - exports", to: "/upgrade", accent: true },
+  { icon: CreditCard, label: "Billing",         sublabel: "Manage plan, invoices, and cancellation", to: "/settings/billing" },
   { icon: HardDrive, label: "Storage",          sublabel: "850MB of 1GB used", to: "/settings/storage" },
   { icon: Gift,      label: "Refer & Earn",     sublabel: "$10/month per active Pro referral", to: "/settings/referral" },
   { icon: Bell,      label: "Notifications",    to: "#" },

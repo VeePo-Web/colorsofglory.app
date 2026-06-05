@@ -13,12 +13,12 @@ const ReferralRedirectPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const normalized = code?.trim().toUpperCase() ?? "";
     if (code) {
-      const normalized = code.trim().toUpperCase();
-      // Persist so checkout survives page refreshes
+      // Persist so checkout survives page refreshes.
       sessionStorage.setItem("cog:referral-code", normalized);
     }
-    navigate(`/upgrade?ref=${code ?? ""}`, { replace: true });
+    navigate(`/upgrade?ref=${encodeURIComponent(normalized)}`, { replace: true });
   }, [code, navigate]);
 
   return null; // Instant redirect - no flash

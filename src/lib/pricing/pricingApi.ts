@@ -8,10 +8,15 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Types
 
+export type PlanKey = 'free' | 'starter' | 'pro';
+export type SubPlan = 'free' | 'starter' | 'pro' | 'founder_pro';
+export type PaymentEnvironment = 'sandbox' | 'live';
+
 export interface PlanTier {
-  key: string;                          // "free" | "starter" | "pro"
+  key: PlanKey;                         // "free" | "starter" | "pro"
   displayName: string;                  // "Free" | "Starter" | "Pro"
   monthlyCents: number;                 // 0 | 500 | 10000
+  currency: string;                     // "cad"
   ownedSongLimit: number;               // 1 | 4 | 50
   storageBytesIncluded: number;
   allowsFounderCode: boolean;
@@ -26,6 +31,7 @@ type PlanTierRow = {
   key: string;
   display_name: string;
   monthly_cents: number;
+  currency: string;
   owned_song_limit: number;
   storage_bytes_included: number;
   allows_founder_code: boolean;
@@ -35,8 +41,6 @@ type PlanTierRow = {
   stripe_referral_price_id: string | null;
   sort_order: number;
 };
-
-export type SubPlan = 'free' | 'pro' | 'founder_pro';
 
 export interface ValidateCodeResult {
   kind: 'founder' | 'member_referral' | 'invalid';
@@ -57,6 +61,31 @@ export interface CreateCheckoutResult {
   url: string | null;
   appliedCodeKind: 'founder' | 'member_referral' | 'none';
   ignoredReferrer: boolean;
+  ignoredCode: boolean;
+}
+
+export interface CreateCheckoutInput {
+  planKey: Exclude<PlanKey, 'free'>;
+  code?: string | null;
+  referrerCode?: string | null;
+  returnUrl: string;
+  environment?: PaymentEnvironment;
+}
+
+export interface BillingSubscriptionSummary {
+  id: string;
+  plan: SubPlan;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+  unitAmountCents: number;
+  currency: string;
+}
+
+export interface BillingOverview {
+  authenticated: boolean;
+  currentPlan: SubPlan;
+  subscription: BillingSubscriptionSummary | null;
 }
 
 export interface ReferralStats {
@@ -75,6 +104,43 @@ export interface ReferralStats {
   nextPayoutEstimateCents: number;
 }
 
+const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
+  already_attributed: "You've already applied a code to this account.",
+  code_exhausted: "That founder code has reached its limit.",
+  exhausted: "That founder code has reached its limit.",
+  forbidden: "This subscription belongs to a different account.",
+  invalid_code: "That code didn't work. Check it and try again.",
+  invalid_plan_key: "That plan is not available right now.",
+  invalid_price_id: "That checkout option is not available right now.",
+  invalid_return_url: "Checkout needs a fresh return link. Refresh and try again.",
+  no_active_subscription: "We could not find an active subscription to manage.",
+  no_customer: "We could not find billing details for this account yet.",
+  plan_not_purchasable: "That plan is not available for checkout right now.",
+  price_not_found: "That checkout price is not available right now.",
+  return_url_missing_session_template: "Checkout needs a fresh return link. Refresh and try again.",
+  storage_addons_require_pro: "Storage add-ons are available after Pro is active.",
+  unauthorized: "Please sign in before changing billing.",
+};
+
+function normalizeCode(code?: string | null): string | undefined {
+  const trimmed = code?.trim().toUpperCase();
+  return trimmed || undefined;
+}
+
+function getPaymentEnvironment(): PaymentEnvironment {
+  return import.meta.env.PROD ? 'live' : 'sandbox';
+}
+
+export function buildEmbeddedCheckoutReturnUrl(origin = window.location.origin): string {
+  const cleanOrigin = origin.replace(/\/$/, '');
+  return `${cleanOrigin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+}
+
+export function paymentErrorToMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  return CHECKOUT_ERROR_MESSAGES[raw] ?? (raw.replace(/_/g, ' ') || 'Something went wrong. Please try again.');
+}
+
 // fetchPlanTiers
 
 /** Load all purchasable tiers from the plan_tiers table, sorted by sort_order. */
@@ -84,7 +150,7 @@ export async function fetchPlanTiers(): Promise<PlanTier[]> {
     .select(
       'key, display_name, monthly_cents, owned_song_limit, storage_bytes_included, ' +
       'allows_founder_code, allows_member_referral, allows_storage_addons, ' +
-      'stripe_price_id, stripe_referral_price_id, sort_order'
+      'stripe_price_id, stripe_referral_price_id, sort_order, currency'
     )
     .order('sort_order', { ascending: true });
 
@@ -93,9 +159,10 @@ export async function fetchPlanTiers(): Promise<PlanTier[]> {
   const rows = (data ?? []) as unknown as PlanTierRow[];
 
   return rows.map((row) => ({
-    key: row.key,
+    key: row.key as PlanKey,
     displayName: row.display_name,
     monthlyCents: row.monthly_cents,
+    currency: row.currency ?? 'cad',
     ownedSongLimit: row.owned_song_limit,
     storageBytesIncluded: row.storage_bytes_included,
     allowsFounderCode: row.allows_founder_code,
@@ -189,28 +256,37 @@ export async function validateCode(code: string, planKey = 'pro'): Promise<Valid
  * @param returnUrl - where Stripe redirects after payment
  */
 export async function createCheckout(
-  planKey: string,
+  planKey: Exclude<PlanKey, 'free'>,
   code: string | null,
   returnUrl: string
 ): Promise<CreateCheckoutResult> {
+  return createCheckoutSession({ planKey, code, returnUrl });
+}
+
+export async function createCheckoutSession(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
   const body: Record<string, unknown> = {
-    plan_key: planKey,
-    returnUrl,
-    environment: import.meta.env.PROD ? 'live' : 'sandbox',
+    plan_key: input.planKey,
+    returnUrl: input.returnUrl,
+    environment: input.environment ?? getPaymentEnvironment(),
   };
 
-  if (code) body.code = code.trim().toUpperCase();
+  const manualCode = normalizeCode(input.code);
+  const referrerCode = normalizeCode(input.referrerCode);
+
+  if (manualCode) body.code = manualCode;
+  if (referrerCode) body.referrer_code = referrerCode;
 
   const { data, error } = await supabase.functions.invoke('create-checkout', { body });
 
-  if (error) throw new Error(error.message ?? 'Checkout creation failed');
-  if (data?.error) throw new Error(data.error);
+  if (error) throw new Error(paymentErrorToMessage(error.message ?? 'Checkout creation failed'));
+  if (data?.error) throw new Error(paymentErrorToMessage(data.error));
 
   return {
     clientSecret: data.clientSecret ?? null,
     url: data.url ?? null,
     appliedCodeKind: data.applied_code_kind ?? 'none',
     ignoredReferrer: data.ignored_referrer ?? false,
+    ignoredCode: data.ignored_code ?? false,
   };
 }
 
@@ -221,20 +297,93 @@ export async function getBillingPortalUrl(returnUrl: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke('billing-customer-portal', {
     body: {
       returnUrl,
-      environment: import.meta.env.PROD ? 'live' : 'sandbox',
+      environment: getPaymentEnvironment(),
     },
   });
 
-  if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error);
-  if (!data?.url) throw new Error('No portal URL returned');
+  if (error) throw new Error(paymentErrorToMessage(error.message));
+  if (data?.error) throw new Error(paymentErrorToMessage(data.error));
+  if (!data?.url) throw new Error(paymentErrorToMessage('portal_session_failed'));
 
   return data.url as string;
 }
 
+export async function fetchBillingOverview(): Promise<BillingOverview> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      authenticated: false,
+      currentPlan: 'free',
+      subscription: null,
+    };
+  }
+
+  const [planResult, subscriptionResult] = await Promise.all([
+    supabase.rpc('current_plan', { _user_id: user.id }),
+    supabase
+      .from('subscriptions')
+      .select('id, plan, status, current_period_end, cancelled_at, unit_amount_cents, currency')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (planResult.error) throw planResult.error;
+  if (subscriptionResult.error) throw subscriptionResult.error;
+
+  const sub = subscriptionResult.data;
+
+  return {
+    authenticated: true,
+    currentPlan: (planResult.data as SubPlan) ?? 'free',
+    subscription: sub
+      ? {
+          id: sub.id,
+          plan: sub.plan as SubPlan,
+          status: sub.status,
+          currentPeriodEnd: sub.current_period_end,
+          cancelledAt: sub.cancelled_at,
+          unitAmountCents: sub.unit_amount_cents,
+          currency: sub.currency ?? 'cad',
+        }
+      : null,
+  };
+}
+
+export async function cancelCurrentSubscription(atPeriodEnd = true): Promise<{
+  ok: true;
+  status: string;
+  cancelAtPeriodEnd: boolean;
+}> {
+  const { data, error } = await supabase.functions.invoke('billing-cancel-subscription', {
+    body: {
+      at_period_end: atPeriodEnd,
+      environment: getPaymentEnvironment(),
+    },
+  });
+
+  if (error) throw new Error(paymentErrorToMessage(error.message));
+  if (data?.error) throw new Error(paymentErrorToMessage(data.error));
+
+  return {
+    ok: true,
+    status: data.status ?? 'active',
+    cancelAtPeriodEnd: data.cancel_at_period_end ?? atPeriodEnd,
+  };
+}
+
 // centsToDisplay
 
-export function centsToDisplay(cents: number): string {
+export function centsToDisplay(cents: number, currency = 'cad'): string {
   if (cents === 0) return '$0';
-  return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+  try {
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+      maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    }).format(cents / 100);
+  } catch {
+    return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+  }
 }

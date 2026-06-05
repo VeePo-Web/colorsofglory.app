@@ -18,9 +18,12 @@ export const qaRoutes = [
   { path: "/songs/1/activity", label: "Activity" },
   { path: "/songs/1/credits", label: "Credits" },
   { path: "/settings", label: "Settings" },
+  { path: "/settings/billing", label: "Billing settings" },
   { path: "/settings/storage", label: "Storage settings" },
   { path: "/settings/referral", label: "Referral settings" },
   { path: "/upgrade", label: "Upgrade" },
+  { path: "/pricing", label: "Pricing alias" },
+  { path: "/checkout/success?session_id=cs_test_demo", label: "Checkout success" },
   { path: "/not-a-real-song-room", label: "404 fallback" },
 ];
 
@@ -34,7 +37,9 @@ export const mobileRenderRoutes = [
   { path: "/songs/1/chords", label: "Chords" },
   { path: "/songs/1/canvas", label: "Song canvas" },
   { path: "/settings", label: "Settings" },
+  { path: "/settings/billing", label: "Billing settings" },
   { path: "/upgrade", label: "Upgrade" },
+  { path: "/checkout/success?session_id=cs_test_demo", label: "Checkout success" },
   { path: "/not-a-real-song-room", label: "404 fallback" },
 ];
 

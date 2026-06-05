@@ -6,10 +6,14 @@ import GoldButton from "@/components/cog/GoldButton";
 import BackHeader from "@/components/cog/BackHeader";
 import BottomNav from "@/components/cog/BottomNav";
 import {
+  buildEmbeddedCheckoutReturnUrl,
+  createCheckoutSession,
   fetchPlanTiers,
   fetchCurrentPlan,
   validateCode,
   centsToDisplay,
+  paymentErrorToMessage,
+  type PlanKey,
   type PlanTier,
   type SubPlan,
   type ValidateCodeResult,
@@ -101,6 +105,15 @@ const ReferredBanner = ({ referrerName }: { referrerName?: string }) => (
   </div>
 );
 
+const codeErrorMessage = (reason?: string): string => {
+  if (reason === "wrong_plan") return "Codes only work on the Pro plan.";
+  if (reason === "already_attributed") return "You've already applied a code to your account.";
+  if (reason === "self") return "You can't use your own code.";
+  if (reason === "expired") return "That code is no longer active.";
+  if (reason === "network_error") return "We couldn't validate the code. Check your connection.";
+  return "That code didn't work. Check it and try again.";
+};
+
 // Pricing card
 
 interface PricingCardProps {
@@ -133,11 +146,12 @@ const PricingCard = ({
 
   // CTA copy
   let ctaLabel = `Get ${tier.displayName}`;
-  if (isFree) ctaLabel = "Your current plan";
+  if (isFree && isCurrentPlan) ctaLabel = "Your current plan";
+  else if (isFree) ctaLabel = "Included";
   else if (isCurrentPlan) ctaLabel = "Current plan";
-  else if (isPro && showDiscount) ctaLabel = `Go Pro - ${centsToDisplay(effectiveCents)}/month`;
-  else if (isPro) ctaLabel = `Go Pro - ${centsToDisplay(tier.monthlyCents)}/month`;
-  else ctaLabel = `Start for ${centsToDisplay(tier.monthlyCents)}/month`;
+  else if (isPro && showDiscount) ctaLabel = `Go Pro - ${centsToDisplay(effectiveCents, tier.currency)}/month`;
+  else if (isPro) ctaLabel = `Go Pro - ${centsToDisplay(tier.monthlyCents, tier.currency)}/month`;
+  else ctaLabel = `Start for ${centsToDisplay(tier.monthlyCents, tier.currency)}/month`;
 
   return (
     <div
@@ -186,7 +200,7 @@ const PricingCard = ({
       <div className="flex items-baseline gap-2 mb-1">
         {showDiscount && (
           <del className="text-base" style={{ color: "#CCC" }}>
-            {centsToDisplay(tier.monthlyCents)}/mo
+            {centsToDisplay(tier.monthlyCents, tier.currency)}/mo
           </del>
         )}
         <p
@@ -198,7 +212,7 @@ const PricingCard = ({
             lineHeight: 1,
           }}
         >
-          {isFree ? "Free" : `${centsToDisplay(effectiveCents)}`}
+          {isFree ? "Free" : `${centsToDisplay(effectiveCents, tier.currency)}`}
           {!isFree && <span className="text-base font-normal" style={{ color: "#666" }}>/mo</span>}
         </p>
       </div>
@@ -243,49 +257,62 @@ const UpgradePage = () => {
   // URL state
   const refCode = searchParams.get("ref");
   const source = searchParams.get("source"); // "song_gate" | "settings" | direct
+  const [storedRefCode, setStoredRefCode] = useState<string | null>(null);
 
   // Data state
   const [tiers, setTiers] = useState<PlanTier[]>([]);
   const [currentPlan, setCurrentPlan] = useState<SubPlan>("free");
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   // Code state
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const [codeResult, setCodeResult] = useState<ValidateCodeResult | null>(null);
+  const [referralResult, setReferralResult] = useState<ValidateCodeResult | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const referralCode = (refCode ?? storedRefCode ?? "").trim().toUpperCase();
 
   // Referral state (from URL or validated code)
-  const isReferred = !!refCode || codeResult?.kind === "member_referral";
-  const referrerName = codeResult?.referrerDisplayName ?? codeResult?.founderDisplayName ?? undefined;
+  const manualDiscountResult = codeResult?.kind !== "invalid" ? codeResult : null;
+  const referralDiscountResult = referralResult?.kind !== "invalid" ? referralResult : null;
+  const activeDiscountResult = manualDiscountResult ?? referralDiscountResult;
+  const isReferred = !!referralDiscountResult;
+  const referrerName = referralDiscountResult?.referrerDisplayName ?? referralDiscountResult?.founderDisplayName ?? undefined;
 
   // Checkout state
   const [checkoutTierKey, setCheckoutTierKey] = useState<string | null>(null);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStoredRefCode(sessionStorage.getItem("cog:referral-code"));
+  }, []);
 
   // Load data
   useEffect(() => {
+    setDataError(null);
     Promise.all([fetchPlanTiers(), fetchCurrentPlan()])
       .then(([tierData, plan]) => {
         setTiers(tierData);
         setCurrentPlan(plan);
       })
-      .catch(console.error)
+      .catch(() => setDataError("Plans are taking longer than usual to load. Refresh and try again."))
       .finally(() => setIsLoadingData(false));
   }, []);
 
   // Pre-validate referral code from URL
   useEffect(() => {
-    if (!refCode) return;
-    validateCode(refCode, "pro")
+    if (!referralCode) return;
+    validateCode(referralCode, "pro")
       .then((result) => {
-        if (result.kind !== "invalid") setCodeResult(result);
+        setReferralResult(result);
       })
       .catch(() => {});
-  }, [refCode]);
+  }, [referralCode]);
 
   const handleValidateCode = async () => {
     const trimmed = codeInput.trim().toUpperCase();
@@ -297,15 +324,7 @@ const UpgradePage = () => {
       const result = await validateCode(trimmed, "pro");
       setCodeResult(result);
       if (result.kind === "invalid") {
-        setCodeError(
-          result.reason === "wrong_plan"
-            ? "Codes only work on the Pro plan."
-            : result.reason === "already_attributed"
-            ? "You've already applied a code to your account."
-            : result.reason === "self"
-            ? "You can't use your own code."
-            : "That code didn't work. Check it and try again."
-        );
+        setCodeError(codeErrorMessage(result.reason));
       }
     } catch {
       setCodeError("We couldn't validate the code. Check your connection.");
@@ -320,14 +339,38 @@ const UpgradePage = () => {
     setCheckoutTierKey(tier.key);
     setIsLoadingCheckout(true);
     setCheckoutError(null);
+    setCheckoutNotice(null);
 
     try {
-      const { createCheckout } = await import("@/lib/pricing/pricingApi");
-      const effectiveCode = codeResult?.kind !== "invalid" ? codeInput.trim() : null;
-      const finalCode = effectiveCode || refCode || null;
-      const returnUrl = `${window.location.origin}/checkout/success`;
+      const typedCode = codeInput.trim().toUpperCase();
+      let manualCode: string | null = null;
 
-      const result = await createCheckout(tier.key, finalCode, returnUrl);
+      if (tier.key === "pro" && typedCode) {
+        const validation = await validateCode(typedCode, "pro");
+        setCodeResult(validation);
+        if (validation.kind === "invalid") {
+          const message = codeErrorMessage(validation.reason);
+          setCodeError(message);
+          throw new Error(message);
+        }
+        manualCode = typedCode;
+      }
+
+      const canUseReferralCode = !manualCode && referralResult?.kind !== "invalid" && !!referralCode;
+      const result = await createCheckoutSession({
+        planKey: tier.key as Exclude<PlanKey, "free">,
+        code: manualCode,
+        referrerCode: canUseReferralCode ? referralCode : null,
+        returnUrl: buildEmbeddedCheckoutReturnUrl(),
+      });
+
+      if (result.ignoredReferrer) {
+        setCheckoutNotice("Your founder code was applied. The referral link will stay unused.");
+      }
+
+      if (result.ignoredCode) {
+        setCheckoutNotice("Codes apply to Pro only, so this checkout will continue at regular pricing.");
+      }
 
       if (result.clientSecret) {
         setClientSecret(result.clientSecret);
@@ -337,7 +380,7 @@ const UpgradePage = () => {
         throw new Error("No checkout URL or client secret returned.");
       }
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Checkout failed. Please try again.");
+      setCheckoutError(paymentErrorToMessage(err));
     } finally {
       setIsLoadingCheckout(false);
     }
@@ -401,6 +444,16 @@ const UpgradePage = () => {
           </div>
         )}
 
+        {checkoutNotice && (
+          <div
+            className="rounded-xl px-4 py-3 mb-4 text-sm text-center"
+            style={{ backgroundColor: "rgba(83,171,139,0.08)", color: "#3E8F71", border: "1px solid rgba(83,171,139,0.20)" }}
+            role="status"
+          >
+            {checkoutNotice}
+          </div>
+        )}
+
         {/* Pricing cards */}
         {isLoadingData ? (
           <div className="space-y-4">
@@ -409,28 +462,39 @@ const UpgradePage = () => {
             ))}
           </div>
         ) : (
-          tiers.map((tier) => (
-            <PricingCard
-              key={tier.key}
-              tier={tier}
-              isCurrentPlan={currentPlan === tier.key || (currentPlan === "founder_pro" && tier.key === "pro")}
-              isReferred={isReferred && tier.key === "pro"}
-              codeResult={tier.key === "pro" ? codeResult : null}
-              isLoading={isLoadingCheckout && checkoutTierKey === tier.key}
-              onSelect={() => handleSelectTier(tier)}
-            />
-          ))
+          <>
+            {dataError && (
+              <div
+                className="rounded-xl px-4 py-3 mb-4 text-sm text-center"
+                style={{ backgroundColor: "rgba(224,84,64,0.08)", color: "#E05440", border: "1px solid rgba(224,84,64,0.20)" }}
+                role="alert"
+              >
+                {dataError}
+              </div>
+            )}
+            {tiers.map((tier) => (
+              <PricingCard
+                key={tier.key}
+                tier={tier}
+                isCurrentPlan={currentPlan === tier.key || (currentPlan === "founder_pro" && tier.key === "pro")}
+                isReferred={!!activeDiscountResult && tier.key === "pro"}
+                codeResult={tier.key === "pro" ? activeDiscountResult : null}
+                isLoading={isLoadingCheckout && checkoutTierKey === tier.key}
+                onSelect={() => handleSelectTier(tier)}
+              />
+            ))}
+          </>
         )}
 
-        {/* Founder code entry - only shown if not already referred */}
-        {!isReferred && (
+        {/* Founder code entry */}
+        {currentPlan !== "founder_pro" && (
           <div className="mb-6">
             <button
               onClick={() => setShowCodeInput(!showCodeInput)}
               className="flex items-center gap-1.5 text-sm w-full justify-center transition-opacity hover:opacity-70 py-2"
               style={{ color: "#B5935A" }}
             >
-              Have a founder code?
+              {referralCode ? "Have a founder code instead?" : "Have a founder code?"}
               {showCodeInput
                 ? <ChevronUp size={14} strokeWidth={2} />
                 : <ChevronDown size={14} strokeWidth={2} />

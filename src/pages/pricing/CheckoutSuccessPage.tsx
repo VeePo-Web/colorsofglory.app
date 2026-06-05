@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
@@ -12,7 +12,9 @@ const AUTO_NAVIGATE_MS = 3000;
  */
 const CheckoutSuccessPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [countdown, setCountdown] = useState(3);
+  const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -64,7 +66,9 @@ const CheckoutSuccessPage = () => {
           You're in.
         </h1>
         <p className="text-base mb-10 leading-relaxed" style={{ color: "#666" }}>
-          Your Pro workspace is ready. Every song you write from here is protected, connected, and yours.
+          {sessionId
+            ? "Your workspace is being finalized. Every song you write from here is protected, connected, and yours."
+            : "Your workspace is ready. Every song you write from here is protected, connected, and yours."}
         </p>
 
         {/* Manual CTA - auto-navigate handles it but user can tap now */}
