@@ -20,9 +20,16 @@ function toE164(digits: string): string {
 }
 
 function toFriendlyError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes("Invalid phone")) return "Enter a valid US phone number.";
-  if (msg.includes("rate")) return "Too many attempts. Please wait a moment and try again.";
+  const raw = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string } | null)?.code ?? "";
+  const msg = raw.toLowerCase();
+  if (code === "phone_provider_disabled" || msg.includes("unsupported phone provider") || msg.includes("provider")) {
+    return "SMS sign-in isn't available yet. Please contact support or try again shortly.";
+  }
+  if (code === "over_sms_send_rate_limit" || msg.includes("rate")) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+  if (msg.includes("invalid phone")) return "Enter a valid US phone number.";
   if (msg.includes("network") || msg.includes("fetch")) return "We could not send the code. Check your connection and try again.";
   return "We could not send the code. Please try again.";
 }

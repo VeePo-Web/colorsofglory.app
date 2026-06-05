@@ -76,6 +76,9 @@ const OTPInput = ({
             ref={(el) => { refs.current[idx] = el; }}
             type="text"
             inputMode="numeric"
+            autoComplete={idx === 0 ? "one-time-code" : "off"}
+            name={idx === 0 ? "one-time-code" : undefined}
+            pattern="[0-9]*"
             maxLength={1}
             value={value[idx] ?? ""}
             onChange={(e) => handleChange(idx, e.target.value)}
