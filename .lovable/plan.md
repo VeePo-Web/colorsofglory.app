@@ -1,73 +1,81 @@
-# Checkout Flow Audit Plan
+# Make Twilio SMS OTP work on mobile
 
-Goal: clicking a paid tier on `/upgrade` reliably opens Stripe Embedded Checkout and a successful payment lands on `/checkout/success` with the subscription persisted. The current 401 (`bad_jwt / missing sub`) confirms the flow is broken before Stripe is ever called.
+## What's actually broken
 
-## 1. Reproduce + classify the current failure
-- Confirm in network log: `POST /functions/v1/create-checkout` → 401 `{"error":"unauthorized"}` with anon JWT bearer (no `sub`).
-- Confirm auth log: `bad_jwt / invalid claim: missing sub claim` → user is signed out on `/upgrade`.
-- Conclusion: not a backend bug. UI lets unauthenticated users press "Go Pro".
+Right now, tapping "Continue" on `/auth/login` sends a request to Supabase Auth's `/otp` endpoint and gets back:
 
-## 2. Fix the auth gap on /upgrade (root cause of today's 401)
-File: `src/pages/pricing/UpgradePage.tsx` (`handleSelectTier`).
-- Call `supabase.auth.getUser()` (or read from an auth context) before `createCheckout`.
-- If no user: `navigate("/login?next=/upgrade&plan=" + tier.key + (refCode ? "&ref=" + refCode : ""))` instead of invoking the function.
-- After login, restore the intent: read `?next` + `?plan` and resume checkout automatically.
-- Add a visible "Sign in to subscribe" CTA state on the cards so users aren't surprised.
+```
+400 { "code": "phone_provider_disabled", "message": "Unsupported phone provider" }
+```
 
-## 3. Audit `createCheckout` request contract (frontend ↔ edge function)
-File: `src/lib/pricing/pricingApi.ts` + `supabase/functions/create-checkout/index.ts`.
-- `returnUrl` MUST contain `{CHECKOUT_SESSION_ID}` (server validates this; today the page sends `/checkout/success` with no template → would 400 even after auth is fixed). Change to:
-  `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`.
-- `environment`: `import.meta.env.PROD ? 'live' : 'sandbox'` is wrong for Lovable preview (preview is built `PROD` but uses the sandbox token). Derive from the token prefix via `getStripeEnvironment()` per the Stripe knowledge.
-- Ensure `Authorization: Bearer <user JWT>` is attached. `supabase.functions.invoke` does this automatically when a session exists — verify after step 2 fix.
-- Surface `ignored_code` from the response in the UI (today only `ignored_referrer` is read).
+This is **not a code bug**. The backend (Lovable Cloud / Supabase Auth) has no SMS provider configured, so it refuses to send the code. No amount of frontend work will fix this — the provider has to be turned on in the Auth dashboard.
 
-## 4. Audit the edge function itself (`create-checkout`)
-- `getUser(token)` path uses service-role client with the user's bearer — verify it actually decodes user JWTs (preferred pattern: separate anon-keyed client with `global.headers.Authorization`). Today's 401 happened because the bearer was the anon key itself; once a real user JWT arrives, confirm `auth.getUser(token)` returns a user. Add a debug log on failure with the JWT `sub` for one-off diagnosis (then remove).
-- Confirm `config.toml` does NOT require `verify_jwt = false` for `create-checkout` (gateway-level JWT check was passing today — the 401 was from the in-function `getUser`). Leave as-is.
-- Re-test the validation branches we already hardened: `{CHECKOUT_SESSION_ID}` required, invalid plan_key, claim_founder_code_redemption atomicity, release on Stripe error, pending_code cleared.
-- Verify `plan_tiers.stripe_price_id` rows have the `_cad` lookup keys present in Stripe (`prices.list({ lookup_keys })` returns ≥1). If Stripe lacks them → checkout returns 404 `price_not_found`. Action: call `payments--get_go_live_status` + list prices to confirm the three CAD prices exist in sandbox.
+The fix is a one-time backend configuration + a couple of small code hardenings so the experience is solid on real phones.
 
-## 5. Audit `CheckoutModal` mount
-File: `src/components/pricing/CheckoutModal.tsx`.
-- Modal is rendered behind a `Suspense` boundary but `UpgradePage` never actually mounts it — `clientSecret` state is set but no `<Suspense><CheckoutModal …/></Suspense>` exists in JSX (verify lines 500–522 of UpgradePage that weren't read yet). If missing, add it with `onClose={() => setClientSecret(null)}`.
-- Confirm `VITE_PAYMENTS_CLIENT_TOKEN` is present in `.env.development` (sandbox `pk_test_…`). Show the `PaymentTestModeBanner` pattern so unconfigured builds fail loudly.
-- `loadStripe` is called at module scope — fine, but guard `null` token to avoid silent breakage.
+---
 
-## 6. Audit return / success flow
-File: `src/pages/pricing/CheckoutSuccessPage.tsx`.
-- Stripe will append `?session_id=…` once step 3's `returnUrl` is fixed. Read it, optionally call a `checkout-session-status` lookup to confirm `paid`, then navigate home. At minimum, log it so we can verify in network panel.
-- Verify route `/checkout/success` is registered in `src/App.tsx` (read to confirm; if not → user lands on 404 after paying).
+## Plan
 
-## 7. Verify the webhook persists the subscription
-- After a sandbox test payment, query `subscriptions` for the test user: expect one row with `environment='sandbox'`, `status='active'`, correct `price_id` lookup key, and `current_period_end` in the future.
-- Spot-check `billing_events` idempotency (re-trigger the same event from Stripe CLI / Dashboard → no duplicate row).
-- Check `referral_attributions` row was inserted for founder/member code paths; `codes.redemption_count` incremented for founder.
+### 1. Turn on Twilio as the SMS provider (you do this, ~5 min)
 
-## 8. End-to-end smoke test matrix
-Run each with `supabase--curl_edge_functions` + a manual browser pass:
-1. Signed-out user clicks Pro → redirected to /login (no 401).
-2. Signed-in user, no code → checkout opens, pays with `4242…`, lands on success, subscription row appears.
-3. Signed-in user, valid founder code → checkout shows $49 CAD, success, `referral_attributions.referrer_type='founder'`, redemption incremented.
-4. Signed-in user, valid member referral code → checkout at $49 CAD, attribution row with `referrer_type='member'`.
-5. Signed-in user, code on Starter → `ignored_code=true` in response, UI shows a note, checkout proceeds at $5.
-6. Already-attributed user → 409 `already_attributed` surfaced as friendly error.
-7. Exhausted founder code → 409 `code_exhausted`, no Stripe call (verify redemption count unchanged via `release_founder_code_redemption`).
-8. Decline card `4000…0002` → modal stays, redemption released, no orphan attribution.
+In Lovable Cloud → Auth → Phone provider, enable **Twilio** and paste in:
 
-## 9. Logging + observability pass
-- Add structured `console.log` in `create-checkout` for: resolved plan_key, priceId, applied_code_kind, customer id, session id. Keep concise; these surface in `edge_function_logs`.
-- Frontend: log `clientSecret` presence (boolean only) + any error from `createCheckout` to the browser console with a `[checkout]` prefix.
+- Twilio Account SID
+- Twilio Auth Token (or API Key SID + Secret)
+- Twilio Messaging Service SID *(recommended)* or a single Twilio "From" number in E.164 format (e.g. `+15551234567`)
 
-## 10. Documentation + handoff
-- Update `.lovable/payments-v2.md` "Known gaps" section with the auth-guard + returnUrl-template fixes and the smoke test results.
-- Note the live-vs-sandbox env-derivation rule so future edits don't reintroduce the `import.meta.env.PROD` shortcut.
+You'll need a Twilio account with:
+- A verified sender (Messaging Service or a purchased number with SMS capability)
+- For Canadian/US destinations: **A2P 10DLC registration** completed, OR a Toll-Free number that's been verified. Without this, carriers silently drop SMS to US/CA mobiles — the API returns 200 but the phone never rings.
 
-## Out of scope (this audit)
-- Visual redesign of the Upgrade page (Claude owns).
-- Multi-currency (CAD-only per memory).
-- New plan tiers / pricing changes.
-- Stripe go-live (separate workflow via `payments--get_go_live_status`).
+I'll walk you through where to click once you say go.
 
-## Deliverable
-A passing run of the 8 smoke tests above, with screenshots of: signed-out redirect, embedded checkout modal, successful `/checkout/success?session_id=…`, and a `subscriptions` row in the DB.
+### 2. Add Twilio test credentials for the stress harness (optional but smart)
+
+`docs/codex-stress/README.md` already expects "Test OTP" entries (`+15555550100`–`+15555550119` → `123456`) so Codex can load-test without burning real SMS. We'll add those in the same Auth panel under **Test OTP**.
+
+### 3. Lock down SMS abuse before going live
+
+Twilio's two cheap protections, both toggled in the Twilio console (I'll point to them):
+
+- **SMS Pumping Protection** — blocks the fraud pattern where attackers spam OTP sends to premium-rate numbers they own.
+- **SMS Geo Permissions** — restrict to US + CA only (you can add more countries later). Default is "everywhere," which is how people wake up to $4k bills.
+
+### 4. Frontend hardening (small, mobile-only polish)
+
+Touch only `src/pages/auth/PhoneLoginPage.tsx` and `CodeVerifyPage.tsx`:
+
+- **Better error mapping.** Right now `phone_provider_disabled`, `sms_send_failed`, and `over_sms_send_rate_limit` all collapse to "We could not send the code." Map them to honest messages so future regressions surface fast.
+- **Disable the Continue button while in flight** (already done) + add a 30s client-side cooldown on resend (already done in `CodeVerifyPage`, mirror it on `PhoneLoginPage` so the user can't double-tap and trip per-phone rate limits).
+- **`autoComplete="one-time-code"` + `inputMode="numeric"`** on the OTP boxes so iOS Safari and Android Chrome auto-fill the code from the SMS notification — this is the single biggest mobile UX win and `OTPInput.tsx` likely doesn't set it yet. I'll verify and patch.
+- **E.164 sanity check** before submit. Today we hardcode `+1` and 10 digits, which is fine for US/CA only. We'll keep that but reject obviously bad inputs (all zeros, repeating digits) before spending a Twilio send.
+
+### 5. Verify end-to-end on a real phone
+
+After Twilio is live:
+
+1. Load the preview on an actual mobile device (not just the desktop preview).
+2. Enter your real number → tap Continue → confirm SMS arrives within ~10s.
+3. iOS: confirm the code suggestion bar appears above the keyboard. Android: confirm SMS Retriever/autofill fills the boxes.
+4. Try a wrong code → friendly error, boxes clear.
+5. Wait 30s → Resend works.
+6. Sign out, sign back in → existing-user path works.
+
+If anything fails, I'll read `supabase--edge_function_logs` for the `auth` service and the Twilio Messaging logs side-by-side to diagnose.
+
+### 6. Codex stress pass (optional, after #5 passes)
+
+Hand off to Codex to run `scripts/stress/otp-send.ts --mode=test-numbers --rps=5 --duration=30` to confirm p95 latency and that rate limits return structured JSON, not HTML.
+
+---
+
+## What I need from you to start
+
+1. **Confirm you have a Twilio account** (or want me to walk you through creating one — ~10 min including A2P).
+2. **Pick the sender:** Messaging Service SID (recommended, better deliverability + pumping protection) vs. single Twilio number.
+3. **Confirm launch geography** — US + CA only, or also international? This decides whether we need additional A2P/regulatory work.
+
+Once you answer those three, I'll switch to build mode and:
+- Guide you through the Auth panel paste-in
+- Patch `PhoneLoginPage.tsx`, `CodeVerifyPage.tsx`, and `OTPInput.tsx` for the mobile polish
+- Verify on the preview together
