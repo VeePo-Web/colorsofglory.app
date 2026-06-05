@@ -86,7 +86,6 @@ const SongCanvasExperience = () => {
     loadVoiceMemosForCanvas(songId).then((db) => {
       setCanvas((prev) => mergeDBCardsIntoCanvas(prev, db));
     }).catch(() => { /* non-fatal — canvas works without DB cards */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId]);
   const nodesById = useMemo(() => new Map(canvas.nodes.map((node) => [node.id, node])), [canvas.nodes]);
   const rootNode = canvas.nodes.find((node) => node.objectType === "root_song");

@@ -1,4 +1,4 @@
-import { DIVIDER_X } from "./CanvasViewport";
+import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 
 /**
  * The two zone header labels: "Ideas Tree" and "Final Song"
