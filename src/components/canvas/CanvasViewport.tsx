@@ -1,49 +1,31 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useGesture } from "@/hooks/useGesture";
+import {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  IDEAS_ZONE_WIDTH,
+} from "@/lib/canvas/canvasConstants";
+import {
+  CanvasViewportContext,
+  type CanvasViewportContextValue,
+} from "./canvasViewportContext";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const CANVAS_WIDTH = 2400;    // total canvas width (Ideas + Final zones)
-export const CANVAS_HEIGHT = 3200;   // total canvas height
-export const DIVIDER_X = CANVAS_WIDTH / 2;  // center split between trees
-export const IDEAS_ZONE_WIDTH = CANVAS_WIDTH / 2;
-export const FINAL_ZONE_WIDTH = CANVAS_WIDTH / 2;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2.5;
 const INITIAL_ZOOM = 1.0;
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
-interface ViewportCtx {
   /** Convert canvas coordinates → screen coordinates */
-  canvasToScreen: (cx: number, cy: number) => { x: number; y: number };
   /** Convert screen coordinates → canvas coordinates */
-  screenToCanvas: (sx: number, sy: number) => { x: number; y: number };
-  /** Animate pan so canvas point (cx, cy) lands at the viewport center */
-  panTo: (cx: number, cy: number, vcx: number, vcy: number, ms?: number) => void;
-  /** Current zoom (read-only, updates after gesture ends) */
-  zoom: number;
-  /** Current pan (read-only, updates after gesture ends) */
-  panX: number;
-  panY: number;
-}
-
-const CanvasViewportContext = createContext<ViewportCtx | null>(null);
-
-export function useCanvasViewport(): ViewportCtx {
-  const ctx = useContext(CanvasViewportContext);
-  if (!ctx) throw new Error("useCanvasViewport must be used inside <CanvasViewport>");
-  return ctx;
-}
-
 // ─── CanvasViewport ───────────────────────────────────────────────────────────
 
 interface CanvasViewportProps {
@@ -153,7 +135,7 @@ const CanvasViewport = ({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stable context value — coordinate helpers reference refs so they're always current
-  const ctxValue: ViewportCtx = {
+  const ctxValue: CanvasViewportContextValue = {
     canvasToScreen: useCallback((cx, cy) => ({
       x: cx * zoomRef.current + panRef.current.x,
       y: cy * zoomRef.current + panRef.current.y,

@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+type VoiceMemoRow = Database["public"]["Tables"]["voice_memos"]["Row"];
 
 export interface UploadUrlResult {
   uploadUrl: string;
@@ -16,6 +19,27 @@ export interface VoiceMemoRecord {
   created_at: string;
   created_by: string;
   is_processing: boolean;
+  status?: VoiceMemoRow["status"];
+}
+
+const PROCESSING_STATUSES = new Set<VoiceMemoRow["status"]>([
+  "uploading",
+  "uploaded",
+]);
+
+function toVoiceMemoRecord(row: VoiceMemoRow): VoiceMemoRecord {
+  return {
+    id: row.id,
+    song_id: row.song_id,
+    title: row.title ?? "Voice memo",
+    duration_ms: row.duration_ms ?? 0,
+    section_label: row.section_id ? "Linked section" : "Raw idea",
+    storage_path: row.storage_path,
+    created_at: row.created_at,
+    created_by: "Contributor",
+    is_processing: PROCESSING_STATUSES.has(row.status),
+    status: row.status,
+  };
 }
 
 /** Step 1 of upload: get a signed URL to PUT audio to Supabase Storage */
@@ -104,7 +128,7 @@ export async function listVoiceMemos(songId: string): Promise<VoiceMemoRecord[]>
     .eq("song_id", songId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []).map(toVoiceMemoRecord);
 }
 
 /** Complete upload: getUploadUrl + upload blob + finalize in sequence */
