@@ -28,6 +28,13 @@ import CanvasViewport, { DIVIDER_X } from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import type { RecordingResult } from "@/hooks/useVoiceRecorder";
+import RecordingSheet from "@/components/voice/RecordingSheet";
+import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
+import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
+import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
+import { formatDuration } from "@/lib/voice/audioFormat";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -48,11 +55,14 @@ export interface CanvasCard {
   section: string;
   contributor: string;
   status: "raw" | "shortlisted" | "approved" | "meaning" | "review";
-  accent: string;   // creator's aurora color
-  x: number;        // canvas-coordinate position
+  accent: string;
+  x: number;
   y: number;
-  isDimmedReference?: boolean;  // true = original after move to Final
+  isDimmedReference?: boolean;
+  isProcessing?: boolean;
 }
+
+type RecordingFlow = "idle" | "recording" | "reviewing";
 
 const CARD_ICONS: Record<CanvasCardType, ElementType> = {
   lyric: FileText,
@@ -407,6 +417,14 @@ const SongCanvasExperience = () => {
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
 
+  // ── Voice recording state ────────────────────────────────────────────────────
+  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
+  const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>("idle");
+  const [recordingSection, setRecordingSection] = useState("Raw idea");
+  const [recordingNote, setRecordingNote] = useState("");
+  const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
+  const voiceMemoCountRef = useRef(0);
+
   // Drag tracking for card repositioning
   const draggingCardId = useRef<string | null>(null);
   const dragStartCanvas = useRef({ x: 0, y: 0 });
@@ -489,6 +507,58 @@ const SongCanvasExperience = () => {
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
   }, [dismissFirstAction]);
+
+  // ── Voice recording handlers ──────────────────────────────────────────────────
+  const handleStartRecording = useCallback(async () => {
+    setRecordingSection("Raw idea");
+    setRecordingNote("");
+    setRecordingFlow("recording");
+    await startRecording();
+  }, [startRecording]);
+
+  const handleStopRecording = useCallback(async () => {
+    const result = await stopRecording();
+    if (result) { setPendingRecording(result); setRecordingFlow("reviewing"); }
+    else setRecordingFlow("idle");
+  }, [stopRecording]);
+
+  const handleCancelRecording = useCallback(() => {
+    cancelRecording();
+    setRecordingFlow("idle");
+    setRecordingNote("");
+    setPendingRecording(null);
+  }, [cancelRecording]);
+
+  const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
+    if (!pendingRecording) return;
+    voiceMemoCountRef.current++;
+    const tempId = `voice-${Date.now()}`;
+    const row = voiceMemoCountRef.current;
+    const newCard: CanvasCard = {
+      id: tempId, tree: "ideas", type: "voice",
+      title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
+      section, contributor: "You", status: "raw", accent: "#D4AE5C",
+      x: 80 + (row % 2) * 260, y: 200 + Math.floor(row / 2) * 180,
+      isProcessing: true,
+    };
+    setCards((prev) => [newCard, ...prev]);
+    setRecordingFlow("idle");
+    setRecordingNote("");
+    setPendingRecording(null);
+    try {
+      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe });
+      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
+    } catch {
+      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
+    }
+  }, [pendingRecording, songId]);
+
+  const openMicSettings = useCallback(() => {
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) window.location.href = "app-settings:";
+    else if (/Android/.test(ua)) alert("Settings → Apps → Colors of Glory → Permissions → Microphone");
+    else alert("Click the 🔒 lock icon in your address bar → Site Settings → Microphone → Allow");
+  }, []);
 
   const chooseLayer = (layer: LayerId) => {
     setActiveLayer(layer);
@@ -576,19 +646,35 @@ const SongCanvasExperience = () => {
                   onChords={() => { addCard("chord"); dismissFirstAction(); }}
                 />
               )}
+              {/* Mic FAB — record voice memo */}
+              <button
+                type="button"
+                onClick={() => { void handleStartRecording(); }}
+                disabled={recordingFlow !== "idle"}
+                className="absolute flex items-center justify-center rounded-full text-white transition-all duration-150 active:scale-95"
+                style={{
+                  right: 80, bottom: 80, width: 52, height: 52, zIndex: 40,
+                  backgroundColor: recordingFlow === "recording" ? "#E05440" : "#1A1A1A",
+                  boxShadow: recordingFlow === "recording"
+                    ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45)"
+                    : "0 4px 16px rgba(0,0,0,0.25)",
+                  animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
+                }}
+                aria-label={recordingFlow === "recording" ? "Recording..." : "Record voice memo"}
+                aria-pressed={recordingFlow === "recording"}
+              >
+                <Mic size={20} strokeWidth={2} />
+              </button>
+
               {/* Quick-add FAB */}
               <button
                 type="button"
                 onClick={() => addCard("note")}
                 className="absolute flex items-center justify-center rounded-full text-white transition-all duration-150 active:scale-95"
                 style={{
-                  right: 20,
-                  bottom: 80,
-                  width: 52,
-                  height: 52,
+                  right: 20, bottom: 80, width: 52, height: 52, zIndex: 40,
                   backgroundColor: "#B5935A",
                   boxShadow: "0 4px 16px rgba(181,147,90,0.45)",
-                  zIndex: 40,
                 }}
                 aria-label="Create idea"
               >
@@ -636,18 +722,63 @@ const SongCanvasExperience = () => {
               ×
             </button>
             <div className="p-4" style={{ paddingTop: 48 }}>
-              <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
-                <SongCanvasWorkLayers activeLayer={activeLayer} />
-              </Suspense>
-              <Suspense fallback={null}>
-                <SongCanvasCollabLayers activeLayer={activeLayer} />
-              </Suspense>
+              {activeLayer === "voice" ? (
+                <VoiceLayerPanel
+                  songId={songId}
+                  currentUserName="You"
+                  onRecord={() => { setShowWorkPanel(false); setActiveLayer("room"); void handleStartRecording(); }}
+                />
+              ) : (
+                <>
+                  <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
+                    <SongCanvasWorkLayers activeLayer={activeLayer} />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <SongCanvasCollabLayers activeLayer={activeLayer} />
+                  </Suspense>
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
 
       <SongTabBar activeTab="canvas" />
+
+      {/* Recording sheet */}
+      {(recordingFlow === "recording" || recorderState.phase === "permission-denied") && (
+        <RecordingSheet
+          phase={recorderState.phase}
+          durationMs={recorderState.durationMs}
+          analyserNode={recorderState.analyserNode}
+          error={recorderState.error}
+          section={recordingSection}
+          onSectionChange={setRecordingSection}
+          noteValue={recordingNote}
+          onNoteChange={setRecordingNote}
+          onStop={handleStopRecording}
+          onCancel={handleCancelRecording}
+          onOpenSettings={openMicSettings}
+        />
+      )}
+
+      {/* Review sheet */}
+      {recordingFlow === "reviewing" && pendingRecording && (
+        <VoiceReviewSheet
+          recording={pendingRecording}
+          defaultName={recordingNote.trim() || `Voice Memo ${voiceMemoCountRef.current + 1}`}
+          section={recordingSection}
+          onSave={handleSaveMemo}
+          onDiscard={handleCancelRecording}
+        />
+      )}
+
+      <style>{`
+        @keyframes mic-pulse {
+          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
+          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+        }
+      `}</style>
     </div>
   );
 };
