@@ -323,12 +323,30 @@ const UpgradePage = () => {
     setCheckoutError(null);
 
     try {
+      // Auth gate — embedded checkout requires a signed-in user JWT.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        const intent = {
+          tierKey: tier.key,
+          code: codeInput.trim() || refCode || null,
+          ref: refCode || null,
+          source: source || null,
+        };
+        sessionStorage.setItem("cog:pending-checkout", JSON.stringify(intent));
+        navigate("/auth/login");
+        return;
+      }
+
       const { createCheckout } = await import("@/lib/pricing/pricingApi");
       const effectiveCode = codeResult?.kind !== "invalid" ? codeInput.trim() : null;
       const finalCode = effectiveCode || refCode || null;
-      const returnUrl = `${window.location.origin}/checkout/success`;
+      const returnUrl = `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
 
       const result = await createCheckout(tier.key, finalCode, returnUrl);
+
+      if (result.ignoredReferrer) {
+        console.warn("[checkout] referrer code was ignored for this tier");
+      }
 
       if (result.clientSecret) {
         setClientSecret(result.clientSecret);
@@ -338,6 +356,7 @@ const UpgradePage = () => {
         throw new Error("No checkout URL or client secret returned.");
       }
     } catch (err) {
+      console.error("[checkout] failed", err);
       setCheckoutError(err instanceof Error ? err.message : "Checkout failed. Please try again.");
     } finally {
       setIsLoadingCheckout(false);
