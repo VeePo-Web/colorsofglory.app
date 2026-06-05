@@ -1,154 +1,29 @@
-import {
-  ElementType,
-  lazy,
-  Suspense,
-  useCallback,
-  type CSSProperties,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  FileText,
-  Mic,
-  Music,
-  Plus,
-  Sparkles,
-  StickyNote,
-  Users,
-  GitBranch,
-} from "lucide-react";
+import { ArrowLeft, Mic, Plus } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport, { DIVIDER_X } from "@/components/canvas/CanvasViewport";
-import CanvasDivider from "@/components/canvas/CanvasDivider";
-import ZoneLabels from "@/components/canvas/ZoneLabel";
-import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
-
-const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
-const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type CanvasTree = "ideas" | "final";
-type CanvasCardType = "lyric" | "voice" | "hum" | "chord" | "note" | "scripture" | "section";
-type LayerId = "room" | "lyrics" | "voice" | "chords" | "notes" | "ideas" | "people";
-
-export interface CanvasCard {
-  id: string;
-  tree: CanvasTree;
-  type: CanvasCardType;
-  title: string;
-  body: string;
-  meta: string;
-  section: string;
-  contributor: string;
-  status: "raw" | "shortlisted" | "approved" | "meaning" | "review";
-  accent: string;   // creator's aurora color
-  x: number;        // canvas-coordinate position
-  y: number;
-  isDimmedReference?: boolean;  // true = original after move to Final
-}
-
-const CARD_ICONS: Record<CanvasCardType, ElementType> = {
-  lyric: FileText,
-  voice: Mic,
-  hum: Mic,
-  chord: Music,
-  note: StickyNote,
-  scripture: StickyNote,
-  section: GitBranch,
-};
-
-const LAYERS: Array<{ id: LayerId; label: string; icon: ElementType }> = [
-  { id: "room",   label: "Canvas",  icon: GitBranch },
-  { id: "lyrics", label: "Lyrics",  icon: FileText },
-  { id: "voice",  label: "Voice",   icon: Mic },
-  { id: "chords", label: "Chords",  icon: Music },
-  { id: "notes",  label: "Notes",   icon: StickyNote },
-  { id: "people", label: "People",  icon: Users },
-];
-
-// ─── Initial card data ────────────────────────────────────────────────────────
-
-const INITIAL_CARDS: CanvasCard[] = [
-  {
-    id: "hum-1",
-    tree: "ideas",
-    type: "hum",
-    title: "First melody hum",
-    body: "Soft lift into the chorus. Keep the ache in the first two notes.",
-    meta: "0:12 voice",
-    section: "Verse 1",
-    contributor: "Parker",
-    status: "raw",
-    accent: "#D4AE5C",
-    x: 80,
-    y: 200,
-  },
-  {
-    id: "verse-line",
-    tree: "ideas",
-    type: "lyric",
-    title: "Verse image",
-    body: "I waited in the quiet / You painted morning gold.",
-    meta: "Lyric fragment",
-    section: "Verse 1",
-    contributor: "Sarah",
-    status: "shortlisted",
-    accent: "#53AB8B",
-    x: 320,
-    y: 200,
-  },
-  {
-    id: "meaning-psalm",
-    tree: "ideas",
-    type: "scripture",
-    title: "Meaning anchor",
-    body: "Psalm 46:10 — Be still before the second verse turns upward.",
-    meta: "Scripture",
-    section: "Meaning",
-    contributor: "Parker",
-    status: "meaning",
-    accent: "#8070C4",
-    x: 80,
-    y: 440,
-  },
-  {
-    id: "chorus-core",
-    tree: "final",
-    type: "section",
-    title: "Chorus center",
-    body: "You are glory in the waiting / Fire in the night.",
-    meta: "Approved lyric",
-    section: "Chorus",
-    contributor: "Parker",
-    status: "approved",
-    accent: "#D4AE5C",
-    x: DIVIDER_X + 80,
-    y: 200,
-  },
-  {
-    id: "chord-bed",
-    tree: "final",
-    type: "chord",
-    title: "Warm progression",
-    body: "C - G - Am - F, 74 BPM. Let the bridge breathe.",
-    meta: "Key C",
-    section: "Arrangement",
-    contributor: "Caleb",
-    status: "approved",
-    accent: "#8070C4",
-    x: DIVIDER_X + 80,
-    y: 420,
-  },
-];
-
-const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
+import CanvasViewport from "@/components/canvas/CanvasViewport";
+import RootSongCard from "@/components/canvas/RootSongCard";
+import IdeaCanvasCard from "@/components/canvas/IdeaCanvasCard";
+import CanvasConnectionLayer from "@/components/canvas/CanvasConnectionLayer";
+import AddIdeaSheet from "@/components/canvas/AddIdeaSheet";
+import CardDetailDrawer from "@/components/canvas/CardDetailDrawer";
+import {
+  addIdeaToCanvas,
+  createInitialCanvasState,
+  getCanvasPermissions,
+  moveNodeToZone,
+  persistCanvasState,
+} from "@/lib/canvas/canvasService";
+import type { AddIdeaInput, CanvasRole } from "@/lib/canvas/canvasTypes";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import type { RecordingResult } from "@/hooks/useVoiceRecorder";
+import RecordingSheet from "@/components/voice/RecordingSheet";
+import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
+import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
+import { formatDuration } from "@/lib/voice/audioFormat";
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -162,7 +37,12 @@ const VISUALLY_HIDDEN: CSSProperties = {
   border: 0,
 };
 
-const SongCanvasSemanticSummary = () => (
+const ROLE_VALUES = new Set(["owner", "contributor", "reviewer", "viewer"]);
+
+const toCanvasRole = (value: string | null): CanvasRole =>
+  value && ROLE_VALUES.has(value) ? (value as CanvasRole) : "owner";
+
+const SongCanvasSemanticSummary = ({ title }: { title: string }) => (
   <section aria-label="Song room sections" style={VISUALLY_HIDDEN}>
     <p>Everything for this song stays connected here.</p>
     <h2>Lyrics</h2>
@@ -173,220 +53,9 @@ const SongCanvasSemanticSummary = () => (
     <h2>Final tree</h2>
     <h2>In this room</h2>
     <h2>What changed</h2>
-    <button type="button">Add idea</button>
-    <button type="button">Record idea</button>
+    <p>{title} has a central song card and visible song idea cards.</p>
   </section>
 );
-
-// ─── Canvas card component ─────────────────────────────────────────────────────
-
-interface CanvasCardProps {
-  card: CanvasCard;
-  selected: boolean;
-  onSelect: () => void;
-  onMoveToFinal: () => void;
-  onMoveToIdeas: () => void;
-  onDragStart: (e: React.PointerEvent, cardId: string) => void;
-}
-
-const CanvasCardEl = ({
-  card,
-  selected,
-  onSelect,
-  onMoveToFinal,
-  onMoveToIdeas,
-  onDragStart,
-}: CanvasCardProps) => {
-  const Icon = CARD_ICONS[card.type];
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: card.x,
-        top: card.y,
-        width: 200,
-        minHeight: 130,
-        borderRadius: 16,
-        backgroundColor: "#FFFFFF",
-        border: selected
-          ? `2px solid ${card.accent}`
-          : card.isDimmedReference
-          ? `1.5px dashed ${card.accent}60`
-          : `2px solid ${card.accent}40`,
-        boxShadow: selected
-          ? `0 8px 28px ${card.accent}30`
-          : "0 4px 14px rgba(0,0,0,0.09)",
-        opacity: card.isDimmedReference ? 0.42 : 1,
-        cursor: "pointer",
-        userSelect: "none",
-        zIndex: selected ? 20 : 10,
-        transform: selected ? "scale(1.03)" : "scale(1)",
-        transition: "transform 150ms ease, box-shadow 150ms ease, opacity 200ms ease",
-        padding: 14,
-        boxSizing: "border-box",
-      }}
-      onClick={onSelect}
-      onPointerDown={(e) => {
-        e.stopPropagation(); // prevent canvas pan when interacting with a card
-        onDragStart(e, card.id);
-      }}
-      role="button"
-      aria-pressed={selected}
-      aria-label={`${card.type} card: ${card.title}`}
-    >
-      {/* Creator dot — top right */}
-      <div
-        style={{
-          position: "absolute",
-          top: 10,
-          right: 10,
-          width: 22,
-          height: 22,
-          borderRadius: "50%",
-          backgroundColor: card.accent,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 8,
-          fontWeight: 700,
-          color: "#FFFFFF",
-          letterSpacing: 0,
-        }}
-        title={card.contributor}
-      >
-        {card.contributor.slice(0, 2).toUpperCase()}
-      </div>
-
-      {/* Icon + section */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            backgroundColor: `${card.accent}18`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <Icon size={14} strokeWidth={1.8} style={{ color: card.accent }} />
-        </div>
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: "#999",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          {card.section}
-        </span>
-      </div>
-
-      {/* Title */}
-      <p
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: "#1A1A1A",
-          fontFamily: "var(--font-display)",
-          marginBottom: 6,
-          lineHeight: 1.3,
-        }}
-      >
-        {card.title}
-      </p>
-
-      {/* Body */}
-      <p
-        style={{
-          fontSize: 12,
-          color: "#666",
-          lineHeight: 1.5,
-          fontFamily: "var(--font-body)",
-          overflow: "hidden",
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-        }}
-      >
-        {card.body}
-      </p>
-
-      {/* "Used in Final" label for dimmed references */}
-      {card.isDimmedReference && (
-        <p style={{ fontSize: 10, color: card.accent, marginTop: 8, fontWeight: 600 }}>
-          ↳ Used in Final
-        </p>
-      )}
-
-      {/* In-place action buttons when selected */}
-      {selected && (
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            marginTop: 10,
-            borderTop: "1px solid rgba(0,0,0,0.07)",
-            paddingTop: 8,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {card.tree === "ideas" && !card.isDimmedReference && (
-            <button
-              onClick={onMoveToFinal}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "#B5935A",
-                color: "#FFF",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              → Final
-            </button>
-          )}
-          {card.tree === "final" && (
-            <button
-              onClick={onMoveToIdeas}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "rgba(0,0,0,0.06)",
-                color: "#666",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              ← Ideas
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── isLayerId guard ──────────────────────────────────────────────────────────
-
-const isLayerId = (v: string | null): v is LayerId =>
-  ["room", "lyrics", "voice", "chords", "notes", "ideas", "people"].includes(v ?? "");
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 const SongCanvasExperience = () => {
   const { id } = useParams<{ id: string }>();
@@ -394,260 +63,320 @@ const SongCanvasExperience = () => {
   const songTitle = useSongTitle(songId);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const role = toCanvasRole(searchParams.get("role"));
 
-  const [cards, setCards] = useState<CanvasCard[]>(INITIAL_CARDS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
-  const [showFirstAction, setShowFirstAction] = useState(() => {
-    return !localStorage.getItem(FIRST_VISIT_KEY(songId));
-  });
-  const [activeLayer, setActiveLayer] = useState<LayerId>(() => {
-    const layer = searchParams.get("layer");
-    return isLayerId(layer) ? layer : "room";
-  });
-  const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
+  const [canvas, setCanvas] = useState(() => createInitialCanvasState(songId, songTitle, role));
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [drawerState, setDrawerState] = useState<"closed" | "addIdea">("closed");
 
-  // Drag tracking for card repositioning
-  const draggingCardId = useRef<string | null>(null);
-  const dragStartCanvas = useRef({ x: 0, y: 0 });
-  const dragStartCard = useRef({ x: 0, y: 0 });
+  // ── Voice recording ────────────────────────────────────────────────────────
+  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
+  type RecordingFlow = "idle" | "recording" | "reviewing";
+  const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>("idle");
+  const [recordingSection, setRecordingSection] = useState("Raw idea");
+  const [recordingNote, setRecordingNote] = useState("");
+  const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
+  const voiceMemoCountRef = useRef(0);
 
-  useEffect(() => {
-    const layer = searchParams.get("layer");
-    if (isLayerId(layer)) {
-      setActiveLayer(layer);
-      setShowWorkPanel(layer !== "room" && layer !== "ideas");
+  const permissions = useMemo(() => getCanvasPermissions(role), [role]);
+  const nodesById = useMemo(() => new Map(canvas.nodes.map((node) => [node.id, node])), [canvas.nodes]);
+  const rootNode = canvas.nodes.find((node) => node.objectType === "root_song");
+  const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) : undefined;
+  const selectedCard = selectedNode?.objectType === "idea_card" ? canvas.cardsById[selectedNode.objectId] : undefined;
+
+  const updateCanvas = useCallback((next: typeof canvas) => {
+    persistCanvasState(next);
+    setCanvas({
+      ...next,
+      permissions,
+      song: { ...next.song, title: songTitle },
+    });
+  }, [permissions, songTitle]);
+
+  const openAddIdea = useCallback(() => {
+    if (!permissions.canCreate) return;
+    setDrawerState("addIdea");
+    setSelectedNodeId(null);
+  }, [permissions.canCreate]);
+
+  const saveIdea = useCallback((input: AddIdeaInput) => {
+    const next = addIdeaToCanvas({ ...canvas, permissions }, input);
+    setCanvas(next);
+    setDrawerState("closed");
+    const addedNode = next.nodes[next.nodes.length - 1];
+    setSelectedNodeId(addedNode.id);
+  }, [canvas, permissions]);
+
+  const moveSelectedNode = useCallback(() => {
+    if (!selectedNode || !permissions.canMove) return;
+    updateCanvas(moveNodeToZone(canvas, selectedNode.id, "review"));
+  }, [selectedNode, permissions.canMove, updateCanvas, canvas]);
+
+  const openRecordMemo = useCallback(async () => {
+    if (!permissions.canRecord) return;
+    setDrawerState("closed");
+    setRecordingSection("Raw idea");
+    setRecordingNote("");
+    setRecordingFlow("recording");
+    await startRecording();
+  }, [permissions.canRecord, startRecording]);
+
+  const handleStopRecording = useCallback(async () => {
+    const result = await stopRecording();
+    if (result) {
+      setPendingRecording(result);
+      setRecordingFlow("reviewing");
+    } else {
+      setRecordingFlow("idle");
     }
-  }, [searchParams]);
+  }, [stopRecording]);
 
-  const dismissFirstAction = useCallback(() => {
-    localStorage.setItem(FIRST_VISIT_KEY(songId), "1");
-    setShowFirstAction(false);
-  }, [songId]);
+  const handleCancelRecording = useCallback(() => {
+    cancelRecording();
+    setRecordingFlow("idle");
+    setRecordingNote("");
+    setPendingRecording(null);
+  }, [cancelRecording]);
 
-  // ── Card manipulation ──────────────────────────────────────────────────────
+  const handleSaveVoiceMemo = useCallback(async ({
+    name,
+    section,
+    transcribe,
+  }: { name: string; section: string; transcribe: boolean }) => {
+    if (!pendingRecording) return;
 
-  const handleCardDragStart = useCallback((e: React.PointerEvent, cardId: string) => {
-    draggingCardId.current = cardId;
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
-    dragStartCanvas.current = { x: e.clientX, y: e.clientY };
-    dragStartCard.current = { x: card.x, y: card.y };
-    setIsDragOver(true);
-    setSelectedId(cardId);
-  }, [cards]);
+    voiceMemoCountRef.current++;
 
-  const handleMoveToFinal = useCallback((cardId: string) => {
-    setCards((prev) =>
-      prev.map((c) => {
-        if (c.id !== cardId) return c;
-        // Original stays as dimmed reference
-        return { ...c, isDimmedReference: true };
-      }).concat({
-        ...prev.find((c) => c.id === cardId)!,
-        id: `${cardId}-final`,
-        tree: "final",
-        isDimmedReference: false,
-        x: DIVIDER_X + 80 + Math.random() * 200,
-        y: 200 + Math.random() * 300,
-        status: "approved",
-      })
-    );
-    setSelectedId(null);
-    setIsDragOver(false);
-  }, []);
-
-  const handleMoveToIdeas = useCallback((cardId: string) => {
-    setCards((prev) => prev.filter((c) => c.id !== cardId));
-    // Restore the original dimmed reference
-    setCards((prev) =>
-      prev.map((c) =>
-        c.id === cardId.replace("-final", "")
-          ? { ...c, isDimmedReference: false }
-          : c
-      )
-    );
-    setSelectedId(null);
-  }, []);
-
-  const addCard = useCallback((type: CanvasCardType) => {
-    dismissFirstAction();
-    const newCard: CanvasCard = {
-      id: `card-${Date.now()}`,
-      tree: "ideas",
-      type,
-      title: type === "hum" ? "Quick hum" : type === "lyric" ? "New lyric" : "New chord",
-      body: "",
-      meta: "",
-      section: "Raw idea",
-      contributor: "You",
-      status: "raw",
-      accent: "#D4AE5C",
-      x: 80 + Math.random() * 400,
-      y: 160 + Math.random() * 600,
+    // Add card to canvas immediately
+    const ideaInput: AddIdeaInput = {
+      title: name,
+      preview: `🎙 ${formatDuration(pendingRecording.durationMs)} · ${section}`,
+      type: "voice",
     };
-    setCards((prev) => [newCard, ...prev]);
-    setSelectedId(newCard.id);
-  }, [dismissFirstAction]);
+    const next = addIdeaToCanvas({ ...canvas, permissions }, ideaInput);
+    setCanvas(next);
+    setRecordingFlow("idle");
+    setRecordingNote("");
+    setPendingRecording(null);
 
-  const chooseLayer = (layer: LayerId) => {
-    setActiveLayer(layer);
-    const show = layer !== "room" && layer !== "ideas";
-    setShowWorkPanel(show);
-    navigate(`/songs/${songId}/canvas?layer=${layer}`, { replace: false });
-  };
+    // Upload in background
+    try {
+      await uploadVoiceMemo({
+        songId,
+        blob: pendingRecording.blob,
+        mimeType: pendingRecording.mimeType,
+        durationMs: pendingRecording.durationMs,
+        title: name,
+        sectionLabel: section,
+        transcribe,
+      });
+    } catch {
+      // upload failed — card stays on canvas, memo won't be in DB
+    }
+  }, [pendingRecording, canvas, permissions, songId]);
 
-  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas"), [cards]);
-  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final"), [cards]);
+  const openMicSettings = useCallback(() => {
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) {
+      window.location.href = "app-settings:";
+    } else if (/Android/.test(ua)) {
+      alert("Go to Settings → Apps → Colors of Glory → Permissions → Microphone");
+    } else {
+      alert("Click the 🔒 lock icon in your address bar → Site Settings → Microphone → Allow");
+    }
+  }, []);
 
   return (
     <div
       className="relative flex flex-col"
-      style={{ height: "100dvh", backgroundColor: "#FAFAF6", overflow: "hidden" }}
+      style={{ height: "100dvh", backgroundColor: "var(--cog-cream)", overflow: "hidden" }}
     >
-      <SongCanvasSemanticSummary />
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
+      <SongCanvasSemanticSummary title={canvas.song.title} />
+      <div className="pointer-events-none fixed inset-0 cog-glow" />
+
       <header
-        className="relative z-30 flex items-center justify-between gap-3 px-5 pb-3 flex-shrink-0"
-        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: 48 }}
+        className="relative z-30 mx-auto flex w-full max-w-[1180px] items-center justify-between gap-3 px-5 pb-3"
+        style={{ paddingTop: 46 }}
       >
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(`/songs/${songId}`)}
           className="flex min-h-11 items-center gap-1.5 rounded-full px-1 text-sm transition-opacity hover:opacity-70 active:scale-[0.97]"
-          style={{ color: "#666", flexShrink: 0 }}
-          aria-label="Back to songs"
+          style={{ color: "var(--cog-warm-gray)", flexShrink: 0 }}
+          aria-label="Back to song workspace"
         >
           <ArrowLeft size={16} strokeWidth={2} />
-          Songs
+          Song
         </button>
 
-        {/* Song title centered */}
-        <div className="flex flex-col items-center min-w-0 flex-1">
+        <div className="min-w-0 flex-1 text-center">
           <CogBrand variant="stacked" size="sm" />
           <h1
-            className="text-center font-bold leading-tight truncate"
-            style={{ fontSize: 15, color: "#1A1A1A", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
+            className="mt-1 truncate text-center text-[17px] font-semibold leading-tight"
+            style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}
           >
-            {songTitle}
+            {canvas.song.title}
           </h1>
+          <p className="text-[11px] font-medium" style={{ color: "var(--cog-muted)" }}>
+            Canvas
+          </p>
         </div>
 
-        {/* Layer chips */}
-        <div
-          className="flex gap-1 overflow-x-auto flex-shrink-0"
-          style={{ maxWidth: 220 }}
-        >
-          {LAYERS.map((layer) => {
-            const Icon = layer.icon;
-            const active = activeLayer === layer.id;
-            return (
-              <button
-                key={layer.id}
-                type="button"
-                onClick={() => chooseLayer(layer.id)}
-                aria-pressed={active}
-                className="flex min-h-8 shrink-0 items-center gap-1 rounded-xl px-2.5 text-[11px] font-semibold transition-all duration-150 active:scale-[0.97]"
-                style={{
-                  backgroundColor: active ? "#FFFFFF" : "transparent",
-                  border: active ? "1px solid rgba(181,147,90,0.30)" : "1px solid transparent",
-                  color: active ? "#B5935A" : "#999",
-                  boxShadow: active ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                <Icon size={12} strokeWidth={1.8} />
-                {layer.label}
-              </button>
-            );
-          })}
+        <div className="flex shrink-0 rounded-full px-3 py-2 text-xs font-semibold" style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}>
+          {role}
         </div>
       </header>
 
-      {/* ── Canvas viewport ──────────────────────────────────────────────── */}
-      <div className="relative flex-1 min-h-0">
-        <CanvasViewport
-          className="w-full h-full"
-          overlay={
-            <>
-              {showFirstAction && (
-                <FirstActionPrompt
-                  onHum={() => { addCard("hum"); dismissFirstAction(); }}
-                  onLyric={() => { addCard("lyric"); dismissFirstAction(); }}
-                  onChords={() => { addCard("chord"); dismissFirstAction(); }}
-                />
-              )}
-              {/* Quick-add FAB */}
-              <button
-                type="button"
-                onClick={() => addCard("note")}
-                className="absolute flex items-center justify-center rounded-full text-white transition-all duration-150 active:scale-95"
-                style={{
-                  right: 20,
-                  bottom: 80,
-                  width: 52,
-                  height: 52,
-                  backgroundColor: "#B5935A",
-                  boxShadow: "0 4px 16px rgba(181,147,90,0.45)",
-                  zIndex: 40,
-                }}
-                aria-label="Create idea"
-              >
-                <Plus size={22} strokeWidth={2.5} />
-              </button>
-            </>
-          }
-        >
-          {/* Canvas content — all positioned absolutely */}
-          <ZoneLabels />
-          <CanvasDivider isDropActive={isDragOver} />
-
-          {/* Render all cards */}
-          {[...ideasCards, ...finalCards].map((card) => (
-            <CanvasCardEl
-              key={card.id}
-              card={card}
-              selected={selectedId === card.id}
-              onSelect={() => setSelectedId(selectedId === card.id ? null : card.id)}
-              onMoveToFinal={() => handleMoveToFinal(card.id)}
-              onMoveToIdeas={() => handleMoveToIdeas(card.id)}
-              onDragStart={handleCardDragStart}
-            />
-          ))}
-        </CanvasViewport>
-
-        {/* Work layer slide-in panel */}
-        {showWorkPanel && (
-          <div
-            className="absolute top-0 right-0 bottom-0 z-40 overflow-y-auto"
-            style={{
-              width: 320,
-              backgroundColor: "#FAFAF6",
-              borderLeft: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => { setShowWorkPanel(false); setActiveLayer("room"); }}
-              className="absolute top-4 right-4 flex items-center justify-center rounded-full"
-              style={{ width: 32, height: 32, backgroundColor: "rgba(0,0,0,0.06)", color: "#666" }}
-              aria-label="Close panel"
-            >
-              ×
-            </button>
-            <div className="p-4" style={{ paddingTop: 48 }}>
-              <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
-                <SongCanvasWorkLayers activeLayer={activeLayer} />
-              </Suspense>
-              <Suspense fallback={null}>
-                <SongCanvasCollabLayers activeLayer={activeLayer} />
-              </Suspense>
-            </div>
-          </div>
-        )}
+      <div className="relative z-20 px-5 pb-3">
+        <div className="mx-auto max-w-[760px] rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(250,247,242,0.82)", border: "1px solid var(--cog-border)" }}>
+          <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}>
+            Start building the song here.
+          </p>
+          <p className="mt-1 text-xs leading-5" style={{ color: "var(--cog-warm-gray)" }}>
+            Add a lyric, voice memo, chord idea, story note, or scripture note. Everything stays connected to this song.
+          </p>
+          {!permissions.canCreate && (
+            <p className="mt-2 text-xs font-medium" style={{ color: "var(--cog-gold)" }}>
+              You can view this canvas. Ask the owner if you need to contribute.
+            </p>
+          )}
+        </div>
       </div>
 
+      <main className="relative min-h-0 flex-1" aria-label="Song canvas workspace">
+        <section aria-label="Song canvas map" className="h-full">
+          <CanvasViewport
+            className="h-full w-full"
+            initialZoom={0.92}
+            overlay={
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-[76px] z-40 mx-auto flex max-w-[430px] gap-2 px-5 pb-4"
+                style={{ paddingBottom: "max(14px, env(safe-area-inset-bottom))" }}
+              >
+                <button
+                  type="button"
+                  onClick={openAddIdea}
+                  disabled={!permissions.canCreate}
+                  className="pointer-events-auto flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+                  style={{ backgroundColor: "var(--cog-gold)", boxShadow: "var(--cog-shadow-fab)" }}
+                >
+                  <Plus size={17} strokeWidth={2} />
+                  Add idea
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void openRecordMemo(); }}
+                  disabled={!permissions.canRecord || recordingFlow !== "idle"}
+                  aria-label={recordingFlow === "recording" ? "Recording..." : "Record idea / Record memo"}
+                  aria-pressed={recordingFlow === "recording"}
+                  className="pointer-events-auto flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+                  style={{
+                    backgroundColor: recordingFlow === "recording" ? "#E05440" : "var(--cog-cream-light)",
+                    border: recordingFlow === "recording" ? "none" : "1px solid var(--cog-border)",
+                    color: recordingFlow === "recording" ? "#FFFFFF" : "var(--cog-charcoal)",
+                    animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
+                  }}
+                >
+                  <Mic size={17} strokeWidth={2} />
+                  {recordingFlow === "recording" ? "Recording..." : "Record memo"}
+                </button>
+              </div>
+            }
+          >
+            <CanvasConnectionLayer edges={canvas.edges} nodes={canvas.nodes} />
+
+            {rootNode && (
+              <RootSongCard
+                title={canvas.song.title}
+                x={rootNode.x}
+                y={rootNode.y}
+                width={rootNode.width}
+                height={rootNode.height}
+              />
+            )}
+
+            {canvas.nodes.map((node) => {
+              if (node.objectType !== "idea_card") return null;
+              const card = canvas.cardsById[node.objectId];
+              if (!card) return null;
+              return (
+                <IdeaCanvasCard
+                  key={node.id}
+                  card={card}
+                  node={node}
+                  selected={selectedNodeId === node.id}
+                  onOpen={() => {
+                    setSelectedNodeId(node.id);
+                    setDrawerState("closed");
+                  }}
+                />
+              );
+            })}
+          </CanvasViewport>
+        </section>
+
+        <div
+          aria-live="polite"
+          className="absolute left-5 top-3 z-40 rounded-full px-3 py-2 text-xs font-semibold"
+          style={{ backgroundColor: "rgba(250,247,242,0.92)", color: "var(--cog-gold)", border: "1px solid rgba(184,149,58,0.18)" }}
+        >
+          {canvas.lastStatus}
+        </div>
+
+        {drawerState === "addIdea" && (
+          <AddIdeaSheet
+            onClose={() => setDrawerState("closed")}
+            onSave={saveIdea}
+          />
+        )}
+
+        {selectedCard && selectedNode && drawerState === "closed" && (
+          <CardDetailDrawer
+            card={selectedCard}
+            node={selectedNode}
+            permissions={permissions}
+            onClose={() => setSelectedNodeId(null)}
+            onMove={moveSelectedNode}
+          />
+        )}
+      </main>
+
       <SongTabBar activeTab="canvas" />
+
+      {/* ── Recording sheet (slides up over canvas) ──────────────────── */}
+      {(recordingFlow === "recording" || recorderState.phase === "permission-denied") && (
+        <RecordingSheet
+          phase={recorderState.phase}
+          durationMs={recorderState.durationMs}
+          analyserNode={recorderState.analyserNode}
+          error={recorderState.error}
+          section={recordingSection}
+          onSectionChange={setRecordingSection}
+          noteValue={recordingNote}
+          onNoteChange={setRecordingNote}
+          onStop={handleStopRecording}
+          onCancel={handleCancelRecording}
+          onOpenSettings={openMicSettings}
+        />
+      )}
+
+      {/* ── Review sheet (after stopping) ────────────────────────────── */}
+      {recordingFlow === "reviewing" && pendingRecording && (
+        <VoiceReviewSheet
+          recording={pendingRecording}
+          defaultName={recordingNote.trim() || `Voice Memo ${voiceMemoCountRef.current + 1}`}
+          section={recordingSection}
+          onSave={handleSaveVoiceMemo}
+          onDiscard={handleCancelRecording}
+        />
+      )}
+
+      <style>{`
+        @keyframes mic-pulse {
+          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
+          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+        }
+      `}</style>
     </div>
   );
 };
