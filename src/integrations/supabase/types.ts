@@ -1847,6 +1847,13 @@ export type Database = {
         Args: { _bytes: number; _owner_user_id: string }
         Returns: boolean
       }
+      check_phone_registered: {
+        Args: { _phone: string }
+        Returns: {
+          display_name: string
+          user_id: string
+        }[]
+      }
       claim_founder_code_redemption: {
         Args: { _code_id: string }
         Returns: boolean
@@ -1879,6 +1886,32 @@ export type Database = {
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       expire_pending_invites: { Args: never; Returns: number }
       generate_referral_code: { Args: never; Returns: string }
+      get_my_profile: {
+        Args: never
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          created_at: string
+          display_name: string
+          email: string
+          first_name: string
+          first_song_id: string
+          last_name: string
+          onboarding_state: Json
+          onboarding_step: Database["public"]["Enums"]["onboarding_step"]
+          onboarding_updated_at: string
+          payout_country: string
+          payout_email: string
+          payout_method: Database["public"]["Enums"]["payout_method_kind"]
+          pending_code: string
+          phone_e164: string
+          referral_code: string
+          referred_by_user_id: string
+          stripe_connect_account_id: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_song_activity: {
         Args: { _limit?: number; _offset?: number; _song_id: string }
         Returns: {
