@@ -288,6 +288,26 @@ const UpgradePage = () => {
       .catch(() => {});
   }, [refCode]);
 
+  // Resume a pending checkout after the user signs in.
+  useEffect(() => {
+    if (isLoadingData || tiers.length === 0) return;
+    const raw = sessionStorage.getItem("cog:pending-checkout");
+    if (!raw) return;
+    let intent: { tierKey: string; code?: string | null } | null = null;
+    try { intent = JSON.parse(raw); } catch { /* ignore */ }
+    if (!intent?.tierKey) return;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      sessionStorage.removeItem("cog:pending-checkout");
+      const tier = tiers.find((t) => t.key === intent!.tierKey);
+      if (!tier) return;
+      if (intent!.code) setCodeInput(intent!.code);
+      handleSelectTier(tier);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingData, tiers]);
+
   const handleValidateCode = async () => {
     const trimmed = codeInput.trim().toUpperCase();
     if (!trimmed) return;
