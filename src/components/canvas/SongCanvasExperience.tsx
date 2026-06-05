@@ -508,8 +508,8 @@ const SongCanvasExperience = () => {
       <SongCanvasSemanticSummary />
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <header
-        className="relative z-30 flex items-center justify-between gap-3 px-5 pt-12 pb-3 flex-shrink-0"
-        style={{ maxWidth: 1180, margin: "0 auto", width: "100%" }}
+        className="relative z-30 flex items-center justify-between gap-3 px-5 pb-3 flex-shrink-0"
+        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: 48 }}
       >
         <button
           type="button"
@@ -526,8 +526,8 @@ const SongCanvasExperience = () => {
         <div className="flex flex-col items-center min-w-0 flex-1">
           <CogBrand variant="stacked" size="sm" />
           <h1
-            className="text-center font-bold leading-tight truncate max-w-[180px]"
-            style={{ fontSize: 15, color: "#1A1A1A", fontFamily: "var(--font-display)", marginTop: 4 }}
+            className="text-center font-bold leading-tight truncate"
+            style={{ fontSize: 15, color: "#1A1A1A", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
           >
             {songTitle}
           </h1>
@@ -618,8 +618,13 @@ const SongCanvasExperience = () => {
         {/* Work layer slide-in panel */}
         {showWorkPanel && (
           <div
-            className="absolute top-0 right-0 bottom-0 w-80 z-40 shadow-2xl overflow-y-auto"
-            style={{ backgroundColor: "#FAFAF6", borderLeft: "1px solid rgba(0,0,0,0.08)" }}
+            className="absolute top-0 right-0 bottom-0 z-40 overflow-y-auto"
+            style={{
+              width: 320,
+              backgroundColor: "#FAFAF6",
+              borderLeft: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+            }}
           >
             <button
               type="button"
@@ -630,7 +635,7 @@ const SongCanvasExperience = () => {
             >
               ×
             </button>
-            <div className="p-4 pt-12">
+            <div className="p-4" style={{ paddingTop: 48 }}>
               <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
                 <SongCanvasWorkLayers activeLayer={activeLayer} />
               </Suspense>
