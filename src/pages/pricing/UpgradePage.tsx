@@ -5,6 +5,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BackHeader from "@/components/cog/BackHeader";
 import BottomNav from "@/components/cog/BottomNav";
+import { supabase } from "@/integrations/supabase/client";
 import {
   fetchPlanTiers,
   fetchCurrentPlan,
