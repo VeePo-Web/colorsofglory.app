@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-05T03:08:29.725Z",
+  "generatedAt": "2026-06-05T04:31:33.760Z",
   "routesChecked": [
     {
       "path": "/",
@@ -78,6 +78,10 @@
       "label": "Settings"
     },
     {
+      "path": "/settings/billing",
+      "label": "Billing settings"
+    },
+    {
       "path": "/settings/storage",
       "label": "Storage settings"
     },
@@ -88,6 +92,14 @@
     {
       "path": "/upgrade",
       "label": "Upgrade"
+    },
+    {
+      "path": "/pricing",
+      "label": "Pricing alias"
+    },
+    {
+      "path": "/checkout/success?session_id=cs_test_demo",
+      "label": "Checkout success"
     },
     {
       "path": "/not-a-real-song-room",
@@ -132,8 +144,16 @@
       "label": "Settings"
     },
     {
+      "path": "/settings/billing",
+      "label": "Billing settings"
+    },
+    {
       "path": "/upgrade",
       "label": "Upgrade"
+    },
+    {
+      "path": "/checkout/success?session_id=cs_test_demo",
+      "label": "Checkout success"
     },
     {
       "path": "/not-a-real-song-room",
@@ -194,7 +214,7 @@
     {
       "name": "Production preview route smoke",
       "status": "pass",
-      "details": "23 routes"
+      "details": "26 routes"
     }
   ],
   "findings": []

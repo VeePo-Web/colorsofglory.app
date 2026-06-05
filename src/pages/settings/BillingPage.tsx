@@ -33,9 +33,9 @@ function formatDate(value: string | null): string {
 
 const BillingSkeleton = () => (
   <div className="space-y-4" aria-label="Loading billing">
-    <div className="h-40 rounded-2xl bg-[rgba(28,26,23,0.05)]" />
-    <div className="h-24 rounded-2xl bg-[rgba(28,26,23,0.05)]" />
-    <div className="h-14 rounded-full bg-[rgba(184,149,58,0.14)]" />
+    <div className="rounded-2xl" style={{ height: 160, backgroundColor: "rgba(28,26,23,0.05)" }} />
+    <div className="rounded-2xl" style={{ height: 96, backgroundColor: "rgba(28,26,23,0.05)" }} />
+    <div className="rounded-full" style={{ height: 56, backgroundColor: "rgba(184,149,58,0.14)" }} />
   </div>
 );
 
@@ -170,7 +170,10 @@ const BillingPage = () => {
             >
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--cog-warm-gray)" }}>
+                  <p
+                    className="mb-1 text-xs font-semibold uppercase"
+                    style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.16em" }}
+                  >
                     Current plan
                   </p>
                   <p className="text-3xl font-semibold" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}>
@@ -250,8 +253,8 @@ const BillingPage = () => {
               >
                 <button
                   onClick={() => setShowCancelConfirm((value) => !value)}
-                  className="flex min-h-11 w-full items-center justify-between gap-4 text-left text-sm font-semibold transition-opacity hover:opacity-75"
-                  style={{ color: "#B43C3C" }}
+                  className="flex w-full items-center justify-between gap-4 text-left text-sm font-semibold transition-opacity hover:opacity-70"
+                  style={{ color: "#B43C3C", minHeight: 44 }}
                 >
                   <span className="flex items-center gap-2">
                     <XCircle size={17} strokeWidth={1.7} />
@@ -264,19 +267,19 @@ const BillingPage = () => {
                     <p className="mb-3 text-sm leading-relaxed" style={{ color: "var(--cog-warm-gray)" }}>
                       This schedules cancellation at the end of the current billing period. Your songs stay safe, and access continues until then.
                     </p>
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="grid gap-2">
                       <button
                         onClick={handleCancelAtPeriodEnd}
                         disabled={isCancelling}
-                        className="min-h-11 rounded-full px-4 text-sm font-semibold text-white transition-all active:scale-[0.97] disabled:opacity-45"
-                        style={{ backgroundColor: "#B43C3C" }}
+                        className="rounded-full px-4 text-sm font-semibold text-white transition-all active:scale-[0.97] disabled:opacity-40"
+                        style={{ backgroundColor: "#B43C3C", minHeight: 44 }}
                       >
                         {isCancelling ? "Scheduling..." : "Cancel at period end"}
                       </button>
                       <button
                         onClick={() => setShowCancelConfirm(false)}
-                        className="min-h-11 rounded-full px-4 text-sm font-semibold transition-opacity hover:opacity-75"
-                        style={{ color: "var(--cog-warm-gray)" }}
+                        className="rounded-full px-4 text-sm font-semibold transition-opacity hover:opacity-70"
+                        style={{ color: "var(--cog-warm-gray)", minHeight: 44 }}
                       >
                         Keep my plan
                       </button>

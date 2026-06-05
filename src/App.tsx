@@ -61,11 +61,14 @@ const RouteFallback = () => (
   <div className="relative min-h-screen bg-[var(--cog-cream)]">
     <div className="pointer-events-none fixed inset-0 cog-glow" />
     <div className="relative mx-auto flex min-h-screen w-full max-w-[var(--max-w-app)] flex-col justify-center px-8">
-      <p className="mb-6 text-center text-xs font-medium uppercase tracking-[0.24em] text-[var(--cog-muted)]">
+      <p
+        className="mb-6 text-center text-xs font-medium uppercase"
+        style={{ color: "var(--cog-muted)", letterSpacing: "0.24em" }}
+      >
         Colors of Glory
       </p>
       <div className="space-y-3" aria-label="Loading page">
-        <div className="h-5 w-32 rounded-full bg-[rgba(184,149,58,0.12)]" />
+        <div className="h-5 w-32 rounded-full" style={{ backgroundColor: "rgba(184,149,58,0.12)" }} />
         <div className="h-12 rounded-2xl bg-[var(--cog-cream-light)] shadow-[var(--cog-shadow-sm)]" />
         <div className="h-12 rounded-2xl bg-[var(--cog-cream-light)] shadow-[var(--cog-shadow-sm)]" />
       </div>
