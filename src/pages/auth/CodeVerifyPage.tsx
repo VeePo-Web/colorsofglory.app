@@ -43,6 +43,13 @@ const CodeVerifyPage = () => {
   }, [e164, navigate]);
 
   const routeAfterAuth = useCallback(async () => {
+    // Pending checkout intent wins — bring the user straight back to /upgrade
+    // where the resume effect will reopen Stripe Embedded Checkout.
+    const pendingCheckout = sessionStorage.getItem("cog:pending-checkout");
+    if (pendingCheckout) {
+      navigate("/upgrade", { replace: true });
+      return;
+    }
     const inviteToken = sessionStorage.getItem("cog:invite-token");
     if (inviteToken) {
       navigate(`/invite/${inviteToken}`, { replace: true });

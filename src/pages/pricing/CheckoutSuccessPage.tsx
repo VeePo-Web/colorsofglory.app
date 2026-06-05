@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
@@ -12,9 +12,14 @@ const AUTO_NAVIGATE_MS = 3000;
  */
 const CheckoutSuccessPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [countdown, setCountdown] = useState(3);
 
   useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (sessionId) {
+      console.log("[checkout] success session_id=", sessionId);
+    }
     const interval = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) { clearInterval(interval); return 0; }
@@ -23,7 +28,7 @@ const CheckoutSuccessPage = () => {
     }, 1000);
     const timer = setTimeout(() => navigate("/", { replace: true }), AUTO_NAVIGATE_MS);
     return () => { clearInterval(interval); clearTimeout(timer); };
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   return (
     <div
