@@ -1,116 +1,225 @@
-# Payments verification + referral copy update
+# Codex stress-test prompt — Twilio SMS OTP pipeline
 
-Two tracks. Track A is copy (small, deterministic). Track B is a full payments audit (verify every link from "click Upgrade" through Stripe webhook to subscription row).
-
----
-
-## Track A — Copy change (UpgradePage.tsx)
-
-Update three strings so the discount is framed as a **referral code (limited time)**, not a "founder code forever". `$100` language stays in the price-anchor sentence but is no longer tied to "founder".
-
-1. **Line 43** — feature bullet inside Pro tier
-   - From: `"Founder code: 50% off forever"`
-   - To: `"50% off with referral code (limited time)"`
-
-2. **Lines 99–100** — referred banner
-   - From: `50% off Pro is yours – $49/month instead of $100.`
-   - To: `50% off Pro with your referral code – $49/month instead of $100. Limited time.`
-
-3. **Line 473** — code-entry header
-   - From: `"Have a founder code?"`
-   - To: `"Have a referral code?"`
-
-4. **Line 520** — applied confirmation
-   - Already says `Referral code applied - 50% off Pro is yours.` → append ` Limited time.`
-
-No logic changes. `codeResult.kind === "founder"` and `"member_referral"` discount paths stay intact server-side; only user-facing copy moves to "referral code".
+Drop the prompt below into Codex verbatim. It produces a self-contained harness under `scripts/stress/otp/` that exercises the Supabase Auth → Twilio SMS pipeline end-to-end, captures structured metrics, and writes a publish-ready report. The prompt is written in Codex's preferred imperative style with explicit guardrails, pre-flight checks, file layout, scenario matrix, success criteria, and stop conditions.
 
 ---
 
-## Track B — Payments audit (does checkout actually work?)
+## How this lands
 
-Goal: prove that a real signed-in user can click **Upgrade → Pro**, complete Stripe sandbox checkout, and end up with an `active` row in `public.subscriptions` filtered by `environment='sandbox'`, with the app reflecting Pro tier on next render.
+I will create one file in build mode: `docs/codex/otp-stress-test.prompt.md` containing the prompt verbatim. Nothing else changes. No edge functions touched. No DB writes. No Twilio calls from Lovable.
 
-### B1. Static audit (read-only, no edits)
-
-Read and cross-check:
-
-- `src/pages/pricing/UpgradePage.tsx` — `handleSelectTier` flow, auth-gate, `sessionStorage` resume.
-- `src/lib/pricing/pricingApi.ts` — `createCheckout`, `getBillingPortalUrl`, env passed (`getStripeEnvironment()`).
-- `src/lib/stripe.ts` — `getStripeEnvironment` derivation.
-- `supabase/functions/create-checkout/index.ts` — JWT validation, env routing, `lookup_key` resolution, `managed_payments`/`automatic_tax`, `return_url` shape.
-- `supabase/functions/payments-webhook/index.ts` — signature verification, `?env=` parsing, upsert into `subscriptions`, `price_id` resolution order (`lookup_key` → `lovable_external_id` → `price.id`).
-- `supabase/functions/validate-code/index.ts` — discount math + `kind` returned.
-- `supabase/functions/apply-founder-code-to-active-sub/index.ts` — post-purchase discount path.
-- `subscriptions` table policies + `has_active_subscription` function.
-- `src/pages/pricing/CheckoutSuccessPage.tsx` — session_id handling, refetch + nav.
-
-Confirm:
-- Every server read of `subscriptions` includes `.eq('environment', getStripeEnvironment())`.
-- Tier gating keys off `price_id` (lookup_key), never `product_id`.
-- No `STRIPE_SECRET_KEY` references; all Stripe calls go through `createStripeClient(env)`.
-- Webhook is registered (it is — managed by `enable_stripe_payments`).
-
-### B2. Confirm products + prices exist
-
-Check via `payments-` tooling that the following prices exist with the expected `lookup_key`s referenced in `create-checkout`:
-- `pro_monthly` ($100/mo)
-- `pro_yearly` (if shown)
-- any add-on / storage SKUs the UI exposes
-
-If missing or mis-priced, recreate via `payments--create_price` (sandbox auto-syncs to live on publish).
-
-### B3. Edge function smoke (sandbox)
-
-Using `supabase--curl_edge_functions` while signed in to preview:
-
-1. `POST /create-checkout` with `{ tierKey: "pro_monthly", code: null }` → expect `{ url, sessionId }`.
-2. `POST /create-checkout` with a known valid referral code → expect discounted line item or coupon attached.
-3. `POST /validate-code` with valid + invalid + expired codes → expect correct `kind` + `discountPercent`.
-4. `POST /create-checkout` unauthenticated → expect 401 (matches the earlier bug we fixed).
-
-### B4. Manual browser pass (operator)
-
-In preview, signed in as a fresh test account:
-
-1. `/upgrade` → click **Pro** with no code → Stripe sandbox checkout opens with $100/mo.
-2. Pay with `4242 4242 4242 4242`, any future date, any CVC, any ZIP.
-3. Land on `/checkout/success?session_id=…` → success copy renders, redirect after 3s.
-4. Realtime: `subscriptions` row appears (`status=active`, `environment=sandbox`, `price_id=pro_monthly`).
-5. `/upgrade` now shows Pro as current plan, **Manage billing** opens portal in new tab.
-6. Repeat with a referral code → checkout shows 50% off → row stores discount metadata.
-7. Repeat the entire flow logged out → auth gate redirects to `/auth/login`, OTP verify, then auto-resumes checkout via `cog:pending-checkout`.
-
-### B5. Edge cases to verify
-
-- User already has active sub → "Upgrade" CTA is replaced with "Manage billing" (no duplicate sub created).
-- Webhook arrives before user lands on success page → row is upserted; success page refetch picks it up.
-- Webhook with bad signature → 400; nothing inserted.
-- `?env=live` webhook in preview → ignored cleanly (200 + `ignored:"invalid env"`), nothing inserted.
-- `apply-founder-code-to-active-sub` on an active sub → coupon applied, `current_period_end` unchanged.
-
-### B6. Failure-mode triage
-
-If any step in B4 breaks, the most likely culprits in order:
-1. Missing `lookup_key` on price → `create-checkout` returns 400.
-2. `return_url` missing `{CHECKOUT_SESSION_ID}` template → success page can't show details.
-3. Webhook handler not reading `?env=` → row inserted with default `'sandbox'` but client filters by `'live'` (or vice-versa).
-4. RLS on `subscriptions` blocking client `select` (should allow `auth.uid() = user_id`).
-5. `getStripeEnvironment()` mismatch with the env the webhook stamps.
-
-Each is fixable without schema changes — fixes go into the relevant edge function or `src/lib/stripe.ts`.
+You then paste the file's contents into Codex and run it from your local checkout.
 
 ---
 
-## What lands as code (after plan approval)
+## The prompt — copy from here to "END PROMPT"
 
-- **Frontend only** for Track A: 4 string edits in `src/pages/pricing/UpgradePage.tsx`.
-- **No edits** for Track B until the audit finds a concrete defect; then fixes are scoped to the exact edge function or pricing helper, never schema.
-- Track B report posted back here as a green/red checklist.
+```
+You are Codex operating on the Colors of Glory repo. Your single deliverable
+this session is a Twilio SMS-OTP stress-test harness. You will NOT modify
+application code, edge functions, RLS, or the database schema. All work
+lives under scripts/stress/otp/. All artifacts land under
+scripts/stress/otp/reports/ (gitignored).
 
-## Out of scope
+# 0. MISSION
 
-- Going live on Stripe (separate go-live flow).
-- New plan tiers, currencies, or seat-based pricing.
-- Visual redesign of the upgrade page.
-- Twilio / OTP work (already covered).
+Prove or disprove these claims, with numbers, under load:
+
+  C1. Supabase Auth + Twilio reliably sends one SMS OTP per phone within
+      p95 ≤ 4000 ms from request → Twilio "queued" status.
+  C2. The same pipeline survives a 20-RPS burst for 60 s without any
+      provider-side 5xx, without dropping below 98% accepted-send rate,
+      and without violating the configured per-number cooldown.
+  C3. supabase.auth.verifyOtp({ type: "sms" }) returns a session for the
+      magic test numbers (+15555550100..+15555550119, code 123456) with
+      p95 ≤ 800 ms and 100% success.
+  C4. Abuse traffic (fake E.164 numbers outside Geo Permissions, malformed
+      numbers, replayed codes) is rejected with the expected Supabase
+      error codes and never reaches Twilio billing.
+  C5. The resend cooldown enforced server-side matches what the UI shows
+      on /auth/code-verify (currently 30 s). No client trick bypasses it.
+
+Each claim ends GREEN / YELLOW / RED in the final report with the
+specific metric that decided it.
+
+# 1. HARD GUARDRAILS — VIOLATING ANY OF THESE FAILS THE RUN
+
+- HARD CAP: total Twilio sends across this entire session ≤ 2000.
+  Implement a process-wide counter; refuse to send once hit; log and
+  exit non-zero.
+- NEVER send to a real phone number. Allowed destinations:
+    * Supabase magic test numbers +15555550100..+15555550119
+    * Twilio magic numbers +15005550006 (valid) / +15005550001 (invalid)
+    * Synthetic fakes for abuse sim (see §4 T6) — must be REJECTED
+      before reaching Twilio. If any reach Twilio, abort the scenario.
+- NEVER print or persist: TWILIO_AUTH_TOKEN, SUPABASE_SERVICE_ROLE_KEY,
+  OTP codes for real numbers, full phone numbers in logs (mask middle 4
+  digits: +1555***0100).
+- NEVER use the service-role key from a client-style call path. Only the
+  anon key + the public Supabase JS client, exactly as the app uses it.
+- NEVER call Twilio's REST API directly. The whole point is to exercise
+  the Supabase Auth → Twilio path the app actually uses.
+- READ-ONLY against production data. No INSERT/UPDATE/DELETE on any
+  public table. No edge function deploys. No migrations.
+- If you discover the harness is sending to a number not in the allow-
+  list above, STOP within 1 second and exit non-zero.
+
+# 2. PRE-FLIGHT — REFUSE TO START UNTIL ALL TRUE
+
+Print a checklist and require each line to be ✅ before any scenario runs.
+If any line is ❌, write reports/preflight-blocked.md explaining what is
+missing and exit 0 (not an error — the operator must fix backend config).
+
+  [ ] SUPABASE_URL and SUPABASE_ANON_KEY readable from .env
+  [ ] Supabase Auth → Phone provider = Twilio, ENABLED
+  [ ] Twilio Messaging Service SID configured (NOT a single From number)
+  [ ] A2P 10DLC campaign registered + APPROVED for the sending number
+  [ ] SMS Pumping Protection: ON
+  [ ] Geo Permissions: only US + CA enabled
+  [ ] Test OTPs configured in Supabase Auth → Phone:
+        +15555550100..+15555550119 → 123456
+  [ ] Resend cooldown documented (default 30 s — confirm in dashboard)
+  [ ] Operator typed "I CONFIRM SANDBOX" into CONFIRM env var
+
+# 3. FILE LAYOUT — CREATE EXACTLY THIS
+
+  scripts/stress/otp/
+    README.md                # how to run, what each scenario does
+    .env.example             # required env vars, no real values
+    package.json             # type: module, scripts: preflight, t1..t8, all
+    tsconfig.json            # node16 module, strict
+    supaClient.ts            # creates anon client, no service role
+    metrics.ts               # latency histogram, error taxonomy, csv writer
+    cooldown.ts              # tracks last-send-per-number, asserts ≥ N seconds
+    test-numbers.json        # 20 magic + 50 synthetic fakes (clearly labeled)
+    scenarios/
+      t1-baseline-send.ts
+      t2-burst-send.ts
+      t3-verify-happy.ts
+      t4-verify-negative.ts
+      t5-cooldown-probe.ts
+      t6-abuse-sim.ts
+      t7-real-phone-smoke.ts   # GUARDED: requires REAL_PHONE_OPT_IN=1 + number
+      t8-soak.ts
+    run-all.ts               # orchestrates t1→t8, writes SUMMARY.md
+    reports/                 # gitignored, .gitkeep only
+
+  scripts/stress/otp/reports/.gitignore   # ignore everything except .gitkeep
+
+# 4. SCENARIO MATRIX — IMPLEMENT EACH
+
+For every scenario: structured JSONL log, per-request timing, error code
+captured verbatim from Supabase (`error.code` / `error.message` /
+`error.status`). Never invent your own taxonomy — record what Supabase
+returned and bucket afterward.
+
+  T1 baseline-send
+    Loop the 20 magic numbers, sequentially, 1 send each, 200 ms apart.
+    Pass: 100% accepted, p95 latency ≤ 4000 ms.
+
+  T2 burst-send
+    20 RPS for 60 s = 1200 requests across the 20 magic numbers, round-
+    robin. Respect cooldown by widening rotation if needed. Pass: ≥ 98%
+    accepted, zero 5xx, p95 ≤ 5000 ms.
+
+  T3 verify-happy
+    For each magic number used in T1, call supabase.auth.verifyOtp({
+    phone, token: "123456", type: "sms" }). Pass: 100% returns session,
+    p95 ≤ 800 ms.
+
+  T4 verify-negative
+    For each magic number, call verifyOtp with: wrong code "000000",
+    empty code, 5-digit code, 7-digit code, code from a different
+    number. Pass: every call returns an error; classify by Supabase
+    error code; zero false sessions issued.
+
+  T5 cooldown-probe
+    Send to one magic number, then immediately re-send. Expect rate-
+    limit / cooldown error. Walk the cooldown: re-send at t=5s, 15s,
+    25s, 31s. First success time must be ≥ documented cooldown.
+
+  T6 abuse-sim
+    Attempt to send to: malformed numbers ("123", "abc", "+1"),
+    out-of-geo numbers (+44…, +91…, +234…), 50 synthetic fakes shaped
+    like +1-area-code-NXX-XXXX but reserved/invalid. EVERY ONE must be
+    rejected by Supabase or by Geo Permissions before reaching Twilio
+    billing. If any go through, mark RED and stop scenario.
+
+  T7 real-phone-smoke (GUARDED)
+    Only runs if env REAL_PHONE_OPT_IN=1 AND REAL_PHONE_E164 is set AND
+    operator confirms in stdin. Sends exactly ONE OTP, prompts operator
+    to type the received code, verifies, exits. This is the only path
+    that touches a real number.
+
+  T8 soak
+    1 send every 30 s for 30 min, rotating across the 20 magic numbers.
+    Watches for latency drift, error-rate creep, and Twilio queue
+    backpressure (look at supabase error.status, count 429s).
+
+# 5. METRICS — REPORT EXACTLY THESE
+
+For every scenario emit reports/<scenario>.json:
+  {
+    "scenario": "t2-burst-send",
+    "started_at": "...", "ended_at": "...",
+    "total_requests": 1200,
+    "accepted": 1188,
+    "rejected_by_supabase": { "over_sms_send_rate_limit": 8, "...": 4 },
+    "rejected_by_twilio_via_supabase": {},
+    "latency_ms": { "p50": ..., "p95": ..., "p99": ..., "max": ... },
+    "twilio_send_budget_used": 1188,
+    "twilio_send_budget_remaining": <2000 - cumulative>,
+    "claims_touched": ["C1","C2"]
+  }
+
+Final reports/SUMMARY.md:
+  - Table: claim → GREEN/YELLOW/RED → deciding metric → source scenario
+  - Top 5 error codes observed, with counts and remediation hints
+  - Twilio budget used / 2000
+  - Operator action items (e.g. "raise Supabase rate limit", "register
+    second 10DLC campaign", "tighten Geo Permissions")
+  - Reproduction commands
+
+# 6. ORCHESTRATION
+
+  npm run preflight   # §2 checklist only, no sends
+  npm run t1 .. t8    # individual scenarios
+  npm run all         # preflight → t1 t2 t3 t4 t5 t6 t8 → SUMMARY.md
+                      # t7 NEVER runs in `all`; must be invoked explicitly
+
+Between scenarios, sleep 60 s to let cooldowns and Twilio queues drain.
+Re-check budget remaining before each scenario; skip and mark SKIPPED
+if remaining < scenario's worst-case send count.
+
+# 7. STYLE & DEPENDENCIES
+
+- TypeScript, Node ≥ 20, ESM. No frameworks. Only deps allowed:
+  @supabase/supabase-js, dotenv, picocolors. No test runner needed.
+- Every async call wrapped with try/catch + structured error capture.
+- No top-level await chains > 3 levels; pull helpers into supaClient.ts
+  and metrics.ts.
+- Code is the spec — comment WHY, not WHAT.
+
+# 8. WHEN YOU FINISH
+
+Print, in this order:
+  1) Files created (tree).
+  2) How to run preflight.
+  3) Two-paragraph plain-English summary suitable for pasting back to
+     the Lovable agent — what is GREEN, what is YELLOW, what is RED,
+     and the single highest-leverage fix.
+
+Do not open a PR. Do not commit. Leave the working tree dirty for the
+operator to review.
+```
+
+---
+
+## What this plan does NOT do
+
+- No application code changes.
+- No edge function deploys.
+- No DB writes.
+- No Twilio calls from Lovable itself.
+
+Out of scope: actually running the harness (Codex/operator does that locally), tuning Supabase rate limits, registering A2P 10DLC.
