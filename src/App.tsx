@@ -15,7 +15,7 @@ const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstI
 const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
 
-// Invite flow — new frictionless join screens
+// Invite flow - new frictionless join screens
 const InviteJoinPage     = lazy(() => import("./pages/invite/InviteJoinPage"));
 const InviteWelcomePage  = lazy(() => import("./pages/invite/InviteWelcomeBackPage"));
 const InviteVerifyPage   = lazy(() => import("./pages/invite/InviteVerifyPage"));
@@ -29,6 +29,13 @@ const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
+
+// Pricing + checkout (new)
+const PricingUpgradePage     = lazy(() => import("./pages/pricing/UpgradePage"));
+const CheckoutSuccessPage    = lazy(() => import("./pages/pricing/CheckoutSuccessPage"));
+const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedirectPage"));
+
+// Legacy upgrade placeholder (keep for any existing links)
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -122,7 +129,15 @@ const App = () => (
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/storage" element={<StoragePage />} />
             <Route path="/settings/referral" element={<ReferralPage />} />
-            <Route path="/upgrade" element={<UpgradePage />} />
+
+            {/* Pricing + checkout */}
+            <Route path="/upgrade" element={<PricingUpgradePage />} />
+            <Route path="/pricing" element={<PricingUpgradePage />} />
+            <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+            <Route path="/r/:code" element={<ReferralRedirectPage />} />
+
+            {/* Legacy upgrade placeholder */}
+            <Route path="/upgrade-old" element={<UpgradePage />} />
 
             {/* Admin (internal) */}
             <Route path="/admin" element={<RequireAdmin><AdminHomePage /></RequireAdmin>} />

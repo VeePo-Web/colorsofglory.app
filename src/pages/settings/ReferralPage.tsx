@@ -1,34 +1,29 @@
-﻿import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Share2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
-
-const REFERRAL_LINK = "app.colorsofglory.com/ref/PARKER123";
-
-interface StatCard {
-  label: string;
-  value: string;
-}
-
-const STATS: StatCard[][] = [
-  [
-    { label: "Signups", value: "24" },
-    { label: "Active Pro", value: "18" },
-  ],
-  [
-    { label: "Pending", value: "3" },
-    { label: "Payable", value: "$180" },
-  ],
-];
+import { fetchReferralStats, centsToDisplay, type ReferralStats } from "@/lib/pricing/pricingApi";
 
 const ReferralPage = () => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const [stats, setStats] = useState<ReferralStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchReferralStats()
+      .then(setStats)
+      .catch(() => {/* keep null - use placeholder UI */})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const referralLink = stats?.link ?? "colorsofglory.app/r/...";
+  const fullLink = stats?.link ?? `https://colorsofglory.app/r/...`;
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(`https://${REFERRAL_LINK}`);
+      await navigator.clipboard.writeText(fullLink);
     } catch {
       // Fallback for environments without clipboard API
     }
@@ -103,7 +98,7 @@ const ReferralPage = () => {
                 fontFamily: "monospace",
               }}
             >
-              {REFERRAL_LINK}
+              {referralLink}
             </p>
             <button
               onClick={handleCopy}
@@ -122,9 +117,18 @@ const ReferralPage = () => {
           </div>
         </div>
 
-        {/* Stats grid */}
+        {/* Stats grid - live data from me-referrals */}
         <div className="flex flex-col gap-3 mb-8">
-          {STATS.map((row, rowIndex) => (
+          {([
+            [
+              { label: "Signups", value: isLoading ? "..." : String(stats?.attributedCount ?? 0) },
+              { label: "Active Pro", value: isLoading ? "..." : String(stats?.payingCount ?? 0) },
+            ],
+            [
+              { label: "Pending", value: isLoading ? "..." : centsToDisplay(stats?.earnings.pendingCents ?? 0) },
+              { label: "Payable", value: isLoading ? "..." : centsToDisplay(stats?.earnings.payableCents ?? 0) },
+            ],
+          ] as Array<Array<{label: string; value: string}>>).map((row, rowIndex) => (
             <div key={rowIndex} className="grid grid-cols-2 gap-3">
               {row.map((stat) => (
                 <div
@@ -224,4 +228,3 @@ const ReferralPage = () => {
 };
 
 export default ReferralPage;
-

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Settings } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
+import { canCreateSong } from "@/lib/pricing/pricingApi";
 
 type SongStatus = "active" | "draft" | "collaborating" | "private" | "archived";
 type Tab = "Owned" | "Invited" | "Archived";
@@ -73,12 +74,27 @@ const STATUS_LABELS: Record<SongStatus, string> = {
 const SongCatalogPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
+  const [isCheckingCreate, setIsCheckingCreate] = useState(false);
 
   const filteredSongs = MOCK_SONGS.filter((s) => {
     if (activeTab === "Owned") return s.type === "owned" && s.status !== "archived";
     if (activeTab === "Invited") return s.type === "invited";
     return s.status === "archived";
   });
+
+  const handleCreateSong = async () => {
+    if (isCheckingCreate) return;
+    setIsCheckingCreate(true);
+    try {
+      const allowed = await canCreateSong();
+      if (allowed) navigate("/onboarding/start-song");
+      else navigate("/upgrade?source=song_gate_free");
+    } catch {
+      navigate("/onboarding/start-song");
+    } finally {
+      setIsCheckingCreate(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen" style={{ backgroundColor: "#FAFAF6" }}>
@@ -163,10 +179,12 @@ const SongCatalogPage = () => {
         )}
       </div>
 
-      {/* "+ New song" FAB — gold pill, above BottomNav */}
+      {/* "+ New song" FAB - gold pill, above BottomNav */}
       <button
-        onClick={() => navigate("/onboarding/start-song")}
-        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-3.5 rounded-full font-semibold text-white transition-all duration-150 active:scale-95"
+        onClick={handleCreateSong}
+        disabled={isCheckingCreate}
+        aria-busy={isCheckingCreate}
+        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-3.5 rounded-full font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-80"
         style={{
           bottom: 88,
           backgroundColor: "#B5935A",
@@ -177,7 +195,7 @@ const SongCatalogPage = () => {
         }}
       >
         <Plus size={17} strokeWidth={2.5} />
-        New song
+        {isCheckingCreate ? "Checking..." : "New song"}
       </button>
 
       <BottomNav active="songs" />
