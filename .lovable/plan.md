@@ -1,81 +1,116 @@
-# Make Twilio SMS OTP work on mobile
+# Payments verification + referral copy update
 
-## What's actually broken
-
-Right now, tapping "Continue" on `/auth/login` sends a request to Supabase Auth's `/otp` endpoint and gets back:
-
-```
-400 { "code": "phone_provider_disabled", "message": "Unsupported phone provider" }
-```
-
-This is **not a code bug**. The backend (Lovable Cloud / Supabase Auth) has no SMS provider configured, so it refuses to send the code. No amount of frontend work will fix this — the provider has to be turned on in the Auth dashboard.
-
-The fix is a one-time backend configuration + a couple of small code hardenings so the experience is solid on real phones.
+Two tracks. Track A is copy (small, deterministic). Track B is a full payments audit (verify every link from "click Upgrade" through Stripe webhook to subscription row).
 
 ---
 
-## Plan
+## Track A — Copy change (UpgradePage.tsx)
 
-### 1. Turn on Twilio as the SMS provider (you do this, ~5 min)
+Update three strings so the discount is framed as a **referral code (limited time)**, not a "founder code forever". `$100` language stays in the price-anchor sentence but is no longer tied to "founder".
 
-In Lovable Cloud → Auth → Phone provider, enable **Twilio** and paste in:
+1. **Line 43** — feature bullet inside Pro tier
+   - From: `"Founder code: 50% off forever"`
+   - To: `"50% off with referral code (limited time)"`
 
-- Twilio Account SID
-- Twilio Auth Token (or API Key SID + Secret)
-- Twilio Messaging Service SID *(recommended)* or a single Twilio "From" number in E.164 format (e.g. `+15551234567`)
+2. **Lines 99–100** — referred banner
+   - From: `50% off Pro is yours – $49/month instead of $100.`
+   - To: `50% off Pro with your referral code – $49/month instead of $100. Limited time.`
 
-You'll need a Twilio account with:
-- A verified sender (Messaging Service or a purchased number with SMS capability)
-- For Canadian/US destinations: **A2P 10DLC registration** completed, OR a Toll-Free number that's been verified. Without this, carriers silently drop SMS to US/CA mobiles — the API returns 200 but the phone never rings.
+3. **Line 473** — code-entry header
+   - From: `"Have a founder code?"`
+   - To: `"Have a referral code?"`
 
-I'll walk you through where to click once you say go.
+4. **Line 520** — applied confirmation
+   - Already says `Referral code applied - 50% off Pro is yours.` → append ` Limited time.`
 
-### 2. Add Twilio test credentials for the stress harness (optional but smart)
-
-`docs/codex-stress/README.md` already expects "Test OTP" entries (`+15555550100`–`+15555550119` → `123456`) so Codex can load-test without burning real SMS. We'll add those in the same Auth panel under **Test OTP**.
-
-### 3. Lock down SMS abuse before going live
-
-Twilio's two cheap protections, both toggled in the Twilio console (I'll point to them):
-
-- **SMS Pumping Protection** — blocks the fraud pattern where attackers spam OTP sends to premium-rate numbers they own.
-- **SMS Geo Permissions** — restrict to US + CA only (you can add more countries later). Default is "everywhere," which is how people wake up to $4k bills.
-
-### 4. Frontend hardening (small, mobile-only polish)
-
-Touch only `src/pages/auth/PhoneLoginPage.tsx` and `CodeVerifyPage.tsx`:
-
-- **Better error mapping.** Right now `phone_provider_disabled`, `sms_send_failed`, and `over_sms_send_rate_limit` all collapse to "We could not send the code." Map them to honest messages so future regressions surface fast.
-- **Disable the Continue button while in flight** (already done) + add a 30s client-side cooldown on resend (already done in `CodeVerifyPage`, mirror it on `PhoneLoginPage` so the user can't double-tap and trip per-phone rate limits).
-- **`autoComplete="one-time-code"` + `inputMode="numeric"`** on the OTP boxes so iOS Safari and Android Chrome auto-fill the code from the SMS notification — this is the single biggest mobile UX win and `OTPInput.tsx` likely doesn't set it yet. I'll verify and patch.
-- **E.164 sanity check** before submit. Today we hardcode `+1` and 10 digits, which is fine for US/CA only. We'll keep that but reject obviously bad inputs (all zeros, repeating digits) before spending a Twilio send.
-
-### 5. Verify end-to-end on a real phone
-
-After Twilio is live:
-
-1. Load the preview on an actual mobile device (not just the desktop preview).
-2. Enter your real number → tap Continue → confirm SMS arrives within ~10s.
-3. iOS: confirm the code suggestion bar appears above the keyboard. Android: confirm SMS Retriever/autofill fills the boxes.
-4. Try a wrong code → friendly error, boxes clear.
-5. Wait 30s → Resend works.
-6. Sign out, sign back in → existing-user path works.
-
-If anything fails, I'll read `supabase--edge_function_logs` for the `auth` service and the Twilio Messaging logs side-by-side to diagnose.
-
-### 6. Codex stress pass (optional, after #5 passes)
-
-Hand off to Codex to run `scripts/stress/otp-send.ts --mode=test-numbers --rps=5 --duration=30` to confirm p95 latency and that rate limits return structured JSON, not HTML.
+No logic changes. `codeResult.kind === "founder"` and `"member_referral"` discount paths stay intact server-side; only user-facing copy moves to "referral code".
 
 ---
 
-## What I need from you to start
+## Track B — Payments audit (does checkout actually work?)
 
-1. **Confirm you have a Twilio account** (or want me to walk you through creating one — ~10 min including A2P).
-2. **Pick the sender:** Messaging Service SID (recommended, better deliverability + pumping protection) vs. single Twilio number.
-3. **Confirm launch geography** — US + CA only, or also international? This decides whether we need additional A2P/regulatory work.
+Goal: prove that a real signed-in user can click **Upgrade → Pro**, complete Stripe sandbox checkout, and end up with an `active` row in `public.subscriptions` filtered by `environment='sandbox'`, with the app reflecting Pro tier on next render.
 
-Once you answer those three, I'll switch to build mode and:
-- Guide you through the Auth panel paste-in
-- Patch `PhoneLoginPage.tsx`, `CodeVerifyPage.tsx`, and `OTPInput.tsx` for the mobile polish
-- Verify on the preview together
+### B1. Static audit (read-only, no edits)
+
+Read and cross-check:
+
+- `src/pages/pricing/UpgradePage.tsx` — `handleSelectTier` flow, auth-gate, `sessionStorage` resume.
+- `src/lib/pricing/pricingApi.ts` — `createCheckout`, `getBillingPortalUrl`, env passed (`getStripeEnvironment()`).
+- `src/lib/stripe.ts` — `getStripeEnvironment` derivation.
+- `supabase/functions/create-checkout/index.ts` — JWT validation, env routing, `lookup_key` resolution, `managed_payments`/`automatic_tax`, `return_url` shape.
+- `supabase/functions/payments-webhook/index.ts` — signature verification, `?env=` parsing, upsert into `subscriptions`, `price_id` resolution order (`lookup_key` → `lovable_external_id` → `price.id`).
+- `supabase/functions/validate-code/index.ts` — discount math + `kind` returned.
+- `supabase/functions/apply-founder-code-to-active-sub/index.ts` — post-purchase discount path.
+- `subscriptions` table policies + `has_active_subscription` function.
+- `src/pages/pricing/CheckoutSuccessPage.tsx` — session_id handling, refetch + nav.
+
+Confirm:
+- Every server read of `subscriptions` includes `.eq('environment', getStripeEnvironment())`.
+- Tier gating keys off `price_id` (lookup_key), never `product_id`.
+- No `STRIPE_SECRET_KEY` references; all Stripe calls go through `createStripeClient(env)`.
+- Webhook is registered (it is — managed by `enable_stripe_payments`).
+
+### B2. Confirm products + prices exist
+
+Check via `payments-` tooling that the following prices exist with the expected `lookup_key`s referenced in `create-checkout`:
+- `pro_monthly` ($100/mo)
+- `pro_yearly` (if shown)
+- any add-on / storage SKUs the UI exposes
+
+If missing or mis-priced, recreate via `payments--create_price` (sandbox auto-syncs to live on publish).
+
+### B3. Edge function smoke (sandbox)
+
+Using `supabase--curl_edge_functions` while signed in to preview:
+
+1. `POST /create-checkout` with `{ tierKey: "pro_monthly", code: null }` → expect `{ url, sessionId }`.
+2. `POST /create-checkout` with a known valid referral code → expect discounted line item or coupon attached.
+3. `POST /validate-code` with valid + invalid + expired codes → expect correct `kind` + `discountPercent`.
+4. `POST /create-checkout` unauthenticated → expect 401 (matches the earlier bug we fixed).
+
+### B4. Manual browser pass (operator)
+
+In preview, signed in as a fresh test account:
+
+1. `/upgrade` → click **Pro** with no code → Stripe sandbox checkout opens with $100/mo.
+2. Pay with `4242 4242 4242 4242`, any future date, any CVC, any ZIP.
+3. Land on `/checkout/success?session_id=…` → success copy renders, redirect after 3s.
+4. Realtime: `subscriptions` row appears (`status=active`, `environment=sandbox`, `price_id=pro_monthly`).
+5. `/upgrade` now shows Pro as current plan, **Manage billing** opens portal in new tab.
+6. Repeat with a referral code → checkout shows 50% off → row stores discount metadata.
+7. Repeat the entire flow logged out → auth gate redirects to `/auth/login`, OTP verify, then auto-resumes checkout via `cog:pending-checkout`.
+
+### B5. Edge cases to verify
+
+- User already has active sub → "Upgrade" CTA is replaced with "Manage billing" (no duplicate sub created).
+- Webhook arrives before user lands on success page → row is upserted; success page refetch picks it up.
+- Webhook with bad signature → 400; nothing inserted.
+- `?env=live` webhook in preview → ignored cleanly (200 + `ignored:"invalid env"`), nothing inserted.
+- `apply-founder-code-to-active-sub` on an active sub → coupon applied, `current_period_end` unchanged.
+
+### B6. Failure-mode triage
+
+If any step in B4 breaks, the most likely culprits in order:
+1. Missing `lookup_key` on price → `create-checkout` returns 400.
+2. `return_url` missing `{CHECKOUT_SESSION_ID}` template → success page can't show details.
+3. Webhook handler not reading `?env=` → row inserted with default `'sandbox'` but client filters by `'live'` (or vice-versa).
+4. RLS on `subscriptions` blocking client `select` (should allow `auth.uid() = user_id`).
+5. `getStripeEnvironment()` mismatch with the env the webhook stamps.
+
+Each is fixable without schema changes — fixes go into the relevant edge function or `src/lib/stripe.ts`.
+
+---
+
+## What lands as code (after plan approval)
+
+- **Frontend only** for Track A: 4 string edits in `src/pages/pricing/UpgradePage.tsx`.
+- **No edits** for Track B until the audit finds a concrete defect; then fixes are scoped to the exact edge function or pricing helper, never schema.
+- Track B report posted back here as a green/red checklist.
+
+## Out of scope
+
+- Going live on Stripe (separate go-live flow).
+- New plan tiers, currencies, or seat-based pricing.
+- Visual redesign of the upgrade page.
+- Twilio / OTP work (already covered).
