@@ -183,15 +183,11 @@ export async function previewInvite(token: string): Promise<InvitePreview> {
  * Queries profiles.phone_e164.
  */
 export async function checkPhoneRegistered(e164: string): Promise<PhoneCheckResult> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('user_id, display_name')
-    .eq('phone_e164', e164)
-    .maybeSingle();
+  const { data } = await supabase.rpc('check_phone_registered', { _phone: e164 });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { exists: false, firstName: null };
 
-  if (!data) return { exists: false, firstName: null };
-
-  const firstName = data.display_name?.split(' ')[0] ?? null;
+  const firstName = row.display_name?.split(' ')[0] ?? null;
   return { exists: true, firstName };
 }
 
