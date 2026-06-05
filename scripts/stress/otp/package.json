@@ -1,0 +1,26 @@
+{
+  "name": "cog-otp-stress-harness",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "preflight": "npm run build --silent && node reports/.dist/run-all.js preflight",
+    "t1": "npm run build --silent && node reports/.dist/scenarios/t1-baseline-send.js",
+    "t2": "npm run build --silent && node reports/.dist/scenarios/t2-burst-send.js",
+    "t3": "npm run build --silent && node reports/.dist/scenarios/t3-verify-happy.js",
+    "t4": "npm run build --silent && node reports/.dist/scenarios/t4-verify-negative.js",
+    "t5": "npm run build --silent && node reports/.dist/scenarios/t5-cooldown-probe.js",
+    "t6": "npm run build --silent && node reports/.dist/scenarios/t6-abuse-sim.js",
+    "t7": "npm run build --silent && node reports/.dist/scenarios/t7-real-phone-smoke.js",
+    "t8": "npm run build --silent && node reports/.dist/scenarios/t8-soak.js",
+    "all": "npm run build --silent && node reports/.dist/run-all.js all"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.16.5"
+  }
+}
