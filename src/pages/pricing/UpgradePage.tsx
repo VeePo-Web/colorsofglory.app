@@ -5,6 +5,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BackHeader from "@/components/cog/BackHeader";
 import BottomNav from "@/components/cog/BottomNav";
+import { supabase } from "@/integrations/supabase/client";
 import {
   buildEmbeddedCheckoutReturnUrl,
   createCheckoutSession,
@@ -314,6 +315,26 @@ const UpgradePage = () => {
       .catch(() => {});
   }, [referralCode]);
 
+  // Resume a pending checkout after the user signs in.
+  useEffect(() => {
+    if (isLoadingData || tiers.length === 0) return;
+    const raw = sessionStorage.getItem("cog:pending-checkout");
+    if (!raw) return;
+    let intent: { tierKey: string; code?: string | null; ref?: string | null } | null = null;
+    try { intent = JSON.parse(raw); } catch { /* ignore */ }
+    if (!intent?.tierKey) return;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      sessionStorage.removeItem("cog:pending-checkout");
+      const tier = tiers.find((t) => t.key === intent!.tierKey);
+      if (!tier) return;
+      if (intent!.code) setCodeInput(intent!.code);
+      handleSelectTier(tier, intent!.code ?? "", intent!.ref ?? "");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingData, tiers]);
+
   const handleValidateCode = async () => {
     const trimmed = codeInput.trim().toUpperCase();
     if (!trimmed) return;
@@ -333,7 +354,11 @@ const UpgradePage = () => {
     }
   };
 
-  const handleSelectTier = async (tier: PlanTier) => {
+  const handleSelectTier = async (
+    tier: PlanTier,
+    codeOverride = codeInput,
+    referralOverride = referralCode
+  ) => {
     if (tier.monthlyCents === 0 || currentPlan === tier.key) return;
 
     setCheckoutTierKey(tier.key);
@@ -342,7 +367,22 @@ const UpgradePage = () => {
     setCheckoutNotice(null);
 
     try {
-      const typedCode = codeInput.trim().toUpperCase();
+      // Auth gate — embedded checkout requires a signed-in user JWT.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        const intent = {
+          tierKey: tier.key,
+          code: codeOverride.trim() || null,
+          ref: referralOverride || null,
+          source: source || null,
+        };
+        sessionStorage.setItem("cog:pending-checkout", JSON.stringify(intent));
+        navigate("/auth/login");
+        return;
+      }
+
+      const typedCode = codeOverride.trim().toUpperCase();
+      const checkoutReferralCode = referralOverride.trim().toUpperCase();
       let manualCode: string | null = null;
 
       if (tier.key === "pro" && typedCode) {
@@ -356,11 +396,11 @@ const UpgradePage = () => {
         manualCode = typedCode;
       }
 
-      const canUseReferralCode = !manualCode && referralResult?.kind !== "invalid" && !!referralCode;
+      const canUseReferralCode = !manualCode && referralResult?.kind !== "invalid" && !!checkoutReferralCode;
       const result = await createCheckoutSession({
         planKey: tier.key as Exclude<PlanKey, "free">,
         code: manualCode,
-        referrerCode: canUseReferralCode ? referralCode : null,
+        referrerCode: canUseReferralCode ? checkoutReferralCode : null,
         returnUrl: buildEmbeddedCheckoutReturnUrl(),
       });
 

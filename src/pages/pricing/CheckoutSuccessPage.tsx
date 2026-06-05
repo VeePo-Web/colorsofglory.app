@@ -17,6 +17,10 @@ const CheckoutSuccessPage = () => {
   const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (sessionId) {
+      console.log("[checkout] success session_id=", sessionId);
+    }
     const interval = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) { clearInterval(interval); return 0; }
@@ -25,7 +29,7 @@ const CheckoutSuccessPage = () => {
     }, 1000);
     const timer = setTimeout(() => navigate("/", { replace: true }), AUTO_NAVIGATE_MS);
     return () => { clearInterval(interval); clearTimeout(timer); };
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   return (
     <div

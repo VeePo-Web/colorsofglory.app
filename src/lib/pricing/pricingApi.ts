@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getStripeEnvironment } from '@/lib/stripe';
 
 // Types
 
@@ -125,10 +126,6 @@ const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
 function normalizeCode(code?: string | null): string | undefined {
   const trimmed = code?.trim().toUpperCase();
   return trimmed || undefined;
-}
-
-function getPaymentEnvironment(): PaymentEnvironment {
-  return import.meta.env.PROD ? 'live' : 'sandbox';
 }
 
 export function buildEmbeddedCheckoutReturnUrl(origin = window.location.origin): string {
@@ -267,7 +264,7 @@ export async function createCheckoutSession(input: CreateCheckoutInput): Promise
   const body: Record<string, unknown> = {
     plan_key: input.planKey,
     returnUrl: input.returnUrl,
-    environment: input.environment ?? getPaymentEnvironment(),
+    environment: input.environment ?? getStripeEnvironment(),
   };
 
   const manualCode = normalizeCode(input.code);
@@ -297,7 +294,7 @@ export async function getBillingPortalUrl(returnUrl: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke('billing-customer-portal', {
     body: {
       returnUrl,
-      environment: getPaymentEnvironment(),
+      environment: getStripeEnvironment(),
     },
   });
 
@@ -359,7 +356,7 @@ export async function cancelCurrentSubscription(atPeriodEnd = true): Promise<{
   const { data, error } = await supabase.functions.invoke('billing-cancel-subscription', {
     body: {
       at_period_end: atPeriodEnd,
-      environment: getPaymentEnvironment(),
+      environment: getStripeEnvironment(),
     },
   });
 
