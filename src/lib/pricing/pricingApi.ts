@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getStripeEnvironment } from '@/lib/stripe';
 
 // Types
 
@@ -196,7 +197,7 @@ export async function createCheckout(
   const body: Record<string, unknown> = {
     plan_key: planKey,
     returnUrl,
-    environment: import.meta.env.PROD ? 'live' : 'sandbox',
+    environment: getStripeEnvironment(),
   };
 
   if (code) body.code = code.trim().toUpperCase();
@@ -221,7 +222,7 @@ export async function getBillingPortalUrl(returnUrl: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke('billing-customer-portal', {
     body: {
       returnUrl,
-      environment: import.meta.env.PROD ? 'live' : 'sandbox',
+      environment: getStripeEnvironment(),
     },
   });
 
