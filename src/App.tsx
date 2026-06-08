@@ -30,6 +30,7 @@ const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
+const CapturePage = lazy(() => import("./pages/CapturePage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const BillingPage = lazy(() => import("./pages/settings/BillingPage"));
@@ -124,10 +125,13 @@ const App = () => (
             <Route path="/home"           element={<ReturningHomePage />} />
 
             {/* Core app */}
-            <Route path="/" element={<RequireAuth><SongCatalogPage /></RequireAuth>} />
+            <Route path="/" element={<RequireAuth><CapturePage /></RequireAuth>} />
+            <Route path="/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
+            <Route path="/songs" element={<RequireAuth><SongCatalogPage /></RequireAuth>} />
             <Route path="/songs/:id" element={<SongWorkspacePage />} />
             <Route path="/songs/:id/brainstorm" element={<RequireAuth><BrainstormPage /></RequireAuth>} />
-            <Route path="/songs/:id/capture" element={<CaptureFirstIdeaPage />} />
+            <Route path="/songs/:id/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
+            <Route path="/songs/:id/capture-onboarding" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
             <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
             <Route path="/songs/:id/chords" element={<CanvasLayerRedirect layer="chords" />} />

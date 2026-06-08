@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Music2, Settings, Home } from "lucide-react";
+import { Music2, Settings, Mic } from "lucide-react";
 
 interface NavItem {
   label: string;
@@ -10,16 +10,16 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    label: "Songs",
-    icon: Home,
+    label: "Capture",
+    icon: Mic,
     path: "/",
     matchPaths: ["/"],
   },
   {
-    label: "Library",
+    label: "Songs",
     icon: Music2,
-    path: "/",
-    matchPaths: ["/songs/"],
+    path: "/songs",
+    matchPaths: ["/songs"],
   },
   {
     label: "Settings",
@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
 
 interface BottomNavProps {
   /** Override active tab if needed */
-  active?: "songs" | "library" | "settings";
+  active?: "capture" | "songs" | "settings";
 }
 
 const BottomNav = ({ active }: BottomNavProps) => {
@@ -40,14 +40,14 @@ const BottomNav = ({ active }: BottomNavProps) => {
 
   const isActive = (item: NavItem) => {
     if (active) {
+      if (active === "capture" && item.label === "Capture") return true;
       if (active === "songs" && item.label === "Songs") return true;
-      if (active === "library" && item.label === "Library") return true;
       if (active === "settings" && item.label === "Settings") return true;
       return false;
     }
     const path = location.pathname;
-    if (item.label === "Songs") return path === "/";
-    if (item.label === "Library") return path.startsWith("/songs/");
+    if (item.label === "Capture") return path === "/" || path === "/capture";
+    if (item.label === "Songs") return path === "/songs" || path.startsWith("/songs/");
     if (item.label === "Settings") return path.startsWith("/settings/");
     return false;
   };
