@@ -11,6 +11,8 @@ interface BigMicProps {
   /** Hold-to-record: press starts, release stops. */
   onHoldStart?: () => void;
   onHoldEnd?: () => void;
+  /** When true, the current take started via hold-to-hum. Changes the label. */
+  humMode?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface BigMicProps {
  * - Hold to start, release to stop (quick hums) when handlers provided.
  * - Respects prefers-reduced-motion: ripple and amplitude fall back to a static ring.
  */
-const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd }: BigMicProps) => {
+const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd, humMode }: BigMicProps) => {
   const ringRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const recording = phase === "recording";
@@ -165,7 +167,9 @@ const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd }: 
             : phase === "requesting-permission"
               ? "Listening for permission…"
               : recording
-                ? "Tap to stop · say \u201cVerse 1\u201d or \u201cChorus\u201d to split"
+                ? humMode
+                  ? "Humming\u2026 release to save"
+                  : "Tap to stop · say \u201cVerse 1\u201d or \u201cChorus\u201d to split"
                 : onHoldStart
                   ? "Tap to record · or hold for a quick hum"
                   : "Tap to record"}
