@@ -98,11 +98,12 @@ export function chordToNumbers(chord: NumberChord, mode: Mode = "major"): string
   const defaultQuality = DIATONIC_QUALITY[mode][chord.degree - 1];
   // Display quality only when it differs from the diatonic default,
   // or when it's non-triadic (sus2/sus4/aug). Keeps chips clean.
+  const q: string = chord.quality;
   const showQuality =
-    chord.quality !== defaultQuality ||
-    chord.quality === "sus2" ||
-    chord.quality === "sus4" ||
-    chord.quality === "aug";
+    q !== defaultQuality ||
+    q === "sus2" ||
+    q === "sus4" ||
+    q === "aug";
 
   const prefix = chord.accidental ?? "";
   const suffix = showQuality ? QUALITY_SUFFIX_NUM[chord.quality] : "";
