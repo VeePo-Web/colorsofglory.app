@@ -90,15 +90,12 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
           }}
         >
           <AnimatePresence initial={false}>
-            {populated.map((block, idx) => {
-              // First block usually has the implicit "unlabeled" marker; skip the divider there.
-              const showDivider = idx > 0 || block.marker.source !== "voice" && block.marker.kind !== "unlabeled" && idx === 0
-                ? block.marker.kind !== "unlabeled"
-                : false;
+            {populated.map((block) => {
+              // Hide the divider for the implicit "unlabeled" head block.
+              const showDivider = block.marker.kind !== "unlabeled";
               return (
                 <div key={block.id}>
-                  {showDivider && idx > 0 && <SectionDivider label={block.marker.label} />}
-                  {showDivider && idx === 0 && <SectionDivider label={block.marker.label} />}
+                  {showDivider && <SectionDivider label={block.marker.label} />}
                   <motion.p
                     layout
                     initial={{ opacity: 0, y: 4 }}
