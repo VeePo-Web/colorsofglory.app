@@ -9,7 +9,7 @@ export async function listBrainstormMemos(songId: string, includeArchived = fals
     .select("*")
     .eq("song_id", songId)
     .order("created_at", { ascending: false });
-  if (!includeArchived) q = q.neq("status", "archived").neq("status", "deleted");
+  if (!includeArchived) q = q.neq("status", "archived" as never).neq("status", "deleted");
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as BrainstormMemo[];
@@ -26,7 +26,7 @@ export async function updateMemoNotes(memoId: string, notes: string): Promise<vo
 }
 
 export async function archiveMemo(memoId: string): Promise<void> {
-  const { error } = await supabase.from("voice_memos").update({ status: "archived" }).eq("id", memoId);
+  const { error } = await supabase.from("voice_memos").update({ status: "archived" as never }).eq("id", memoId);
   if (error) throw error;
 }
 
