@@ -476,6 +476,63 @@ export type Database = {
         }
         Relationships: []
       }
+      idea_captures: {
+        Row: {
+          author_user_id: string
+          created_at: string
+          id: string
+          lyric_snippet: string | null
+          scripture_ref: string | null
+          section_id: string | null
+          song_id: string | null
+          tags: string[]
+          title: string | null
+          updated_at: string
+          voice_memo_id: string | null
+        }
+        Insert: {
+          author_user_id: string
+          created_at?: string
+          id?: string
+          lyric_snippet?: string | null
+          scripture_ref?: string | null
+          section_id?: string | null
+          song_id?: string | null
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+          voice_memo_id?: string | null
+        }
+        Update: {
+          author_user_id?: string
+          created_at?: string
+          id?: string
+          lyric_snippet?: string | null
+          scripture_ref?: string | null
+          section_id?: string | null
+          song_id?: string | null
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+          voice_memo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idea_captures_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "idea_captures_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invite_requests: {
         Row: {
           created_at: string
@@ -682,6 +739,7 @@ export type Database = {
           referral_code: string | null
           referred_by_user_id: string | null
           stripe_connect_account_id: string | null
+          timezone: string | null
           updated_at: string
           user_id: string
         }
@@ -708,6 +766,7 @@ export type Database = {
           referral_code?: string | null
           referred_by_user_id?: string | null
           stripe_connect_account_id?: string | null
+          timezone?: string | null
           updated_at?: string
           user_id: string
         }
@@ -734,6 +793,7 @@ export type Database = {
           referral_code?: string | null
           referred_by_user_id?: string | null
           stripe_connect_account_id?: string | null
+          timezone?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1393,6 +1453,75 @@ export type Database = {
           },
         ]
       }
+      takes: {
+        Row: {
+          byte_size: number
+          created_at: string
+          created_by: string
+          duration_ms: number | null
+          friendly_name: string | null
+          id: string
+          is_archived: boolean
+          is_primary: boolean
+          mime_type: string
+          name_is_custom: boolean
+          song_id: string
+          storage_path: string
+          updated_at: string
+          voice_memo_id: string
+          waveform_peaks: Json | null
+        }
+        Insert: {
+          byte_size?: number
+          created_at?: string
+          created_by: string
+          duration_ms?: number | null
+          friendly_name?: string | null
+          id?: string
+          is_archived?: boolean
+          is_primary?: boolean
+          mime_type?: string
+          name_is_custom?: boolean
+          song_id: string
+          storage_path: string
+          updated_at?: string
+          voice_memo_id: string
+          waveform_peaks?: Json | null
+        }
+        Update: {
+          byte_size?: number
+          created_at?: string
+          created_by?: string
+          duration_ms?: number | null
+          friendly_name?: string | null
+          id?: string
+          is_archived?: boolean
+          is_primary?: boolean
+          mime_type?: string
+          name_is_custom?: boolean
+          song_id?: string
+          storage_path?: string
+          updated_at?: string
+          voice_memo_id?: string
+          waveform_peaks?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "takes_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "takes_voice_memo_id_fkey"
+            columns: ["voice_memo_id"]
+            isOneToOne: false
+            referencedRelation: "voice_memos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -1869,6 +1998,10 @@ export type Database = {
       }
       clear_pending_code: { Args: { _user_id: string }; Returns: undefined }
       complete_onboarding: { Args: { _user_id: string }; Returns: string }
+      compute_friendly_take_name: {
+        Args: { _created_at: string; _duration_ms: number; _tz: string }
+        Returns: string
+      }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
@@ -2004,6 +2137,24 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_takes: {
+        Args: { _include_archived?: boolean; _voice_memo_id: string }
+        Returns: {
+          byte_size: number
+          created_at: string
+          created_by: string
+          duration_ms: number
+          friendly_name: string
+          id: string
+          is_archived: boolean
+          is_primary: boolean
+          name_is_custom: boolean
+          song_id: string
+          storage_path: string
+          voice_memo_id: string
+          waveform_peaks: Json
+        }[]
+      }
       mark_memo_failed: {
         Args: { _memo_id: string; _reason: string }
         Returns: undefined
@@ -2087,6 +2238,18 @@ export type Database = {
       }
       owned_active_song_count: { Args: { _user_id: string }; Returns: number }
       plan_tier_key_for_user: { Args: { _user_id: string }; Returns: string }
+      quick_capture: {
+        Args: {
+          _lyric_snippet: string
+          _scripture_ref: string
+          _section_id: string
+          _song_id: string
+          _tags: string[]
+          _title: string
+          _voice_memo_id: string
+        }
+        Returns: string
+      }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
       record_invoice_refunded: { Args: { _event: Json }; Returns: number }
@@ -2169,6 +2332,7 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: string
       }
+      set_primary_take: { Args: { _take_id: string }; Returns: string }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
