@@ -2392,6 +2392,7 @@ export type Database = {
         | "uploaded"
         | "finalized"
         | "transcribed"
+        | "archived"
       onboarding_step:
         | "not_started"
         | "intent_selected"
@@ -2593,6 +2594,7 @@ export const Constants = {
         "uploaded",
         "finalized",
         "transcribed",
+        "archived",
       ],
       onboarding_step: [
         "not_started",
