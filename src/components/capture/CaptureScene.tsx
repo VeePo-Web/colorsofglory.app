@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -15,6 +15,8 @@ import LiveTranscript from "./LiveTranscript";
 import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
 import ReviewSheet from "./ReviewSheet";
 import ImportMemoButton from "./ImportMemoButton";
+import LatestPeekStrip from "./LatestPeekStrip";
+import CommitRibbon from "./CommitRibbon";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 
@@ -50,6 +52,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     "idle" | "listening" | "transcribing" | "ready" | "skipped"
   >("idle");
   const [saving, setSaving] = useState(false);
+  const [humMode, setHumMode] = useState(false);
+  const [prompt] = useState(() => pickPrompt(new Date()));
 
   // Side-rail sheet (idle taps)
   const [sheetAction, setSheetAction] = useState<RailAction | null>(null);
@@ -64,6 +68,14 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     storagePath: string | null;
     durationMs: number;
   }>({ open: false, takeId: null, songId: null, storagePath: null, durationMs: 0 });
+
+  // Post-commit ribbon — quiet success → tap to land on the canvas.
+  const [ribbon, setRibbon] = useState<{
+    open: boolean;
+    songId: string | null;
+    songTitle?: string;
+    blockCount: number;
+  }>({ open: false, songId: null, blockCount: 0 });
 
   // Reset state if the user navigates between contexts.
   useEffect(() => {
@@ -124,6 +136,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         toast.error("Could not save take", { description: msg.slice(0, 140) });
       } finally {
         setSaving(false);
+        setHumMode(false);
       }
     },
     [saving, songId, songTitle],
@@ -145,11 +158,36 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
     // Start recording fresh.
     setManualMarkers([]);
+    setHumMode(false);
     setStatus("listening");
     live.reset();
     if (live.supported) live.start();
     await recorder.startRecording();
   }, [phase, recorder, saving, live, handleAudioFile]);
+
+  const handleHoldStart = useCallback(async () => {
+    if (saving || phase === "recording") return;
+    setManualMarkers([]);
+    setHumMode(true);
+    setStatus("listening");
+    live.reset();
+    if (live.supported) live.start();
+    await recorder.startRecording();
+  }, [phase, recorder, saving, live]);
+
+  const handleHoldEnd = useCallback(async () => {
+    if (phase !== "recording") return;
+    const result = await recorder.stopRecording();
+    live.stop();
+    if (!result) {
+      setHumMode(false);
+      return;
+    }
+    const file = new File([result.blob], `hum-${Date.now()}.webm`, {
+      type: result.mimeType || "audio/webm",
+    });
+    await handleAudioFile(file, result.durationMs);
+  }, [phase, recorder, live, handleAudioFile]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -202,6 +240,47 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     setManualMarkers([]);
     setStatus("idle");
   }, []);
+
+  const handleReviewCommitted = useCallback(
+    (info: { songId: string; songTitle?: string; blockCount: number }) => {
+      setReview((r) => ({ ...r, open: false }));
+      setPendingBlocks([]);
+      setManualMarkers([]);
+      setStatus("idle");
+      setRibbon({
+        open: true,
+        songId: info.songId,
+        songTitle: info.songTitle ?? songTitle,
+        blockCount: info.blockCount,
+      });
+    },
+    [songTitle],
+  );
+
+  const handleResumePeek = useCallback(
+    async (memoId: string, _songId: string) => {
+      const takeId = await getPrimaryTakeIdForMemo(memoId).catch(() => null);
+      if (!takeId) {
+        toast.message("Take is still uploading", { description: "Try again in a moment." });
+        return;
+      }
+      const { data: takeRow } = await supabase
+        .from("takes")
+        .select("storage_path, song_id, duration_ms, songs(title)")
+        .eq("id", takeId)
+        .maybeSingle();
+      if (!takeRow) return;
+      setReview({
+        open: true,
+        takeId,
+        songId: (takeRow.song_id as string) ?? _songId,
+        songTitle: (takeRow.songs as { title?: string } | null)?.title ?? songTitle,
+        storagePath: (takeRow.storage_path as string | undefined) ?? null,
+        durationMs: (takeRow.duration_ms as number | null) ?? 0,
+      });
+    },
+    [songTitle],
+  );
 
   return (
     <div className="relative min-h-[100dvh] w-full" style={{ background: "var(--cog-cream)" }}>
@@ -276,7 +355,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
         <button
           type="button"
-          aria-label="More options"
+          aria-label="Settings"
+          onClick={() => navigate("/settings")}
           className="flex items-center justify-center transition-transform active:scale-95"
           style={{
             background: "transparent",
@@ -286,7 +366,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             padding: 8,
           }}
         >
-          <MoreHorizontal size={20} />
+          <Settings size={20} />
         </button>
       </header>
 
@@ -295,11 +375,34 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         className="relative flex flex-col items-center"
         style={{ padding: "24px 20px 140px", gap: 32 }}
       >
+        {/* Rotating serif prompt — fades when the user starts recording so the
+            mic and live transcript own the screen. */}
+        <p
+          aria-hidden={phase === "recording"}
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "clamp(20px, 5vw, 26px)",
+            lineHeight: 1.25,
+            color: "var(--cog-charcoal)",
+            textAlign: "center",
+            maxWidth: 360,
+            margin: 0,
+            opacity: phase === "recording" ? 0 : 0.92,
+            transition: "opacity 600ms var(--cog-ease, cubic-bezier(0.25,0.46,0.45,0.94))",
+            minHeight: 64,
+          }}
+        >
+          {prompt}
+        </p>
+
         <BigMic
           phase={phase}
           durationMs={durationMs}
           analyser={analyserNode}
           onTap={handleMicTap}
+          onHoldStart={handleHoldStart}
+          onHoldEnd={handleHoldEnd}
+          humMode={humMode}
         />
 
         {/* Rail is a fixed right-edge overlay so the mic stays dead center. */}
@@ -328,6 +431,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
         {phase !== "recording" && !saving && !review.open && (
           <ImportMemoButton disabled={saving} onPicked={handleAudioFile} />
+        )}
+
+        {/* Peek-strip of the last 3 captures — only shown when idle so it
+            never competes with the live transcript bloom. */}
+        {phase !== "recording" && !saving && !review.open && (
+          <LatestPeekStrip onResume={handleResumePeek} />
         )}
 
         {recorder.state.error && (
@@ -361,6 +470,20 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         durationMs={review.durationMs}
         pendingBlocks={pendingBlocks}
         onClose={handleReviewClose}
+        onCommitted={handleReviewCommitted}
+      />
+
+      <CommitRibbon
+        open={ribbon.open}
+        blockCount={ribbon.blockCount}
+        songTitle={ribbon.songTitle}
+        onOpenCanvas={() => {
+          if (ribbon.songId) {
+            navigate(`/songs/${ribbon.songId}/canvas?from=capture`);
+          }
+          setRibbon((r) => ({ ...r, open: false }));
+        }}
+        onDismiss={() => setRibbon((r) => ({ ...r, open: false }))}
       />
     </div>
   );
@@ -373,4 +496,21 @@ function formatNewSongTitle(): string {
   const day = now.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   return `New idea · ${day} · ${time}`;
+}
+
+/**
+ * Time-of-day rotating prompt. Sunday gets its own worship-leaning copy.
+ * Pure function — no React, no Date.now mocking required for testing.
+ */
+function pickPrompt(now: Date): string {
+  const hour = now.getHours();
+  const isSunday = now.getDay() === 0;
+  if (isSunday) {
+    return "What did worship stir in you today?";
+  }
+  if (hour < 5) return "Something the night gave you?";
+  if (hour < 12) return "What's the first line that came to you?";
+  if (hour < 17) return "Hum the melody you can't shake.";
+  if (hour < 22) return "Anything from today worth remembering?";
+  return "One quiet thought before bed?";
 }

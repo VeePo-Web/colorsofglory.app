@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Merge, Trash2 } from "lucide-react";
 
 import {
   requestTranscript,
@@ -36,6 +36,11 @@ interface ReviewSheetProps {
   durationMs: number;
   pendingBlocks: PendingBlock[];
   onClose: () => void;
+  /**
+   * Fired after a successful canvas commit. Parent uses this to show the
+   * CommitRibbon and suppress the older toast+autonavigate fallback.
+   */
+  onCommitted?: (info: { songId: string; songTitle?: string; blockCount: number }) => void;
 }
 
 const KIND_LABELS: Record<EditableBlock["kind"], string> = {
@@ -55,6 +60,7 @@ const ReviewSheet = ({
   durationMs,
   pendingBlocks,
   onClose,
+  onCommitted,
 }: ReviewSheetProps) => {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
@@ -164,6 +170,35 @@ const ReviewSheet = ({
   const deleteBlock = (id: string) =>
     setBlocks((prev) => prev.filter((b) => b.id !== id));
 
+  const moveBlock = (id: string, dir: -1 | 1) =>
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === id);
+      if (idx < 0) return prev;
+      const next = idx + dir;
+      if (next < 0 || next >= prev.length) return prev;
+      const copy = prev.slice();
+      const [item] = copy.splice(idx, 1);
+      copy.splice(next, 0, item);
+      return copy;
+    });
+
+  /** Fold this block's text into the previous block; preserves the older label. */
+  const mergeUp = (id: string) =>
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === id);
+      if (idx <= 0) return prev;
+      const copy = prev.slice();
+      const target = copy[idx - 1];
+      const incoming = copy[idx];
+      copy[idx - 1] = {
+        ...target,
+        text: [target.text, incoming.text].filter(Boolean).join("\n"),
+        end_ms: Math.max(target.end_ms, incoming.end_ms),
+      };
+      copy.splice(idx, 1);
+      return copy;
+    });
+
   const handleCommit = async () => {
     if (!takeId || !songId) return;
     const usable = blocks.filter((b) => b.text.trim().length > 0 || b.kind === "section");
@@ -185,11 +220,20 @@ const ReviewSheet = ({
           end_ms: b.end_ms,
         })),
       });
-      toast.success("Added to canvas", {
-        description: `${usable.length} ${usable.length === 1 ? "block" : "blocks"} saved.`,
-      });
-      onClose();
-      navigate(`/songs/${result.song_id}/canvas?from=capture`);
+      if (onCommitted) {
+        // Parent handles the ribbon + navigation.
+        onCommitted({
+          songId: result.song_id,
+          songTitle,
+          blockCount: usable.length,
+        });
+      } else {
+        toast.success("Added to canvas", {
+          description: `${usable.length} ${usable.length === 1 ? "block" : "blocks"} saved.`,
+        });
+        onClose();
+        navigate(`/songs/${result.song_id}/canvas?from=capture`);
+      }
     } catch (e) {
       const raw = (e as { message?: string })?.message ?? "";
       if (raw.includes("song_limit_reached") || raw.includes("402")) {
@@ -273,7 +317,7 @@ const ReviewSheet = ({
           )}
 
           <div className="flex flex-col gap-3">
-            {blocks.map((b) => (
+            {blocks.map((b, idx) => (
               <article
                 key={b.id}
                 className="rounded-2xl p-3"
@@ -307,15 +351,51 @@ const ReviewSheet = ({
                     className="flex-1 h-8 text-sm"
                     style={{ fontFamily: "var(--font-display)" }}
                   />
-                  <button
+                  <div className="flex items-center" style={{ gap: 2 }}>
+                    <button
+                      type="button"
+                      aria-label="Move block up"
+                      disabled={idx === 0}
+                      onClick={() => moveBlock(b.id, -1)}
+                      className="p-1.5 rounded-full transition-colors"
+                      style={{ color: idx === 0 ? "var(--cog-muted)" : "var(--cog-warm-gray)", opacity: idx === 0 ? 0.4 : 1 }}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Move block down"
+                      disabled={idx === blocks.length - 1}
+                      onClick={() => moveBlock(b.id, 1)}
+                      className="p-1.5 rounded-full transition-colors"
+                      style={{
+                        color: idx === blocks.length - 1 ? "var(--cog-muted)" : "var(--cog-warm-gray)",
+                        opacity: idx === blocks.length - 1 ? 0.4 : 1,
+                      }}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    {idx > 0 && (
+                      <button
+                        type="button"
+                        aria-label="Merge into previous block"
+                        onClick={() => mergeUp(b.id)}
+                        className="p-1.5 rounded-full transition-colors"
+                        style={{ color: "var(--cog-warm-gray)" }}
+                      >
+                        <Merge size={14} />
+                      </button>
+                    )}
+                    <button
                     type="button"
                     aria-label="Delete block"
                     onClick={() => deleteBlock(b.id)}
                     className="p-2 rounded-full transition-colors"
                     style={{ color: "var(--cog-muted)" }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <Textarea
                   value={b.text}

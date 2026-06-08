@@ -49,6 +49,23 @@ const ORDINAL_RULES: Record<string, number> = {
   // numeric tokens: "1", "2"…
 };
 
+/**
+ * Filler tokens we'll silently consume *before* a marker phrase. Lets users
+ * say things like "okay chorus", "and now the bridge", "this is verse two"
+ * without leaking those words into the section body.
+ */
+const LEADING_FILLERS = new Set<string>([
+  "okay", "ok", "alright", "alrighty", "right",
+  "and", "so", "now", "then",
+  "this", "that", "its", "it",
+  "is", "was",
+  "the", "a", "an",
+  "lets", "let", "us",
+  "going", "to", "into",
+  "do", "try", "play",
+  "uh", "um", "like",
+]);
+
 function normalizeToken(t: string): string {
   return t.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
@@ -126,8 +143,24 @@ export function detectSectionMarkers(
       ordinal = ORDINAL_RULES[matched.rule.tokens[0]];
     }
 
+    // Walk backwards over leading-filler tokens so the marker absorbs them.
+    let phraseStart = i;
+    while (
+      phraseStart > 0 &&
+      LEADING_FILLERS.has(tokens[phraseStart - 1]) &&
+      // Don't consume tokens that already belong to an earlier marker's body.
+      (found.length === 0 || words[phraseStart - 1].startMs > (found[found.length - 1].contentStartMs ?? found[found.length - 1].atMs))
+    ) {
+      phraseStart -= 1;
+    }
+
+    const phraseStartWord = words[phraseStart] ?? startWord;
+    const lastConsumedIdx = i + consumed - 1;
+    const lastConsumedWord = words[lastConsumedIdx] ?? startWord;
+
     found.push({
-      atMs: startWord.startMs,
+      atMs: phraseStartWord.startMs,
+      contentStartMs: lastConsumedWord.endMs,
       kind: matched.rule.kind,
       ordinal,
       source: "voice",
@@ -174,8 +207,11 @@ export function buildTranscriptBlocks(
   for (let idx = 0; idx < effective.length; idx += 1) {
     const marker = effective[idx];
     const nextAt = effective[idx + 1]?.atMs ?? Number.POSITIVE_INFINITY;
+    // Strip the marker phrase + leading fillers from the body by using
+    // contentStartMs when present.
+    const bodyStart = marker.contentStartMs ?? marker.atMs;
     const blockWords = words.filter(
-      (w) => w.startMs >= marker.atMs && w.startMs < nextAt,
+      (w) => w.startMs >= bodyStart && w.startMs < nextAt,
     );
     blocks.push({
       id: `block-${idx}-${marker.atMs}`,

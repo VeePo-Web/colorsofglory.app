@@ -27,6 +27,14 @@ export interface TranscriptWord {
 export interface SectionMarker {
   /** ms offset where this section begins. */
   atMs: number;
+  /**
+   * ms offset where this section's *content* begins — i.e. the end of the
+   * spoken marker phrase ("verse one") plus any leading fillers
+   * ("okay", "this is the…"). `buildTranscriptBlocks` uses this to strip
+   * the announcement out of the card body so the user only sees the actual
+   * lyric. When unset, falls back to `atMs`.
+   */
+  contentStartMs?: number;
   /** Resolved section kind (e.g. "chorus"). */
   kind: SectionKind;
   /** Numeric ordinal when applicable (verse 1 → 1). */

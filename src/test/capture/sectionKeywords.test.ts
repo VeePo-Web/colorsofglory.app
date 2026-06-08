@@ -86,6 +86,7 @@ describe("buildTranscriptBlocks", () => {
     const markers = detectSectionMarkers(words);
     const blocks = buildTranscriptBlocks(words, markers);
     expect(blocks.map((b) => b.marker.label)).toEqual(["Verse 1", "Chorus"]);
-    expect(blocks[1].text).toBe("Chorus rise");
+    // Marker word "Chorus" is now stripped from the section body.
+    expect(blocks[1].text).toBe("rise");
   });
 });
