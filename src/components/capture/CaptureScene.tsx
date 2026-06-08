@@ -288,7 +288,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       {/* Main scene */}
       <main
         className="relative flex flex-col items-center"
-        style={{ padding: "16px 20px 120px", gap: 28 }}
+        style={{ padding: "24px 20px 140px", gap: 32 }}
       >
         <BigMic
           phase={phase}
@@ -297,6 +297,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           onTap={handleMicTap}
         />
 
+        {/* Rail is a fixed right-edge overlay so the mic stays dead center. */}
         <SideRail recording={phase === "recording"} onAction={handleRailAction} />
 
         <LiveTranscript
