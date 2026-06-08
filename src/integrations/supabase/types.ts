@@ -1926,6 +1926,32 @@ export type Database = {
           payload: Json
         }[]
       }
+      get_song_detail: {
+        Args: { _song_id: string }
+        Returns: {
+          collaborator_count: number
+          cover_color: string
+          created_at: string
+          id: string
+          is_locked: boolean
+          key_signature: string
+          last_activity_at: string
+          lyrics_filled_count: number
+          lyrics_snippet: string
+          my_role: Database["public"]["Enums"]["song_member_role"]
+          note_count: number
+          owner_user_id: string
+          pending_suggestion_count: number
+          section_count: number
+          status: Database["public"]["Enums"]["song_status"]
+          tags: string[]
+          tempo_bpm: number
+          time_signature: string
+          title: string
+          updated_at: string
+          voice_memo_count: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1951,6 +1977,32 @@ export type Database = {
       is_song_owner: {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
+      }
+      list_my_songs: {
+        Args: never
+        Returns: {
+          collaborator_count: number
+          cover_color: string
+          created_at: string
+          id: string
+          last_activity_at: string
+          my_role: Database["public"]["Enums"]["song_member_role"]
+          status: Database["public"]["Enums"]["song_status"]
+          title: string
+          voice_memo_count: number
+        }[]
+      }
+      list_song_members: {
+        Args: { _song_id: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          display_name: string
+          first_name: string
+          joined_at: string
+          role: Database["public"]["Enums"]["song_member_role"]
+          user_id: string
+        }[]
       }
       mark_memo_failed: {
         Args: { _memo_id: string; _reason: string }
@@ -2012,6 +2064,10 @@ export type Database = {
         }
       }
       mature_holds: { Args: never; Returns: number }
+      my_song_role: {
+        Args: { _song_id: string }
+        Returns: Database["public"]["Enums"]["song_member_role"]
+      }
       next_paid_month_index: {
         Args: { _referred_user: string; _referrer_founder: string }
         Returns: number

@@ -3,6 +3,48 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type Song = Database["public"]["Tables"]["songs"]["Row"];
 export type SongInvite = Database["public"]["Tables"]["song_invites"]["Row"];
+export type SongStatus = Database["public"]["Enums"]["song_status"];
+export type SongMemberRole = Database["public"]["Enums"]["song_member_role"];
+
+/** Minimal shape for the Song Catalog grid. */
+export type SongCard = {
+  id: string;
+  title: string;
+  cover_color: string | null;
+  status: SongStatus;
+  last_activity_at: string | null;
+  created_at: string;
+  my_role: SongMemberRole;
+  voice_memo_count: number;
+  collaborator_count: number;
+};
+
+/** Full song + per-room counts for the Workspace hub. */
+export type SongDetail = {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  status: SongStatus;
+  key_signature: string | null;
+  tempo_bpm: number | null;
+  time_signature: string | null;
+  tags: string[] | null;
+  cover_color: string | null;
+  is_locked: boolean;
+  last_activity_at: string | null;
+  created_at: string;
+  updated_at: string;
+  lyrics_snippet: string | null;
+  my_role: SongMemberRole;
+  counts: {
+    sections: number;
+    lyrics_filled: number;
+    voice_memos: number;
+    notes: number;
+    collaborators: number;
+    pending_suggestions: number;
+  };
+};
 
 /**
  * Canonical edge-function error codes. UI can switch on these to render
@@ -188,4 +230,60 @@ export const upsertNotificationPrefs = async (
     .maybeSingle();
   if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
   return data as SongNotificationPrefs | null;
+};
+
+// --- Catalog + Workspace reads -------------------------------------------
+
+/** Catalog: all songs the signed-in user is a member of, newest activity first. */
+export const listMySongs = async (): Promise<SongCard[]> => {
+  const { data, error } = await supabase.rpc("list_my_songs");
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  return (data ?? []) as SongCard[];
+};
+
+/** Workspace hub: full song + counts, or null when caller isn't a member. */
+export const getSong = async (song_id: string): Promise<SongDetail | null> => {
+  const { data, error } = await supabase
+    .rpc("get_song_detail", { _song_id: song_id })
+    .maybeSingle();
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    owner_user_id: row.owner_user_id as string,
+    title: row.title as string,
+    status: row.status as SongStatus,
+    key_signature: (row.key_signature as string | null) ?? null,
+    tempo_bpm: (row.tempo_bpm as number | null) ?? null,
+    time_signature: (row.time_signature as string | null) ?? null,
+    tags: (row.tags as string[] | null) ?? null,
+    cover_color: (row.cover_color as string | null) ?? null,
+    is_locked: Boolean(row.is_locked),
+    last_activity_at: (row.last_activity_at as string | null) ?? null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+    lyrics_snippet: (row.lyrics_snippet as string | null) ?? null,
+    my_role: row.my_role as SongMemberRole,
+    counts: {
+      sections: Number(row.section_count ?? 0),
+      lyrics_filled: Number(row.lyrics_filled_count ?? 0),
+      voice_memos: Number(row.voice_memo_count ?? 0),
+      notes: Number(row.note_count ?? 0),
+      collaborators: Number(row.collaborator_count ?? 0),
+      pending_suggestions: Number(row.pending_suggestion_count ?? 0),
+    },
+  };
+};
+
+/**
+ * Archive a song (owner only — relies on existing RLS UPDATE policy).
+ * Use `unarchiveSong` above to restore.
+ */
+export const archiveSong = async (song_id: string): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ status: "archived" })
+    .eq("id", song_id);
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
 };

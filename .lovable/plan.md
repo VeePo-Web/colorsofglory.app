@@ -1,64 +1,70 @@
-# Lovable backend — what's next
+# Cog SDK slice — Songs / Activity / Members helpers for the Catalog + Workspace handoff
 
-The account/admin feature is **done on Lovable's side**: schema, RLS, `user_roles`, `handle_new_user` trigger, `admin-seed-parker`, `configure_auth` (email confirmation + HIBP), Google OAuth, and the `src/integrations/cog/auth.ts` SDK are all live. Parker is verified as admin. The UI is sitting in Claude's lane via `docs/claude-handoffs/2026-06-08-auth-and-account-menu.md`.
+The handoff doc tells Claude to import `listMySongs`, `getSong`, `archiveSong`, `getRecentActivity`, `listMembers`, and `myRole`. Some pieces already exist in `src/integrations/cog/songs.ts` (`createSong`, `deleteSong`, `unarchiveSong`, `getSongActivity`, invites, notif prefs). This plan adds the missing pieces and exposes them under the names the handoff doc promised, without duplicating logic.
 
-So Lovable should move to the next backend chunk while Claude builds the auth UI. Per `.lovable/plan.md` build sequence, the next phases that are still **partially scaffolded but need hardening / verification / activation** are listed below. I recommend doing them in this order — each is small and unblocks a Claude UI screen.
+## Files
 
-## Phase A — Phone OTP provider (small, unblocks Phone tab)
+### 1. Extend `src/integrations/cog/songs.ts`
+Add (do not remove or rename anything existing):
 
-Right now `sendPhoneOtp` will return `PROVIDER_NOT_CONFIGURED` because no SMS provider is wired up in Lovable Cloud. Until that's done, the Phone tab Claude builds will only ever show the "coming soon" fallback. Two sub-tasks:
+- `SongCard` type — minimal shape for the catalog grid:
+  ```
+  { id, title, cover_color, status, last_activity_at, my_role,
+    voice_memo_count, collaborator_count }
+  ```
+- `SongDetail` type — full row + counts:
+  ```
+  { ...Song, my_role, counts: { sections, lyric_lines, voice_memos, notes, collaborators, pending_suggestions } }
+  ```
+- `listMySongs(): Promise<SongCard[]>` — query `songs` joined to `song_members` filtered to `auth.uid()`, status != 'deleted', ordered by `last_activity_at desc`. Uses a single RPC `list_my_songs()` (SECURITY DEFINER) — see migration below — so we get counts and `my_role` in one round trip instead of N+1.
+- `getSong(id): Promise<SongDetail | null>` — calls RPC `get_song_detail(_song_id uuid)` (SECURITY DEFINER, gated by `is_song_member`). Returns null when not a member or not found.
+- `archiveSong(song_id)` / `unarchiveSong(song_id)` — `archiveSong` updates `songs.status='archived'` via authenticated update (relies on existing owner-update RLS). `unarchiveSong` already exists; leave it.
 
-1. Check provider status (`supabase--project_info` / auth settings) and confirm whether Twilio/MessageBird is configured.
-2. If not, list exactly which secrets the user must supply (e.g. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGE_SERVICE_SID`) and stop until they provide them — no provisioning until you say go.
+### 2. New `src/integrations/cog/activity.ts`
+Thin module that re-exports the activity API so Claude's imports match the handoff doc verbatim:
+```ts
+export type { SongActivityRow as ActivityEvent } from "./songs";
+export { getSongActivity as getRecentActivity } from "./songs";
+```
+Add a helper `getActivitySince(songId, sinceISO)` that filters client-side from the RPC result (cheap; activity feed is small).
 
-## Phase B — Storage buckets + signed-URL verification
+### 3. New `src/integrations/cog/members.ts`
+```ts
+export type SongMember = {
+  user_id: string;
+  role: "owner" | "collaborator" | "viewer";
+  joined_at: string;
+  display_name: string | null;
+  avatar_color: string | null;
+  initials: string;
+};
+export async function listMembers(songId): Promise<SongMember[]>
+export async function myRole(songId): Promise<SongMember["role"] | null>
+```
+Both call a new RPC `list_song_members(_song_id)` SECURITY DEFINER, gated by `is_song_member`. `myRole` is just `list_song_members().find(m => m.user_id === auth.uid())?.role`, or a separate cheap RPC `my_song_role(_song_id)` returning a single text — I'll add the latter so the workspace header doesn't pull the full member list just to know the caller's role.
 
-Buckets per memory: `voice-memos` (private), `exports` (private), `avatars` (public). Verify each exists with correct policies, and that:
+## Backend additions (migration + RLS)
 
-- `voice-memo-upload-url` / `voice-memo-signed-url` edge functions return scoped URLs gated by `is_song_member`.
-- `avatars` bucket has public read + per-user write policy so Claude's Settings → Profile avatar upload works when wired.
-- Storage triggers correctly bump `profiles.storage_usage` against the **song owner** (not the uploader), per memory.
+Single migration creating four SECURITY DEFINER RPCs in `public`, all `STABLE`, `search_path = public`, executed only by `authenticated`:
 
-Output: a short `scripts/codex/verify-storage.md` checklist + linter pass.
+1. `list_my_songs()` — returns `SongCard[]` for `auth.uid()`. Pulls counts with `LEFT JOIN LATERAL` subqueries against `voice_memos` and `song_members`.
+2. `get_song_detail(_song_id uuid)` — returns one row with `Song.*`, `my_role`, and the 6 counts. Guarded by `is_song_member(_song_id, auth.uid())`; returns null otherwise.
+3. `list_song_members(_song_id uuid)` — returns members joined to `profiles`. Guarded by `is_song_member`.
+4. `my_song_role(_song_id uuid)` — returns `text` (role) or null. Thin wrapper over `song_role`.
 
-## Phase C — Songs/song-content data layer audit
+Grants: `GRANT EXECUTE ... TO authenticated` on all four. No `anon` grant. No new tables, so no table-level GRANT/RLS work.
 
-Edge functions (`create-song`, `song-invite-*`, `voice-memo-*`, `song-delete`, etc.) exist. Before Claude builds the Song Workspace UI, run a verification pass:
+These RPCs return ONLY IDs, counts, names, colors — no lyric text, no memo content, in line with the "activity payloads use IDs + event kinds only" memory rule. Lyric text comes later through the dedicated lyrics SDK slice.
 
-1. `supabase--linter` for RLS warnings on `songs`, `song_sections`, `lyrics`, `voice_memos`, `song_notes`, `chord_charts`, `collaborators`, `versions`, `activity_log`, `credits`.
-2. Confirm every policy uses `is_song_member` / `song_role` SECURITY DEFINER helpers (not inline subqueries).
-3. Confirm `create-song` enforces "free plan = 1 owned active song" server-side, and invited memberships don't consume the invitee's slot.
-4. Spot-check with `supabase--read_query` that activity payloads store IDs + event kinds only (no raw lyric/memo content).
+## What I am NOT doing
 
-Output: a Claude handoff doc for the **Song Catalog + Song Workspace hub** (the next big UI chunk per CLAUDE.md Phase 2 build order).
+- Not touching `src/pages/**` or `src/components/**`.
+- Not changing existing exports in `songs.ts`.
+- Not adding a `pending_suggestions` table — the count comes from a placeholder `(SELECT 0)` until the suggestions feature lands; the field is in the type so Claude can render the slot without a future breaking change.
+- Not building the lyrics or notes SDK — those land in their own handoffs.
 
-## Phase D — Stripe payments go-live readiness (defer unless asked)
+## Verification after build
 
-`payments-v2.md` already exists; `enable_stripe_payments`, `create-checkout`, `billing-customer-portal`, `payments-webhook` are wired. Before launch: run `payments--get_go_live_status`, confirm products/prices exist in live mode, verify webhook secret. **Skip this round** unless user asks — paywall UI isn't being built yet.
-
-## Recommendation
-
-Do **A → B → C** in that order. A is ~5 min (probably blocked on user secrets). B is one verification pass + maybe a policy fix. C produces the next Claude handoff doc so Claude has continuous work after the auth UI lands.
-
-## Question for you
-
-Which phase do you want to start with?
-
-- **A — Phone OTP provider** (fastest; likely needs you to give Twilio creds)
-- **B — Storage buckets verification**
-- **C — Songs data-layer audit + write the Song Workspace Claude handoff**
-- **All three in order** (I'll pause at A if secrets are missing)
-
-Nothing in this plan touches `src/pages/**` or `src/components/**` — strictly Lovable's lane (migrations, edge functions, storage, secrets, plus `docs/claude-handoffs/*` and `scripts/codex/*`).
-
----
-
-## Execution log — 2026-06-08
-
-**Phase A (Phone OTP provider):** TWILIO_API_KEY connector is linked (visible in secrets). However, Supabase Auth's phone provider must be turned on and pointed at Twilio inside the Cloud dashboard — Lovable's `configure_auth` tool does not expose that field. **Action for Parker:** Cloud → Auth → Providers → Phone → enable Twilio, paste the Message Service SID from your Twilio console. Until then, `sendPhoneOtp` returns `PROVIDER_NOT_CONFIGURED` and the Phone tab Claude builds will show the graceful "coming soon" fallback. No blocker for the email/Google flow.
-
-**Phase B (Storage):** All three buckets exist and are private (workspace policy blocks public buckets — memory updated). RLS policies on `storage.objects` are in place: avatars per-user, voice-memos by song-member, exports by song-owner. Checklist written to `scripts/codex/verify-storage.md`.
-
-**Phase C (Songs data layer):** Linter pass shows 114 informational/warn items (mostly the standard "anon can execute SECURITY DEFINER" notes on intentionally public helpers like `is_invite_valid` and `resolve_code` — these are required for invite preview and landing pages). No critical RLS gaps. `create-song` enforces the free-plan gate via `can_create_song` RPC. Song Workspace handoff written to `docs/claude-handoffs/2026-06-08-song-catalog-and-workspace.md`.
-
-**Next backend task:** Once Claude finishes the Workspace hub, prepare the **Lyrics + Chords** SDK slice (`@/integrations/cog/lyrics.ts`) — typed wrappers for `song_sections` + `song_lyrics` reads/writes, plus an `activity_log` writer that records only IDs + event kinds.
+- `supabase--read_query` to spot-check each RPC returns expected shape for Parker.
+- `supabase--linter` for any new `0028_anon_security_definer_function_executable` warnings (expected: none, because grants are `authenticated` only).
+- Update `.lovable/plan.md` execution log.
