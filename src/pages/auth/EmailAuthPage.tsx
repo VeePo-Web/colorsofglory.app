@@ -36,6 +36,7 @@ const EmailAuthPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [resetCooldown, setResetCooldown] = useState(0);
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -113,7 +114,17 @@ const EmailAuthPage = () => {
     setResetting(true);
     try {
       await requestPasswordReset(parsed.data);
-      setInfo("If an account exists for that email, a reset link is on the way.");
+      setInfo("If an account exists for that email, a reset link is on the way. The link expires in 1 hour.");
+      setResetCooldown(30);
+      const interval = window.setInterval(() => {
+        setResetCooldown((s) => {
+          if (s <= 1) {
+            window.clearInterval(interval);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
     } catch (err) {
       setError(friendly(err));
     } finally {
@@ -274,11 +285,15 @@ const EmailAuthPage = () => {
             <button
               type="button"
               onClick={handleForgot}
-              disabled={resetting}
+              disabled={resetting || resetCooldown > 0}
               className="mt-1 text-center text-[0.875rem] underline-offset-4 transition hover:underline disabled:opacity-60"
               style={{ color: "#6B6459" }}
             >
-              {resetting ? "Sending reset link…" : "Forgot password?"}
+              {resetting
+                ? "Sending reset link…"
+                : resetCooldown > 0
+                ? `Resend available in ${resetCooldown}s`
+                : "Forgot password?"}
             </button>
           )}
         </form>
