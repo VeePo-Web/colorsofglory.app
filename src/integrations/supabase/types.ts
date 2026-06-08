@@ -1617,6 +1617,7 @@ export type Database = {
           failure_reason: string | null
           id: string
           mime_type: string
+          notes: string | null
           section_id: string | null
           song_id: string
           status: Database["public"]["Enums"]["memo_status"]
@@ -1633,6 +1634,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mime_type: string
+          notes?: string | null
           section_id?: string | null
           song_id: string
           status?: Database["public"]["Enums"]["memo_status"]
@@ -1649,6 +1651,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mime_type?: string
+          notes?: string | null
           section_id?: string | null
           song_id?: string
           status?: Database["public"]["Enums"]["memo_status"]
