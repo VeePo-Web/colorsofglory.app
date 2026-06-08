@@ -128,7 +128,10 @@ const App = () => (
             <Route path="/" element={<RequireAuth><CapturePage /></RequireAuth>} />
             <Route path="/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
             <Route path="/songs" element={<RequireAuth><SongCatalogPage /></RequireAuth>} />
-            <Route path="/songs/:id" element={<SongWorkspacePage />} />
+            {/* Mic-first capture is the song's default landing.
+                Workspace hub is one tap away at /songs/:id/room. */}
+            <Route path="/songs/:id" element={<RequireAuth><CapturePage /></RequireAuth>} />
+            <Route path="/songs/:id/room" element={<SongWorkspacePage />} />
             <Route path="/songs/:id/brainstorm" element={<RequireAuth><BrainstormPage /></RequireAuth>} />
             <Route path="/songs/:id/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
             <Route path="/songs/:id/capture-onboarding" element={<CaptureFirstIdeaPage />} />
