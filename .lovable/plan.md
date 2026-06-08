@@ -1,94 +1,143 @@
-## Goal
+## The verdict from research
 
-Make every text input in the capture flow (lyrics, scripture, idea/note, chord freeform, section label, etc.) feel like talking to a friend: tap the mic, speak, watch your words appear, tap again to stop. Already-existing infrastructure (`useLiveTranscript` Web Speech hook + `transcribe-take` ElevenLabs edge function) gets reused.
+Studied: **Suno mobile**, **Adobe Podcast**, **Dubnote**, **Suonote**, **Lyric Genie**, **AudioPen**, **Voicenotes**, **Otter**. Best ideas — distilled — that fit Colors of Glory's warmth (no DAW chrome, no startup blue):
 
-## UX (the part the user cares about)
+| Source | Steal this | Reject this |
+|---|---|---|
+| **Adobe Podcast / Enhance Speech** | One big inviting target. Whole canvas is the action. Zero chrome. | Studio-tech aesthetic, dark grays. |
+| **Suno mobile** | One-thumb composition. Prompt-bar pinned to the bottom; results bloom upward. Big tactile generate button. | AI-as-author. We're capture, not generation. |
+| **Dubnote** | **Auto-split a single recording into sections** (verse/hook/riff) on-device. BPM auto-detect. Friendly section chips. | Heavy folder hierarchy. |
+| **Suonote** | "Compose by sections" — recording lives inside a section card, not a flat list. Lyrics-in-context. | Crowded studio screen. |
+| **AudioPen / Voicenotes** | The "talk → it becomes clean text" magic. Zero post-edit pressure. | Generic productivity vibe. |
+| **Lyric Genie** | Inline AI assist on a lyric line. | Notepad-feel; not enough room metaphor. |
 
-Every input field grows a small gold **mic chip** in its trailing edge.
+**Our north star (now locked):**
+> *Big mic in the middle. Talk. By the time you've put the phone down, your idea is already a card on a canvas — labeled, transcribed, split into sections, and waiting for the next thought.*
 
-- **Idle:** subtle gold mic icon.
-- **Tap:** pulses, ring grows. Permission prompt the first time only.
-- **Speaking:** live partial words stream into the field in muted gold; finalized words snap to charcoal.
-- **Tap again (or 1.5s of silence):** stops, smart-formats, locks the text in.
-- **Highlight-then-mic:** dictation **replaces** the selection. No highlight → **appends with a space**. (Per user spec.)
-- **Holding the mic for >400ms:** push-to-talk mode (record while held, release to stop). Standard tap = toggle mode.
-- **No Web Speech support (Firefox, some Android webviews):** mic chip silently swaps to a "record + upload" flow that captures up to 30s, sends to the existing `transcribe-take` ElevenLabs endpoint, then drops the transcript in.
-- **Errors are calm:** "Mic blocked — enable in Settings" inline, no toast spam.
+---
 
-## Engine selection (auto, invisible to user)
+## The Capture Scene becomes the home (already true — extend it)
 
-1. **Web Speech API** (`useLiveTranscript`, already shipped). Used when `getRecognitionCtor()` returns non-null. Free, on-device, instant partials.
-2. **ElevenLabs Scribe batch fallback** via existing `supabase/functions/transcribe-take` edge function. Triggered when Web Speech is unsupported OR errors out mid-session. Records via `MediaRecorder` → uploads blob → returns text.
+`CapturePage` is already wired at `/` and `/capture`. We keep that. We elevate it to feel like the front door of the product, not a tool tucked inside a song. Mockup intent:
 
-A new tiny hook `useDictation()` picks the engine, exposes a uniform `{ supported, isRecording, partial, start, stop, error }` shape, and wraps both paths.
-
-## Per-field smart formatting (user picked "per-field")
-
-A pure function `formatDictation(raw, fieldKind)` runs on the final transcript before insert. No AI call for v1 — these are deterministic rules, fast, free, predictable:
-
-| Field kind | Formatting |
-|---|---|
-| `lyrics` | Convert sentence boundaries / long pauses into line breaks. Capitalize first word of each line. Strip stray "comma", "period" verbalizations (already common). |
-| `scripture` | Normalize spoken refs ("John three sixteen", "psalm twenty three verse one") → `John 3:16`, `Psalm 23:1`. Reuses existing `parseReference.ts`. If the result is a valid ref, also auto-trigger the existing ScripturePicker fetch. |
-| `chords` | Tokenize spoken chord names ("C major", "A minor seven", "G slash B", "four chord", "one five six minor four") → chord tokens. If a key is set, route numbers through the Nashville engine and **inject chips into the progression** instead of the text field. Freeform fallback if parsing fails. |
-| `idea` / `note` / generic | Raw transcript + light punctuation cleanup (collapse double spaces, capitalize first letter, add trailing period if missing). |
-| `section_label` | Title-case, strip filler ("um, verse one" → "Verse 1"). |
-
-Spoken-number → digit conversion ("twenty three" → 23) lives in a tiny `spokenNumbers.ts` helper shared by scripture + chords.
-
-## Insert behavior (highlight-replace, else append)
-
-A shared `insertDictatedText(el, formatted, raw)` utility on the `<input>`/`<textarea>` ref:
-
-1. Read `selectionStart` / `selectionEnd`.
-2. If `start !== end` → replace the selection range with `formatted`.
-3. Else → append `(value.endsWith(" ") || value === "" ? "" : " ") + formatted` to the end and move caret to new end.
-4. Fire a synthetic `input` event so React Hook Form / controlled state picks it up.
-5. Highlight the just-inserted span in faint gold for 600ms (`transition opacity`) so users see what landed.
-
-## Files to create
-
-```
-src/components/capture/DictationMic.tsx        // The mic chip + states (visual)
-src/components/capture/DictationField.tsx      // Wraps any <Input>/<Textarea>; renders mic + manages insertion
-src/hooks/useDictation.ts                      // Engine picker (Web Speech → ElevenLabs fallback)
-src/lib/dictation/insertDictated.ts            // Highlight-replace / append logic
-src/lib/dictation/formatDictation.ts           // Per-field formatters
-src/lib/dictation/spokenNumbers.ts             // "twenty three" → 23
-src/test/dictation/format.test.ts              // Per-field rules
-src/test/dictation/insert.test.ts              // Highlight vs append behavior
+```text
+┌─────────────────────────────┐
+│  Today                  ⚙   │  ← only 2 chrome elements
+│                             │
+│        "What's on your      │
+│         heart right now?"   │  ← serif, charcoal, breathes
+│                             │
+│                             │
+│           ◉ ◉ ◉             │  ← live waveform when active
+│         ╭───────╮           │
+│         │   🎤  │           │  ← BigMic, 128px, gold glow
+│         ╰───────╯           │
+│         Hold to hum         │
+│                             │
+│  ┌─────┬─────┬─────┬─────┐  │  ← SideRail, now a bottom dock
+│  │Lyric│Chord│Scrip│Idea │  │      (one-thumb reach on 390px)
+│  └─────┴─────┴─────┴─────┘  │
+│                             │
+│       Latest: "Hook idea"   │  ← peek-strip of last 3 captures
+│       28s · 2 sections      │
+└─────────────────────────────┘
 ```
 
-## Files to edit (Claude UI surface only — `src/integrations/cog/*` is the Lovable boundary; everything below is Claude-territory)
+Cream background, single radial glow under the mic, serif prompt, no nav bar, no song picker (defaults to **Unfiled**, song chip only appears when one is selected). Settings is one icon, top-right.
 
-- `src/components/capture/CaptureSheet.tsx` — wrap lyrics textarea, scripture input, idea textarea, section-label input, and the chord freeform fallback in `<DictationField>`.
-- `src/components/capture/ScripturePicker.tsx` — add `<DictationMic>` next to the reference input, route output through scripture formatter, auto-fetch on valid ref.
-- `src/components/capture/ChordPicker.tsx` — add a mic to the freeform-input panel; if a chord token parses, push it onto the progression chips instead of the text field.
+---
 
-## Files NOT touched
+## What we're building (Phase 1.6 of capture)
 
-- No backend changes. `transcribe-take` edge function already exists.
-- No new tables, RLS, or migrations.
-- `src/integrations/cog/*` untouched — dictation is purely a UI concern. Lovable's boundary holds.
+Eight focused upgrades. Each is small, ships independently, and every one removes a tap.
 
-## Visual language
+### 1. **Idle prompt that rotates by time of day** *(UI only)*
+- Morning: *"What's the first line that came to you?"*
+- Afternoon: *"Hum the melody you can't shake."*
+- Evening: *"Anything from today worth remembering?"*
+- Sunday: *"What did worship stir in you?"*
 
-- Mic chip = 28px gold-pale circle with a Lucide `Mic` icon at `var(--cog-gold)`. Recording state: same circle filled `var(--cog-gold)`, pulsing ring at 18% opacity, scale 1 → 1.08 → 1 at 1.2s.
-- Live partial text rendered in `var(--cog-gold)` at 70% opacity. Final words fade to `var(--cog-charcoal)` over 200ms.
-- No banners. No modals. No toasts on success.
+Charcoal serif, 24px, fades 600ms when recording starts.
+
+### 2. **Hold-vs-tap mic with intent visible** *(UX clarity)*
+- **Tap** → records until you tap again (toplines/full ideas).
+- **Hold** → hum mode, releases when you let go (the 8-second melody fragment).
+- Tooltip ring under the mic shows which mode is engaged in real time. (Adobe Podcast big-target language.)
+
+### 3. **Live transcript bloom** *(existing, polished)*
+While you speak, transcript appears **above** the mic in muted gold partials → snaps to charcoal on finalize. The phone never feels like a form.
+
+### 4. **Auto section split — the headline feature** *(Dubnote stolen well)*
+On stop, the take is auto-split into section cards via two signals:
+1. **Spoken markers** in transcript ("verse one", "this is the chorus", "bridge", "tag", "intro", "outro"). Already partially handled by `sectionKeywords.ts` — extend its vocabulary, add fuzzy match ("the chorus part", "okay chorus"), and ensure the marker word itself is stripped from the card body.
+2. **Acoustic silence boundaries** — pauses ≥ 1.6s become soft splits. Uses `AnalyserNode` RMS dip detection (no new dep, no upload).
+
+Each split renders as its own **section card** with: auto-label (`Verse 1`, `Hook`, etc.), waveform thumbnail, transcript snippet, durations. User can drag, rename, or merge cards before committing.
+
+### 5. **The Review Sheet becomes the canvas pre-stage** *(existing → enhanced)*
+Today's `ReviewSheet` is functional but flat. New layout:
+- Top: friendly name field with AI suggestion ("Morning Mercy — Verse 1").
+- Middle: **stack of section cards** (from #4) the user can swipe-reorder, swipe-left to merge with previous, tap to rename.
+- Bottom: **destination chip** with three big targets — *Unfiled* / *This Song* / *New Song* — and a single primary CTA **"Send to canvas →"**.
+- A single tap commits all cards as nodes on the song's Canvas (existing `/songs/:id/canvas` route).
+
+### 6. **Latest peek-strip** *(returning-user delight)*
+Below the dock, a horizontally-scrollable strip of the **last 3 captures** as 96px mini-cards: title, duration, "2 sections" pill, tiny gold play affordance. Tap to resume in Review Sheet. Builds the muscle memory that capture *goes somewhere*.
+
+### 7. **One-tap "Open Canvas" after commit** *(removes a navigation tax)*
+Today: commit → toast → user has to find the canvas. New: commit shows a 1.5s ribbon — *"3 cards added to **Morning Mercy** →"* — tappable, deep-links straight to the canvas with those new nodes pulsing for 800ms so the user sees where their work landed.
+
+### 8. **Side rail labeled-icons, always visible** *(per user spec)*
+The dock buttons (Lyrics / Chords / Scripture / Idea) keep their label always-on, not on hover. Tapping any of them while idle opens the CaptureSheet for that block. While recording, they become **markers** — tapping "Chords" mid-take pins a chord-section marker at the current timestamp (same mechanism as #4 spoken markers).
+
+---
+
+## Files (UI only — Lovable boundary respected)
+
+All work in `src/components/capture/**` plus a tiny lib helper. Backend, schema, edge functions, and `src/integrations/cog/**` untouched — everything exists.
+
+**Edit**
+- `src/components/capture/CaptureScene.tsx` — rotating prompt, peek-strip slot, settings icon, idle/recording state polish.
+- `src/components/capture/BigMic.tsx` — hold-vs-tap intent ring, friendly mode label.
+- `src/components/capture/SideRail.tsx` — promote to bottom dock with always-on labels.
+- `src/components/capture/ReviewSheet.tsx` — section-card stack, destination chip, "Send to canvas" CTA, post-commit ribbon.
+- `src/lib/capture/sectionKeywords.ts` — extend vocab + fuzzy match, strip marker word from card body.
+
+**Create**
+- `src/components/capture/SectionCardStack.tsx` — reorderable + mergeable card list used by Review Sheet.
+- `src/components/capture/LatestPeekStrip.tsx` — horizontal scroll of last 3 captures.
+- `src/components/capture/CommitRibbon.tsx` — post-commit deep-link toast-ribbon.
+- `src/lib/capture/acousticSplits.ts` — RMS-dip silence detection from a `Blob` + `AudioContext` (zero deps).
+- `src/test/capture/acousticSplits.test.ts` — unit test on a stub buffer.
+- `src/test/capture/sectionKeywords.test.ts` — extend with fuzzy + strip cases.
+
+**Do not touch**
+- `src/integrations/cog/**` (Lovable boundary).
+- Any migration, edge function, or backend file.
+- Storage bucket policies. The existing `voice-memos` flow handles the upload + ELabs transcription already.
+
+---
+
+## Out of scope (intentional — these are the *next* round, not this one)
+
+- BPM/key detection from acoustic features (needs a real DSP pass; later).
+- Canvas-side node entrance animation polish (Claude Code handoff already covers `/songs/:id/canvas`).
+- Voice command shortcuts ("delete that", "rename verse 2"). Belongs in a v2 once dictation lands.
+- Apple Voice Memos import beyond what `ImportMemoButton` already does.
+
+---
 
 ## Acceptance scenarios
 
-1. Empty lyrics field → tap mic, say "I will sing of your mercy forever" → field shows the line, capitalized, with a line break if you paused. Mic returns to idle.
-2. Lyrics with text + cursor highlighting "Verse 1" → tap mic, say "Bridge" → "Verse 1" is replaced by "Bridge" in place.
-3. Lyrics with text, nothing highlighted → tap mic, say "and your love endures" → appended with a leading space.
-4. Scripture field → say "psalm twenty three" → field shows `Psalm 23` and the ScripturePicker preview loads automatically.
-5. Chord picker, key = G, freeform mic → say "G, D, E minor, C" → 4 chord chips appear in the progression strip; freeform field stays empty.
-6. Firefox (no Web Speech) → mic chip records up to 30s via MediaRecorder, shows "Transcribing…" inline, then drops formatted text in.
-7. Mic permission denied → mic chip greys out, tooltip "Mic blocked — enable in Settings".
+1. **Cold open** — Open the app. Cream screen, serif prompt, mic glowing. No nav, no menus. Tap mic, speak for 18 seconds saying "verse one … under your wing I rest … chorus … you are my hiding place." Stop. Review Sheet opens with **two section cards** — Verse 1 and Chorus — each with its own waveform and transcript snippet. Marker words don't appear in card bodies.
+2. **One-thumb** — Whole flow (open → record → name → send to canvas) reachable with right thumb on a 390px viewport.
+3. **Returning** — Open the app the next morning. Peek-strip shows "Morning Mercy", "Bridge hum", "Scripture: Psalm 91". Tap "Bridge hum" → Review Sheet re-opens at that take.
+4. **Hum mode** — Hold the mic for 4 seconds. Release. Take saves as an 8-second-or-less *hum* card, no transcript expected, waveform-only.
+5. **Mid-take marker** — Recording. Tap "Chords" in the dock. Continue. Stop. Review Sheet shows a chord-marker pinned at the moment of the tap, separating sections.
+6. **Canvas handoff** — Tap "Send to canvas". Ribbon appears: "3 cards added to Morning Mercy →". Tap. Land on `/songs/:id/canvas` with the three new nodes pulsing gold for 800ms.
 
-## Out of scope (intentional)
+---
 
-- Real-time AI clean-up via Lovable AI Gateway (user chose deterministic per-field formatting). Easy to add later as a `?aiPolish` prop on `<DictationField>`.
-- Multi-language. Defaults to browser locale; English-only formatting rules in v1.
-- Punctuation voice commands ("new line", "period"). Web Speech already inserts most of these on iOS Safari; we'll lean on that.
+## Why this is the right next step
+
+The bones are already here — `CaptureScene`, `BigMic`, `SideRail`, `LiveTranscript`, `ReviewSheet`, `useVoiceRecorder`, `useLiveTranscript`, `transcribe-take` edge function, `idea_captures` + `takes` tables, the Canvas route. The plan finishes the **last mile** between "I had a thought" and "it's already on the canvas" without adding any backend surface area. Everything else (dictation everywhere, scripture picker, smart chords) plugs in on top of this scene without rework.
