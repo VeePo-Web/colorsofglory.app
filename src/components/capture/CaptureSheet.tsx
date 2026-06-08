@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { RailAction } from "./SideRail";
+import ScripturePicker from "./ScripturePicker";
 
 export type PendingBlockKind = "lyrics" | "chords" | "scripture" | "idea" | "section";
 
@@ -50,6 +51,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
   const [text, setText] = useState("");
   const [sectionKind, setSectionKind] = useState<string>("verse");
   const [sectionNum, setSectionNum] = useState<string>("");
+  const [scriptureFallback, setScriptureFallback] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -57,13 +59,17 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
       setText("");
       setSectionKind("verse");
       setSectionNum("");
+      setScriptureFallback(false);
       // Focus on next tick so the sheet animation doesn't fight the keyboard.
-      setTimeout(() => inputRef.current?.focus(), 80);
+      setTimeout(() => {
+        if (action !== "scripture") inputRef.current?.focus();
+      }, 80);
     }
-  }, [open]);
+  }, [open, action]);
 
   if (!action) return null;
   const copy = COPY[action];
+  const useScripturePicker = action === "scripture" && !scriptureFallback;
 
   const handleSave = () => {
     const trimmed = text.trim();
@@ -121,6 +127,26 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
         </SheetHeader>
 
         <div className="flex flex-col gap-3 mt-4">
+          {useScripturePicker && (
+            <ScripturePicker
+              onPicked={(label, scriptureText) => {
+                onSave({
+                  id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  kind: "scripture",
+                  section_kind: null,
+                  label,
+                  text: scriptureText,
+                  start_ms: null,
+                  end_ms: null,
+                });
+                onClose();
+              }}
+              onFallback={() => setScriptureFallback(true)}
+            />
+          )}
+
+          {!useScripturePicker && (
+            <>
           {action === "section" && (
             <div className="grid grid-cols-2 gap-2">
               <select
@@ -162,6 +188,9 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
           >
             Save to take
           </Button>
+            </>
+          )}
+
           <button
             type="button"
             onClick={onClose}

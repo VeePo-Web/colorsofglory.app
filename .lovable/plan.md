@@ -1,104 +1,178 @@
 ## Goal
-Let users import an existing voice memo from their phone (iOS Voice Memos `.m4a`, Android recorder `.m4a`/`.amr`/`.3gp`, or any `audio/*` file) on the Capture scene, then run the **same** transcription + section-splitting pipeline that ships today — so the Review Sheet opens with verse/chorus blocks ready to commit to canvas.
+Make Scripture capture frictionless: the songwriter types a reference like `Psalm 23` or `John 3:16-17`, the app auto-fetches the passage from a Bible API, and they can either keep the whole chapter (default) or tap to pick specific verses — then save into the take like any other pending block.
 
-## What's already in place (do not rebuild)
-- `submitSharedAudio` (SDK) → `intake-voice-memo` (edge fn) already accepts any `audio/*` file ≤50MB, validates membership, uploads to `voice-memos`, creates the `voice_memo` + primary `take` row, and counts bytes against the owner's storage.
-- `requestTranscript` + `transcribe-take` already perform server-side section splitting from spoken cues ("verse one", "chorus", etc.) and write `transcript_json.blocks` on the take.
-- `ReviewSheet` already auto-polls until transcript is ready, renders editable blocks, and commits to canvas.
-- `CaptureScene` already has the post-record handoff (create song → upload → fetch take id → open Review Sheet); we just need to call the same path with an imported file.
+## UX (inside the existing Capture Sheet, `action === "scripture"`)
 
-So **this is a frontend-only change** + a small refactor inside `CaptureScene.tsx`. No new edge functions, no SDK changes, no schema work.
-
-## UX
-Below the mic, when idle (not recording), show a single quiet pill:
+Replace the plain textarea with a 3-zone picker:
 
 ```
-        ◯
-       MIC
-       0:00
-
-   ⤓  Import a voice memo
+┌──────────────────────────────────────────────┐
+│  Add scripture                    [ WEB ▾ ]  │  ← translation pill
+│  Type a reference. Whole chapter by default. │
+│                                              │
+│  ┌────────────────────────────────────────┐  │
+│  │ Psalm 23                          ✕   │  │  ← reference input (autofocus)
+│  └────────────────────────────────────────┘  │
+│  Psalm 23 · 6 verses · all selected          │  ← status line
+│                                              │
+│  [ All ]  [ First verse ]  [ Clear ]         │  ← quick chips
+│                                              │
+│  ┌────────────────────────────────────────┐  │
+│  │ ☑ 1  The Lord is my shepherd; I shall  │  │  ← scrollable verse list
+│  │      not want.                          │  │     each row toggles
+│  │ ☑ 2  He makes me lie down in green …    │  │     gold check when selected
+│  │ ☑ 3  He restores my soul. He leads me … │  │
+│  │ …                                        │  │
+│  └────────────────────────────────────────┘  │
+│                                              │
+│  [ Save to take ]                            │
+│  [ Cancel ]   [ paste manually instead ]     │
+└──────────────────────────────────────────────┘
 ```
 
-- Icon: `Upload` (lucide), 16px.
-- Style: ghost button — transparent background, 1px gold border `rgba(184,149,58,0.30)`, charcoal text, 11px serif, `border-radius: 999px`, `padding: 8px 14px`.
-- Hidden while recording or while a take is being saved (`saving === true`).
-- Tapping triggers a hidden `<input type="file" accept="audio/*" />` (no `capture` attr, so iOS opens the full Files picker which exposes Voice Memos via the Files app and "Browse" → "On My iPhone" → "Voice Memos").
+Behavior:
+1. **Autofocus** the reference input when the sheet opens.
+2. As they type, debounce 300ms then call `parseReference()` (client-side, no network). If the parse succeeds, call `fetchPassage()` via the edge function. While loading, show a one-line shimmer where the verse list will appear.
+3. On success, render every verse with a gold checkbox; **all verses pre-selected** when the user typed just `Psalm 23` (no verse range), only the typed range pre-selected when they typed `John 3:16-17`.
+4. Tapping a verse row toggles selection. Quick chips:
+   - `All` → select every verse
+   - `First verse` → select only verse 1
+   - `Clear` → deselect all (Save disabled until something is selected)
+5. The translation pill opens a small popover with three options (WEB default, KJV, ASV — all public domain via `bible-api.com`). Persist last choice in `localStorage` under `cog.scripture.translation`.
+6. `Save to take`:
+   - `label` = canonical ref (e.g. `Psalm 23 (WEB)` if all selected, `Psalm 23:1-3 (WEB)` if contiguous range, `Psalm 23:1,3,5 (WEB)` if sparse).
+   - `text` = selected verses joined with `\n`, each line prefixed with the verse number (`1 The Lord is my shepherd…`).
+   - Existing `PendingBlock` shape, `kind: "scripture"` — no schema change.
+7. Errors:
+   - Parse fails → show inline hint `Try "Psalm 23" or "John 3:16-17"`. No fetch.
+   - Fetch fails / not found → toast `Couldn't find that passage` + reveal the original plain textarea so they can paste manually. The textarea is otherwise hidden behind a `paste manually instead` link.
 
-On file pick:
-1. Client-side guard: size > 50MB → toast error, abort. Mime not starting with `audio/` → toast error, abort.
-2. Best-effort: read duration via an off-DOM `<audio>` element + `URL.createObjectURL` (so the Review Sheet header shows the right `mm:ss`). Fall back to 0 on failure — non-blocking.
-3. Call the existing post-record path (extracted into a shared helper, see below).
+## Reference parser (client, no network)
 
-## Implementation
-
-### Refactor in `src/components/capture/CaptureScene.tsx`
-Extract the inner body of `handleMicTap`'s "stop recording" branch (lines that create the song, call `submitSharedAudio`, fetch take id + storage_path, open Review Sheet) into a new memoized helper:
+`src/lib/scripture/parseReference.ts` exports:
 
 ```ts
-const handleAudioFile = useCallback(async (file: File, durationMs: number) => {
-  // existing logic: ensure song, submitSharedAudio, getPrimaryTakeIdForMemo,
-  // fetch storage_path, setReview({...})
-}, [songId, songTitle]);
+type ParsedRef = {
+  book: string;          // canonical name e.g. "Psalms", "1 Corinthians"
+  bookId: string;        // bible-api slug e.g. "psalms", "1corinthians"
+  chapter: number;
+  verses?: { start: number; end: number }; // omitted = whole chapter
+  display: string;       // pretty version for the UI
+};
+
+function parseReference(input: string): ParsedRef | null;
 ```
 
-Then:
-- The mic stop branch calls `handleAudioFile(new File([blob], ...), result.durationMs)` — same behavior as today.
-- The new import button calls `handleAudioFile(pickedFile, measuredDurationMs)`.
+- Built-in book table (66 books) with aliases: `ps`, `psa`, `psalm`, `psalms` → Psalms; `1 cor`, `1cor`, `i corinthians` → 1 Corinthians; `song`, `sos` → Song of Solomon; etc.
+- Regex: `^\s*(\d?\s*[a-z. ]+?)\s+(\d+)(?::(\d+)(?:[-–](\d+))?)?\s*$/i` then alias lookup.
+- Pure function, fully unit-testable. No deps.
 
-### New component `src/components/capture/ImportMemoButton.tsx`
-- Owns the hidden `<input ref>` and the visible pill button.
-- Props: `disabled: boolean`, `onPicked: (file: File, durationMs: number) => void | Promise<void>`.
-- Measures duration via:
+## Bible source
+
+`bible-api.com` — free, no auth, CORS-enabled, three public-domain translations (WEB, KJV, ASV). Endpoint format:
+
+```
+GET https://bible-api.com/psalm+23?translation=web
+GET https://bible-api.com/john+3:16-17?translation=kjv
+```
+
+Response shape we'll normalize:
+```json
+{
+  "reference": "Psalm 23",
+  "verses": [{ "book_name":"Psalms", "chapter":23, "verse":1, "text":"The Lord is my shepherd…" }, …],
+  "translation_id": "web"
+}
+```
+
+We proxy through an edge function so:
+- We control CORS / future provider swap (api.bible for ESV/NIV later).
+- We can cache hot chapters in memory and via response headers.
+- The provider's URL never appears in the client bundle.
+
+## Edge function: `fetch-scripture`
+
+`supabase/functions/fetch-scripture/index.ts`
+
+- Method: `POST`, JSON body validated with Zod:
   ```ts
-  const audio = new Audio();
-  audio.preload = "metadata";
-  audio.src = URL.createObjectURL(file);
-  await new Promise<void>((res) => {
-    audio.onloadedmetadata = () => res();
-    audio.onerror = () => res();
-    setTimeout(res, 1500); // hard timeout
-  });
-  const durationMs = isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0;
-  URL.revokeObjectURL(audio.src);
+  { reference: string (1..120 chars), translation: "web"|"kjv"|"asv" (default "web") }
   ```
-- Resets `input.value = ""` after each pick so the user can re-import the same file.
+- `verify_jwt = true` (default — only logged-in users hit it; cheap protection from open abuse). No song membership needed.
+- Logic:
+  1. Build provider URL: `https://bible-api.com/${encodeURIComponent(reference)}?translation=${translation}`.
+  2. In-memory `Map<string, { at: number; payload: any }>` cache keyed by `${translation}|${normalizedRef}`, TTL 24h, max 200 entries (LRU-ish via `Map` insertion order).
+  3. Fetch with 6s timeout.
+  4. Normalize to:
+     ```ts
+     {
+       canonical: "Psalm 23",
+       book: "Psalms",
+       chapter: 23,
+       translation: "web",
+       verses: [{ verse: 1, text: "…" }, …]
+     }
+     ```
+  5. Return `200` with `Cache-Control: public, max-age=86400, immutable` so the browser caches identical calls.
+  6. Errors:
+     - Parse-side issues → `400 { error: "invalid_reference" }`.
+     - Upstream 404 → `404 { error: "not_found" }`.
+     - Upstream 5xx / timeout → `502 { error: "upstream_unavailable" }`.
+- CORS via `npm:@supabase/supabase-js@2/cors`.
+- No new secrets, no DB writes, no storage. Pure read pass-through.
 
-### Hook it into `CaptureScene.tsx`
-Inside the `<main>` block, just under the partial transcript / pending-blocks notice, render:
+## Client SDK
 
-```tsx
-{phase !== "recording" && !saving && !review.open && (
-  <ImportMemoButton
-    disabled={saving}
-    onPicked={(file, dur) => handleAudioFile(file, dur)}
-  />
-)}
+`src/integrations/cog/scripture.ts`:
+
+```ts
+export type ScripturePassage = {
+  canonical: string;
+  book: string;
+  chapter: number;
+  translation: "web" | "kjv" | "asv";
+  verses: { verse: number; text: string }[];
+};
+
+export async function fetchPassage(
+  reference: string,
+  translation: "web" | "kjv" | "asv" = "web",
+): Promise<ScripturePassage>;
 ```
 
-Set `setStatus("transcribing")` and `setSaving(true)` inside `handleAudioFile` so the existing busy UI (status copy, disabled mic) covers both paths.
+Thin wrapper over `supabase.functions.invoke("fetch-scripture", ...)`. Also maintains an in-memory `Map` cache (per session) keyed identically to the edge function, so re-opens during the same session don't even hit the network.
 
-### Toast strings
-- Success: rely on existing "Started a new song" toast in `handleAudioFile` + the Review Sheet opening as confirmation.
-- Size error: `"That file is bigger than 50MB."` (matches edge-fn cap).
-- Mime error: `"Only audio files can be imported."`
-- Edge-fn 403 (not a member): `"You're not a member of this song."` — already surfaced by existing catch.
+## New component
 
-## Notes & explicit non-goals
-- **No new "Unfiled inbox" view.** The imported file flows into the same song the user is currently on (or a freshly-created "New idea · Dec 8 · 3:42 PM" song if none) — identical to a recorded take.
-- **No live transcript pane** during import — there's nothing live to show. The Review Sheet handles polling + display, exactly like the post-record path.
-- **No drag-and-drop on mobile** in this pass. (Possible follow-up for desktop.)
-- **No iCloud-specific picker tweaks.** iOS handles Voice Memos via the standard Files picker that `<input type="file" accept="audio/*">` already opens.
-- **No changes to `intake-voice-memo` or `transcribe-take`.** The 50MB cap and `audio/*` filter already cover iOS m4a (`audio/mp4`/`audio/m4a`/`audio/x-m4a`) and Android m4a/amr/3gp.
+`src/components/capture/ScripturePicker.tsx`
+
+Props: `{ onPicked: (label: string, text: string) => void; onFallbackPaste: () => void; }`.
+Internal state: `query`, `parsed`, `passage`, `selected: Set<number>`, `loading`, `translation`, `error`.
+
+This is rendered by `CaptureSheet` only when `action === "scripture"`. The existing textarea remains as the fallback path, hidden behind `paste manually instead` (or shown automatically if the fetch fails).
 
 ## Files
-- New: `src/components/capture/ImportMemoButton.tsx`
-- Edit: `src/components/capture/CaptureScene.tsx` (extract `handleAudioFile`, render the button)
+
+- New: `src/lib/scripture/parseReference.ts` (+ `bookTable.ts` with the 66-book alias map)
+- New: `src/integrations/cog/scripture.ts`
+- New: `src/components/capture/ScripturePicker.tsx`
+- New: `supabase/functions/fetch-scripture/index.ts`
+- Edit: `src/components/capture/CaptureSheet.tsx` — when `action === "scripture"`, render `<ScripturePicker />` above (and the textarea fallback below, hidden by default). Wire its `onPicked(label, text)` to call the existing `onSave(...)` with `kind: "scripture"`.
 
 ## Verification
-1. Open `/capture` on mobile, idle. The "Import a voice memo" pill appears under the duration counter.
-2. Tap → Files picker opens → pick a `.m4a` from Voice Memos → Review Sheet opens with "Listening back to your take…" shimmer.
-3. After server transcription returns, blocks appear (sections split if the recording included spoken "verse one"/"chorus" cues).
-4. "Add to canvas" navigates to `/songs/:id/canvas?from=capture` exactly like a recorded take.
-5. Re-importing the same file works (input value resets).
-6. Files > 50MB show a friendly toast and never upload.
+
+1. Open Capture → tap **Scripture** chip → sheet opens with autofocused input.
+2. Type `Psalm 23` → after 300ms, 6 verses appear, all pre-checked. Save → pending block stored with label `Psalm 23 (WEB)`, text containing all 6 numbered verses.
+3. Type `John 3:16-17` → only verses 16-17 appear pre-checked. Tap verse 17 to deselect → label becomes `John 3:16 (WEB)`.
+4. Type `Psalm 119` → all 176 verses render in a scrollable list, sheet doesn't overflow viewport.
+5. Type `Habakuk 99` → inline `Couldn't find that passage` + textarea fallback appears.
+6. Switch translation to KJV → list refetches, persists across sheet reopens.
+7. Offline / edge fn fails → toast + textarea fallback works, save still functions.
+8. After save, the pending block flows into Review Sheet exactly like Lyrics/Idea blocks today.
+
+## Explicit non-goals (deferred)
+- ESV/NIV/NLT translations (require paid API + licensing).
+- Cross-chapter references (`John 3:16-4:2`) — parser returns `null` for now.
+- Verse search by keyword (`"shepherd"`).
+- Inline Scripture lookup inside the lyrics editor (this pass is only the Capture rail).
+- Saving the chosen passage to a per-song `scripture_zone` table — Product Vision doc 10 (Story/Scripture/Meaning Zone). That backend table is a later phase; today this just becomes a pending block of `kind: "scripture"`.
