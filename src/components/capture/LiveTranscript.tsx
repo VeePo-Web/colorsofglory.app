@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import type { TranscriptBlock } from "@/lib/capture/transcriptModel";
 
 interface LiveTranscriptProps {
@@ -17,15 +18,51 @@ const STATUS_COPY: Record<LiveTranscriptProps["status"], string> = {
   skipped: "Transcription is off for this take.",
 };
 
+const SectionDivider = ({ label }: { label: string }) => (
+  <motion.div
+    layout
+    initial={{ opacity: 0, y: -4 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      margin: "10px 0 6px",
+    }}
+  >
+    <span style={{ flex: 1, height: 1, background: "rgba(184,149,58,0.35)" }} />
+    <span
+      style={{
+        fontFamily: "var(--font-body)",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        color: "var(--cog-gold)",
+        padding: "3px 10px",
+        borderRadius: 999,
+        background: "var(--cog-cream-light, #faf7f2)",
+        border: "1px solid rgba(184,149,58,0.35)",
+      }}
+    >
+      {label}
+    </span>
+    <span style={{ flex: 1, height: 1, background: "rgba(184,149,58,0.35)" }} />
+  </motion.div>
+);
+
 const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscriptProps) => {
-  const hasBlocks = blocks.some((b) => b.words.length > 0);
+  const populated = blocks.filter((b) => b.words.length > 0);
+  const hasBlocks = populated.length > 0;
   const hasPartial = partial.trim().length > 0;
 
   return (
     <section
       aria-label="Live transcript"
       className="w-full"
-      style={{ maxWidth: 480, margin: "0 auto" }}
+      style={{ maxWidth: 460, margin: "0 auto", paddingRight: 72 /* keep rail clear */ }}
     >
       {!hasBlocks && !hasPartial && (
         <p
@@ -42,84 +79,79 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
         </p>
       )}
 
-      <div className="flex flex-col" style={{ gap: 12 }}>
-        {blocks
-          .filter((b) => b.words.length > 0)
-          .map((block) => (
-            <article
-              key={block.id}
-              style={{
-                background: "var(--cog-cream-light, #faf7f2)",
-                border: "1px solid rgba(184,149,58,0.30)",
-                borderRadius: 16,
-                padding: "14px 16px",
-                boxShadow: "0 4px 14px rgba(28,26,23,0.05)",
-              }}
-            >
-              <p
-                style={{
-                  fontFamily: "var(--font-body)",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--cog-gold)",
-                  margin: 0,
-                  marginBottom: 6,
-                }}
-              >
-                {block.marker.label}
-              </p>
-              <p
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 16,
-                  lineHeight: 1.5,
-                  color: "var(--cog-charcoal)",
-                  margin: 0,
-                }}
-              >
-                {block.words.map((word, idx) => (
-                  <button
-                    key={`${block.id}-${idx}`}
-                    type="button"
-                    onClick={() => onWordTap?.(word.startMs)}
+      {(hasBlocks || hasPartial) && (
+        <div
+          style={{
+            background: "var(--cog-cream-light, #faf7f2)",
+            border: "1px solid rgba(184,149,58,0.22)",
+            borderRadius: 20,
+            padding: "16px 18px",
+            boxShadow: "0 6px 20px rgba(28,26,23,0.05)",
+          }}
+        >
+          <AnimatePresence initial={false}>
+            {populated.map((block) => {
+              // Hide the divider for the implicit "unlabeled" head block.
+              const showDivider = block.marker.kind !== "unlabeled";
+              return (
+                <div key={block.id}>
+                  {showDivider && <SectionDivider label={block.marker.label} />}
+                  <motion.p
+                    layout
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
                     style={{
-                      background: "transparent",
-                      border: "none",
-                      padding: 0,
-                      font: "inherit",
-                      color: "inherit",
-                      cursor: onWordTap ? "pointer" : "default",
+                      fontFamily: "var(--font-display)",
+                      fontSize: 17,
+                      lineHeight: 1.55,
+                      color: "var(--cog-charcoal)",
+                      margin: 0,
                     }}
                   >
-                    {word.text}
-                    {idx < block.words.length - 1 ? " " : ""}
-                  </button>
-                ))}
-              </p>
-            </article>
-          ))}
+                    {block.words.map((word, wIdx) => (
+                      <button
+                        key={`${block.id}-${wIdx}`}
+                        type="button"
+                        onClick={() => onWordTap?.(word.startMs)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          padding: 0,
+                          font: "inherit",
+                          color: "inherit",
+                          cursor: onWordTap ? "pointer" : "default",
+                        }}
+                      >
+                        {word.text}
+                        {wIdx < block.words.length - 1 ? " " : ""}
+                      </button>
+                    ))}
+                  </motion.p>
+                </div>
+              );
+            })}
+          </AnimatePresence>
 
-        {hasPartial && (
-          <p
-            aria-live="polite"
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 16,
-              lineHeight: 1.5,
-              color: "var(--cog-warm-gray, #6b6459)",
-              fontStyle: "italic",
-              opacity: 0.75,
-              margin: 0,
-              padding: "0 4px",
-            }}
-          >
-            {partial}
-            <span style={{ color: "var(--cog-gold)" }}>{"\u00a0\u258f"}</span>
-          </p>
-        )}
-      </div>
+          {hasPartial && (
+            <p
+              aria-live="polite"
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: 17,
+                lineHeight: 1.55,
+                color: "var(--cog-warm-gray, #6b6459)",
+                fontStyle: "italic",
+                opacity: 0.8,
+                margin: hasBlocks ? "6px 0 0" : 0,
+              }}
+            >
+              {partial}
+              <span style={{ color: "var(--cog-gold)" }}>{"\u00a0\u258f"}</span>
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 };
