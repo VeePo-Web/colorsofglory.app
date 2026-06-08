@@ -1,80 +1,104 @@
-## Where we are
+## Goal
+Let users import an existing voice memo from their phone (iOS Voice Memos `.m4a`, Android recorder `.m4a`/`.amr`/`.3gp`, or any `audio/*` file) on the Capture scene, then run the **same** transcription + section-splitting pipeline that ships today — so the Review Sheet opens with verse/chorus blocks ready to commit to canvas.
 
-The capture flow is shipped end-to-end: big mic → record → live web-speech transcript → review sheet → commit to canvas. What's missing to actually match the Adobe Podcast feel is three specific things. This plan is surgical — no scope creep.
+## What's already in place (do not rebuild)
+- `submitSharedAudio` (SDK) → `intake-voice-memo` (edge fn) already accepts any `audio/*` file ≤50MB, validates membership, uploads to `voice-memos`, creates the `voice_memo` + primary `take` row, and counts bytes against the owner's storage.
+- `requestTranscript` + `transcribe-take` already perform server-side section splitting from spoken cues ("verse one", "chorus", etc.) and write `transcript_json.blocks` on the take.
+- `ReviewSheet` already auto-polls until transcript is ready, renders editable blocks, and commits to canvas.
+- `CaptureScene` already has the post-record handoff (create song → upload → fetch take id → open Review Sheet); we just need to call the same path with an imported file.
 
-## What's still off (vs. Adobe Podcast)
+So **this is a frontend-only change** + a small refactor inside `CaptureScene.tsx`. No new edge functions, no SDK changes, no schema work.
 
-1. **Side rail is a horizontal grid under the mic.** Adobe puts secondary verbs on the *edge*, not below the subject. The mic should own center; the rail should hug the right edge.
-2. **Section markers don't appear inline as you speak.** Today, saying "Verse 1" splits blocks in state, but the live transcript pane shows a flat list. We need a gold inline divider that slides in the moment a marker is detected — so the user *sees* structure forming.
-3. **Canvas doesn't celebrate arrival.** After commit we navigate to `/songs/:id/canvas?from=capture`, but the new cards don't pulse. The user can't tell what just landed.
+## UX
+Below the mic, when idle (not recording), show a single quiet pill:
 
-Everything else (BigMic ripple/amplitude, ReviewSheet polish, CaptureSheet per-kind copy, transcript hook, intake pipeline) is already in place and working.
+```
+        ◯
+       MIC
+       0:00
 
-## Changes
-
-### 1. `SideRail.tsx` — vertical, right-edge, safe-area aware
-Switch from a 5-column grid to a vertical floating rail pinned to the right side, vertically centered against the mic.
-
-```text
-┌────────────────────────────┐
-│         [ title chip ]     │
-│                            │
-│                       ┌──┐ │
-│                       │L │ │  Lyrics
-│         ◯             ├──┤ │
-│        MIC            │C │ │  Chords
-│         ◯             ├──┤ │
-│                       │S │ │  Section
-│       0:14            ├──┤ │
-│                       │📖│ │  Scripture
-│                       ├──┤ │
-│                       │💡│ │  Idea
-│                       └──┘ │
-└────────────────────────────┘
+   ⤓  Import a voice memo
 ```
 
-- Position: `fixed`, `right: max(12px, env(safe-area-inset-right))`, `top: 50%`, `translateY(-50%)`.
-- Chip: 56px wide, icon + tiny label below, stacked vertically with 8px gap.
-- Stagger entrance (40ms each) on mount.
-- While recording: subtle gold outer ring + on tap, flash gold for 300ms (timestamped pin behavior unchanged).
-- Update `CaptureScene.tsx` main layout to remove the rail from the flow (it becomes a fixed overlay), so the mic re-centers properly.
+- Icon: `Upload` (lucide), 16px.
+- Style: ghost button — transparent background, 1px gold border `rgba(184,149,58,0.30)`, charcoal text, 11px serif, `border-radius: 999px`, `padding: 8px 14px`.
+- Hidden while recording or while a take is being saved (`saving === true`).
+- Tapping triggers a hidden `<input type="file" accept="audio/*" />` (no `capture` attr, so iOS opens the full Files picker which exposes Voice Memos via the Files app and "Browse" → "On My iPhone" → "Voice Memos").
 
-### 2. `LiveTranscript.tsx` — inline section dividers, live
-Today blocks render as separate cards. Adobe-style: render them as one continuous transcript with **gold section dividers** between blocks, and when a new marker arrives during recording the divider slides in (Framer Motion, `translateY(-4px)` + opacity, 250ms `var(--cog-ease-reveal)`).
+On file pick:
+1. Client-side guard: size > 50MB → toast error, abort. Mime not starting with `audio/` → toast error, abort.
+2. Best-effort: read duration via an off-DOM `<audio>` element + `URL.createObjectURL` (so the Review Sheet header shows the right `mm:ss`). Fall back to 0 on failure — non-blocking.
+3. Call the existing post-record path (extracted into a shared helper, see below).
 
-- Replace the per-block `<article>` cards with a single continuous transcript surface.
-- Each `block.marker` (except the first "unlabeled" implicit one) renders as a divider row:
+## Implementation
+
+### Refactor in `src/components/capture/CaptureScene.tsx`
+Extract the inner body of `handleMicTap`'s "stop recording" branch (lines that create the song, call `submitSharedAudio`, fetch take id + storage_path, open Review Sheet) into a new memoized helper:
+
+```ts
+const handleAudioFile = useCallback(async (file: File, durationMs: number) => {
+  // existing logic: ensure song, submitSharedAudio, getPrimaryTakeIdForMemo,
+  // fetch storage_path, setReview({...})
+}, [songId, songTitle]);
+```
+
+Then:
+- The mic stop branch calls `handleAudioFile(new File([blob], ...), result.durationMs)` — same behavior as today.
+- The new import button calls `handleAudioFile(pickedFile, measuredDurationMs)`.
+
+### New component `src/components/capture/ImportMemoButton.tsx`
+- Owns the hidden `<input ref>` and the visible pill button.
+- Props: `disabled: boolean`, `onPicked: (file: File, durationMs: number) => void | Promise<void>`.
+- Measures duration via:
+  ```ts
+  const audio = new Audio();
+  audio.preload = "metadata";
+  audio.src = URL.createObjectURL(file);
+  await new Promise<void>((res) => {
+    audio.onloadedmetadata = () => res();
+    audio.onerror = () => res();
+    setTimeout(res, 1500); // hard timeout
+  });
+  const durationMs = isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0;
+  URL.revokeObjectURL(audio.src);
   ```
-  ───── VERSE 1 ─────
-  i was lost but now i'm found …
-  ───── CHORUS ─────
-  …
-  ```
-- Divider style: thin gold rule (1px, `rgba(184,149,58,0.40)`) with the uppercase label centered in a small cream pill.
-- Use Framer `AnimatePresence` keyed on `marker.atMs` so each new marker animates in only once.
-- Partial word at the tail keeps its gold cursor.
+- Resets `input.value = ""` after each pick so the user can re-import the same file.
 
-### 3. Canvas arrival pulse
-In `SongCanvasExperience` (or its card renderer — to be located when building), read `?from=capture` from `useSearchParams`. For cards whose `created_at` is within the last ~30s, add a one-shot Framer animation: `boxShadow: 0 0 0 0 rgba(184,149,58,0.4) → 0 0 0 12px rgba(184,149,58,0)`, 1500ms, staggered by 60ms across cards.
+### Hook it into `CaptureScene.tsx`
+Inside the `<main>` block, just under the partial transcript / pending-blocks notice, render:
 
-If the canvas renderer doesn't expose per-card mount cleanly, add a lightweight `useCanvasArrivalPulse(songId)` hook that returns a `Set<cardId>` of recently-arrived ids and applies a `data-pulse` attribute the card CSS can pick up.
+```tsx
+{phase !== "recording" && !saving && !review.open && (
+  <ImportMemoButton
+    disabled={saving}
+    onPicked={(file, dur) => handleAudioFile(file, dur)}
+  />
+)}
+```
 
-## Out of scope (still)
-- No live server-side STT (Web Speech is good enough; batch on stop continues).
-- No waveform scrubber redesign (native `<audio>` stays for now).
-- No re-record, compare, merge.
-- No BPM/key detection.
+Set `setStatus("transcribing")` and `setSaving(true)` inside `handleAudioFile` so the existing busy UI (status copy, disabled mic) covers both paths.
+
+### Toast strings
+- Success: rely on existing "Started a new song" toast in `handleAudioFile` + the Review Sheet opening as confirmation.
+- Size error: `"That file is bigger than 50MB."` (matches edge-fn cap).
+- Mime error: `"Only audio files can be imported."`
+- Edge-fn 403 (not a member): `"You're not a member of this song."` — already surfaced by existing catch.
+
+## Notes & explicit non-goals
+- **No new "Unfiled inbox" view.** The imported file flows into the same song the user is currently on (or a freshly-created "New idea · Dec 8 · 3:42 PM" song if none) — identical to a recorded take.
+- **No live transcript pane** during import — there's nothing live to show. The Review Sheet handles polling + display, exactly like the post-record path.
+- **No drag-and-drop on mobile** in this pass. (Possible follow-up for desktop.)
+- **No iCloud-specific picker tweaks.** iOS handles Voice Memos via the standard Files picker that `<input type="file" accept="audio/*">` already opens.
+- **No changes to `intake-voice-memo` or `transcribe-take`.** The 50MB cap and `audio/*` filter already cover iOS m4a (`audio/mp4`/`audio/m4a`/`audio/x-m4a`) and Android m4a/amr/3gp.
 
 ## Files
-
-- Edit: `src/components/capture/SideRail.tsx` (vertical floating rail)
-- Edit: `src/components/capture/CaptureScene.tsx` (remove rail from flow; it's now overlayed)
-- Edit: `src/components/capture/LiveTranscript.tsx` (continuous transcript + animated dividers via Framer Motion)
-- Edit: `src/components/canvas/SongCanvasExperience.tsx` (read `?from=capture`, pass pulse set down) + the card renderer (read `data-pulse`)
-- Possibly new: `src/hooks/useCanvasArrivalPulse.ts` if the card renderer needs an indirection
+- New: `src/components/capture/ImportMemoButton.tsx`
+- Edit: `src/components/capture/CaptureScene.tsx` (extract `handleAudioFile`, render the button)
 
 ## Verification
-
-1. Open `/capture` on mobile viewport — mic centered, rail on the right edge, no horizontal row of chips below.
-2. Tap mic, say "verse one this is the first line, chorus this is the hook" — divider rows for VERSE 1 and CHORUS slide in during recording.
-3. Stop, hit "Add to canvas", land on `/songs/:id/canvas?from=capture` — new cards pulse gold for ~1.5s.
+1. Open `/capture` on mobile, idle. The "Import a voice memo" pill appears under the duration counter.
+2. Tap → Files picker opens → pick a `.m4a` from Voice Memos → Review Sheet opens with "Listening back to your take…" shimmer.
+3. After server transcription returns, blocks appear (sections split if the recording included spoken "verse one"/"chorus" cues).
+4. "Add to canvas" navigates to `/songs/:id/canvas?from=capture` exactly like a recorded take.
+5. Re-importing the same file works (input value resets).
+6. Files > 50MB show a friendly toast and never upload.
