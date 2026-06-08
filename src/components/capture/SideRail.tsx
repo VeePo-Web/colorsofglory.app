@@ -1,4 +1,4 @@
-import { PenLine, Music, Bookmark, BookOpen, Lightbulb } from "lucide-react";
+import { PenLine, Music, Bookmark, BookOpen, Lightbulb, type LucideIcon } from "lucide-react";
 
 export type RailAction = "lyrics" | "chords" | "section" | "scripture" | "note";
 
@@ -7,11 +7,7 @@ interface SideRailProps {
   onAction: (action: RailAction) => void;
 }
 
-const CHIPS: Array<{
-  id: RailAction;
-  label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
-}> = [
+const CHIPS: Array<{ id: RailAction; label: string; icon: LucideIcon }> = [
   { id: "lyrics", label: "Lyrics", icon: PenLine },
   { id: "chords", label: "Chords", icon: Music },
   { id: "section", label: "Section", icon: Bookmark },
