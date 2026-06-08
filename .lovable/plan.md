@@ -50,3 +50,15 @@ Which phase do you want to start with?
 - **All three in order** (I'll pause at A if secrets are missing)
 
 Nothing in this plan touches `src/pages/**` or `src/components/**` — strictly Lovable's lane (migrations, edge functions, storage, secrets, plus `docs/claude-handoffs/*` and `scripts/codex/*`).
+
+---
+
+## Execution log — 2026-06-08
+
+**Phase A (Phone OTP provider):** TWILIO_API_KEY connector is linked (visible in secrets). However, Supabase Auth's phone provider must be turned on and pointed at Twilio inside the Cloud dashboard — Lovable's `configure_auth` tool does not expose that field. **Action for Parker:** Cloud → Auth → Providers → Phone → enable Twilio, paste the Message Service SID from your Twilio console. Until then, `sendPhoneOtp` returns `PROVIDER_NOT_CONFIGURED` and the Phone tab Claude builds will show the graceful "coming soon" fallback. No blocker for the email/Google flow.
+
+**Phase B (Storage):** All three buckets exist and are private (workspace policy blocks public buckets — memory updated). RLS policies on `storage.objects` are in place: avatars per-user, voice-memos by song-member, exports by song-owner. Checklist written to `scripts/codex/verify-storage.md`.
+
+**Phase C (Songs data layer):** Linter pass shows 114 informational/warn items (mostly the standard "anon can execute SECURITY DEFINER" notes on intentionally public helpers like `is_invite_valid` and `resolve_code` — these are required for invite preview and landing pages). No critical RLS gaps. `create-song` enforces the free-plan gate via `can_create_song` RPC. Song Workspace handoff written to `docs/claude-handoffs/2026-06-08-song-catalog-and-workspace.md`.
+
+**Next backend task:** Once Claude finishes the Workspace hub, prepare the **Lyrics + Chords** SDK slice (`@/integrations/cog/lyrics.ts`) — typed wrappers for `song_sections` + `song_lyrics` reads/writes, plus an `activity_log` writer that records only IDs + event kinds.
