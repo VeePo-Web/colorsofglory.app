@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { RailAction } from "./SideRail";
 import ScripturePicker from "./ScripturePicker";
+import ChordPicker from "./ChordPicker";
 
 export type PendingBlockKind = "lyrics" | "chords" | "scripture" | "idea" | "section";
 
@@ -52,6 +53,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
   const [sectionKind, setSectionKind] = useState<string>("verse");
   const [sectionNum, setSectionNum] = useState<string>("");
   const [scriptureFallback, setScriptureFallback] = useState(false);
+  const [chordsFallback, setChordsFallback] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -60,6 +62,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
       setSectionKind("verse");
       setSectionNum("");
       setScriptureFallback(false);
+      setChordsFallback(false);
       // Focus on next tick so the sheet animation doesn't fight the keyboard.
       setTimeout(() => {
         if (action !== "scripture") inputRef.current?.focus();
@@ -70,6 +73,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
   if (!action) return null;
   const copy = COPY[action];
   const useScripturePicker = action === "scripture" && !scriptureFallback;
+  const useChordPicker = action === "chords" && !chordsFallback;
 
   const handleSave = () => {
     const trimmed = text.trim();
@@ -145,7 +149,34 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
             />
           )}
 
-          {!useScripturePicker && (
+          {useChordPicker && (
+            <>
+              <ChordPicker
+                onSave={(label, lettersText) => {
+                  onSave({
+                    id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    kind: "chords",
+                    section_kind: null,
+                    label,
+                    text: lettersText,
+                    start_ms: null,
+                    end_ms: null,
+                  });
+                  onClose();
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setChordsFallback(true)}
+                className="text-xs self-center"
+                style={{ color: "var(--cog-warm-gray)" }}
+              >
+                Type freeform instead
+              </button>
+            </>
+          )}
+
+          {!useScripturePicker && !useChordPicker && (
             <>
           {action === "section" && (
             <div className="grid grid-cols-2 gap-2">
