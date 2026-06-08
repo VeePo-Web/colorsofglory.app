@@ -4,11 +4,15 @@ import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
-import { uploadVoiceMemo } from "@/integrations/cog/memos";
-import { quickCapture } from "@/integrations/cog/capture";
+import { submitSharedAudio } from "@/integrations/cog/intake";
+import { createSong } from "@/integrations/cog/songs";
+import { getPrimaryTakeIdForMemo } from "@/integrations/cog/transcript";
+import { supabase } from "@/integrations/supabase/client";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
+import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
+import ReviewSheet from "./ReviewSheet";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker, TranscriptWord } from "@/lib/capture/transcriptModel";
 
@@ -39,11 +43,25 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const { phase, durationMs, analyserNode } = recorder.state;
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
-  const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([]);
+  const [transcriptWords] = useState<TranscriptWord[]>([]);
   const [status, setStatus] = useState<
     "idle" | "listening" | "transcribing" | "ready" | "skipped"
   >("idle");
   const [saving, setSaving] = useState(false);
+
+  // Side-rail sheet (idle taps)
+  const [sheetAction, setSheetAction] = useState<RailAction | null>(null);
+  const [pendingBlocks, setPendingBlocks] = useState<PendingBlock[]>([]);
+
+  // Review sheet (auto-opens after stop)
+  const [review, setReview] = useState<{
+    open: boolean;
+    takeId: string | null;
+    songId: string | null;
+    songTitle?: string;
+    storagePath: string | null;
+    durationMs: number;
+  }>({ open: false, takeId: null, songId: null, storagePath: null, durationMs: 0 });
 
   // Reset state if the user navigates between contexts.
   useEffect(() => {
@@ -59,75 +77,121 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   const handleMicTap = useCallback(async () => {
     if (saving) return;
+
     if (phase === "recording") {
       const result = await recorder.stopRecording();
       if (!result) return;
       setStatus("transcribing");
       setSaving(true);
       try {
-        const memoId = await uploadVoiceMemo({
-          songId: songId ?? "00000000-0000-0000-0000-000000000000",
-          blob: result.blob,
-          mimeType: result.mimeType,
-          durationMs: result.durationMs,
-          title: songTitle ? `${songTitle} — capture` : "Unfiled capture",
-        }).catch(() => null);
-
-        if (memoId && songId) {
-          // Best-effort linkage to the song's idea feed.
-          await quickCapture({
-            song_id: songId,
-            title: "Voice capture",
-            voice_memo_id: memoId,
-          }).catch(() => undefined);
+        // 1. Make sure we have a destination song.
+        let targetSongId = songId ?? null;
+        let targetSongTitle = songTitle;
+        if (!targetSongId) {
+          const newTitle = formatNewSongTitle();
+          const { song } = await createSong({ title: newTitle });
+          targetSongId = song.id;
+          targetSongTitle = newTitle;
+          toast.message("Started a new song", { description: newTitle });
         }
 
-        setStatus(memoId ? "ready" : "skipped");
-        toast.success(
-          songTitle ? `Saved to ${songTitle}` : "Saved to your Unfiled inbox",
-          { description: "Phase 1: review + canvas commit ship next." },
-        );
+        // 2. Upload the audio + create the voice memo + primary take in one call.
+        const file = new File([result.blob], `take-${Date.now()}.webm`, {
+          type: result.mimeType || "audio/webm",
+        });
+        const intake = await submitSharedAudio({
+          file,
+          song_id: targetSongId,
+          title: targetSongTitle ? `${targetSongTitle} — capture` : "Capture",
+        });
+
+        // 3. Find the take row we'll transcribe + commit.
+        const takeId = await getPrimaryTakeIdForMemo(intake.voice_memo_id);
+        if (!takeId) throw new Error("Take was created but could not be located.");
+
+        // 4. Resolve the take's storage_path so the review sheet can play it back.
+        const { data: takeRow } = await supabase
+          .from("takes")
+          .select("storage_path")
+          .eq("id", takeId)
+          .maybeSingle();
+
+        setStatus("ready");
+        setReview({
+          open: true,
+          takeId,
+          songId: targetSongId,
+          songTitle: targetSongTitle,
+          storagePath: (takeRow?.storage_path as string | undefined) ?? null,
+          durationMs: result.durationMs,
+        });
       } catch (err) {
         setStatus("skipped");
-        toast.error("Could not save take. Recording is still on your device.");
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Could not save take", { description: msg.slice(0, 140) });
       } finally {
         setSaving(false);
       }
       return;
     }
+
+    // Start recording fresh.
     setManualMarkers([]);
-    setTranscriptWords([]);
     setStatus("listening");
     await recorder.startRecording();
   }, [phase, recorder, saving, songId, songTitle]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
-      if (action !== "section") {
-        toast.message(`${action[0].toUpperCase() + action.slice(1)} sheet coming next.`, {
-          description: "Phase 1.5 will open the progressive capture sheet here.",
+      // While recording, every rail tap drops a timestamped pin (no modal).
+      if (phase === "recording") {
+        if (action === "section") {
+          setManualMarkers((prev) => [
+            ...prev,
+            { atMs: durationMs, kind: "verse", source: "manual", label: "New Section" },
+          ]);
+          toast.success("Section marker added", {
+            description: `at ${(durationMs / 1000).toFixed(1)}s — rename in the review sheet.`,
+          });
+          return;
+        }
+        // Lyrics/Chords/Scripture/Idea pin → store as pending block tied to this moment.
+        setPendingBlocks((prev) => [
+          ...prev,
+          {
+            id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            kind: action === "note" ? "idea" : (action as PendingBlock["kind"]),
+            section_kind: null,
+            label: action === "note" ? "Idea" : action.charAt(0).toUpperCase() + action.slice(1),
+            text: "",
+            start_ms: durationMs,
+            end_ms: durationMs,
+          },
+        ]);
+        toast.message(`${action.charAt(0).toUpperCase() + action.slice(1)} pinned`, {
+          description: `at ${(durationMs / 1000).toFixed(1)}s — fill it in when you stop.`,
         });
         return;
       }
-      if (phase !== "recording") {
-        toast.message("Start a take first, then tap Section to mark a new part.");
-        return;
-      }
-      setManualMarkers((prev) => [
-        ...prev,
-        {
-          atMs: durationMs,
-          kind: "verse",
-          source: "manual",
-          label: "New Section",
-        },
-      ]);
-      toast.success("Section marker added", {
-        description: `at ${(durationMs / 1000).toFixed(1)}s — rename in the review sheet.`,
-      });
+      // Idle: open the progressive capture sheet.
+      setSheetAction(action);
     },
     [phase, durationMs],
   );
+
+  const handleSheetSave = useCallback((block: PendingBlock) => {
+    setPendingBlocks((prev) => [...prev, block]);
+    toast.success("Saved", {
+      description: "It'll appear in the next review sheet after you record.",
+    });
+  }, []);
+
+  const handleReviewClose = useCallback(() => {
+    setReview((r) => ({ ...r, open: false }));
+    setPendingBlocks([]);
+    setManualMarkers([]);
+    setStatus("idle");
+  }, []);
 
   return (
     <div className="relative min-h-[100dvh] w-full" style={{ background: "var(--cog-cream)" }}>
@@ -220,6 +284,15 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           }
         />
 
+        {pendingBlocks.length > 0 && phase !== "recording" && !review.open && (
+          <p
+            className="text-xs"
+            style={{ color: "var(--cog-warm-gray)", fontStyle: "italic" }}
+          >
+            {pendingBlocks.length} {pendingBlocks.length === 1 ? "note" : "notes"} ready · record a take to review.
+          </p>
+        )}
+
         {recorder.state.error && (
           <p
             role="alert"
@@ -234,8 +307,33 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           </p>
         )}
       </main>
+
+      <CaptureSheet
+        open={sheetAction !== null}
+        action={sheetAction}
+        onClose={() => setSheetAction(null)}
+        onSave={handleSheetSave}
+      />
+
+      <ReviewSheet
+        open={review.open}
+        takeId={review.takeId}
+        songId={review.songId}
+        songTitle={review.songTitle}
+        storagePath={review.storagePath}
+        durationMs={review.durationMs}
+        pendingBlocks={pendingBlocks}
+        onClose={handleReviewClose}
+      />
     </div>
   );
 };
 
 export default CaptureScene;
+
+function formatNewSongTitle(): string {
+  const now = new Date();
+  const day = now.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `New idea · ${day} · ${time}`;
+}
