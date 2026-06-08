@@ -95,12 +95,11 @@ export function chordToLetters(
 
 /** Render a single NumberChord as a Nashville number ("1", "6m", "b7", "4/5"). */
 export function chordToNumbers(chord: NumberChord, mode: Mode = "major"): string {
-  const defaultQuality = DIATONIC_QUALITY[mode][chord.degree - 1] as string;
   const q = chord.quality as string;
-  // Display quality only when it differs from the diatonic default,
-  // or when it's non-triadic (sus2/sus4/aug). Keeps chips clean.
-  const nonTriadic = q === "sus2" || q === "sus4" || q === "aug";
-  const showQuality = q !== defaultQuality || nonTriadic;
+  // Always show m / ° / + / sus — they read as part of the chord name to
+  // worship teams. Only suppress "maj" since major is the unmarked default
+  // in Nashville notation (e.g. "1" already means I major).
+  const showQuality = q !== "maj";
 
   const prefix = chord.accidental ?? "";
   const suffix = showQuality ? QUALITY_SUFFIX_NUM[chord.quality] : "";
