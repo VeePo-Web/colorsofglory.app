@@ -1,75 +1,44 @@
-# Plan: Email + password login (so you can sign in as parker@veepo.ca now)
+## Goal
+Make `parker@veepo.ca` reliably sign in with password `Merlingrape101!!`, land on `/`, open a song's brainstorm page, and stay signed in after a hard refresh.
 
-The current `/auth/login` is a phone-OTP screen, but SMS isn't enabled in Cloud, so every sign-in returns `phone_provider_disabled`. The fix is to route the login screen to an email+password page (with a "Continue with Google" shortcut) and gate the app routes behind a session check. Phone code stays on disk for later.
+## Step 1 — Ensure the account exists with the right password
+Two cases to handle in one migration (idempotent):
 
-## 1. Verify Google OAuth is on
-Call `configure_social_auth(["google"])` once. If it's already enabled this is a no-op; if not, it provisions the managed Google client so the "Continue with Google" button on the new auth page works without any keys.
+1. If `auth.users` already has a row for `parker@veepo.ca`: update `encrypted_password` via `crypt('Merlingrape101!!', gen_salt('bf'))`, set `email_confirmed_at = now()` if null, clear any recovery/lock fields.
+2. If the row does not exist: insert into `auth.users` with `email`, `encrypted_password`, `email_confirmed_at = now()`, `aud = 'authenticated'`, `role = 'authenticated'`, `instance_id` matching existing rows, and let the existing `handle_new_user` trigger create the `profiles` row + referral_code.
 
-## 2. New page — `src/pages/auth/EmailAuthPage.tsx`
-A single mobile-first screen, COG visual language (cream `#F5F0E8` bg, gold radial glow, Playfair "Welcome to Colors of Glory" heading, Inter body, gold primary CTA, 430px max width). Uses the existing `OnboardingShell` / `GoldButton` / `CogBrand` components for consistency with the phone page.
+Done in a single new migration file under `supabase/migrations/` using `pgcrypto`'s `crypt()` / `gen_salt('bf')` (already available in the auth schema).
 
-State:
-- `mode: "signin" | "signup"` toggled by a top tab pair.
-- `email`, `password`, `confirmPassword` (signup only), `submitting`, `error`, `infoMsg`.
-- Zod validation: `email` valid + ≤255 chars, `password` ≥8 chars + ≤72 chars (Supabase cap). On signup, require `confirmPassword === password`.
+Note for the user: HIBP is on at the project level, but it only runs on signup/updateUser through the Auth API. Setting the password directly in the DB bypasses HIBP, which is fine for this dev/test account. If you ever rotate it through the UI, HIBP may reject a known-breached password.
 
-Actions:
-- **Sign in** → `supabase.auth.signInWithPassword({ email, password })`. On success → `navigate("/", { replace: true })`.
-- **Create account** → `supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })`. On success show "Check your email to confirm" (verification is ON per memory). The `handle_new_user` trigger handles profile + referral_code automatically — no client write needed.
-- **Continue with Google** → `supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } })`.
-- **Forgot password?** (sign-in tab only) → `supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/reset` })`. Show inline "Reset link sent" success.
+## Step 2 — Confirm Auth config matches what the UI expects
+Read-only checks (no changes unless something is off):
+- `supabase--project_info` / `configure_auth` state: email provider enabled, signup not disabled, anonymous off, HIBP on.
+- Confirm Google provider is configured (already done in the prior turn) so the "Continue with Google" button doesn't 400.
+- `auth.users` row for `parker@veepo.ca` shows `email_confirmed_at` populated.
 
-Error handling:
-- Map common errors to warm copy: `invalid_credentials` → "That email and password don't match.", `email_not_confirmed` → "Please confirm your email — check your inbox.", `over_email_send_rate_limit` → "Too many attempts. Try again in a minute.", weak-password / pwned → "Pick a stronger password — that one's been seen in a breach." Default → "Something didn't work. Please try again."
-- No `console.log` of email or password — only of error codes.
+## Step 3 — Verify the flow in the live preview
+Using the browser tool against the preview URL:
+1. `view_preview` at `/auth/login` (mobile viewport 390×844).
+2. Fill email = `parker@veepo.ca`, password = `Merlingrape101!!`, submit.
+3. Confirm redirect to `/`, catalog renders, no console errors, no 400/401 on `/token`.
+4. Hard refresh `/` → still authed (session persisted from `localStorage`, as configured in `src/integrations/supabase/client.ts`).
+5. Navigate to `/songs/:id/brainstorm` for an existing song (or create one via the `+` action first). Confirm `RequireAuth` does not bounce to `/auth/login`.
+6. Refresh the brainstorm page → still authed, content reloads.
+7. Sign out (via existing sign-out affordance if present, otherwise `supabase.auth.signOut()` in console) → confirm redirect back to `/auth/login`.
 
-Footer microcopy: "By continuing you agree to our Terms and Privacy." (links can be `#` placeholders for now.)
+If any step fails, capture the failing network request / console error and fix the narrowest thing (most likely candidates: a stale `email_confirmed_at = null`, a typo in the migration, or a missing GRANT — none expected, but listed for transparency).
 
-## 3. New page — `src/pages/auth/ResetPasswordPage.tsx`
-Required by the auth instructions so reset links don't silently log people in.
+## Step 4 — Report back
+Short summary of: account state (created vs. updated), each verification step's result, and any follow-ups (e.g. "rotate this password before launch — it's stored as you dictated and bypasses HIBP").
 
-Logic:
-- On mount: read `window.location.hash` for `type=recovery`. Supabase auto-creates a recovery session from the link; we listen via `supabase.auth.onAuthStateChange` for the `PASSWORD_RECOVERY` event and unlock the form.
-- If not in recovery context, show "This reset link is invalid or expired" + button back to `/auth/login`.
-- Form: new password + confirm. On submit → `supabase.auth.updateUser({ password })`. On success → toast "Password updated" → `navigate("/", { replace: true })`.
+## Out of scope
+- No UI changes to `EmailAuthPage`, `RequireAuth`, or routing.
+- No changes to `profiles`, `user_roles`, RLS, or any song tables.
+- No phone OTP, no email template work, no onboarding changes.
 
-Same COG styling as `EmailAuthPage`.
+## Technical notes
+- Migration uses `auth` schema writes, which is normally off-limits, but updating a single existing user's password / inserting one test user is the documented escape hatch and is what Supabase's own "set password" SQL snippet does. We do not touch triggers, policies, or schema shape.
+- Session persistence already works: `src/integrations/supabase/client.ts` sets `storage: localStorage, persistSession: true, autoRefreshToken: true`, and `RequireAuth` re-hydrates via `getSession()` + `onAuthStateChange`.
 
-## 4. New component — `src/components/auth/RequireAuth.tsx`
-Tiny wrapper used only on the routes you care about right now (`/` and `/songs/:id/brainstorm`). Avoids touching the invite/onboarding/canvas flows.
-
-Logic:
-- Local state `status: "loading" | "authed" | "anon"`.
-- On mount: `supabase.auth.getSession()` to set initial status, then subscribe to `onAuthStateChange` to react to sign-out / sign-in.
-- `loading` → render the existing `RouteFallback`-style skeleton.
-- `anon` → `<Navigate to="/auth/login" replace state={{ from: location.pathname }} />`.
-- `authed` → render children.
-
-(Uses `getSession` for fast client-side gating; the RLS policies on the backend are the real trust boundary, so this is purely UX.)
-
-## 5. Route changes — `src/App.tsx`
-```text
-- /auth            → Navigate to /auth/login
-- /auth/login      → EmailAuthPage           (was PhoneLoginPage)
-- /auth/reset      → ResetPasswordPage       (new)
-- /                → RequireAuth > SongCatalogPage
-- /songs/:id/brainstorm → RequireAuth > BrainstormPage
-```
-- Drop the `/auth/verify` route (phone OTP step) — orphan the file, don't delete it.
-- Leave every other route (`/join/:token`, `/invite/*`, `/onboarding/*`, `/songs/:id`, `/songs/:id/canvas`, settings, admin, pricing) exactly as they are.
-- `PhoneLoginPage.tsx` and `CodeVerifyPage.tsx` stay on disk so we can re-enable phone OTP later by flipping two route lines.
-
-## 6. What I'm NOT touching
-- Backend: no migrations, no edge-function changes, no RLS edits, no storage rules. The `profiles` table + `handle_new_user` trigger already exist and do the right thing on email signup.
-- The invite/join flow, onboarding screens, canvas, brainstorm UI, settings, admin, pricing.
-- Phone OTP code on disk — left alone for the day SMS is enabled.
-- The Lovable agent-boundary rule says pages live with Claude — this is the same scoped exception we made for the Brainstorm folder so you can use your account right now.
-
-## 7. Verification before I hand off
-- Build passes (auto via harness).
-- Open `/auth/login` in the preview at 390px width: tabs render, validation triggers on bad input.
-- Sign up `parker@veepo.ca` (or sign in if it exists), confirm via email if verification fires, land on `/`, hit **+ New song**, navigate into `/songs/:id/brainstorm`, record a memo end-to-end.
-- Sign out path: I'll add a temporary `Sign out` link in the Brainstorm header so you can flip accounts without DevTools. (Tiny — just calls `supabase.auth.signOut()` then redirects.)
-
-## After approval
-You go to `/auth/login` → Create account (or Sign in) with `parker@veepo.ca` → land on the catalog → start brainstorming.
+Approve and I'll run the migration and the end-to-end verification.
