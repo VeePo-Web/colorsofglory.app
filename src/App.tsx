@@ -7,6 +7,9 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-
 
 const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
+const EmailAuthPage = lazy(() => import("./pages/auth/EmailAuthPage"));
+const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
+import RequireAuth from "./components/auth/RequireAuth";
 const FirstIntentPage = lazy(() => import("./pages/onboarding/FirstIntentPage"));
 const StartFirstSongPage = lazy(() => import("./pages/onboarding/StartFirstSongPage"));
 const FounderCodePage = lazy(() => import("./pages/onboarding/FounderCodePage"));
@@ -93,8 +96,12 @@ const App = () => (
           <Routes>
             {/* Auth */}
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/auth/login" element={<PhoneLoginPage />} />
-            <Route path="/auth/verify" element={<CodeVerifyPage />} />
+            <Route path="/auth/login" element={<EmailAuthPage />} />
+            <Route path="/auth/reset" element={<ResetPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            {/* Phone OTP — disabled until SMS provider is configured */}
+            <Route path="/auth/phone" element={<PhoneLoginPage />} />
+            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
 
             {/* Onboarding */}
             <Route path="/onboarding" element={<Navigate to="/auth/login" replace />} />
@@ -117,9 +124,9 @@ const App = () => (
             <Route path="/home"           element={<ReturningHomePage />} />
 
             {/* Core app */}
-            <Route path="/" element={<SongCatalogPage />} />
+            <Route path="/" element={<RequireAuth><SongCatalogPage /></RequireAuth>} />
             <Route path="/songs/:id" element={<SongWorkspacePage />} />
-            <Route path="/songs/:id/brainstorm" element={<BrainstormPage />} />
+            <Route path="/songs/:id/brainstorm" element={<RequireAuth><BrainstormPage /></RequireAuth>} />
             <Route path="/songs/:id/capture" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
             <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
