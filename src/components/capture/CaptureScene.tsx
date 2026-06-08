@@ -14,6 +14,7 @@ import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
 import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
 import ReviewSheet from "./ReviewSheet";
+import ImportMemoButton from "./ImportMemoButton";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 
@@ -77,17 +78,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     return buildTranscriptBlocks(live.words, markers);
   }, [live.words, manualMarkers]);
 
-  const handleMicTap = useCallback(async () => {
-    if (saving) return;
-
-    if (phase === "recording") {
-      const result = await recorder.stopRecording();
-      live.stop();
-      if (!result) return;
+  const handleAudioFile = useCallback(
+    async (file: File, fileDurationMs: number) => {
+      if (saving) return;
       setStatus("transcribing");
       setSaving(true);
       try {
-        // 1. Make sure we have a destination song.
         let targetSongId = songId ?? null;
         let targetSongTitle = songTitle;
         if (!targetSongId) {
@@ -98,21 +94,15 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           toast.message("Started a new song", { description: newTitle });
         }
 
-        // 2. Upload the audio + create the voice memo + primary take in one call.
-        const file = new File([result.blob], `take-${Date.now()}.webm`, {
-          type: result.mimeType || "audio/webm",
-        });
         const intake = await submitSharedAudio({
           file,
           song_id: targetSongId,
           title: targetSongTitle ? `${targetSongTitle} — capture` : "Capture",
         });
 
-        // 3. Find the take row we'll transcribe + commit.
         const takeId = await getPrimaryTakeIdForMemo(intake.voice_memo_id);
         if (!takeId) throw new Error("Take was created but could not be located.");
 
-        // 4. Resolve the take's storage_path so the review sheet can play it back.
         const { data: takeRow } = await supabase
           .from("takes")
           .select("storage_path")
@@ -126,7 +116,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           songId: targetSongId,
           songTitle: targetSongTitle,
           storagePath: (takeRow?.storage_path as string | undefined) ?? null,
-          durationMs: result.durationMs,
+          durationMs: fileDurationMs,
         });
       } catch (err) {
         setStatus("skipped");
@@ -135,6 +125,21 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       } finally {
         setSaving(false);
       }
+    },
+    [saving, songId, songTitle],
+  );
+
+  const handleMicTap = useCallback(async () => {
+    if (saving) return;
+
+    if (phase === "recording") {
+      const result = await recorder.stopRecording();
+      live.stop();
+      if (!result) return;
+      const file = new File([result.blob], `take-${Date.now()}.webm`, {
+        type: result.mimeType || "audio/webm",
+      });
+      await handleAudioFile(file, result.durationMs);
       return;
     }
 
@@ -144,7 +149,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     live.reset();
     if (live.supported) live.start();
     await recorder.startRecording();
-  }, [phase, recorder, saving, songId, songTitle, live]);
+  }, [phase, recorder, saving, live, handleAudioFile]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -319,6 +324,10 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           >
             {pendingBlocks.length} {pendingBlocks.length === 1 ? "note" : "notes"} ready · record a take to review.
           </p>
+        )}
+
+        {phase !== "recording" && !saving && !review.open && (
+          <ImportMemoButton disabled={saving} onPicked={handleAudioFile} />
         )}
 
         {recorder.state.error && (
