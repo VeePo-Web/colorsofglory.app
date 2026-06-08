@@ -127,6 +127,75 @@ export type Database = {
           },
         ]
       }
+      canvas_cards: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          id: string
+          kind: string
+          label: string | null
+          position: number
+          section_kind: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          updated_at: string
+          x: number | null
+          y: number | null
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          created_by: string
+          end_ms?: number | null
+          id?: string
+          kind: string
+          label?: string | null
+          position?: number
+          section_kind?: string | null
+          song_id: string
+          start_ms?: number | null
+          take_id?: string | null
+          updated_at?: string
+          x?: number | null
+          y?: number | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string
+          end_ms?: number | null
+          id?: string
+          kind?: string
+          label?: string | null
+          position?: number
+          section_kind?: string | null
+          song_id?: string
+          start_ms?: number | null
+          take_id?: string | null
+          updated_at?: string
+          x?: number | null
+          y?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canvas_cards_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canvas_cards_take_id_fkey"
+            columns: ["take_id"]
+            isOneToOne: false
+            referencedRelation: "takes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chord_progressions: {
         Row: {
           chords: Json
@@ -1467,6 +1536,9 @@ export type Database = {
           name_is_custom: boolean
           song_id: string
           storage_path: string
+          transcript_error: string | null
+          transcript_json: Json | null
+          transcript_status: string
           updated_at: string
           voice_memo_id: string
           waveform_peaks: Json | null
@@ -1484,6 +1556,9 @@ export type Database = {
           name_is_custom?: boolean
           song_id: string
           storage_path: string
+          transcript_error?: string | null
+          transcript_json?: Json | null
+          transcript_status?: string
           updated_at?: string
           voice_memo_id: string
           waveform_peaks?: Json | null
@@ -1501,6 +1576,9 @@ export type Database = {
           name_is_custom?: boolean
           song_id?: string
           storage_path?: string
+          transcript_error?: string | null
+          transcript_json?: Json | null
+          transcript_status?: string
           updated_at?: string
           voice_memo_id?: string
           waveform_peaks?: Json | null
