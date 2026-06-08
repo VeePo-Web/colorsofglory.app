@@ -3,6 +3,48 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type Song = Database["public"]["Tables"]["songs"]["Row"];
 export type SongInvite = Database["public"]["Tables"]["song_invites"]["Row"];
+export type SongStatus = Database["public"]["Enums"]["song_status"];
+export type SongMemberRole = Database["public"]["Enums"]["song_member_role"];
+
+/** Minimal shape for the Song Catalog grid. */
+export type SongCard = {
+  id: string;
+  title: string;
+  cover_color: string | null;
+  status: SongStatus;
+  last_activity_at: string | null;
+  created_at: string;
+  my_role: SongMemberRole;
+  voice_memo_count: number;
+  collaborator_count: number;
+};
+
+/** Full song + per-room counts for the Workspace hub. */
+export type SongDetail = {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  status: SongStatus;
+  key_signature: string | null;
+  tempo_bpm: number | null;
+  time_signature: string | null;
+  tags: string[] | null;
+  cover_color: string | null;
+  is_locked: boolean;
+  last_activity_at: string | null;
+  created_at: string;
+  updated_at: string;
+  lyrics_snippet: string | null;
+  my_role: SongMemberRole;
+  counts: {
+    sections: number;
+    lyrics_filled: number;
+    voice_memos: number;
+    notes: number;
+    collaborators: number;
+    pending_suggestions: number;
+  };
+};
 
 /**
  * Canonical edge-function error codes. UI can switch on these to render
