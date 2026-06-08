@@ -231,3 +231,59 @@ export const upsertNotificationPrefs = async (
   if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
   return data as SongNotificationPrefs | null;
 };
+
+// --- Catalog + Workspace reads -------------------------------------------
+
+/** Catalog: all songs the signed-in user is a member of, newest activity first. */
+export const listMySongs = async (): Promise<SongCard[]> => {
+  const { data, error } = await supabase.rpc("list_my_songs");
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  return (data ?? []) as SongCard[];
+};
+
+/** Workspace hub: full song + counts, or null when caller isn't a member. */
+export const getSong = async (song_id: string): Promise<SongDetail | null> => {
+  const { data, error } = await supabase
+    .rpc("get_song_detail", { _song_id: song_id })
+    .maybeSingle();
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    owner_user_id: row.owner_user_id as string,
+    title: row.title as string,
+    status: row.status as SongStatus,
+    key_signature: (row.key_signature as string | null) ?? null,
+    tempo_bpm: (row.tempo_bpm as number | null) ?? null,
+    time_signature: (row.time_signature as string | null) ?? null,
+    tags: (row.tags as string[] | null) ?? null,
+    cover_color: (row.cover_color as string | null) ?? null,
+    is_locked: Boolean(row.is_locked),
+    last_activity_at: (row.last_activity_at as string | null) ?? null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+    lyrics_snippet: (row.lyrics_snippet as string | null) ?? null,
+    my_role: row.my_role as SongMemberRole,
+    counts: {
+      sections: Number(row.section_count ?? 0),
+      lyrics_filled: Number(row.lyrics_filled_count ?? 0),
+      voice_memos: Number(row.voice_memo_count ?? 0),
+      notes: Number(row.note_count ?? 0),
+      collaborators: Number(row.collaborator_count ?? 0),
+      pending_suggestions: Number(row.pending_suggestion_count ?? 0),
+    },
+  };
+};
+
+/**
+ * Archive a song (owner only — relies on existing RLS UPDATE policy).
+ * Use `unarchiveSong` above to restore.
+ */
+export const archiveSong = async (song_id: string): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ status: "archived" })
+    .eq("id", song_id);
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+};
