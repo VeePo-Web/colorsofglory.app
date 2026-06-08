@@ -4,6 +4,8 @@ interface LiveTranscriptProps {
   blocks: TranscriptBlock[];
   /** Phase 1: shown while we wait for batch transcription to return. */
   status: "idle" | "listening" | "transcribing" | "ready" | "skipped";
+  /** Optional in-flight partial word(s) from on-device live STT. */
+  partial?: string;
   onWordTap?: (atMs: number) => void;
 }
 
@@ -15,8 +17,9 @@ const STATUS_COPY: Record<LiveTranscriptProps["status"], string> = {
   skipped: "Transcription is off for this take.",
 };
 
-const LiveTranscript = ({ blocks, status, onWordTap }: LiveTranscriptProps) => {
+const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscriptProps) => {
   const hasBlocks = blocks.some((b) => b.words.length > 0);
+  const hasPartial = partial.trim().length > 0;
 
   return (
     <section
@@ -24,7 +27,7 @@ const LiveTranscript = ({ blocks, status, onWordTap }: LiveTranscriptProps) => {
       className="w-full"
       style={{ maxWidth: 480, margin: "0 auto" }}
     >
-      {!hasBlocks && (
+      {!hasBlocks && !hasPartial && (
         <p
           style={{
             fontFamily: "var(--font-body)",
@@ -97,6 +100,25 @@ const LiveTranscript = ({ blocks, status, onWordTap }: LiveTranscriptProps) => {
               </p>
             </article>
           ))}
+
+        {hasPartial && (
+          <p
+            aria-live="polite"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 16,
+              lineHeight: 1.5,
+              color: "var(--cog-warm-gray, #6b6459)",
+              fontStyle: "italic",
+              opacity: 0.75,
+              margin: 0,
+              padding: "0 4px",
+            }}
+          >
+            {partial}
+            <span style={{ color: "var(--cog-gold)" }}>{"\u00a0\u258f"}</span>
+          </p>
+        )}
       </div>
     </section>
   );

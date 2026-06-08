@@ -4,6 +4,7 @@ import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { useLiveTranscript } from "@/hooks/useLiveTranscript";
 import { submitSharedAudio } from "@/integrations/cog/intake";
 import { createSong } from "@/integrations/cog/songs";
 import { getPrimaryTakeIdForMemo } from "@/integrations/cog/transcript";
@@ -14,7 +15,7 @@ import LiveTranscript from "./LiveTranscript";
 import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
 import ReviewSheet from "./ReviewSheet";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
-import type { SectionMarker, TranscriptWord } from "@/lib/capture/transcriptModel";
+import type { SectionMarker } from "@/lib/capture/transcriptModel";
 
 interface CaptureSceneProps {
   /** When provided, captures attach to this song; otherwise they land in Unfiled. */
@@ -41,9 +42,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const navigate = useNavigate();
   const recorder = useVoiceRecorder();
   const { phase, durationMs, analyserNode } = recorder.state;
+  const live = useLiveTranscript();
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
-  const [transcriptWords] = useState<TranscriptWord[]>([]);
   const [status, setStatus] = useState<
     "idle" | "listening" | "transcribing" | "ready" | "skipped"
   >("idle");
@@ -67,19 +68,21 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   useEffect(() => {
     return () => {
       recorder.cancelRecording();
+      live.stop();
     };
-  }, [recorder]);
+  }, [recorder, live]);
 
   const blocks = useMemo(() => {
-    const markers = detectSectionMarkers(transcriptWords, manualMarkers);
-    return buildTranscriptBlocks(transcriptWords, markers);
-  }, [transcriptWords, manualMarkers]);
+    const markers = detectSectionMarkers(live.words, manualMarkers);
+    return buildTranscriptBlocks(live.words, markers);
+  }, [live.words, manualMarkers]);
 
   const handleMicTap = useCallback(async () => {
     if (saving) return;
 
     if (phase === "recording") {
       const result = await recorder.stopRecording();
+      live.stop();
       if (!result) return;
       setStatus("transcribing");
       setSaving(true);
@@ -138,8 +141,10 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     // Start recording fresh.
     setManualMarkers([]);
     setStatus("listening");
+    live.reset();
+    if (live.supported) live.start();
     await recorder.startRecording();
-  }, [phase, recorder, saving, songId, songTitle]);
+  }, [phase, recorder, saving, songId, songTitle, live]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -228,20 +233,41 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           </span>
         </button>
 
-        <div
-          aria-label="Capture destination"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 14,
-            color: "var(--cog-charcoal)",
-            padding: "6px 14px",
-            borderRadius: 999,
-            background: "rgba(184,149,58,0.10)",
-            border: "1px solid rgba(184,149,58,0.25)",
-          }}
-        >
-          {songTitle ?? "Unfiled"}
-        </div>
+        {songId ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/songs/${songId}/room`)}
+            aria-label={`Open ${songTitle ?? "song"} room`}
+            className="transition-transform active:scale-95"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "var(--cog-charcoal)",
+              padding: "6px 14px",
+              borderRadius: 999,
+              background: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.25)",
+              cursor: "pointer",
+            }}
+          >
+            {songTitle ?? "Open room"}
+          </button>
+        ) : (
+          <div
+            aria-label="Capture destination"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "var(--cog-charcoal)",
+              padding: "6px 14px",
+              borderRadius: 999,
+              background: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.25)",
+            }}
+          >
+            Unfiled
+          </div>
+        )}
 
         <button
           type="button"
@@ -275,6 +301,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
         <LiveTranscript
           blocks={blocks}
+          partial={phase === "recording" ? live.partial : ""}
           status={
             phase === "recording"
               ? "listening"
