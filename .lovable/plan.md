@@ -1,71 +1,125 @@
-## Capture Scene — Phase 1.5: Live transcript, Review sheet, Canvas commit
+## Research takeaways
 
-Phase 1 already shipped (big mic, side rail, hold-to-record, take upload, `/` route + Songs tab). This plan finishes the "frictionless idea → canvas" loop.
+From Adobe Podcast/Studio design research, the strongest principles to borrow are:
 
-### 1. Live transcript layer (during recording)
-- New hook `useLiveTranscript()` — streams partial text using the browser `SpeechRecognition` API when available (Chrome/Safari iOS), falls back to "Listening…" + amplitude ribbon.
-- Renders under the mic: rolling 2-line partial transcript, fades old words.
-- Section keywords (`verse one`, `verse two`, `pre-chorus`, `chorus`, `bridge`, `tag`, `outro`) detected live → drops an inline section divider chip in the transcript.
-- Manual side-rail taps (Lyrics/Chords/Section/Scripture/Idea) drop a timestamped pin that wins over voice detection if within 1.5s.
+- **People think in words, not waveforms.** Audio should become editable lyric/idea blocks as quickly as possible.
+- **Do not be subtle.** Labeled actions beat icon-only controls; the user should never wonder what a side button does.
+- **Fewer knobs, fewer mistakes.** Keep the first scene focused on recording, marking, and reviewing — not advanced editing.
+- **Make hard work invisible.** Recording, transcription, section detection, saving, and canvas handoff should feel like one flow.
+- **Story-first, not tool-first.** For Colors of Glory this becomes “song idea first,” not “audio file first.”
 
-### 2. Finalized transcript on save
-- On stop: send the take audio to a new edge function `transcribe-take` (Lovable AI Gateway, Gemini Flash audio input) for the canonical transcript with word-level ms offsets.
-- Merge live pins + voice-detected sections + final transcript into a `TranscriptModel` of ordered blocks: `{ kind: 'verse'|'chorus'|'bridge'|'chords'|'scripture'|'idea'|'lyrics', label, text, startMs, endMs, words[] }`.
-- Persisted on the `takes` row (existing) as `transcript_json`.
+## Current state
 
-### 3. Review sheet (bottom sheet, opens automatically after stop)
-- Header: take name (editable, friendly default like "Idea · Mon 2:14pm"), duration, destination chip.
-- Audio scrubber with waveform; tapping a word in a block scrubs to that ms.
-- Block list — each block is a card you can:
-  - Rename (Verse 1 → Pre-Chorus)
-  - Merge with previous / split at cursor
-  - Delete
-  - Change kind (lyrics ↔ chords ↔ scripture ↔ idea)
-- Destination picker: "New song" (default if on `/`) or existing song from catalog.
-- Sticky CTA: **Add to canvas** (gold) — commits blocks as canvas cards.
+The app already has the right foundation:
 
-### 4. Canvas commit
-- New SDK call `commitTakeToCanvas(takeId, songId, blocks[])` → edge function `commit-take` creates:
-  - `songs` row if "New song"
-  - One `canvas_cards` row per block (lyrics/scripture/idea → text card; chords → chord card; section blocks → section header card)
-  - Links each card back to `take_id` + `start_ms`/`end_ms` so tapping the card plays that audio slice
-  - Activity log entry
-- After commit: navigate to `/songs/:id/canvas` with the new cards highlighted briefly.
+- `/` opens the new Capture scene.
+- `BigMic` gives a large gold microphone with recording pulse and live amplitude.
+- `SideRail` has labeled tools: Lyrics, Chords, Section, Scripture, Idea.
+- Spoken section parsing already detects phrases like “Verse 1,” “Chorus,” and “Bridge.”
+- Backend/SDK hooks now exist for transcription and committing transcript blocks to canvas.
 
-### 5. Files
+The main missing product layer is the **frictionless review-and-commit UI** after recording stops.
 
-New frontend (Claude scope — handoff doc only, I won't write these):
-- `src/components/capture/LiveTranscript.tsx`
-- `src/components/capture/TranscriptBlock.tsx`
-- `src/components/capture/ReviewSheet.tsx`
-- `src/components/capture/DestinationPicker.tsx`
-- `src/hooks/useLiveTranscript.ts`
+## Plan
 
-New backend (Lovable scope — I will write):
-- `supabase/functions/transcribe-take/index.ts`
-- `supabase/functions/commit-take/index.ts`
-- Migration: add `transcript_json jsonb`, `transcript_status text` to `takes`; create `canvas_cards` table + RLS + GRANTs (gated by `is_song_member`)
-- `src/integrations/cog/transcript.ts` — `requestTranscript(takeId)`, `getTake(takeId)`
-- `src/integrations/cog/canvas.ts` — `commitTakeToCanvas(...)`, `listCanvasCards(songId)`
-- `src/lib/capture/sectionKeywords.ts` + tests (already partly in Phase 1, extend)
-- `src/lib/capture/transcriptModel.ts` — merge logic for pins + voice sections + final transcript
+### 1. Make Capture the true first scene
 
-Handoff doc: `docs/claude-handoffs/2026-06-08-review-sheet.md` covering LiveTranscript, ReviewSheet, DestinationPicker visual spec + component API the SDK already exposes.
+Keep the first screen as a calm, full-screen recording surface:
 
-### 6. Out of scope (this phase)
-- Streaming partials from the server model (Phase 2)
-- Chord/key/BPM auto-detection
-- Layered "record over this" takes
-- Compare mode / merge / splice on canvas
-- Onboarding integration
-- Phone OTP, email templates, billing screens
+```text
+Top:       destination chip / simple options
+Center:    big gold microphone
+Side/near: labeled capture buttons
+Bottom:    live transcript preview / state text
+After stop: review sheet slides up
+```
 
-### 7. Verification
-1. Sign in, land on `/`, big mic visible.
-2. Tap mic, say "Verse one, holy is the Lord. Chorus, glory glory." → live transcript shows partials + a `Chorus` divider appears mid-stream.
-3. Tap **Section** chip during recording → manual section pin lands at that ms.
-4. Tap mic to stop → Review sheet slides up with named blocks.
-5. Rename a block, scrub by tapping a word, change destination to "New song".
-6. Tap **Add to canvas** → lands on `/songs/:id/canvas` with cards visible.
-7. Tap a card → plays that slice of the original take.
-8. Reduced-motion: sheet fades instead of sliding; no ripple on mic.
+The first impression should be: “I can sing, speak, hum, or mark an idea immediately.”
+
+### 2. Upgrade the side buttons into real capture tools
+
+Turn each rail button into an explicit timestamped action:
+
+- **Lyrics** — starts/marks lyric text capture.
+- **Chords** — drops a chord/key/BPM pin.
+- **Section** — drops Verse / Chorus / Bridge marker.
+- **Scripture** — drops a scripture/meaning note pin.
+- **Idea** — drops a general note/theme pin.
+
+While recording, every tap creates a time-linked pin. While idle, tapping opens a compact progressive sheet for typing/pasting that content.
+
+### 3. Add live section intelligence
+
+During recording:
+
+- Spoken phrases like “Verse 1,” “Chorus,” “Bridge,” “Tag,” and “Outro” should show as inline section chips.
+- Manual side-button pins should override voice detection near the same timestamp.
+- The live transcript area should stay lightweight: last 1–2 lines plus detected section chips, not a full editor.
+
+### 4. Build the post-recording Review Sheet
+
+When the user stops recording, open a bottom sheet instead of only showing a toast.
+
+Review Sheet contents:
+
+- take title / rename field
+- duration + small waveform scrubber
+- destination picker: current song, unfiled, or new song
+- structured blocks:
+  - Verse 1
+  - Chorus
+  - Chords
+  - Scripture / note
+  - Idea
+- simple edit controls:
+  - rename block
+  - change block type
+  - merge/split
+  - delete
+- primary gold CTA: **Add to canvas**
+
+This is where the voice memo becomes organized songwriting material.
+
+### 5. Canvas handoff behavior
+
+On **Add to canvas**:
+
+- Lyrics blocks become lyric cards/section zones.
+- Chord pins become chord cards.
+- Scripture pins become meaning/scripture cards.
+- Idea pins become idea cards.
+- Each card keeps the audio time range so tapping it can play that exact slice later.
+
+The flow should land on `/songs/:id/canvas` with the new cards already visible.
+
+### 6. Keep this in the Colors of Glory design language
+
+Use the locked COG system, not Adobe’s dark/purple style:
+
+- cream background
+- warm gold mic and active states
+- serif section labels
+- explicit labeled buttons
+- soft spiritual glow
+- mobile-first 390px layout
+- calm, non-overwhelming motion
+
+### 7. Role boundary
+
+Because the project memory says Claude owns frontend UI, the implementation should be handed to Claude for files under `src/pages/**` and `src/components/**`.
+
+Lovable should only support this with:
+
+- typed SDK updates under `src/integrations/cog/*` if needed
+- backend/function fixes if the review sheet exposes a missing API
+- handoff docs describing exact UI behavior and data contracts
+
+## Success criteria
+
+- Opening the app shows the big mic first.
+- User can record immediately with one tap.
+- Side buttons are obvious and labeled.
+- Saying “Verse 1” or “Chorus” creates separate transcript blocks.
+- Stopping opens a review sheet, not a dead end.
+- User can edit the blocks and send them to canvas in one tap.
+- Canvas receives organized cards linked back to the original voice memo.
