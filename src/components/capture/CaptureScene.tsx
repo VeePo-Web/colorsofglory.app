@@ -233,20 +233,41 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           </span>
         </button>
 
-        <div
-          aria-label="Capture destination"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 14,
-            color: "var(--cog-charcoal)",
-            padding: "6px 14px",
-            borderRadius: 999,
-            background: "rgba(184,149,58,0.10)",
-            border: "1px solid rgba(184,149,58,0.25)",
-          }}
-        >
-          {songTitle ?? "Unfiled"}
-        </div>
+        {songId ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/songs/${songId}/room`)}
+            aria-label={`Open ${songTitle ?? "song"} room`}
+            className="transition-transform active:scale-95"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "var(--cog-charcoal)",
+              padding: "6px 14px",
+              borderRadius: 999,
+              background: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.25)",
+              cursor: "pointer",
+            }}
+          >
+            {songTitle ?? "Open room"}
+          </button>
+        ) : (
+          <div
+            aria-label="Capture destination"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "var(--cog-charcoal)",
+              padding: "6px 14px",
+              borderRadius: 999,
+              background: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.25)",
+            }}
+          >
+            Unfiled
+          </div>
+        )}
 
         <button
           type="button"
