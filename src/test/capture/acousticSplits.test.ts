@@ -58,13 +58,16 @@ describe("findSilenceBoundaries", () => {
     expect(findSilenceBoundaries(stubBuffer([sig]))).toEqual([]);
   });
 
-  it("ignores silence at the edges (intro/outro)", () => {
+  it("does not emit a boundary inside the edge padding when silence is at the very edge", () => {
+    // With edgePadMs: 2200, both leading/trailing silences land inside the pad.
     const sig = buildSignal([
       { ms: 2000, rms: 0.001 }, // leading silence
       { ms: 3000, rms: 0.4 },
       { ms: 2000, rms: 0.001 }, // trailing silence
     ]);
-    expect(findSilenceBoundaries(stubBuffer([sig]))).toEqual([]);
+    expect(
+      findSilenceBoundaries(stubBuffer([sig]), { edgePadMs: 2200 }),
+    ).toEqual([]);
   });
 
   it("emits multiple boundaries between several sections", () => {
