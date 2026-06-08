@@ -1617,6 +1617,7 @@ export type Database = {
           failure_reason: string | null
           id: string
           mime_type: string
+          notes: string | null
           section_id: string | null
           song_id: string
           status: Database["public"]["Enums"]["memo_status"]
@@ -1633,6 +1634,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mime_type: string
+          notes?: string | null
           section_id?: string | null
           song_id: string
           status?: Database["public"]["Enums"]["memo_status"]
@@ -1649,6 +1651,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mime_type?: string
+          notes?: string | null
           section_id?: string | null
           song_id?: string
           status?: Database["public"]["Enums"]["memo_status"]
@@ -2389,6 +2392,7 @@ export type Database = {
         | "uploaded"
         | "finalized"
         | "transcribed"
+        | "archived"
       onboarding_step:
         | "not_started"
         | "intent_selected"
@@ -2590,6 +2594,7 @@ export const Constants = {
         "uploaded",
         "finalized",
         "transcribed",
+        "archived",
       ],
       onboarding_step: [
         "not_started",

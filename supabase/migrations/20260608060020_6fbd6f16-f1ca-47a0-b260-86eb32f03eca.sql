@@ -1,0 +1,1 @@
+ALTER TABLE public.voice_memos ADD COLUMN IF NOT EXISTS notes text;

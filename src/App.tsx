@@ -26,6 +26,7 @@ const ReturningHomePage  = lazy(() => import("./pages/ReturningHomePage"));
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
+const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const BillingPage = lazy(() => import("./pages/settings/BillingPage"));
@@ -118,6 +119,7 @@ const App = () => (
             {/* Core app */}
             <Route path="/" element={<SongCatalogPage />} />
             <Route path="/songs/:id" element={<SongWorkspacePage />} />
+            <Route path="/songs/:id/brainstorm" element={<BrainstormPage />} />
             <Route path="/songs/:id/capture" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
             <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />

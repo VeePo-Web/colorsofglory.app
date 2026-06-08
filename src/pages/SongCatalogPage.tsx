@@ -1,98 +1,100 @@
-﻿import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, Mic } from "lucide-react";
+import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
+import { listMySongs, createSong, type SongCard as SongRow } from "@/integrations/cog/songs";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
-type SongStatus = "active" | "draft" | "collaborating" | "private" | "archived";
 type Tab = "Owned" | "Invited" | "Archived";
 
-interface SongCollab {
-  initials: string;
-  color: string;
+function relativeDate(iso: string | null): string {
+  if (!iso) return "Just now";
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
-
-interface Song {
-  id: string;
-  title: string;
-  status: SongStatus;
-  lastEdited: string;
-  collaborators: SongCollab[];
-  type: "owned" | "invited" | "archived";
-}
-
-const MOCK_SONGS: Song[] = [
-  {
-    id: "1",
-    title: "Grace in the Waiting",
-    status: "active",
-    lastEdited: "2h ago",
-    collaborators: [
-      { initials: "AS", color: "#B8953A" },
-      { initials: "PK", color: "#8B7355" },
-    ],
-    type: "owned",
-  },
-  {
-    id: "2",
-    title: "Morning Prayer",
-    status: "collaborating",
-    lastEdited: "Yesterday",
-    collaborators: [
-      { initials: "SM", color: "#6B8E6B" },
-      { initials: "DL", color: "#8B6B8E" },
-    ],
-    type: "owned",
-  },
-  {
-    id: "3",
-    title: "Holy Fire",
-    status: "draft",
-    lastEdited: "3 days ago",
-    collaborators: [{ initials: "PK", color: "#8B7355" }],
-    type: "owned",
-  },
-  {
-    id: "4",
-    title: "Untitled Song",
-    status: "private",
-    lastEdited: "Oct 26",
-    collaborators: [],
-    type: "owned",
-  },
-];
-
-const STATUS_LABELS: Record<SongStatus, string> = {
-  active: "Active",
-  draft: "Draft",
-  collaborating: "Collaborating",
-  private: "Private",
-  archived: "Archived",
-};
 
 const SongCatalogPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
   const [isCheckingCreate, setIsCheckingCreate] = useState(false);
+  const [songs, setSongs] = useState<SongRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
 
-  const filteredSongs = MOCK_SONGS.filter((s) => {
-    if (activeTab === "Owned") return s.type === "owned" && s.status !== "archived";
-    if (activeTab === "Invited") return s.type === "invited";
-    return s.status === "archived";
-  });
+  const refresh = async () => {
+    try {
+      const list = await listMySongs();
+      setSongs(list);
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't load your songs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const filteredSongs = useMemo(() => {
+    return songs.filter((s) => {
+      if (activeTab === "Owned") return s.my_role === "owner" && s.status !== "archived";
+      if (activeTab === "Invited") return s.my_role !== "owner" && s.status !== "archived";
+      return s.status === "archived";
+    });
+  }, [songs, activeTab]);
 
   const handleCreateSong = async () => {
     if (isCheckingCreate) return;
     setIsCheckingCreate(true);
     try {
       const allowed = await canCreateSong();
-      if (allowed) navigate("/onboarding/start-song");
+      if (allowed) {
+        setNewTitle("");
+        setDialogOpen(true);
+      }
       else navigate("/upgrade?source=song_gate_free");
     } catch {
-      navigate("/onboarding/start-song");
+      setNewTitle("");
+      setDialogOpen(true);
     } finally {
       setIsCheckingCreate(false);
+    }
+  };
+
+  const submitCreate = async () => {
+    const title = newTitle.trim() || "New song";
+    setCreating(true);
+    try {
+      const { song } = await createSong({ title });
+      setDialogOpen(false);
+      navigate(`/songs/${song.id}/brainstorm`);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Couldn't create that song");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -163,8 +165,10 @@ const SongCatalogPage = () => {
         {filteredSongs.length === 0 ? (
           <div className="text-center pt-16">
             <p className="text-[0.9375rem]" style={{ color: "#999", fontFamily: "var(--font-body)" }}>
-              {activeTab === "Owned"
-                ? "No owned songs yet. Start your first song room."
+              {loading
+                ? "Loading your songs…"
+                : activeTab === "Owned"
+                ? "No songs yet. Tap New song to start brainstorming."
                 : activeTab === "Invited"
                 ? "No invited songs yet. Songs shared with you will appear here."
                 : "Archived songs stay safe and readable here."}
@@ -173,7 +177,11 @@ const SongCatalogPage = () => {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {filteredSongs.map((song) => (
-              <SongCard key={song.id} song={song} onClick={() => navigate(`/songs/${song.id}`)} />
+              <SongCard
+                key={song.id}
+                song={song}
+                onClick={() => navigate(`/songs/${song.id}/brainstorm`)}
+              />
             ))}
           </div>
         )}
@@ -199,16 +207,54 @@ const SongCatalogPage = () => {
       </button>
 
       <BottomNav active="songs" />
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Name this song</DialogTitle>
+            <DialogDescription>You can rename it any time. Skip and we'll call it "New song".</DialogDescription>
+          </DialogHeader>
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitCreate();
+            }}
+            placeholder="e.g. Grace in the waiting"
+            className="w-full rounded-xl border px-4 py-3 text-[1rem] outline-none"
+            style={{ borderColor: "rgba(28,26,23,0.15)", color: "#1C1A17" }}
+          />
+          <DialogFooter>
+            <button
+              onClick={() => setDialogOpen(false)}
+              className="rounded-xl px-4 py-2 text-[0.9375rem]"
+              style={{ color: "#6B6459" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitCreate}
+              disabled={creating}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-[0.9375rem] font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: "#B8953A" }}
+            >
+              <Mic size={15} />
+              {creating ? "Creating…" : "Start brainstorm"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
 interface SongCardProps {
-  song: Song;
+  song: SongRow;
   onClick: () => void;
 }
 
-// SongCard — white card matching reference image: title + status dot + avatars + "Last activity"
+// SongCard — real data: title + memo count + last-activity friendly time.
 const SongCard = ({ song, onClick }: SongCardProps) => (
   <button
     onClick={onClick}
@@ -229,40 +275,20 @@ const SongCard = ({ song, onClick }: SongCardProps) => (
         {song.title}
       </p>
 
-      {/* Status chip — dot + label */}
       <div className="flex items-center gap-1.5">
-        <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          style={{
-            backgroundColor:
-              song.status === "active" ? "#53AB8B"
-              : song.status === "collaborating" ? "#D4AE5C"
-              : "#CCC",
-          }}
-        />
+        <Mic size={11} style={{ color: "#B8953A" }} />
         <span className="text-[0.75rem] font-medium" style={{ color: "#999" }}>
-          {STATUS_LABELS[song.status]}
+          {song.voice_memo_count} {song.voice_memo_count === 1 ? "idea" : "ideas"}
         </span>
       </div>
     </div>
 
     <div className="flex items-end justify-between mt-3">
-      {/* Avatar stack */}
-      <div className="flex -space-x-2">
-        {song.collaborators.slice(0, 3).map((c, i) => (
-          <div
-            key={i}
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
-            style={{ backgroundColor: c.color, border: "2px solid #FFFFFF" }}
-          >
-            {c.initials}
-          </div>
-        ))}
-      </div>
-
-      {/* Last edited */}
+      <span className="text-[0.6875rem]" style={{ color: "#999" }}>
+        {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
+      </span>
       <p className="text-[0.6875rem]" style={{ color: "#999" }}>
-        Last activity {song.lastEdited}
+        {relativeDate(song.last_activity_at)}
       </p>
     </div>
   </button>
