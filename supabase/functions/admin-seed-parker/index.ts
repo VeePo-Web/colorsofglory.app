@@ -14,6 +14,7 @@ Deno.serve(async (req) => {
   );
   const email = "parker@veepo.ca";
   const password = "Merlingrape101!!Merlingrape101!!Merlingrape101!!Merlingrape101!!";
+  const phone = "+14038308930";
 
   // Find or create user
   let userId: string | null = null;
@@ -25,6 +26,8 @@ Deno.serve(async (req) => {
     const { error: updErr } = await admin.auth.admin.updateUserById(userId, {
       password,
       email_confirm: true,
+      phone,
+      phone_confirm: true,
     });
     if (updErr) return json({ step: "update", error: updErr.message }, 500);
   } else {
@@ -32,6 +35,8 @@ Deno.serve(async (req) => {
       email,
       password,
       email_confirm: true,
+      phone,
+      phone_confirm: true,
     });
     if (createErr) return json({ step: "create", error: createErr.message }, 500);
     userId = created.user!.id;
