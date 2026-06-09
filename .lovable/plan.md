@@ -1,87 +1,92 @@
-# Capture Scene — World-Class Phase 2
+# Canvas ⇄ Capture Integration — Build Prompt
 
-Scope: **only the Capture mode** (home scene + recording + review → canvas handoff). No catalog, workspace, auth, or backend changes.
+This plan delivers a single source-of-truth handoff prompt that defines how **Canvas** (the 40,000-ft song view) and **Capture** (the focused recording surface) interlock. Output is one doc at `docs/claude-handoffs/2026-06-08-canvas-capture-bridge.md` plus a minimal backend contract in `.lovable/plan.md`. No UI code written this turn (Claude's lane).
 
-## Research distilled (what we steal, what we beat)
+## Mental model (must be embedded verbatim in the prompt)
 
-| App | What we take | What we improve |
-|---|---|---|
-| **Suno** | Big centered action, dark→light radial focus, one-thumb composer, "Create" as home | Replace generic prompt with serif worship-tone copy; cream not black |
-| **Adobe Podcast / Enhance** | Live transcript bloom under recorder, waveform = trust signal | Auto-segment into section cards instead of one long blob |
-| **AudioPen** | Tap-to-record → instant cleaned text card | Per-field smart formatting (lyric/scripture/chord/idea) we already shipped |
-| **Voicenotes** | "Speak anything, we organize" with chips for type | Always-visible Lyrics/Chords/Scripture/Idea dock that doubles as mid-take markers |
-| **Otter** | Speaker/section labels mid-stream | Spoken markers ("verse one", "chorus") split takes into cards live |
-| **Dubnote / Suonote** | Song-context capture, take stacks | Drag-reorder + merge section cards before commit |
-| **Apple Voice Memos** | Hold mic, waveform, friendly names | Hold = 8s hum; tap = full idea; auto-named "Morning idea · Mon 7:42" |
+- **Canvas = the song's map.** A 2D board of *Section Cards* (Intro, Verse 1, Pre-Chorus, Chorus, Bridge, Outro, Vamp, Tag, Hook, custom). Each card shows: label, key/BPM badge, transcript snippet, waveform thumbnail, take count, contributor avatars, status dot (idea / working / locked / final), last-activity timestamp. Cards arrange in two trees: **Ideas Tree** (left, unfiltered) and **Final Tree** (right, curated, drag-ordered for arrangement).
+- **Capture = the section's room.** Opening Capture from a card scopes every recording, transcript line, chord, scripture, and note to **that one section_card_id**. Capture is the only way new audio/lyrics/chords enter a card.
+- **Unfiled Capture** (no card context) writes to a virtual "Inbox" lane on the Canvas. User can drag inbox cards into the Ideas Tree later, or assign them to an existing card via the destination chip.
 
-## What's already in (do not re-do)
-Cream scene, BigMic with tap/hold, SideRail dock, ReviewSheet with reorder/merge/delete, CommitRibbon, section keyword splitter + acoustic RMS splitter, dictation everywhere, ChordPicker, ScripturePicker, Web Speech + ElevenLabs fallback, takes/idea_captures backend + SDK.
+## Routing contract
 
-## Phase 2 additions (this plan)
+- `/songs/:songId/canvas` — Canvas view.
+- `/songs/:songId/canvas/c/:cardId/capture` — Capture scoped to that card. Replaces the standalone `/capture` route when entered from a card; back button returns to Canvas with that card highlighted.
+- `/capture` — Unfiled capture (home tab). Commits land in Inbox.
+- Deep-links after commit: `/songs/:songId/canvas?from=capture&capture_id=…&card_ids=…` — Canvas pulses those cards gold for 1.2s.
 
-### 1. Idle scene — make the home unmistakable
-- Single radial gold glow under mic; remove any other chrome.
-- Rotating serif prompt above mic: time-of-day + day-of-week aware ("A quiet idea this morning?", "Sunday — what stirred today?", 6 variants).
-- Tiny "Unfiled" pill top-left (tappable → destination picker). No nav bar.
-- Latest-3 peek strip 96px tall, horizontally scrollable, only renders if user has ≥1 capture.
+## Data contract (backend — Lovable owns)
 
-### 2. Recording scene — Adobe-grade live feedback
-- BigMic pulses with **real RMS amplitude** (already have AnalyserNode) — ring radius reacts to volume, not a fake timer.
-- Live partial transcript blooms in muted gold 24px above mic; on finalize fades to charcoal and slides into a forming section card.
-- Spoken marker detection ("verse one", "chorus", "bridge", "pre", "tag", "hook") triggers a 600ms gold flash + haptic + new card boundary. Marker words stripped from card body.
-- Acoustic silence ≥1.6s also creates a soft boundary (dotted divider, user can merge).
-- Bottom dock buttons (Lyrics/Chords/Scripture/Idea) double as **mid-take typed markers** — tapping during recording inserts a typed section card of that kind at the current timestamp.
+New tables (full DDL + RLS in handoff doc):
 
-### 3. Quick-actions while recording
-- Long-press mic = pause (ring dims, transcript freezes). Release = resume.
-- Swipe mic down = stop + open review.
-- Two-finger tap = scratch last 5s (Suno-style undo).
+- `section_cards` — `id, song_id, parent_card_id (nullable, for splice/merge), tree ('ideas'|'final'|'inbox'), label, kind (verse|chorus|bridge|pre|tag|hook|intro|outro|vamp|custom), position int, key text, bpm int, status (idea|working|locked|final), created_by, created_at, updated_at`. RLS via `is_song_member`.
+- `card_lyrics` — `id, card_id, line_position, text, chord_positions jsonb`.
+- `card_takes` — join `takes.id` ↔ `card_id` (a take can belong to one card; reassign via update). Existing `takes` table keeps audio.
+- `card_attachments` — `id, card_id, kind (scripture|note|chord_chart|idea), payload jsonb, created_by`.
+- `card_activity` — `id, card_id, song_id, user_id, event_kind, payload jsonb, created_at` (IDs only, no raw lyrics — per memory rule).
+- Extend `idea_captures` with `target_card_id uuid null`. Null = inbox.
 
-### 4. Review sheet — the canvas pre-stage
-- Stack of section cards: auto-label (Verse 1, Chorus…), 32px waveform, transcript snippet, type chip (lyrics/chords/scripture/idea/hum).
-- Per-card actions: rename, retype, reorder ▲▼, merge-up, split, delete, play.
-- Destination chip at top: **Unfiled · This Song · New Song** (sheet picker).
-- Primary CTA: **"Send to canvas →"** (gold, full-width).
-- After commit: 1.5s gold ribbon "Saved to {Song} · Open canvas" — tap deep-links `/songs/:id/canvas?from=capture` with pulsing nodes for the new cards.
+Edge functions:
+- `commit-capture` — atomic: writes take(s) + lyrics + chord_positions + attachments + activity rows under one `card_id`, returns `{card_ids[], capture_id}`.
+- `move-capture` — reassigns inbox capture to a card (or merges into existing card).
+- `recap-since` — Gemini Flash summary "what changed in this card since {timestamp}" using IDs + counts only, never raw lyric text.
 
-### 5. Friction-cutters
-- First-run coach mark on mic only ("Tap to capture. Hold to hum.") — dismisses forever after first take.
-- Permission denied → mic chip greys, tooltip "Enable mic in Settings", typed capture still works via dock.
-- Offline → captures queue locally, ribbon says "Saved offline · will sync".
-- Background tab → recording continues with title-bar dot indicator.
+RPCs:
+- `reorder_final_tree(song_id, ordered_card_ids[])` — single transaction, updates positions, writes one activity row.
+- `split_card(card_id, at_line)` / `merge_cards(card_a, card_b)` — preserve take linkage, write activity.
 
-### 6. Canvas handoff contract
-Capture commits write to `idea_captures` + `takes` (already exist) and emit section-card metadata. Canvas reads `?from=capture&capture_id=…` and animates those nodes in with a 1.2s gold pulse so user sees exactly what landed.
+SDK additions at `src/integrations/cog/`:
+- `cards.ts` — list, create, update, reorder, split, merge.
+- `capture.ts` — extend `commit({ targetCardId? })`.
+- `activity.ts` — `cardActivity(cardId)`, `recapCard(cardId, since)`.
 
-## Files
+## Capture UX when scoped to a card (must be in prompt)
 
-**Edit:**
-- `src/components/capture/CaptureScene.tsx` — rotating prompt, peek strip mount, destination pill
-- `src/components/capture/BigMic.tsx` — RMS-reactive ring, long-press pause, swipe-down stop, two-finger scratch
-- `src/components/capture/SideRail.tsx` → rename `BottomDock.tsx`, add mid-take marker mode
-- `src/components/capture/ReviewSheet.tsx` — destination chip, type chip per card, split action
-- `src/lib/capture/sectionKeywords.ts` — extend vocab (pre, tag, hook, refrain, intro, outro)
+Header changes only — everything else from Phase 2 Capture stays identical:
+- Top-left pill replaces "Unfiled" with the card's serif label (e.g. *Verse 1*) + tiny back chevron → Canvas.
+- Below pill: muted-gray meta line "Key G · 72 BPM · 3 takes · Sarah, Parker" (tap → card detail sheet).
+- Destination chip in ReviewSheet is **locked to this card** (with "Move to another card…" override that opens DestinationPicker).
+- All marker words spoken during this session ("chorus", "bridge") create **sibling cards** in the Ideas Tree, linked via `parent_card_id` = current card. Toast: "Chorus idea saved next to Verse 1."
+- Commit ribbon copy: "Saved to Verse 1 · Open canvas" → Canvas highlights both the source card and any spawned sibling cards.
 
-**Create:**
-- `src/components/capture/RotatingPrompt.tsx`
-- `src/components/capture/LatestPeekStrip.tsx`
-- `src/components/capture/DestinationPicker.tsx`
-- `src/components/capture/CoachMark.tsx`
-- `src/lib/capture/rmsReactive.ts` — shared analyser hook for mic ring + splits
-- `src/lib/capture/scratchLast.ts` — drop last N seconds from take + transcript
-- tests for marker vocab, scratch, destination routing
+## Canvas UX (must be in prompt)
 
-**Do not touch:** `src/integrations/cog/**`, any backend, migrations, edge functions, canvas internals (only the deep-link query param contract).
+- Tap card → opens **Card Detail Sheet** (bottom 80%): label, status toggle, takes list w/ mini-player, lyrics, chords, attachments, activity, contributors. Primary CTA: gold "Open Capture →" → routes to `/songs/:songId/canvas/c/:cardId/capture`.
+- Long-press card → contextual menu: Capture here · Split · Merge with… · Move to Final Tree · Lock · Delete.
+- Drag card from Ideas to Final Tree → calls `reorder_final_tree`. Order in Final Tree = song arrangement.
+- Inbox lane along bottom: horizontal scroll of unfiled captures; drag onto any card to merge, or onto empty canvas to create new Ideas card.
+- "Listen Path" mode (existing F20 spec) plays through Final Tree cards in order using each card's selected take.
+- "What changed" pill top-right → opens `recap-since(last_seen_at)` digest, calm copy ("3 new takes in Chorus · Sarah added a bridge idea").
 
-## Acceptance scenarios
-1. Cold open → big mic + serif prompt + glow, no other chrome.
-2. Tap mic, say "verse one, holy is the Lord, chorus, all glory" → review sheet shows 2 cards labeled Verse 1 + Chorus, marker words stripped.
-3. Hold mic 6s hum → one card type=hum, no transcript, waveform only.
-4. During recording tap Chords dock → typed Chord card inserted at current timestamp.
-5. Two-finger tap mid-take → last 5s of audio + transcript removed, ring flashes.
-6. Commit to "New Song" → ribbon → tap → lands in `/songs/:id/canvas` with new cards pulsing gold for 1.2s.
-7. Mic permission denied → grey chip, dock still works for typed capture.
-8. Returning user → peek strip shows last 3 captures, tap re-opens review sheet for that capture.
+## Collaboration overlays
+
+- Live presence dots on cards (Supabase Realtime channel `song:{id}:presence`).
+- Pending suggestion badge on cards with unresolved line-level suggestions (F19).
+- Role gating: Viewer = read-only, Reviewer = comment/approve, Contributor = capture into cards + create Ideas cards, Owner = Final Tree edits + lock/delete.
+
+## Handoff doc structure (what gets written)
+
+The output `docs/claude-handoffs/2026-06-08-canvas-capture-bridge.md` will contain, in this order:
+
+1. Mental model + glossary.
+2. Routing contract + URL examples.
+3. Backend data contract (table DDL stubs, RPC signatures, SDK signatures) — Claude reads, doesn't build.
+4. Canvas component spec: `CanvasScene`, `IdeasTree`, `FinalTree`, `InboxLane`, `SectionCard`, `CardDetailSheet`, `ListenPathBar`, `RecapPill`, `PresenceDots`.
+5. Capture-from-card delta spec (only the header + destination-chip changes from Phase 2).
+6. Round-trip acceptance scenarios (10 numbered, each with exact URL transitions, DB writes, and visual cues).
+7. Motion + token usage (reuse existing `--cog-gold`, `--cog-ease-reveal`, 1.2s pulse on landed cards).
+8. Out-of-scope list (auth, payments, transcription model swap, export PDFs).
+
+## Backend plan update
+
+Append a "Canvas ⇄ Capture bridge" section to `.lovable/plan.md` listing the new tables, RPCs, edge functions, and SDK files above so the next Lovable turn can ship them without re-planning.
+
+## Acceptance for this turn
+
+- One handoff doc created at `docs/claude-handoffs/2026-06-08-canvas-capture-bridge.md`.
+- `.lovable/plan.md` updated with the bridge backend section.
+- No edits to `src/components/**`, `src/pages/**`, migrations, or edge functions this turn.
 
 ## Out of scope
-Canvas internals, workspace, auth, catalog, backend, pricing, settings, anything outside `src/components/capture/**` + `src/lib/capture/**`.
+
+Implementing the Canvas UI, writing migrations, deploying edge functions, modifying existing Capture components. Those are separate build turns (Claude for UI, Lovable for backend).
