@@ -139,3 +139,35 @@ Append to `.lovable/plan.md`:
 1. New handoff doc `docs/claude-handoffs/2026-06-08-card-detail-sheet.md` with the full component spec + AI tidy contract + acceptance scenarios.
 2. Append "Card auto-format" backend section to `.lovable/plan.md` (edge fn + SDK additions + trigger).
 3. No edits to `src/components/**`, `src/pages/**`, migrations, or edge functions in this turn (Claude UI build + Lovable backend build are separate following turns).
+
+---
+
+## Card auto-format — backend addendum (Lovable build queue)
+
+**Migration (additive, single statement):**
+```sql
+ALTER TABLE public.section_cards
+  ADD COLUMN IF NOT EXISTS tidy_suggestions_dismissed jsonb NOT NULL DEFAULT '{}'::jsonb;
+```
+
+**Edge function `format-card-content`** (`verify_jwt=true`, RLS via `is_song_member`):
+- Input: `{ card_id: uuid }`.
+- Loads latest take duration + `card_lyrics` + typed `chord_events` from `idea_captures.payload`.
+- Calls Lovable AI Gateway `google/gemini-2.5-flash` with `Output.object` Zod schema, payload sanitized to `{ lyric_lines, chord_events, take_duration_ms, existing_key, existing_bpm }` only — no user_id, song_id, card_id, or audio URL.
+- Writes cleaned `card_lyrics.text` + `chord_positions` in one transaction, appends `card_activity { event_kind:'formatted', payload:{ original_lines, diff_hash } }`.
+- Returns `{ updated: boolean, suggestions: { key?, bpm? } | null }`. Never auto-applies key/bpm.
+- 429/402 or schema-validation failure → raw content stays, no `formatted` activity row, function returns `{ updated:false }`.
+
+**Trigger:** `commit-capture` invokes `format-card-content` fire-and-forget after its own commit. Manual re-run from UI via SDK `retidyCard`.
+
+**SDK additions — `src/integrations/cog/cards.ts`:**
+```
+retidyCard(cardId), revertLine(lyricId), setKeyBpm(cardId,{key?,bpm?}),
+setSelectedTake(cardId, takeId), dismissSuggestion(cardId, 'key'|'bpm'),
+subscribeCard(cardId, onChange)  // multiplexed Realtime channel for sheet
+```
+All payloads Zod-validated.
+
+**Privacy invariant:** `card_activity.payload.original_lines` stays in Postgres for revert; never echoed to AI on re-tidy (re-tidy reads cleaned `card_lyrics.text`), never sent to analytics.
+
+Full spec + acceptance scenarios: `docs/claude-handoffs/2026-06-08-card-detail-sheet.md`.
