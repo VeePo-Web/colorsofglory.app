@@ -90,3 +90,45 @@ Append a "Canvas ⇄ Capture bridge" section to `.lovable/plan.md` listing the n
 ## Out of scope
 
 Implementing the Canvas UI, writing migrations, deploying edge functions, modifying existing Capture components. Those are separate build turns (Claude for UI, Lovable for backend).
+
+---
+
+# Canvas ⇄ Capture bridge — backend items (Lovable lane)
+
+Full UX spec: `docs/claude-handoffs/2026-06-08-canvas-capture-bridge.md`.
+
+## New tables (single migration, with GRANTs + RLS + policies)
+- `section_cards` — id, song_id, parent_card_id, tree(ideas|final|inbox), kind(verse|chorus|bridge|pre|tag|hook|intro|outro|vamp|custom), label, position, song_key, bpm, status(idea|working|locked|final), selected_take_id, created_by, timestamps. RLS via `is_song_member`; writes require `song_role ∈ {owner,contributor}`; Final Tree mutations require `owner`.
+- `card_lyrics` — id, card_id, line_position, text, chord_positions jsonb.
+- `card_attachments` — id, card_id, kind(scripture|note|chord_chart|idea), payload jsonb, created_by.
+- `card_activity` — id, card_id, song_id, user_id, event_kind, payload jsonb (IDs + counts only), created_at.
+
+## Table extensions
+- `takes` += `card_id uuid references section_cards(id) on delete set null`.
+- `idea_captures` += `target_card_id uuid references section_cards(id) on delete set null`.
+
+## RPCs (SECURITY DEFINER, search_path = public)
+- `reorder_final_tree(song_id uuid, ordered_card_ids uuid[])`
+- `split_card(card_id uuid, at_line int)`
+- `merge_cards(card_a uuid, card_b uuid)`
+- `set_card_status(card_id uuid, status text)`
+- `set_selected_take(card_id uuid, take_id uuid)`
+
+## Edge functions
+- `commit-capture` — atomic write of takes + cards + lyrics + activity scoped to optional `target_card_id`; spawns sibling cards for spoken markers; returns `{capture_id, card_ids[]}`.
+- `move-capture` — reassign inbox capture to a card OR promote to new Ideas card.
+- `recap-since` — Gemini Flash digest over `card_activity` IDs/counts only. NEVER send raw lyric/transcript text to the model.
+
+## Realtime
+- Channel `song:{song_id}:presence` for PresenceDots overlay.
+
+## SDK additions (`src/integrations/cog/`)
+- `cards.ts` — list/get/create/update/reorder/split/merge/setStatus/setSelectedTake.
+- `capture.ts` — extend `commit({ targetCardId? })`.
+- `activity.ts` — `cardActivity(cardId)`, `recapSince(songId, since)`.
+
+## Acceptance
+- Owner can drag-order Final Tree; contributor cannot.
+- Inbox captures appear in `tree='inbox'` and can be moved/promoted.
+- `recap-since` payload to AI gateway contains zero lyric/transcript bytes (assert in test).
+- Pulse deep-link `?from=capture&card_ids=…` works after `commit-capture` returns.
