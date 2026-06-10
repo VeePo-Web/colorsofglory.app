@@ -56,6 +56,9 @@ const PasswordGate: React.FC<PasswordGateProps> = ({ onUnlock }) => {
           autoFocus
           autoComplete="off"
         />
+        <p className="text-xs text-[var(--cog-muted)] -mt-2">
+          Hint: COG x2
+        </p>
         {error && (
           <p className="text-sm" style={{ color: "#B23A3A" }}>
             Incorrect password
