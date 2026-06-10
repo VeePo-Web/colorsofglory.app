@@ -1,9 +1,11 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+
+const PasswordGate = lazy(() => import("@/components/PasswordGate"));
 
 const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
@@ -87,7 +89,20 @@ const CanvasLayerRedirect = ({ layer }: { layer: string }) => {
   return <Navigate to={`/songs/${songId}/canvas?layer=${layer}`} replace />;
 };
 
-const App = () => (
+const App = () => {
+  const [unlocked, setUnlocked] = useState<boolean>(
+    () => typeof window !== "undefined" && sessionStorage.getItem("site_unlocked") === "true"
+  );
+
+  if (!unlocked) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[var(--cog-cream)]" />}>
+        <PasswordGate onUnlock={() => setUnlocked(true)} />
+      </Suspense>
+    );
+  }
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -174,6 +189,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
