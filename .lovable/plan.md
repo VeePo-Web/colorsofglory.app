@@ -1,18 +1,13 @@
-## Password Hint Addition
+# Fix Google Sign-In
 
-Add a hint line below the password input in `PasswordGate.tsx` that reads **"COG x2)"** — styled in muted/warm-gray text as a subtle helper. This is a one-line UI text addition with no logic changes.
+## Problem
+Auth logs show `400: Unsupported provider: missing OAuth secret` when users click "Continue with Google". The Google OAuth provider is not configured on the backend, even though the frontend button calls `signInWithGoogle()`.
 
-### Files to edit
-- `src/components/PasswordGate.tsx` — insert hint text below the `<input>`
+## Fix
+1. Run `configure_social_auth(providers: ["google"])` to enable Lovable Cloud's managed Google OAuth. This uses Lovable's shared Google credentials — no client ID/secret needed from you, and it works on `colorsofglory.app` and the preview/published URLs automatically.
+2. Verify by clicking "Continue with Google" on `/auth/login` in the preview — should redirect to Google's account picker instead of erroring.
 
-### Visual placement
-````text
-Password
-[        input        ]
-COG x2)    ← new hint
-[    Enter button    ]
-````
-
-### Styling
-- Use the existing `var(--cog-warm-gray)` or `var(--cog-muted)` color token
-- Small label size (`text-xs`), centered, no new CSS variables needed
+## Notes
+- The existing SDK call in `src/integrations/cog/auth.ts` (`supabase.auth.signInWithOAuth({ provider: "google", redirectTo: window.location.origin })` ) is compatible with managed Google OAuth — no frontend code changes needed.
+- If you later want your own branded Google OAuth (your app name on the consent screen instead of Lovable's), that's a separate follow-up where you create credentials in Google Cloud Console and paste them in Cloud → Auth Settings.
+- No DB, RLS, or page changes. This is a one-call backend config change.
