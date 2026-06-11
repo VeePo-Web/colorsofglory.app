@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import { useEffect, useState, useCallback } from "react";
 import { isCurrentUserAdmin } from "@/integrations/cog/admin";
+import { lovable } from "@/integrations/lovable/index";
 
 // ─── Auth SDK ─────────────────────────────────────────────────────────────
 // Thin typed wrappers around supabase.auth. UI lives in src/pages and
@@ -101,13 +102,10 @@ export async function updatePassword(newPassword: string): Promise<void> {
 // ─── Google OAuth ────────────────────────────────────────────────────────
 
 export async function signInWithGoogle(redirectTo?: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: redirectTo ?? `${window.location.origin}/`,
-    },
+  const result = await lovable.auth.signInWithOAuth("google", {
+    redirect_uri: redirectTo ?? window.location.origin,
   });
-  if (error) throw classify(error);
+  if (result.error) throw classify(result.error);
 }
 
 // ─── Phone OTP ───────────────────────────────────────────────────────────
