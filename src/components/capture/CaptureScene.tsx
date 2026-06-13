@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Settings } from "lucide-react";
 import { toast } from "sonner";
 
-import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { useVoiceRecorder, type RecordingResult } from "@/hooks/useVoiceRecorder";
 import { useLiveTranscript } from "@/hooks/useLiveTranscript";
 import { submitSharedAudio } from "@/integrations/cog/intake";
 import { createSong } from "@/integrations/cog/songs";
@@ -43,7 +43,14 @@ interface CaptureSceneProps {
  */
 const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const navigate = useNavigate();
-  const recorder = useVoiceRecorder();
+  // Safety net: an interruption (call / Bluetooth), the duration ceiling, or
+  // the page being hidden auto-finalizes a take. The hook delivers it here so a
+  // captured idea is never lost. The handler is defined below handleAudioFile,
+  // so route through a ref to avoid a temporal-dead-zone reference.
+  const autoFinalizeRef = useRef<(r: RecordingResult | null) => void>(() => {});
+  const recorder = useVoiceRecorder({
+    onAutoFinalize: (r) => autoFinalizeRef.current(r),
+  });
   const { phase, durationMs, analyserNode } = recorder.state;
   const live = useLiveTranscript();
 
@@ -141,6 +148,35 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     },
     [saving, songId, songTitle],
   );
+
+  // Auto-saved takes (interruption / ceiling / page hidden) flow through the
+  // same upload path as a manual stop, so the idea lands in review either way.
+  const handleAutoFinalize = useCallback(
+    (result: RecordingResult | null) => {
+      live.stop();
+      if (!result) {
+        setHumMode(false);
+        setStatus("idle");
+        return;
+      }
+      if (result.reason === "interrupted") {
+        toast("Saved — the mic was interrupted, but your idea is safe.", { duration: 3600 });
+      } else if (result.reason === "max-duration") {
+        toast("Saved — that take reached the length limit.", { duration: 3200 });
+      } else if (result.reason === "page-hidden") {
+        toast("Saved your idea before you stepped away.", { duration: 3200 });
+      }
+      const file = new File([result.blob], `take-${Date.now()}.webm`, {
+        type: result.mimeType || "audio/webm",
+      });
+      void handleAudioFile(file, result.durationMs);
+    },
+    [handleAudioFile, live],
+  );
+
+  useEffect(() => {
+    autoFinalizeRef.current = handleAutoFinalize;
+  }, [handleAutoFinalize]);
 
   const handleMicTap = useCallback(async () => {
     if (saving) return;
