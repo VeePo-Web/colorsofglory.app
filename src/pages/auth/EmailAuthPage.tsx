@@ -8,7 +8,6 @@ import OnboardingShell from "@/components/cog/OnboardingShell";
 import {
   signInWithPassword,
   signUpWithPassword,
-  signInWithGoogle,
   requestPasswordReset,
   AuthError,
 } from "@/integrations/cog/auth";
@@ -89,17 +88,6 @@ const EmailAuthPage = () => {
       setError(friendly(err));
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleGoogle = async () => {
-    setError(null);
-    setInfo(null);
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      console.error("[auth:google]", (err as { code?: string } | null)?.code ?? "unknown");
-      setError(friendly(err));
     }
   };
 
@@ -298,36 +286,6 @@ const EmailAuthPage = () => {
           )}
         </form>
 
-        {/* Divider */}
-        <div className="my-6 flex items-center gap-3">
-          <span className="h-px flex-1" style={{ backgroundColor: "rgba(28,26,23,0.12)" }} />
-          <span
-            className="text-[0.75rem] uppercase tracking-wider"
-            style={{ color: "#A09689" }}
-          >
-            or
-          </span>
-          <span className="h-px flex-1" style={{ backgroundColor: "rgba(28,26,23,0.12)" }} />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogle}
-          className="flex w-full items-center justify-center gap-3 rounded-full transition-all active:scale-[0.98]"
-          style={{
-            height: 56,
-            backgroundColor: "#FFFFFF",
-            border: "1px solid rgba(28,26,23,0.14)",
-            color: "#1C1A17",
-            fontFamily: "var(--font-body, Inter, system-ui, sans-serif)",
-            fontWeight: 500,
-            fontSize: "1rem",
-          }}
-        >
-          <GoogleIcon />
-          <span>Continue with Google</span>
-        </button>
-
         <p
           className="mt-8 text-center text-[0.75rem]"
           style={{ color: "#A09689" }}
@@ -346,26 +304,5 @@ const EmailAuthPage = () => {
     </OnboardingShell>
   );
 };
-
-const GoogleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-    <path
-      fill="#4285F4"
-      d="M17.64 9.2c0-.64-.06-1.25-.17-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"
-    />
-    <path
-      fill="#34A853"
-      d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.32A8.997 8.997 0 0 0 9 18z"
-    />
-    <path
-      fill="#FBBC05"
-      d="M3.97 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.96H.96A8.997 8.997 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3.01-2.32z"
-    />
-    <path
-      fill="#EA4335"
-      d="M9 3.58c1.32 0 2.5.45 3.43 1.35l2.58-2.58C13.46.89 11.43 0 9 0A8.997 8.997 0 0 0 .96 4.96l3.01 2.32C4.68 5.16 6.66 3.58 9 3.58z"
-    />
-  </svg>
-);
 
 export default EmailAuthPage;
