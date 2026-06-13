@@ -67,9 +67,9 @@ const SongCatalogPage = () => {
   }, [songs, activeTab]);
 
   // Rooms a captured idea can move into — the songwriter's own active rooms.
-  const fileableSongs = MOCK_SONGS.filter((s) => s.type === "owned" && s.status !== "archived").map(
-    (s) => ({ id: s.id, title: s.title })
-  );
+  const fileableSongs = songs
+    .filter((s) => s.my_role === "owner" && s.status !== "archived")
+    .map((s) => ({ id: s.id, title: s.title }));
 
   const handleCreateSong = async () => {
     if (isCheckingCreate) return;
