@@ -1,28 +1,35 @@
-Remove Google OAuth from auth flow and disable it on the backend. Ship email + password only.
+# Add SMS OTP login (Twilio-backed)
 
-## Scope
-1. **Frontend — `src/pages/auth/EmailAuthPage.tsx`**
-   - Remove the Google button, the "or" divider, and the `GoogleIcon` component.
-   - Remove unused `signInWithGoogle` import from `src/integrations/cog/auth`.
-   - Remove the `handleGoogle` function and its error handling.
-   - Keep everything else exactly as-is (tabs, email/password fields, forgot password, terms copy).
+Twilio is already configured as the phone provider in the backend Auth settings, so Supabase will send the codes for us. The existing `PhoneLoginPage` and `CodeVerifyPage` already call `signInWithOtp` / `verifyOtp` and work — they're just not surfaced from the main login screen yet. This plan exposes them and adds a tiny smoke test.
 
-2. **Backend — Disable Google provider**
-   - Call `supabase--configure_social_auth` with `providers: []`, `disable_providers: ["google"]`.
-   - Keep email auth enabled (do NOT disable it).
+## Changes
 
-3. **No changes to**
-   - `ResetPasswordPage.tsx`
-   - Phone OTP pages (already route-commented as disabled)
-   - `src/integrations/cog/auth.ts` SDK (except import cleanup in consumer)
-   - Any onboarding flow logic
+### 1. `src/pages/auth/EmailAuthPage.tsx`
+Add a single secondary entry point under the email/password form:
 
-## Rationale
-- The user does not have Google OAuth credentials yet and wants to ship now.
-- Email/password is fully wired (sign-in, sign-up, forgot password, reset password).
-- Google can be re-enabled later by reversing this plan.
+> Prefer your phone? **Text me a code →** (links to `/auth/phone`)
+
+No other layout changes. Keep the email tabs, forgot password, and terms copy exactly as they are.
+
+### 2. `src/pages/auth/PhoneLoginPage.tsx`
+Two small fixes so the page works as a real entry point, not just a demo:
+- Make **"Use email instead"** actually navigate to `/auth/login` (currently a dead button).
+- Update the verify redirect from `/auth/verify` → `/auth/phone/verify` to match the real route in `App.tsx`.
+
+### 3. `src/pages/auth/CodeVerifyPage.tsx`
+Read-pass + verify it reads the `cog:phone-e164` sessionStorage key set by `PhoneLoginPage`, calls `verifyPhoneOtp`, and routes into the app on success. Patch only if mismatched.
+
+### 4. Backend — no schema or function changes
+- Phone provider + Twilio creds are already configured on the backend (user confirmed).
+- No new secrets, no new tables, no edge functions.
+- I'll run one quick OTP send against a test phone number via the existing `scripts/stress/otp-send.ts` (test-numbers mode, 1 request) to confirm the provider returns 200 before handing back.
+
+### 5. Out of scope (not touching)
+- Email/password flow, reset password, Google (already removed).
+- SMS notifications, invite-by-SMS, WhatsApp — separate features for later.
+- `src/integrations/cog/auth.ts` SDK — `sendPhoneOtp` / `verifyPhoneOtp` already exist.
 
 ## Verify
-- Preview `/auth/login` — confirm no Google button, no "or" divider.
-- Confirm sign-in and sign-up tabs still work.
-- Confirm forgot password flow still works.
+- Preview `/auth/login` → see the "Text me a code" link.
+- Tap it → `/auth/phone` → enter a number → `/auth/phone/verify` → enter code → land in app.
+- Confirm Supabase Auth returns 200 on `/auth/v1/otp` for a test number.

@@ -286,6 +286,18 @@ const EmailAuthPage = () => {
           )}
         </form>
 
+        {/* Phone OTP entry */}
+        <div className="mt-6 flex items-center justify-center gap-2 text-[0.875rem]">
+          <span style={{ color: "#6B6459" }}>Prefer your phone?</span>
+          <Link
+            to="/auth/phone"
+            className="font-medium underline-offset-4 hover:underline"
+            style={{ color: "var(--cog-gold, #B8953A)" }}
+          >
+            Text me a code →
+          </Link>
+        </div>
+
         <p
           className="mt-8 text-center text-[0.75rem]"
           style={{ color: "#A09689" }}

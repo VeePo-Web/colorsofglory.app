@@ -70,7 +70,7 @@ const PhoneLoginPage = () => {
       sessionStorage.setItem("cog:phone-e164", e164);
       sessionStorage.setItem("cog:phone-display", formatDisplay(digits));
 
-      navigate("/auth/verify");
+      navigate("/auth/phone/verify");
     } catch (err) {
       setError(toFriendlyError(err));
     } finally {
@@ -186,6 +186,7 @@ const PhoneLoginPage = () => {
       {/* Email fallback */}
       <button
         type="button"
+        onClick={() => navigate("/auth/login")}
         className="mt-4 text-sm text-center w-full py-2 transition-opacity hover:opacity-70 underline"
         style={{ color: "#B5935A", fontFamily: "var(--font-body)" }}
       >
