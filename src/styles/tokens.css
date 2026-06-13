@@ -1,138 +1,37 @@
-/* ============================================================
-   COLORS OF GLORY — DESIGN TOKEN SYSTEM
-   Source: All 69 spec PDFs + reference images
-   Standard: Fantasy.co × Apple HIG × Christian/Ministry Mode
-   ============================================================ */
-
 :root {
-  /* ---- BACKGROUNDS ---- */
-  --cog-cream:        #F5F0E8;   /* Primary background — warm off-white */
-  --cog-cream-light:  #FAF7F2;   /* Elevated card, phone UI surface */
-  --cog-cream-dark:   #EDE7DA;   /* Subtle section dividers */
-  --cog-cream-canvas: #FBF7EF;   /* Product vision image canvas */
-
-  /* ---- TEXT ---- */
-  --cog-charcoal:     #1C1A17;   /* Primary text — warm near-black */
-  --cog-warm-gray:    #6B6459;   /* Secondary text, labels, metadata */
-  --cog-muted:        #A09689;   /* Placeholder, disabled, captions */
-  --cog-text-primary: #1E1E1F;   /* High-contrast primary (from spec PDFs) */
-  --cog-text-secondary: #5D5750; /* Subtitle, support copy */
-
-  /* ---- GOLD ACCENT ---- */
-  --cog-gold:         #B8953A;   /* Primary CTA, active states */
-  --cog-gold-alt:     #B77722;   /* Product vision spec value */
-  --cog-gold-light:   #D4AE5C;   /* Hover states on gold */
-  --cog-gold-highlight: #D9A247; /* Glow, selected card warmth */
-  --cog-gold-pale:    #E8D5A0;   /* Chord chips, light gold tints */
-  --cog-gold-glow:    rgba(184, 149, 58, 0.15);  /* Radial glow bg */
-  --cog-gold-glow-18: rgba(184, 149, 58, 0.18);  /* Stronger glow */
-
-  /* ---- BORDERS ---- */
-  --cog-border:       rgba(28, 26, 23, 0.10);   /* Default card borders */
-  --cog-border-light: #DED4C6;                  /* Field borders, dividers */
-  --cog-border-gold:  rgba(184, 149, 58, 0.40); /* Selected/active borders */
-  --cog-focus-ring:   1px solid #D9A247;        /* Focus + soft glow */
-
-  /* ---- SHADOWS ---- */
-  --cog-shadow-card:  0 16px 40px rgba(48, 33, 18, 0.10);
-  --cog-shadow-phone: 0 18px 50px rgba(31, 37, 42, 0.16);
-  --cog-shadow-sm:    0 2px 8px rgba(28, 26, 23, 0.08);
-  --cog-shadow-fab:   0 4px 16px rgba(184, 149, 58, 0.30);
-
-  /* ---- TYPOGRAPHY ---- */
+  --cog-cream: #F5F0E8;
+  --cog-cream-light: #FAF7F2;
+  --cog-cream-dark: #EDE7DA;
+  --cog-charcoal: #1C1A17;
+  --cog-warm-gray: #6B6459;
+  --cog-muted: #A09689;
+  --cog-gold: #B8953A;
+  --cog-gold-alt: #B77722;
+  --cog-gold-light: #D4AE5C;
+  --cog-gold-pale: #E8D5A0;
+  --cog-gold-glow: rgba(184, 149, 58, 0.15);
+  --cog-gold-glow-18: rgba(184, 149, 58, 0.18);
+  --cog-border: rgba(28, 26, 23, 0.10);
+  --cog-border-light: #DED4C6;
+  --cog-border-gold: rgba(184, 149, 58, 0.40);
+  --cog-shadow-card: 0 16px 40px rgba(48, 33, 18, 0.10);
+  --cog-shadow-sm: 0 2px 8px rgba(28, 26, 23, 0.08);
+  --cog-shadow-fab: 0 4px 16px rgba(184, 149, 58, 0.30);
   --font-display: 'Playfair Display', 'Georgia', serif;
-  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
-
-  /* Type scale — fluid */
-  --t-song-title:    clamp(2rem, 5vw, 3rem);       /* Song name, workspace header */
-  --t-display-lg:    clamp(1.75rem, 4vw, 2.5rem);  /* Large headings */
-  --t-display:       clamp(1.5rem, 3vw, 2rem);     /* Section headings */
-  --t-title-xl:      1.5rem;                       /* "Credits Review", "Your songs" */
-  --t-title:         1.25rem;                      /* Section labels (Verse 1, Chorus) */
-  --t-body-lg:       1.125rem;                     /* Readable body */
-  --t-body:          1rem;                         /* Base body */
-  --t-label:         0.875rem;                     /* Card labels, timestamps */
-  --t-eyebrow:       0.75rem;                      /* Uppercase category tags */
-  --t-micro:         0.6875rem;                    /* Microcopy, legal text */
-
-  /* ---- SPACING (8px base grid) ---- */
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3:  12px;
-  --space-4:  16px;
-  --space-5:  20px;
-  --space-6:  24px;
-  --space-8:  32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-20: 80px;
-  --space-24: 96px;
-  --space-screen-h: 24px; /* Mobile horizontal screen padding */
-
-  /* ---- BORDER RADIUS ---- */
-  --radius-sm:   8px;
-  --radius:      12px;
-  --radius-card: 16px;   /* Song cards, module cards */
-  --radius-lg:   18px;   /* Large cards, sheets */
-  --radius-xl:   22px;   /* Large containers */
-  --radius-pill: 9999px; /* Status chips, tags, FAB */
-
-  /* ---- MOTION ---- */
-  --cog-ease:        cubic-bezier(0.25, 0.46, 0.45, 0.94);   /* Standard UI */
-  --cog-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);         /* Content entrance */
-  --cog-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);      /* Overshoot (rare) */
-  --cog-ease-sharp:  cubic-bezier(0.4, 0, 0.2, 1);           /* Decisiveness */
-
-  --dur-instant:    90ms;    /* Pressed state, immediate feedback */
-  --dur-fast:       150ms;   /* Hover states, micro-interactions */
-  --dur-base:       250ms;   /* Standard transitions */
-  --dur-slow:       400ms;   /* Content reveals, card entrance */
-  --dur-modal:      600ms;   /* Sheets, modals */
-  --dur-cinematic:  900ms;   /* Hero reveals */
-
-  /* ---- LAYOUT ---- */
-  --max-w-app:    430px;   /* Max mobile width (centered on desktop) */
-  --bottom-nav-h: 80px;    /* Bottom tab bar height */
-  --fab-size:     56px;    /* Floating action button */
-  --touch-min:    44px;    /* Apple HIG minimum touch target */
-
-  /* ---- MODULE CARDS (Song Workspace Hub) ---- */
-  --card-module-size: 96px;   /* Module card square size */
-  --card-module-gap:  14px;   /* Gap between module cards */
-  --card-icon-size:   28px;   /* Icon inside module card */
-
-  /* ---- VOICE MEMO / WAVEFORM ---- */
-  --waveform-height: 40px;
-  --waveform-bar-w:  3px;
-  --waveform-bar-gap: 2px;
-  --mic-btn-size:    80px;    /* Large centered mic button */
-
-  /* ---- Z-INDEX SCALE ---- */
-  --z-base:    1;
-  --z-card:    10;
-  --z-sticky:  100;
-  --z-overlay: 200;
-  --z-sheet:   300;
-  --z-fab:     400;
-  --z-toast:   500;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --t-body: 1rem;
+  --t-eyebrow: 0.75rem;
+  --radius-card: 16px;
+  --cog-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --cog-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-instant: 90ms;
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
+  --dur-modal: 600ms;
+  --max-w-app: 430px;
 }
 
-/* ---- SEMANTIC ALIASES ---- */
-:root {
-  --bg-primary:     var(--cog-cream);
-  --bg-elevated:    var(--cog-cream-light);
-  --bg-subtle:      var(--cog-cream-dark);
-  --text-primary:   var(--cog-charcoal);
-  --text-secondary: var(--cog-warm-gray);
-  --text-muted:     var(--cog-muted);
-  --accent:         var(--cog-gold);
-  --accent-hover:   var(--cog-gold-light);
-  --border:         var(--cog-border);
-  --border-active:  var(--cog-border-gold);
-}
-
-/* ---- GLOBAL BASE ---- */
 *,
 *::before,
 *::after {
@@ -145,23 +44,19 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
   font-family: var(--font-body);
   font-size: var(--t-body);
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  color: var(--cog-charcoal);
+  background-color: var(--cog-cream);
   line-height: 1.5;
   margin: 0;
   padding: 0;
 }
 
-/* ---- TYPOGRAPHY UTILITIES ---- */
-.font-display { font-family: var(--font-display); }
-.font-body    { font-family: var(--font-body); }
-
-/* ---- GLOW SIGNATURE ---- */
 .cog-glow {
   background: radial-gradient(
     ellipse 60% 40% at 50% 85%,
@@ -170,117 +65,11 @@ body {
   );
 }
 
-.cog-glow-center {
-  background: radial-gradient(
-    ellipse 70% 50% at 50% 50%,
-    var(--cog-gold-glow) 0%,
-    transparent 70%
-  );
-}
-
-/* ---- CARD BASE ---- */
-.cog-card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--cog-shadow-card);
-  transition:
-    border-color var(--dur-fast) var(--cog-ease),
-    box-shadow var(--dur-fast) var(--cog-ease),
-    transform var(--dur-instant) var(--cog-ease);
-}
-
-.cog-card:active,
-.cog-card[data-pressed="true"] {
-  transform: scale(0.985);
-  box-shadow: var(--cog-shadow-sm);
-}
-
-.cog-card[data-selected="true"] {
-  border-color: var(--border-active);
-}
-
-/* ---- BUTTON VARIANTS ---- */
-.btn-gold {
-  background: var(--cog-gold);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-card);
-  font-family: var(--font-body);
-  font-size: var(--t-body);
-  font-weight: 500;
-  padding: var(--space-4) var(--space-6);
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--cog-ease),
-    transform var(--dur-instant) var(--cog-ease);
-}
-
-.btn-gold:hover { background: var(--cog-gold-light); }
-.btn-gold:active { transform: scale(0.97); }
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  font-family: var(--font-body);
-  font-size: var(--t-body);
-  font-weight: 500;
-  padding: var(--space-4) var(--space-6);
-  cursor: pointer;
-}
-
-/* ---- STATUS CHIPS ---- */
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--t-eyebrow);
-  font-weight: 500;
-  padding: 3px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--cog-cream-dark);
-  color: var(--text-secondary);
-}
-
-.status-chip--active    { background: rgba(184, 149, 58, 0.15); color: var(--cog-gold-alt); }
-.status-chip--draft     { background: var(--cog-cream-dark); color: var(--text-secondary); }
-.status-chip--collab    { background: rgba(28, 26, 23, 0.06); color: var(--text-secondary); }
-
-/* ---- CHORD CHIPS ---- */
-.chord-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--cog-gold-pale);
-  color: var(--cog-charcoal);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-family: var(--font-body);
-  letter-spacing: 0.01em;
-}
-
-/* ---- WAVEFORM BARS ---- */
-.waveform-bar {
-  width: var(--waveform-bar-w);
-  background: var(--cog-gold);
-  border-radius: 2px;
-  transition: height var(--dur-fast) var(--cog-ease);
-}
-
-.waveform-bar--muted {
-  background: var(--cog-gold-pale);
-}
-
-/* ---- FOCUS RING (accessibility) ---- */
 :focus-visible {
   outline: 2px solid var(--cog-gold);
   outline-offset: 2px;
 }
 
-/* ---- REDUCED MOTION ---- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -289,22 +78,8 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
 
-/* ---- SCROLL BEHAVIOR ---- */
-html {
-  scroll-behavior: smooth;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-}
-
-/* ---- BOTTOM NAV SAFE AREA ---- */
-.cog-bottom-safe {
-  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
-}
-
-.cog-top-safe {
-  padding-top: max(var(--space-4), env(safe-area-inset-top));
+  html {
+    scroll-behavior: auto;
+  }
 }

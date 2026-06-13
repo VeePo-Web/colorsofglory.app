@@ -4,6 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import GlobalCaptureFlow from "@/components/capture/GlobalCaptureFlow";
+import { PracticePlayerProvider } from "@/components/practice/PracticePlayerContext";
+import { MiniPracticePlayer } from "@/components/practice/MiniPracticePlayer";
 
 const PasswordGate = lazy(() => import("@/components/PasswordGate"));
 
@@ -29,10 +32,11 @@ const InviteTeamPage     = lazy(() => import("./pages/invite/InviteTeamIntroPage
 const ReturningHomePage  = lazy(() => import("./pages/ReturningHomePage"));
 
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
+const PracticePlayerPage = lazy(() => import("./pages/PracticePlayerPage"));
+const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
-const CapturePage = lazy(() => import("./pages/CapturePage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
 const BillingPage = lazy(() => import("./pages/settings/BillingPage"));
@@ -108,6 +112,7 @@ const App = () => {
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <PracticePlayerProvider>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Auth */}
@@ -154,6 +159,7 @@ const App = () => {
             <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
             <Route path="/songs/:id/chords" element={<CanvasLayerRedirect layer="chords" />} />
             <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
+            <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
             <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
             <Route path="/songs/:id/notes" element={<CanvasLayerRedirect layer="notes" />} />
             <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
@@ -186,6 +192,9 @@ const App = () => {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        <GlobalCaptureFlow />
+        <MiniPracticePlayer />
+        </PracticePlayerProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

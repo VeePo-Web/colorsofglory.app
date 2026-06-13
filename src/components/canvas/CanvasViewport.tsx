@@ -1,21 +1,20 @@
 import {
   createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useGesture } from "@/hooks/useGesture";
+import {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  IDEAS_ZONE_WIDTH,
+} from "@/lib/canvas/canvasConstants";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const CANVAS_WIDTH = 2400;    // total canvas width (Ideas + Final zones)
-export const CANVAS_HEIGHT = 3200;   // total canvas height
-export const DIVIDER_X = CANVAS_WIDTH / 2;  // center split between trees
-export const IDEAS_ZONE_WIDTH = CANVAS_WIDTH / 2;
-export const FINAL_ZONE_WIDTH = CANVAS_WIDTH / 2;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2.5;
 const INITIAL_ZOOM = 1.0;
@@ -37,12 +36,6 @@ interface ViewportCtx {
 }
 
 const CanvasViewportContext = createContext<ViewportCtx | null>(null);
-
-export function useCanvasViewport(): ViewportCtx {
-  const ctx = useContext(CanvasViewportContext);
-  if (!ctx) throw new Error("useCanvasViewport must be used inside <CanvasViewport>");
-  return ctx;
-}
 
 // ─── CanvasViewport ───────────────────────────────────────────────────────────
 

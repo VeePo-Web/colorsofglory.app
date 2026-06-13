@@ -20,14 +20,18 @@ import {
   StickyNote,
   Users,
   GitBranch,
+  BookOpen,
 } from "lucide-react";
+import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport, { DIVIDER_X } from "@/components/canvas/CanvasViewport";
+import CanvasViewport from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
+import SongRootCard from "@/components/canvas/SongRootCard";
+import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
@@ -35,6 +39,7 @@ import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
 import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -159,6 +164,18 @@ const INITIAL_CARDS: CanvasCard[] = [
 ];
 
 const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
+const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
+
+const getStoredCards = (songId: string): CanvasCard[] => {
+  try {
+    const stored = localStorage.getItem(CARDS_KEY(songId));
+    if (!stored) return INITIAL_CARDS;
+    const parsed = JSON.parse(stored) as CanvasCard[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CARDS;
+  } catch {
+    return INITIAL_CARDS;
+  }
+};
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -183,8 +200,6 @@ const SongCanvasSemanticSummary = () => (
     <h2>Final tree</h2>
     <h2>In this room</h2>
     <h2>What changed</h2>
-    <button type="button">Add idea</button>
-    <button type="button">Record idea</button>
   </section>
 );
 
@@ -404,9 +419,11 @@ const SongCanvasExperience = () => {
   const songTitle = useSongTitle(songId);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isViewer = searchParams.get("role") === "viewer";
 
-  const [cards, setCards] = useState<CanvasCard[]>(INITIAL_CARDS);
+  const [cards, setCards] = useState<CanvasCard[]>(() => getStoredCards(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
   const [showFirstAction, setShowFirstAction] = useState(() => {
     return !localStorage.getItem(FIRST_VISIT_KEY(songId));
@@ -416,6 +433,22 @@ const SongCanvasExperience = () => {
     return isLayerId(layer) ? layer : "room";
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
+
+  // ── Practice launcher state ──────────────────────────────────────────────────
+  const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
+
+  const handleLaunchPractice = useCallback(async () => {
+    if (isPracticeLaunching) return;
+    setIsPracticeLaunching(true);
+    try {
+      const sections = await loadPracticeSections(songId);
+      navigate(`/songs/${songId}/practice`, {
+        state: { songTitle, sections },
+      });
+    } catch {
+      setIsPracticeLaunching(false);
+    }
+  }, [isPracticeLaunching, songId, songTitle, navigate]);
 
   // ── Voice recording state ────────────────────────────────────────────────────
   const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
@@ -438,6 +471,54 @@ const SongCanvasExperience = () => {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
+  }, [cards, songId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadVoiceMemosForCanvas(songId)
+      .then((db) => {
+        if (cancelled) return;
+        const dbCards: CanvasCard[] = db.nodes
+          .filter((node) => node.objectType === "idea_card")
+          .map((node): CanvasCard | null => {
+            const card = db.cards[node.objectId];
+            if (!card) return null;
+            return {
+              id: card.id,
+              tree: "ideas" as const,
+              type: "voice" as const,
+              title: card.title,
+              body: card.body || card.preview || "",
+              meta: card.preview || "Voice memo",
+              section: "Raw idea",
+              contributor: card.contributorName,
+              status: "raw" as const,
+              accent: card.contributorColor,
+              x: node.x,
+              y: node.y,
+            };
+          })
+          .filter((card): card is CanvasCard => Boolean(card));
+
+        if (dbCards.length === 0) return;
+        setCards((prev) => {
+          const existing = new Set(prev.map((card) => card.id));
+          const fresh = dbCards.filter((card) => !existing.has(card.id));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      })
+      .catch(() => {
+        // The local canvas remains usable when backend hydration is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [songId]);
+
   const dismissFirstAction = useCallback(() => {
     localStorage.setItem(FIRST_VISIT_KEY(songId), "1");
     setShowFirstAction(false);
@@ -456,26 +537,32 @@ const SongCanvasExperience = () => {
   }, [cards]);
 
   const handleMoveToFinal = useCallback((cardId: string) => {
+    if (isViewer) return;
     setCards((prev) =>
       prev.map((c) => {
         if (c.id !== cardId) return c;
         // Original stays as dimmed reference
         return { ...c, isDimmedReference: true };
-      }).concat({
-        ...prev.find((c) => c.id === cardId)!,
-        id: `${cardId}-final`,
-        tree: "final",
-        isDimmedReference: false,
-        x: DIVIDER_X + 80 + Math.random() * 200,
-        y: 200 + Math.random() * 300,
-        status: "approved",
-      })
+      }).concat((() => {
+        const finalIndex = prev.filter((c) => c.tree === "final").length;
+        return {
+          ...prev.find((c) => c.id === cardId)!,
+          id: `${cardId}-final`,
+          tree: "final" as const,
+          isDimmedReference: false,
+          x: DIVIDER_X + 80 + (finalIndex % 2) * 240,
+          y: 200 + Math.floor(finalIndex / 2) * 190,
+          status: "approved" as const,
+        };
+      })())
     );
     setSelectedId(null);
     setIsDragOver(false);
-  }, []);
+    setCanvasStatus("Moved. Undo?");
+  }, [isViewer]);
 
   const handleMoveToIdeas = useCallback((cardId: string) => {
+    if (isViewer) return;
     setCards((prev) => prev.filter((c) => c.id !== cardId));
     // Restore the original dimmed reference
     setCards((prev) =>
@@ -486,35 +573,49 @@ const SongCanvasExperience = () => {
       )
     );
     setSelectedId(null);
-  }, []);
+    setCanvasStatus("Moved. Undo?");
+  }, [isViewer]);
 
   const addCard = useCallback((type: CanvasCardType) => {
+    if (isViewer) return;
     dismissFirstAction();
+    const ideaIndex = cards.filter((card) => card.tree === "ideas").length;
+    const titleByType: Record<CanvasCardType, string> = {
+      hum: "Quick hum",
+      lyric: "New lyric",
+      chord: "New chord",
+      note: "New idea",
+      voice: "New voice memo",
+      scripture: "Scripture note",
+      section: "New section",
+    };
     const newCard: CanvasCard = {
       id: `card-${Date.now()}`,
       tree: "ideas",
       type,
-      title: type === "hum" ? "Quick hum" : type === "lyric" ? "New lyric" : "New chord",
+      title: titleByType[type],
       body: "",
       meta: "",
       section: "Raw idea",
       contributor: "You",
       status: "raw",
       accent: "#D4AE5C",
-      x: 80 + Math.random() * 400,
-      y: 160 + Math.random() * 600,
+      x: 80 + (ideaIndex % 3) * 240,
+      y: 700 + Math.floor(ideaIndex / 3) * 180,
     };
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
-  }, [dismissFirstAction]);
+    setCanvasStatus("Saved to this song.");
+  }, [cards, dismissFirstAction, isViewer]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
+    if (isViewer) return;
     setRecordingSection("Raw idea");
     setRecordingNote("");
     setRecordingFlow("recording");
     await startRecording();
-  }, [startRecording]);
+  }, [isViewer, startRecording]);
 
   const handleStopRecording = useCallback(async () => {
     const result = await stopRecording();
@@ -532,24 +633,29 @@ const SongCanvasExperience = () => {
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
     voiceMemoCountRef.current++;
+    setCanvasStatus("Saving...");
     const tempId = `voice-${Date.now()}`;
-    const row = voiceMemoCountRef.current;
-    const newCard: CanvasCard = {
-      id: tempId, tree: "ideas", type: "voice",
-      title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-      section, contributor: "You", status: "raw", accent: "#D4AE5C",
-      x: 80 + (row % 2) * 260, y: 200 + Math.floor(row / 2) * 180,
-      isProcessing: true,
-    };
-    setCards((prev) => [newCard, ...prev]);
+    setCards((prev) => {
+      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
+      const newCard: CanvasCard = {
+        id: tempId, tree: "ideas", type: "voice",
+        title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
+        section, contributor: "You", status: "raw", accent: "#D4AE5C",
+        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        isProcessing: true,
+      };
+      return [newCard, ...prev];
+    });
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
     try {
       const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe });
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
+      setCanvasStatus("Saved to this song.");
     } catch {
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
+      setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
     }
   }, [pendingRecording, songId]);
 
@@ -633,6 +739,21 @@ const SongCanvasExperience = () => {
         </div>
       </header>
 
+      <div className="relative z-30 mx-auto flex w-full max-w-[1180px] items-center justify-between gap-3 px-5 pb-2">
+        <p
+          aria-live="polite"
+          className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
+          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "#B5935A" }}
+        >
+          {canvasStatus}
+        </p>
+        {isViewer && (
+          <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
+            You can view this canvas. Ask the owner if you need to contribute.
+          </p>
+        )}
+      </div>
+
       {/* ── Canvas viewport ──────────────────────────────────────────────── */}
       <div className="relative flex-1 min-h-0">
         <CanvasViewport
@@ -646,44 +767,78 @@ const SongCanvasExperience = () => {
                   onChords={() => { addCard("chord"); dismissFirstAction(); }}
                 />
               )}
+              {/* Practice FAB */}
+              <button
+                type="button"
+                onClick={() => { void handleLaunchPractice(); }}
+                disabled={isPracticeLaunching}
+                className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
+                style={{
+                  left: 20, bottom: 80, width: 140, height: 52, zIndex: 40,
+                  backgroundColor: isPracticeLaunching ? "rgba(181,147,90,0.55)" : "rgba(181,147,90,0.14)",
+                  border: "1px solid rgba(181,147,90,0.40)",
+                  color: "#B5935A",
+                  boxShadow: "none",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+                aria-label="Practice this song"
+              >
+                <BookOpen size={18} strokeWidth={2} />
+                <span>{isPracticeLaunching ? "Loading…" : "Practice"}</span>
+              </button>
+
               {/* Mic FAB — record voice memo */}
               <button
                 type="button"
                 onClick={() => { void handleStartRecording(); }}
-                disabled={recordingFlow !== "idle"}
-                className="absolute flex items-center justify-center rounded-full text-white transition-all duration-150 active:scale-95"
+                disabled={isViewer || recordingFlow !== "idle"}
+                className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
                 style={{
-                  right: 80, bottom: 80, width: 52, height: 52, zIndex: 40,
-                  backgroundColor: recordingFlow === "recording" ? "#E05440" : "#1A1A1A",
+                  right: 168, bottom: 80, width: 140, height: 52, zIndex: 40,
+                  backgroundColor: recordingFlow === "recording" ? "#E05440" : "#FFFFFF",
+                  border: recordingFlow === "recording" ? "none" : "1px solid rgba(181,147,90,0.28)",
+                  color: recordingFlow === "recording" ? "#FFFFFF" : "#1A1A1A",
                   boxShadow: recordingFlow === "recording"
                     ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45)"
-                    : "0 4px 16px rgba(0,0,0,0.25)",
+                    : "0 8px 24px rgba(28,26,23,0.12)",
                   animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 13,
+                  fontWeight: 800,
                 }}
-                aria-label={recordingFlow === "recording" ? "Recording..." : "Record voice memo"}
+                aria-label={recordingFlow === "recording" ? "Recording..." : "Record idea / Record memo"}
                 aria-pressed={recordingFlow === "recording"}
               >
                 <Mic size={20} strokeWidth={2} />
+                <span>{recordingFlow === "recording" ? "Recording..." : "Record memo"}</span>
               </button>
 
               {/* Quick-add FAB */}
               <button
                 type="button"
                 onClick={() => addCard("note")}
-                className="absolute flex items-center justify-center rounded-full text-white transition-all duration-150 active:scale-95"
+                disabled={isViewer}
+                className="absolute flex items-center justify-center gap-2 rounded-2xl text-white transition-all duration-150 active:scale-95"
                 style={{
-                  right: 20, bottom: 80, width: 52, height: 52, zIndex: 40,
+                  right: 20, bottom: 80, width: 140, height: 52, zIndex: 40,
                   backgroundColor: "#B5935A",
                   boxShadow: "0 4px 16px rgba(181,147,90,0.45)",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 13,
+                  fontWeight: 800,
                 }}
-                aria-label="Create idea"
+                aria-label="Add idea"
               >
                 <Plus size={22} strokeWidth={2.5} />
+                <span>Add idea</span>
               </button>
             </>
           }
         >
           {/* Canvas content — all positioned absolutely */}
+          <SongRootCard title={songTitle} />
           <ZoneLabels />
           <CanvasDivider isDropActive={isDragOver} />
 

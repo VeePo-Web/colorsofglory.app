@@ -1,4 +1,4 @@
-import { CANVAS_HEIGHT, DIVIDER_X } from "./CanvasViewport";
+import { CANVAS_HEIGHT, DIVIDER_X } from "@/lib/canvas/canvasConstants";
 
 interface CanvasDividerProps {
   /** Glow when a card is being dragged toward this line */

@@ -29,6 +29,16 @@ const CanvasRouteFallback = () => {
       <section aria-label="Song canvas loading summary" style={visuallyHidden}>
         <h1>{songTitle}</h1>
         <p>Everything for this song stays connected here.</p>
+        <h2>Lyrics</h2>
+        <h2>Voice memos</h2>
+        <h2>Chord map</h2>
+        <h2>Song notes</h2>
+        <h2>Ideas tree</h2>
+        <h2>Final tree</h2>
+        <h2>In this room</h2>
+        <h2>What changed</h2>
+        <button type="button" disabled>Add idea</button>
+        <button type="button" disabled>Record idea</button>
       </section>
     </div>
   );

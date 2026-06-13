@@ -4,6 +4,7 @@ import { Plus, Settings, Mic } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
+import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
 import { listMySongs, createSong, type SongCard as SongRow } from "@/integrations/cog/songs";
 import {
@@ -64,6 +65,11 @@ const SongCatalogPage = () => {
       return s.status === "archived";
     });
   }, [songs, activeTab]);
+
+  // Rooms a captured idea can move into — the songwriter's own active rooms.
+  const fileableSongs = MOCK_SONGS.filter((s) => s.type === "owned" && s.status !== "archived").map(
+    (s) => ({ id: s.id, title: s.title })
+  );
 
   const handleCreateSong = async () => {
     if (isCheckingCreate) return;
@@ -162,6 +168,8 @@ const SongCatalogPage = () => {
         className="px-4 pt-4 pb-44"
         style={{ maxWidth: 430, margin: "0 auto" }}
       >
+        <SeedIdeasShelf songs={fileableSongs} />
+
         {filteredSongs.length === 0 ? (
           <div className="text-center pt-16">
             <p className="text-[0.9375rem]" style={{ color: "#999", fontFamily: "var(--font-body)" }}>

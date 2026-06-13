@@ -46,6 +46,7 @@ function toVoiceMemoRecord(row: VoiceMemoRow): VoiceMemoRecord {
 export async function getUploadUrl(params: {
   songId: string;
   mimeType: string;
+  byteSize: number;
   durationMs: number;
   fileName?: string;
 }): Promise<UploadUrlResult> {
@@ -53,6 +54,7 @@ export async function getUploadUrl(params: {
     body: {
       song_id: params.songId,
       mime_type: params.mimeType,
+      byte_size: params.byteSize,
       duration_ms: params.durationMs,
       file_name: params.fileName,
     },
@@ -78,18 +80,14 @@ export async function uploadBlob(signedUrl: string, blob: Blob, mimeType: string
 /** Step 3 of upload: finalize — creates the DB record, optionally triggers transcription */
 export async function finalizeMemo(params: {
   memoId: string;
-  storagePath: string;
-  title: string;
-  sectionLabel: string;
-  transcribe?: boolean;
+  byteSize: number;
+  durationMs: number;
 }): Promise<void> {
   const { error } = await supabase.functions.invoke("voice-memo-finalize", {
     body: {
       memo_id: params.memoId,
-      storage_path: params.storagePath,
-      title: params.title,
-      section_label: params.sectionLabel,
-      transcribe: params.transcribe ?? false,
+      actual_byte_size: params.byteSize,
+      duration_ms: params.durationMs,
     },
   });
   if (error) throw new Error(error.message);
@@ -142,9 +140,12 @@ export async function uploadVoiceMemo(params: {
   transcribe?: boolean;
   fileName?: string;
 }): Promise<string> {
-  const { uploadUrl, memoId, storagePath } = await getUploadUrl({
+  const byteSize = params.blob.size;
+
+  const { uploadUrl, memoId } = await getUploadUrl({
     songId: params.songId,
     mimeType: params.mimeType,
+    byteSize,
     durationMs: params.durationMs,
     fileName: params.fileName,
   });
@@ -153,10 +154,8 @@ export async function uploadVoiceMemo(params: {
 
   await finalizeMemo({
     memoId,
-    storagePath,
-    title: params.title,
-    sectionLabel: params.sectionLabel,
-    transcribe: params.transcribe,
+    byteSize,
+    durationMs: params.durationMs,
   });
 
   return memoId;

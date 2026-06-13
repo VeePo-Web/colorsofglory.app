@@ -7,6 +7,7 @@ const MAX_BAR_HEIGHT = 80;
 
 interface RecordingWaveformProps {
   analyserNode: AnalyserNode | null;
+  height?: number;
 }
 
 /**
@@ -14,7 +15,7 @@ interface RecordingWaveformProps {
  * All animation via requestAnimationFrame — zero React re-renders during playback.
  * Color gradient: amber (#D4AE5C) left → coral (#E85440) right.
  */
-const RecordingWaveform = ({ analyserNode }: RecordingWaveformProps) => {
+const RecordingWaveform = ({ analyserNode, height = MAX_BAR_HEIGHT }: RecordingWaveformProps) => {
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
   const rafRef = useRef<number>(0);
   const prevHeights = useRef(new Float32Array(BAR_COUNT).fill(0.08));
@@ -46,7 +47,7 @@ const RecordingWaveform = ({ analyserNode }: RecordingWaveformProps) => {
         prevHeights.current[i] = prevHeights.current[i] * 0.65 + freq * 0.35;
         const h = Math.max(0.06, prevHeights.current[i]);
 
-        bar.style.height = `${Math.round(h * MAX_BAR_HEIGHT)}px`;
+        bar.style.height = `${Math.round(h * height)}px`;
 
         // Amber (left) → coral (right) gradient per bar
         const t = i / (BAR_COUNT - 1);
@@ -62,7 +63,7 @@ const RecordingWaveform = ({ analyserNode }: RecordingWaveformProps) => {
 
     rafRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [analyserNode]);
+  }, [analyserNode, height]);
 
   const totalWidth = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP;
 
@@ -73,7 +74,7 @@ const RecordingWaveform = ({ analyserNode }: RecordingWaveformProps) => {
         alignItems: "flex-end",
         justifyContent: "center",
         gap: BAR_GAP,
-        height: MAX_BAR_HEIGHT,
+        height,
         width: totalWidth,
       }}
       aria-hidden="true"
