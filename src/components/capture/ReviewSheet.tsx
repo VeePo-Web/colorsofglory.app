@@ -15,6 +15,7 @@ import {
 import { getTakeSignedUrl } from "@/integrations/cog/takes";
 import { commitTakeToCanvas } from "@/integrations/cog/canvas";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import ReviewAudioPlayer from "./ReviewAudioPlayer";
 import type { PendingBlock } from "./CaptureSheet";
 
 type EditableBlock = {
@@ -268,14 +269,7 @@ const ReviewSheet = ({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-5 pb-3" style={{ scrollbarGutter: "stable" }}>
-          {audioUrl && (
-            <audio
-              src={audioUrl}
-              controls
-              className="w-full rounded-xl mb-4"
-              style={{ background: "rgba(184,149,58,0.06)" }}
-            />
-          )}
+          {audioUrl && <ReviewAudioPlayer src={audioUrl} durationMs={durationMs} />}
 
           {status === "loading" && (
             <div
@@ -330,6 +324,7 @@ const ReviewSheet = ({
                 <div className="flex items-center gap-2 mb-2">
                   <select
                     value={b.kind}
+                    aria-label="Block type"
                     onChange={(e) =>
                       updateBlock(b.id, {
                         kind: e.target.value as EditableBlock["kind"],
@@ -347,6 +342,7 @@ const ReviewSheet = ({
                   </select>
                   <Input
                     value={b.label}
+                    aria-label="Block label"
                     onChange={(e) => updateBlock(b.id, { label: e.target.value })}
                     className="flex-1 h-8 text-sm"
                     style={{ fontFamily: "var(--font-display)" }}
