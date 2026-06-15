@@ -3,20 +3,12 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-const manualChunks = (id: string) => {
-  if (!id.includes("node_modules")) return undefined;
-  if (id.includes("react-dom") || id.includes("react-router") || /node_modules[\\/](react)[\\/]/.test(id)) {
-    return "vendor-react";
-  }
-  if (id.includes("@supabase")) return "vendor-supabase";
-  if (id.includes("@tanstack")) return "vendor-query";
-  if (id.includes("framer-motion")) return "vendor-motion";
-  if (id.includes("lucide-react")) return "vendor-icons";
-  if (id.includes("@radix-ui") || id.includes("vaul") || id.includes("cmdk")) return "vendor-ui";
-  return "vendor";
-};
-
 // https://vitejs.dev/config/
+// NOTE: A previous manualChunks split separated React from packages that
+// import React (Radix, supabase, etc.), which produced a circular chunk
+// graph in production and crashed with
+// "Cannot read properties of undefined (reading 'createContext')".
+// We now let Rollup choose chunk boundaries automatically.
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -29,13 +21,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks,
-      },
     },
   },
 }));
