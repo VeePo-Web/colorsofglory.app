@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Settings } from "lucide-react";
+import { ChevronLeft, Settings, MicOff, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { useVoiceRecorder, type RecordingResult } from "@/hooks/useVoiceRecorder";
@@ -410,6 +410,22 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           onTap={handleMicTap}
         />
 
+        {/* Recovery path — a denied or errored mic must never be a dead end. */}
+        {phase === "permission-denied" && (
+          <RecoveryNotice
+            variant="denied"
+            onRetry={() => { void handleMicTap(); }}
+            onOpenSettings={openMicSettings}
+          />
+        )}
+        {phase === "error" && recorder.state.error && (
+          <RecoveryNotice
+            variant="error"
+            message={recorder.state.error}
+            onRetry={() => { void handleMicTap(); }}
+          />
+        )}
+
         {/* Rail is a fixed right-edge overlay so the mic stays dead center. */}
         <SideRail recording={phase === "recording"} onAction={handleRailAction} />
 
@@ -442,20 +458,6 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             never competes with the live transcript bloom. */}
         {phase !== "recording" && !saving && !review.open && (
           <LatestPeekStrip onResume={handleResumePeek} />
-        )}
-
-        {recorder.state.error && (
-          <p
-            role="alert"
-            style={{
-              fontFamily: "var(--font-body)",
-              fontSize: 13,
-              color: "#b54a30",
-              textAlign: "center",
-            }}
-          >
-            {recorder.state.error}
-          </p>
         )}
       </main>
 
@@ -501,6 +503,154 @@ function formatNewSongTitle(): string {
   const day = now.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   return `New idea · ${day} · ${time}`;
+}
+
+/** Best-effort deep link to OS/browser mic settings, with a guiding toast. */
+function openMicSettings(): void {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  if (/iPad|iPhone|iPod/.test(ua)) {
+    window.location.href = "app-settings:";
+    setTimeout(() => toast("Open Settings → Colors of Glory → Microphone, then return."), 400);
+  } else if (/Android/.test(ua)) {
+    toast("Open Settings → Apps → Colors of Glory → Permissions → Microphone.");
+  } else {
+    toast("Click the lock icon in your address bar → Site settings → Microphone → Allow.");
+  }
+}
+
+/**
+ * RecoveryNotice — a calm, on-brand way back when the mic is blocked or a take
+ * errored. A denied or failed mic must never be a dead end: at scale, a
+ * meaningful share of first-time users tap "Don't Allow" by reflex.
+ */
+function RecoveryNotice({
+  variant,
+  message,
+  onRetry,
+  onOpenSettings,
+}: {
+  variant: "denied" | "error";
+  message?: string;
+  onRetry: () => void;
+  onOpenSettings?: () => void;
+}) {
+  const denied = variant === "denied";
+  return (
+    <div
+      role="alert"
+      style={{
+        width: "100%",
+        maxWidth: 360,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        gap: 12,
+        padding: "20px 22px",
+        borderRadius: 18,
+        background: "var(--cog-cream-light)",
+        border: "1px solid var(--cog-border)",
+        boxShadow: "0 8px 28px rgba(28,26,23,0.06)",
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          background: "rgba(184,149,58,0.12)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--cog-gold)",
+        }}
+      >
+        {denied ? <MicOff size={24} /> : <RefreshCw size={22} />}
+      </div>
+
+      <p
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 18,
+          fontWeight: 700,
+          color: "var(--cog-charcoal)",
+          margin: 0,
+        }}
+      >
+        {denied ? "Microphone access is off" : "That take didn't record"}
+      </p>
+      <p
+        style={{
+          fontFamily: "var(--font-body)",
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: "var(--cog-warm-gray)",
+          margin: 0,
+        }}
+      >
+        {denied
+          ? "Colors of Glory needs your microphone to catch an idea. Turn it on, then come right back."
+          : message ?? "Something interrupted the mic. Give it another try."}
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", marginTop: 4 }}>
+        {denied && onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="transition-transform active:scale-95"
+            style={{
+              height: 48,
+              borderRadius: 14,
+              background: "var(--cog-gold)",
+              color: "#fff",
+              border: "none",
+              cursor: "pointer",
+              fontFamily: "var(--font-body)",
+              fontSize: 15,
+              fontWeight: 700,
+              boxShadow: "0 6px 20px rgba(184,149,58,0.32)",
+            }}
+          >
+            Open Settings
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRetry}
+          className="transition-transform active:scale-95"
+          style={{
+            height: 48,
+            borderRadius: 14,
+            background: denied ? "transparent" : "var(--cog-gold)",
+            color: denied ? "var(--cog-charcoal)" : "#fff",
+            border: denied ? "1px solid var(--cog-border)" : "none",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+            fontSize: 15,
+            fontWeight: denied ? 600 : 700,
+            boxShadow: denied ? "none" : "0 6px 20px rgba(184,149,58,0.32)",
+          }}
+        >
+          Try again
+        </button>
+      </div>
+
+      {denied && (
+        <p
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: 12,
+            color: "var(--cog-muted)",
+            margin: "2px 0 0",
+          }}
+        >
+          Prefer not to? You can still import an existing recording below.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
