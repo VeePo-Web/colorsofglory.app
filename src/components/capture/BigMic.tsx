@@ -8,10 +8,15 @@ interface BigMicProps {
   durationMs: number;
   analyser: AnalyserNode | null;
   onTap: () => void;
-  /** Hold-to-record: press starts, release stops. */
+  /**
+   * Deprecated hold-to-hum handlers — intentionally unused. The primary mic is
+   * tap-to-start / tap-to-stop (iOS Voice Memos standard) for reliability and
+   * keyboard accessibility; mixing a press-and-hold gesture on the same target
+   * races with the tap and orphans recordings. Hold-to-hum lives in its own
+   * Canvas feature (F9 Instant Hum Capture). Props kept optional for compat.
+   */
   onHoldStart?: () => void;
   onHoldEnd?: () => void;
-  /** When true, the current take started via hold-to-hum. Changes the label. */
   humMode?: boolean;
 }
 
@@ -19,14 +24,15 @@ interface BigMicProps {
  * Adobe Podcast-style mic: a big centered gold pill that ripples while
  * recording and shows a live amplitude ring around the glyph.
  *
- * - Tap to start, tap to stop (long captures).
- * - Hold to start, release to stop (quick hums) when handlers provided.
- * - Respects prefers-reduced-motion: ripple and amplitude fall back to a static ring.
+ * Single, unambiguous interaction: tap to start, tap to stop. Works with mouse,
+ * touch, and keyboard (Enter/Space) because it's a plain button click.
+ * Respects prefers-reduced-motion: ripple + amplitude fall back to a static ring.
  */
-const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd, humMode }: BigMicProps) => {
+const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
   const ringRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const recording = phase === "recording";
+  const busy = phase === "requesting-permission" || phase === "stopping";
   const reduceMotion =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -55,22 +61,6 @@ const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd, hu
       if (ringRef.current) ringRef.current.style.transform = "scale(1)";
     };
   }, [analyser, reduceMotion]);
-
-  const holdProps = onHoldStart
-    ? {
-        onPointerDown: (e: React.PointerEvent) => {
-          if (recording) return;
-          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-          onHoldStart();
-        },
-        onPointerUp: () => {
-          if (recording) onHoldEnd?.();
-        },
-        onPointerCancel: () => {
-          if (recording) onHoldEnd?.();
-        },
-      }
-    : {};
 
   return (
     <div className="flex flex-col items-center" style={{ gap: 24 }}>
@@ -111,24 +101,23 @@ const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd, hu
           }}
         />
 
-        {/* The mic button */}
+        {/* The mic button — single tap target, start/stop toggle. */}
         <button
           type="button"
           onClick={onTap}
-          {...holdProps}
+          disabled={busy}
           aria-pressed={recording}
           aria-label={recording ? "Stop recording" : "Start recording"}
           className="absolute rounded-full flex items-center justify-center transition-transform active:scale-95"
           style={{
             inset: 40,
-            background: recording
-              ? "linear-gradient(135deg, var(--cog-gold), var(--cog-gold-light, #d4ae5c))"
-              : "linear-gradient(135deg, var(--cog-gold), var(--cog-gold-light, #d4ae5c))",
+            background: "linear-gradient(135deg, var(--cog-gold), var(--cog-gold-light, #d4ae5c))",
             color: "var(--cog-cream-light, #faf7f2)",
             boxShadow:
               "0 18px 48px rgba(184,149,58,0.42), inset 0 1px 0 rgba(255,255,255,0.35)",
             border: "none",
-            cursor: "pointer",
+            cursor: busy ? "default" : "pointer",
+            opacity: busy ? 0.85 : 1,
           }}
         >
           {recording ? (
@@ -160,18 +149,17 @@ const BigMic = ({ phase, durationMs, analyser, onTap, onHoldStart, onHoldEnd, hu
             color: "var(--cog-warm-gray, #6b6459)",
             margin: 0,
             letterSpacing: "0.02em",
+            textAlign: "center",
           }}
         >
           {phase === "permission-denied"
             ? "Microphone access blocked — enable in Settings"
             : phase === "requesting-permission"
-              ? "Listening for permission…"
-              : recording
-                ? humMode
-                  ? "Humming\u2026 release to save"
-                  : "Tap to stop · say \u201cVerse 1\u201d or \u201cChorus\u201d to split"
-                : onHoldStart
-                  ? "Tap to record · or hold for a quick hum"
+              ? "Starting the mic…"
+              : phase === "stopping"
+                ? "Saving…"
+                : recording
+                  ? "Tap to stop · say “Verse” or “Chorus” to split"
                   : "Tap to record"}
         </p>
       </div>

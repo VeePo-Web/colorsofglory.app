@@ -59,7 +59,6 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     "idle" | "listening" | "transcribing" | "ready" | "skipped"
   >("idle");
   const [saving, setSaving] = useState(false);
-  const [humMode, setHumMode] = useState(false);
   const [prompt] = useState(() => pickPrompt(new Date()));
 
   // Side-rail sheet (idle taps)
@@ -143,7 +142,6 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         toast.error("Could not save take", { description: msg.slice(0, 140) });
       } finally {
         setSaving(false);
-        setHumMode(false);
       }
     },
     [saving, songId, songTitle],
@@ -155,7 +153,6 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     (result: RecordingResult | null) => {
       live.stop();
       if (!result) {
-        setHumMode(false);
         setStatus("idle");
         return;
       }
@@ -194,36 +191,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
     // Start recording fresh.
     setManualMarkers([]);
-    setHumMode(false);
     setStatus("listening");
     live.reset();
     if (live.supported) live.start();
     await recorder.startRecording();
   }, [phase, recorder, saving, live, handleAudioFile]);
-
-  const handleHoldStart = useCallback(async () => {
-    if (saving || phase === "recording") return;
-    setManualMarkers([]);
-    setHumMode(true);
-    setStatus("listening");
-    live.reset();
-    if (live.supported) live.start();
-    await recorder.startRecording();
-  }, [phase, recorder, saving, live]);
-
-  const handleHoldEnd = useCallback(async () => {
-    if (phase !== "recording") return;
-    const result = await recorder.stopRecording();
-    live.stop();
-    if (!result) {
-      setHumMode(false);
-      return;
-    }
-    const file = new File([result.blob], `hum-${Date.now()}.webm`, {
-      type: result.mimeType || "audio/webm",
-    });
-    await handleAudioFile(file, result.durationMs);
-  }, [phase, recorder, live, handleAudioFile]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -436,9 +408,6 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           durationMs={durationMs}
           analyser={analyserNode}
           onTap={handleMicTap}
-          onHoldStart={handleHoldStart}
-          onHoldEnd={handleHoldEnd}
-          humMode={humMode}
         />
 
         {/* Rail is a fixed right-edge overlay so the mic stays dead center. */}

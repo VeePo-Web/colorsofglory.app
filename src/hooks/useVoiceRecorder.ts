@@ -60,6 +60,33 @@ function getAudioContextCtor(): typeof AudioContext | null {
   );
 }
 
+/**
+ * close()/resume() are specced to return a Promise, but not every engine
+ * actually does — calling .catch on a non-thenable return crashes (notably
+ * during teardown). These wrappers tolerate a void return and never throw.
+ */
+function safeCloseContext(ctx: AudioContext | null): void {
+  if (!ctx) return;
+  try {
+    const r = ctx.close() as unknown;
+    if (r && typeof (r as Promise<void>).catch === "function") (r as Promise<void>).catch(() => {});
+  } catch {
+    /* noop */
+  }
+}
+
+function safeResumeContext(ctx: AudioContext): Promise<void> {
+  try {
+    const r = ctx.resume() as unknown;
+    if (r && typeof (r as Promise<void>).then === "function") {
+      return (r as Promise<void>).catch(() => {});
+    }
+  } catch {
+    /* noop */
+  }
+  return Promise.resolve();
+}
+
 export function useVoiceRecorder(
   options?: UseVoiceRecorderOptions,
 ): UseVoiceRecorderReturn {
@@ -102,7 +129,7 @@ export function useVoiceRecorder(
       t.onended = null;
       t.stop();
     });
-    audioContextRef.current?.close().catch(() => {});
+    safeCloseContext(audioContextRef.current);
     streamRef.current = null;
     audioContextRef.current = null;
     analyserRef.current = null;
@@ -194,7 +221,7 @@ export function useVoiceRecorder(
       if (Ctor) {
         try {
           audioCtx = new Ctor();
-          if (audioCtx.state === "suspended") void audioCtx.resume();
+          if (audioCtx.state === "suspended") void safeResumeContext(audioCtx);
         } catch {
           audioCtx = null;
         }
@@ -210,7 +237,7 @@ export function useVoiceRecorder(
           },
         });
       } catch (err) {
-        audioCtx?.close().catch(() => {});
+        safeCloseContext(audioCtx);
         const domErr = err as DOMException;
         if (
           domErr.name === "NotAllowedError" ||
@@ -249,7 +276,7 @@ export function useVoiceRecorder(
       if (audioCtx) {
         try {
           if (audioCtx.state === "suspended") {
-            await audioCtx.resume().catch(() => {});
+            await safeResumeContext(audioCtx);
           }
           const source = audioCtx.createMediaStreamSource(stream);
           analyser = audioCtx.createAnalyser();
@@ -259,7 +286,7 @@ export function useVoiceRecorder(
           audioContextRef.current = audioCtx;
           analyserRef.current = analyser;
         } catch {
-          audioCtx.close().catch(() => {});
+          safeCloseContext(audioCtx);
           audioContextRef.current = null;
           analyserRef.current = null;
           analyser = null;
