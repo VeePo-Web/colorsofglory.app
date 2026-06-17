@@ -18,6 +18,61 @@ const STATUS_COPY: Record<LiveTranscriptProps["status"], string> = {
   skipped: "Transcription is off for this take.",
 };
 
+/**
+ * Listening pulse — shown while recording before any words arrive. iOS Safari
+ * has no live speech API, so without this the transcript panel sits dead during
+ * a take and reads as broken. Three gentle gold dots signal "I'm catching this"
+ * even when no live words can stream. Reduced-motion falls back to a static row.
+ */
+const ListeningPulse = ({ copy }: { copy: string }) => (
+  <div
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 12,
+      padding: "20px 0",
+    }}
+  >
+    <div style={{ display: "flex", gap: 7 }} aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: "var(--cog-gold)",
+            animation: `cog-listen-pulse 1.2s ease-in-out ${i * 0.18}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+    <p
+      aria-live="polite"
+      style={{
+        fontFamily: "var(--font-body)",
+        fontSize: 13,
+        color: "var(--cog-warm-gray, #6b6459)",
+        textAlign: "center",
+        margin: 0,
+        maxWidth: 280,
+      }}
+    >
+      {copy}
+    </p>
+    <style>{`
+      @keyframes cog-listen-pulse {
+        0%, 100% { opacity: 0.25; transform: scale(0.8); }
+        50%      { opacity: 1;    transform: scale(1);   }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes cog-listen-pulse { 0%, 100% { opacity: 0.6; transform: none; } }
+      }
+    `}</style>
+  </div>
+);
+
 const SectionDivider = ({ label }: { label: string }) => (
   <motion.div
     layout
@@ -65,18 +120,22 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
       style={{ maxWidth: 460, margin: "0 auto", paddingRight: 72 /* keep rail clear */ }}
     >
       {!hasBlocks && !hasPartial && (
-        <p
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: 13,
-            color: "var(--cog-muted, #a09689)",
-            textAlign: "center",
-            padding: "20px 0",
-            margin: 0,
-          }}
-        >
-          {STATUS_COPY[status]}
-        </p>
+        status === "listening" ? (
+          <ListeningPulse copy={STATUS_COPY.listening} />
+        ) : STATUS_COPY[status] ? (
+          <p
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: 13,
+              color: "var(--cog-muted, #a09689)",
+              textAlign: "center",
+              padding: "20px 0",
+              margin: 0,
+            }}
+          >
+            {STATUS_COPY[status]}
+          </p>
+        ) : null
       )}
 
       {(hasBlocks || hasPartial) && (
