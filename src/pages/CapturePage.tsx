@@ -1,7 +1,22 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import CaptureScene from "@/components/capture/CaptureScene";
 import { supabase } from "@/integrations/supabase/client";
+
+const CaptureScene = lazy(() => import("@/components/capture/CaptureScene"));
+
+const CaptureSceneFallback = () => (
+  <div className="relative min-h-[100dvh] w-full" style={{ background: "var(--cog-cream)" }}>
+    <div aria-hidden className="pointer-events-none fixed inset-0 cog-glow" />
+    <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-[var(--max-w-app)] flex-col justify-center px-8">
+      <p
+        className="text-center text-xs font-medium uppercase"
+        style={{ color: "var(--cog-muted)", letterSpacing: "0.24em" }}
+      >
+        Preparing capture
+      </p>
+    </div>
+  </div>
+);
 
 /**
  * Capture Page — Adobe-inspired big-mic scene.
@@ -34,7 +49,11 @@ const CapturePage = () => {
     };
   }, [songId]);
 
-  return <CaptureScene songId={songId} songTitle={songTitle} />;
+  return (
+    <Suspense fallback={<CaptureSceneFallback />}>
+      <CaptureScene songId={songId} songTitle={songTitle} />
+    </Suspense>
+  );
 };
 
 export default CapturePage;

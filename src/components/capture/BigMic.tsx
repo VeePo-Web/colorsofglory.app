@@ -39,7 +39,8 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
 
   // Drive the amplitude ring from the analyser node.
   useEffect(() => {
-    if (!analyser || !ringRef.current || reduceMotion) return;
+    const ring = ringRef.current;
+    if (!analyser || !ring || reduceMotion) return;
     const data = new Uint8Array(analyser.frequencyBinCount);
     const tick = () => {
       analyser.getByteTimeDomainData(data);
@@ -50,15 +51,13 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
       }
       const rms = Math.sqrt(sum / data.length); // 0..1
       const scale = 1 + Math.min(rms * 1.4, 0.35);
-      if (ringRef.current) {
-        ringRef.current.style.transform = `scale(${scale.toFixed(3)})`;
-      }
+      ring.style.transform = `scale(${scale.toFixed(3)})`;
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (ringRef.current) ringRef.current.style.transform = "scale(1)";
+      ring.style.transform = "scale(1)";
     };
   }, [analyser, reduceMotion]);
 

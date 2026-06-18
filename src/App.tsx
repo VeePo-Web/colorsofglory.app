@@ -123,6 +123,7 @@ const App = () => {
             {/* Phone OTP — disabled until SMS provider is configured */}
             <Route path="/auth/phone" element={<PhoneLoginPage />} />
             <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
+            <Route path="/auth/verify" element={<Navigate to="/auth/phone/verify" replace />} />
 
             {/* Onboarding */}
             <Route path="/onboarding" element={<Navigate to="/auth/login" replace />} />

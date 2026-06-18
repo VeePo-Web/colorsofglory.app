@@ -11,6 +11,7 @@ import SettingsPage from "@/pages/settings/SettingsPage";
 import ChordsPage from "@/pages/ChordsPage";
 import SongCanvasPage from "@/pages/SongCanvasPage";
 import CodeVerifyPage from "@/pages/auth/CodeVerifyPage";
+import PhoneLoginPage from "@/pages/auth/PhoneLoginPage";
 
 const setMobileViewport = () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -81,11 +82,20 @@ describe("Codex 390px mobile render smoke", () => {
     expect(screen.getByRole("button", { name: /storage/i })).toBeInTheDocument();
   });
 
+  it("renders the phone login screen at the primary mobile width", () => {
+    renderRoute("/auth/phone", "/auth/phone", <PhoneLoginPage />);
+
+    expect(screen.getByRole("heading", { name: /welcome/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/phone number/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /use email instead/i })).toBeInTheDocument();
+  });
+
   it("renders the phone verification screen with seeded session context at the primary mobile width", () => {
     sessionStorage.setItem("cog:phone-e164", "+15555551212");
     sessionStorage.setItem("cog:phone-display", "(555) 555-1212");
 
-    renderRoute("/auth/verify", "/auth/verify", <CodeVerifyPage />);
+    renderRoute("/auth/phone/verify", "/auth/phone/verify", <CodeVerifyPage />);
 
     expect(screen.getByRole("heading", { name: /check your phone/i })).toBeInTheDocument();
     expect(screen.getByText(/\(555\) 555-1212/i)).toBeInTheDocument();

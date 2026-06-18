@@ -19,9 +19,24 @@ function toE164(digits: string): string {
   return `+1${digits}`;
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message?: unknown }).message ?? "");
+  }
+  return String(err);
+}
+
+function errorCode(err: unknown): string {
+  if (typeof err === "object" && err !== null && "code" in err) {
+    return String((err as { code?: unknown }).code ?? "");
+  }
+  return "";
+}
+
 function toFriendlyError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const code = (err as { code?: string } | null)?.code ?? "";
+  const raw = errorMessage(err);
+  const code = errorCode(err);
   const msg = raw.toLowerCase();
   if (code === "phone_provider_disabled" || msg.includes("unsupported phone provider") || msg.includes("provider")) {
     return "SMS sign-in isn't available yet. Please contact support or try again shortly.";
@@ -140,7 +155,7 @@ const PhoneLoginPage = () => {
             onChange={handleChange}
             placeholder="(555) 555-5555"
             aria-label="Phone number"
-            aria-describedby="phone-hint phone-error"
+            aria-describedby={error ? "phone-hint phone-error" : "phone-hint"}
             className="flex-1 bg-transparent outline-none text-base"
             style={{
               color: "#1A1A1A",

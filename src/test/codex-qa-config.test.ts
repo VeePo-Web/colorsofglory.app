@@ -16,6 +16,8 @@ describe("Codex QA gate configuration", () => {
       expect.arrayContaining([
         "/",
         "/auth/login",
+        "/auth/phone",
+        "/auth/phone/verify",
         "/auth/verify",
         "/onboarding/intent",
         "/onboarding/start-song",
@@ -42,6 +44,8 @@ describe("Codex QA gate configuration", () => {
       expect.arrayContaining([
         "/",
         "/auth/login",
+        "/auth/phone",
+        "/auth/phone/verify",
         "/onboarding/start-song",
         "/songs/1",
         "/songs/1/capture",

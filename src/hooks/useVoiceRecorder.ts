@@ -209,6 +209,24 @@ export function useVoiceRecorder(
         return;
       }
 
+      // Precise capability diagnosis — turn a silent, mysterious dead mic into a
+      // clear reason. On insecure (http) origins browsers don't expose
+      // mediaDevices at all, so getUserMedia would throw an opaque TypeError.
+      const mediaDevices =
+        typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+      if (!mediaDevices || typeof mediaDevices.getUserMedia !== "function") {
+        const insecure =
+          typeof window !== "undefined" && window.isSecureContext === false;
+        setState((s) => ({
+          ...s,
+          phase: "error",
+          error: insecure
+            ? "Recording needs a secure (https) connection. Open the published site to record."
+            : "Recording isn't available in this browser.",
+        }));
+        return;
+      }
+
       setState((s) => ({ ...s, phase: "requesting-permission", error: null }));
 
       // Create + kick the AudioContext as early as possible. iOS Safari starts

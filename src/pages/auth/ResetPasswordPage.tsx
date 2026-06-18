@@ -22,7 +22,6 @@ const ResetPasswordPage = () => {
 
   useEffect(() => {
     let mounted = true;
-    let timer: number | undefined;
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (!mounted) return;
@@ -39,7 +38,7 @@ const ResetPasswordPage = () => {
       if (!mounted) return;
       if (data.session) setReady(true);
     });
-    timer = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (!mounted) return;
       setReady((r) => {
         if (!r) setInvalid(true);
@@ -50,7 +49,7 @@ const ResetPasswordPage = () => {
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
-      if (timer) window.clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, []);
 

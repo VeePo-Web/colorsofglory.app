@@ -1,7 +1,9 @@
 export const qaRoutes = [
   { path: "/", label: "Song catalog" },
-  { path: "/auth/login", label: "Phone login" },
-  { path: "/auth/verify", label: "Code verification" },
+  { path: "/auth/login", label: "Email login" },
+  { path: "/auth/phone", label: "Phone login" },
+  { path: "/auth/phone/verify", label: "Phone code verification" },
+  { path: "/auth/verify", label: "Phone verification legacy redirect" },
   { path: "/onboarding/intent", label: "First intent" },
   { path: "/onboarding/start-song", label: "Start first song" },
   { path: "/onboarding/founder-code", label: "Founder code" },
@@ -29,7 +31,9 @@ export const qaRoutes = [
 
 export const mobileRenderRoutes = [
   { path: "/", label: "Song catalog" },
-  { path: "/auth/login", label: "Phone login" },
+  { path: "/auth/login", label: "Email login" },
+  { path: "/auth/phone", label: "Phone login" },
+  { path: "/auth/phone/verify", label: "Phone code verification" },
   { path: "/onboarding/start-song", label: "Start first song" },
   { path: "/songs/1", label: "Song workspace" },
   { path: "/songs/1/capture", label: "Capture first idea" },

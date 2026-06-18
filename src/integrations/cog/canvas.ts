@@ -1,13 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TranscriptBlock } from "./transcript";
 
-// Cast to `any` for table access because generated `Database` types lag
-// behind a freshly applied migration. Types regenerate on the next pull.
-const db = supabase as unknown as {
-  from: (table: string) => any;
-  functions: typeof supabase.functions;
-};
-
 export type CanvasCard = {
   id: string;
   song_id: string;
@@ -43,17 +36,17 @@ export async function commitTakeToCanvas(input: CommitTakeInput): Promise<Commit
 }
 
 export async function listCanvasCards(song_id: string): Promise<CanvasCard[]> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from("canvas_cards")
     .select("*")
     .eq("song_id", song_id)
     .order("position", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as CanvasCard[];
+  return (data ?? []) as unknown as CanvasCard[];
 }
 
 export async function deleteCanvasCard(id: string): Promise<void> {
-  const { error } = await db.from("canvas_cards").delete().eq("id", id);
+  const { error } = await supabase.from("canvas_cards").delete().eq("id", id);
   if (error) throw error;
 }
 
@@ -61,6 +54,6 @@ export async function updateCanvasCard(
   id: string,
   patch: Partial<Pick<CanvasCard, "label" | "body" | "kind" | "section_kind" | "position" | "x" | "y">>,
 ): Promise<void> {
-  const { error } = await db.from("canvas_cards").update(patch).eq("id", id);
+  const { error } = await supabase.from("canvas_cards").update(patch).eq("id", id);
   if (error) throw error;
 }

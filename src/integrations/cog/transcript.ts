@@ -1,8 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// Cast for new columns not yet in generated Database types.
-const db = supabase as unknown as { from: (t: string) => any };
-
 export type TranscriptBlock = {
   id: string;
   kind: "lyrics" | "chords" | "scripture" | "idea" | "section";
@@ -41,7 +38,7 @@ export async function requestTranscript(take_id: string): Promise<TranscriptBloc
 }
 
 export async function getTakeWithTranscript(take_id: string): Promise<TakeTranscriptRow | null> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from("takes")
     .select("id, song_id, storage_path, duration_ms, transcript_status, transcript_json, transcript_error")
     .eq("id", take_id)
@@ -55,7 +52,7 @@ export async function getTakeWithTranscript(take_id: string): Promise<TakeTransc
  * `intake-voice-memo` always inserts one take row (is_primary=true) per memo.
  */
 export async function getPrimaryTakeIdForMemo(voice_memo_id: string): Promise<string | null> {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from("takes")
     .select("id")
     .eq("voice_memo_id", voice_memo_id)
@@ -63,7 +60,7 @@ export async function getPrimaryTakeIdForMemo(voice_memo_id: string): Promise<st
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return (data?.id as string | undefined) ?? null;
+  return data?.id ?? null;
 }
 
 /**

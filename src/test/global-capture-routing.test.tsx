@@ -13,6 +13,8 @@ const renderGlobalCaptureAt = (path: string) =>
 describe("GlobalCaptureFlow route policy", () => {
   it.each([
     "/auth/login",
+    "/auth/phone",
+    "/auth/phone/verify",
     "/auth/verify",
     "/onboarding/intent",
     "/join/song-invite-token",

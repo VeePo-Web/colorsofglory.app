@@ -11,9 +11,17 @@ import { acceptInvite } from "@/lib/invite/inviteApi";
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message?: unknown }).message ?? "");
+  }
+  return String(err);
+}
+
 function toFriendlyError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes('Invalid') || msg.includes('expired'))
+  const msg = errorMessage(err).toLowerCase();
+  if (msg.includes('invalid') || msg.includes('expired') || msg.includes('token'))
     return "That code didn't work. Check it and try again.";
   if (msg.includes('rate')) return "Too many attempts. Please wait a moment.";
   return "Something went wrong. Please try again.";
@@ -96,7 +104,7 @@ const InviteVerifyPage = () => {
       </h1>
       <p className="text-[1rem] text-center mb-2" style={{ color: '#666' }}>
         We sent a 6-digit code to{' '}
-        <span style={{ color: '#1A1A1A', fontWeight: 500 }}>+1 ({displayPhone})</span>
+        <span style={{ color: '#1A1A1A', fontWeight: 500 }}>+1 {displayPhone}</span>
       </p>
       <p className="text-[0.875rem] text-center mb-8" style={{ color: '#B5935A' }}>
         to join {songTitle}

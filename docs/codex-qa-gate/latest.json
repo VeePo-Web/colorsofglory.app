@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-13T17:33:12.197Z",
+  "generatedAt": "2026-06-17T05:04:46.940Z",
   "routesChecked": [
     {
       "path": "/",
@@ -7,11 +7,19 @@
     },
     {
       "path": "/auth/login",
+      "label": "Email login"
+    },
+    {
+      "path": "/auth/phone",
       "label": "Phone login"
     },
     {
+      "path": "/auth/phone/verify",
+      "label": "Phone code verification"
+    },
+    {
       "path": "/auth/verify",
-      "label": "Code verification"
+      "label": "Phone verification legacy redirect"
     },
     {
       "path": "/onboarding/intent",
@@ -113,7 +121,15 @@
     },
     {
       "path": "/auth/login",
+      "label": "Email login"
+    },
+    {
+      "path": "/auth/phone",
       "label": "Phone login"
+    },
+    {
+      "path": "/auth/phone/verify",
+      "label": "Phone code verification"
     },
     {
       "path": "/onboarding/start-song",
@@ -183,8 +199,8 @@
     },
     {
       "name": "bundle budget",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "Old-brand content scan",
@@ -214,7 +230,7 @@
     {
       "name": "Production preview route smoke",
       "status": "pass",
-      "details": "26 routes"
+      "details": "28 routes"
     }
   ],
   "findings": []

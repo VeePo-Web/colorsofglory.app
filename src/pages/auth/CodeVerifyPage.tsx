@@ -10,9 +10,24 @@ import OnboardingShell from "@/components/cog/OnboardingShell";
 const RESEND_SECONDS = 30;
 const CODE_LENGTH = 6;
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message?: unknown }).message ?? "");
+  }
+  return String(err);
+}
+
+function errorCode(err: unknown): string {
+  if (typeof err === "object" && err !== null && "code" in err) {
+    return String((err as { code?: unknown }).code ?? "");
+  }
+  return "";
+}
+
 function toFriendlyError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const code = (err as { code?: string } | null)?.code ?? "";
+  const raw = errorMessage(err);
+  const code = errorCode(err);
   const msg = raw.toLowerCase();
   if (code === "otp_expired" || msg.includes("expired"))
     return "That code expired. Tap resend to get a new one.";
@@ -126,7 +141,7 @@ const CodeVerifyPage = () => {
       </h1>
       <p className="text-[1rem] text-center mb-10" style={{ color: "#666" }}>
         We sent a 6-digit code to{" "}
-        <span style={{ color: "#1A1A1A", fontWeight: 500 }}>+1 ({displayPhone})</span>
+        <span style={{ color: "#1A1A1A", fontWeight: 500 }}>+1 {displayPhone}</span>
       </p>
 
       {/* OTP boxes */}
