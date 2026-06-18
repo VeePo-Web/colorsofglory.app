@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Settings, MicOff, RefreshCw } from "lucide-react";
+import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle } from "lucide-react";
+import { formatDuration } from "@/lib/voice/audioFormat";
 import { toast } from "sonner";
 
 import { useVoiceRecorder, type RecordingResult } from "@/hooks/useVoiceRecorder";
@@ -83,6 +84,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     blockCount: number;
   }>({ open: false, songId: null, blockCount: 0 });
 
+  // Failed-upload safety net: if the network drops mid-upload we KEEP the
+  // recorded file in memory so a precious idea is never lost — the songwriter
+  // can retry instead of re-recording.
+  const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number } | null>(null);
+
   // Reset state if the user navigates between contexts.
   useEffect(() => {
     return () => {
@@ -128,6 +134,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           .maybeSingle();
 
         setStatus("ready");
+        setFailedTake(null);
         setReview({
           open: true,
           takeId,
@@ -138,14 +145,21 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         });
       } catch (err) {
         setStatus("skipped");
+        // Keep the recording so the idea survives a flaky network — never discard.
+        setFailedTake({ file, durationMs: fileDurationMs });
         const msg = err instanceof Error ? err.message : "Unknown error";
-        toast.error("Could not save take", { description: msg.slice(0, 140) });
+        toast.error("Couldn't save that take — your recording is safe.", { description: msg.slice(0, 120) });
       } finally {
         setSaving(false);
       }
     },
     [saving, songId, songTitle],
   );
+
+  const retryFailedTake = useCallback(() => {
+    if (!failedTake) return;
+    void handleAudioFile(failedTake.file, failedTake.durationMs);
+  }, [failedTake, handleAudioFile]);
 
   // Auto-saved takes (interruption / ceiling / page hidden) flow through the
   // same upload path as a manual stop, so the idea lands in review either way.
@@ -426,6 +440,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           />
         )}
 
+        {/* Failed upload — the recording is held in memory; offer a retry so a
+            captured idea never dies to a dropped connection. */}
+        {failedTake && !saving && phase !== "recording" && (
+          <FailedTakeNotice
+            durationMs={failedTake.durationMs}
+            onRetry={retryFailedTake}
+            onDiscard={() => setFailedTake(null)}
+          />
+        )}
+
         {/* Rail is a fixed right-edge overlay so the mic stays dead center. */}
         <SideRail recording={phase === "recording"} onAction={handleRailAction} />
 
@@ -516,6 +540,113 @@ function openMicSettings(): void {
   } else {
     toast("Click the lock icon in your address bar → Site settings → Microphone → Allow.");
   }
+}
+
+/**
+ * FailedTakeNotice — shown when a recording uploaded but the network dropped.
+ * The blob is still held in memory, so we reassure ("your recording is safe")
+ * and offer a one-tap retry rather than forcing the songwriter to re-perform.
+ */
+function FailedTakeNotice({
+  durationMs,
+  onRetry,
+  onDiscard,
+}: {
+  durationMs: number;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      style={{
+        width: "100%",
+        maxWidth: 360,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: "16px 18px",
+        borderRadius: 18,
+        background: "var(--cog-cream-light)",
+        border: "1px solid rgba(181,74,48,0.30)",
+        boxShadow: "0 8px 28px rgba(28,26,23,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          aria-hidden
+          style={{
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: "50%",
+            background: "rgba(181,74,48,0.10)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#b54a30",
+          }}
+        >
+          <AlertTriangle size={18} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "var(--cog-charcoal)", margin: 0 }}>
+            Couldn't save that take
+          </p>
+          <p style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-warm-gray)", margin: "2px 0 0" }}>
+            Your {formatDuration(durationMs)} recording is safe — let's try again.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="transition-transform active:scale-95"
+          style={{
+            flex: 1,
+            height: 44,
+            borderRadius: 12,
+            background: "var(--cog-gold)",
+            color: "#fff",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+            fontSize: 14,
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            boxShadow: "0 6px 18px rgba(184,149,58,0.30)",
+          }}
+        >
+          <RefreshCw size={15} />
+          Retry
+        </button>
+        <button
+          type="button"
+          onClick={onDiscard}
+          className="transition-transform active:scale-95"
+          style={{
+            height: 44,
+            paddingInline: 16,
+            borderRadius: 12,
+            background: "transparent",
+            color: "var(--cog-warm-gray)",
+            border: "1px solid var(--cog-border)",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          Discard
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /**
