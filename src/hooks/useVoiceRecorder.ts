@@ -229,7 +229,7 @@ export function useVoiceRecorder(
 
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = await mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -244,7 +244,25 @@ export function useVoiceRecorder(
           domErr.name === "PermissionDeniedError" ||
           domErr.name === "SecurityError"
         ) {
-          setState((s) => ({ ...s, phase: "permission-denied", error: null }));
+          // A cross-origin preview/embed frame without an explicit
+          // allow="microphone" policy rejects with NotAllowedError too — and
+          // OS Settings can't fix that. Diagnose it so the user opens the real
+          // site instead of chasing settings that won't help.
+          let framed = false;
+          try {
+            framed = typeof window !== "undefined" && window.self !== window.top;
+          } catch {
+            framed = true; // cross-origin access threw → we're definitely framed
+          }
+          if (framed) {
+            setState((s) => ({
+              ...s,
+              phase: "error",
+              error: "Recording is blocked in this preview frame. Open the published site to record.",
+            }));
+          } else {
+            setState((s) => ({ ...s, phase: "permission-denied", error: null }));
+          }
         } else if (domErr.name === "NotFoundError" || domErr.name === "DevicesNotFoundError") {
           setState((s) => ({
             ...s,

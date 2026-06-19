@@ -144,4 +144,24 @@ describe("useVoiceRecorder", () => {
     expect(res).toBeNull();
     expect(result.current.state.phase).toBe("error");
   });
+
+  it("diagnoses an insecure (http) context instead of failing opaquely", async () => {
+    // On http origins browsers don't expose mediaDevices at all.
+    Object.defineProperty(navigator, "mediaDevices", {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(window, "isSecureContext", {
+      writable: true,
+      configurable: true,
+      value: false,
+    });
+    const { result } = renderHook(() => useVoiceRecorder());
+    await act(async () => {
+      await result.current.startRecording();
+    });
+    expect(result.current.state.phase).toBe("error");
+    expect(result.current.state.error).toMatch(/secure|https/i);
+  });
 });
