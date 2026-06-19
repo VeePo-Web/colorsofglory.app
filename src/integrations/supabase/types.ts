@@ -133,53 +133,75 @@ export type Database = {
           created_at: string
           created_by: string
           end_ms: number | null
+          group_id: string | null
           id: string
           kind: string
           label: string | null
+          parent_card_id: string | null
           position: number
           section_kind: string | null
+          section_label: string | null
           song_id: string
           start_ms: number | null
           take_id: string | null
+          tree_kind: string
           updated_at: string
           x: number | null
           y: number | null
+          z_index: number
         }
         Insert: {
           body?: string
           created_at?: string
           created_by: string
           end_ms?: number | null
+          group_id?: string | null
           id?: string
           kind: string
           label?: string | null
+          parent_card_id?: string | null
           position?: number
           section_kind?: string | null
+          section_label?: string | null
           song_id: string
           start_ms?: number | null
           take_id?: string | null
+          tree_kind?: string
           updated_at?: string
           x?: number | null
           y?: number | null
+          z_index?: number
         }
         Update: {
           body?: string
           created_at?: string
           created_by?: string
           end_ms?: number | null
+          group_id?: string | null
           id?: string
           kind?: string
           label?: string | null
+          parent_card_id?: string | null
           position?: number
           section_kind?: string | null
+          section_label?: string | null
           song_id?: string
           start_ms?: number | null
           take_id?: string | null
+          tree_kind?: string
           updated_at?: string
           x?: number | null
           y?: number | null
+          z_index?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "canvas_cards_parent_card_id_fkey"
+            columns: ["parent_card_id"]
+            isOneToOne: false
+            referencedRelation: "canvas_cards"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "canvas_cards_song_id_fkey"
             columns: ["song_id"]
@@ -1768,6 +1790,7 @@ export type Database = {
     }
     Functions: {
       _assert_admin: { Args: never; Returns: undefined }
+      _assert_canvas_write: { Args: { _song_id: string }; Returns: undefined }
       accept_song_invite: {
         Args: { _token: string; _user_id: string }
         Returns: {
@@ -2056,6 +2079,163 @@ export type Database = {
       can_upload_bytes: {
         Args: { _bytes: number; _owner_user_id: string }
         Returns: boolean
+      }
+      canvas_bulk_move: { Args: { _payload: Json }; Returns: number }
+      canvas_group_cards: { Args: { _card_ids: string[] }; Returns: string }
+      canvas_link_cards: {
+        Args: { _child_id: string; _parent_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      canvas_move_card: {
+        Args: { _card_id: string; _x: number; _y: number; _z_index?: number }
+        Returns: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      canvas_promote_to_final: {
+        Args: { _card_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      canvas_set_section: {
+        Args: { _card_id: string; _section_label: string; _tree_kind?: string }
+        Returns: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      canvas_unlink_card: {
+        Args: { _card_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       check_phone_registered: {
         Args: { _phone: string }
