@@ -142,6 +142,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
@@ -164,6 +165,7 @@ export type Database = {
           section_kind?: string | null
           section_label?: string | null
           song_id: string
+          source_capture_id?: string | null
           start_ms?: number | null
           take_id?: string | null
           tree_kind?: string
@@ -186,6 +188,7 @@ export type Database = {
           section_kind?: string | null
           section_label?: string | null
           song_id?: string
+          source_capture_id?: string | null
           start_ms?: number | null
           take_id?: string | null
           tree_kind?: string
@@ -207,6 +210,13 @@ export type Database = {
             columns: ["song_id"]
             isOneToOne: false
             referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canvas_cards_source_capture_id_fkey"
+            columns: ["source_capture_id"]
+            isOneToOne: false
+            referencedRelation: "idea_captures"
             referencedColumns: ["id"]
           },
           {
@@ -573,6 +583,7 @@ export type Database = {
           created_at: string
           id: string
           lyric_snippet: string | null
+          promoted_card_id: string | null
           scripture_ref: string | null
           section_id: string | null
           song_id: string | null
@@ -586,6 +597,7 @@ export type Database = {
           created_at?: string
           id?: string
           lyric_snippet?: string | null
+          promoted_card_id?: string | null
           scripture_ref?: string | null
           section_id?: string | null
           song_id?: string | null
@@ -599,6 +611,7 @@ export type Database = {
           created_at?: string
           id?: string
           lyric_snippet?: string | null
+          promoted_card_id?: string | null
           scripture_ref?: string | null
           section_id?: string | null
           song_id?: string | null
@@ -608,6 +621,13 @@ export type Database = {
           voice_memo_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "idea_captures_promoted_card_id_fkey"
+            columns: ["promoted_card_id"]
+            isOneToOne: false
+            referencedRelation: "canvas_cards"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "idea_captures_section_id_fkey"
             columns: ["section_id"]
@@ -2098,6 +2118,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
@@ -2129,6 +2150,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
@@ -2160,6 +2182,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
@@ -2191,6 +2214,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
@@ -2222,6 +2246,7 @@ export type Database = {
           section_kind: string | null
           section_label: string | null
           song_id: string
+          source_capture_id: string | null
           start_ms: number | null
           take_id: string | null
           tree_kind: string
