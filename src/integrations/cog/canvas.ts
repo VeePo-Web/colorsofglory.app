@@ -24,6 +24,11 @@ export type CanvasCard = {
   y: number | null;
   created_at: string;
   updated_at: string;
+  parent_card_id: string | null;
+  group_id: string | null;
+  tree_kind: "ideas" | "final";
+  section_label: string | null;
+  z_index: number;
 };
 
 export type CommitTakeResult = { song_id: string; card_ids: string[] };
@@ -63,4 +68,63 @@ export async function updateCanvasCard(
 ): Promise<void> {
   const { error } = await db.from("canvas_cards").update(patch).eq("id", id);
   if (error) throw error;
+}
+
+// ---------- Canvas write RPCs ----------
+
+export type BulkMoveItem = { id: string; x: number; y: number; z?: number };
+
+async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await (supabase as any).rpc(fn, args);
+  if (error) throw error;
+  return data as T;
+}
+
+export async function moveCard(
+  card_id: string,
+  x: number,
+  y: number,
+  z_index?: number,
+): Promise<CanvasCard> {
+  return rpc<CanvasCard>("canvas_move_card", {
+    _card_id: card_id,
+    _x: x,
+    _y: y,
+    _z_index: z_index ?? null,
+  });
+}
+
+export async function bulkMoveCards(items: BulkMoveItem[]): Promise<number> {
+  return rpc<number>("canvas_bulk_move", { _payload: items });
+}
+
+export async function linkCards(parent_id: string, child_id: string): Promise<CanvasCard> {
+  return rpc<CanvasCard>("canvas_link_cards", {
+    _parent_id: parent_id,
+    _child_id: child_id,
+  });
+}
+
+export async function unlinkCard(card_id: string): Promise<CanvasCard> {
+  return rpc<CanvasCard>("canvas_unlink_card", { _card_id: card_id });
+}
+
+export async function groupCards(card_ids: string[]): Promise<string> {
+  return rpc<string>("canvas_group_cards", { _card_ids: card_ids });
+}
+
+export async function setCardSection(
+  card_id: string,
+  section_label: string | null,
+  tree_kind?: "ideas" | "final",
+): Promise<CanvasCard> {
+  return rpc<CanvasCard>("canvas_set_section", {
+    _card_id: card_id,
+    _section_label: section_label,
+    _tree_kind: tree_kind ?? null,
+  });
+}
+
+export async function promoteCardToFinal(card_id: string): Promise<CanvasCard> {
+  return rpc<CanvasCard>("canvas_promote_to_final", { _card_id: card_id });
 }
