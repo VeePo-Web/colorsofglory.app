@@ -1,5 +1,6 @@
 import { z } from "https://esm.sh/zod@3.23.8";
 import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/auth.ts";
+import { logActivity } from "../_shared/activity.ts";
 
 const InputSchema = z.object({
   capture_id: z.string().uuid(),
@@ -124,6 +125,15 @@ Deno.serve(async (req) => {
     .from("idea_captures")
     .update({ promoted_card_id: card.id })
     .eq("id", capture.id);
+
+  await logActivity(admin, {
+    song_id,
+    actor_user_id: user.id,
+    kind: "capture_promoted",
+    entity_type: "canvas_card",
+    entity_id: card.id,
+    payload: { capture_id: capture.id, take_id, tree: input.target_tree },
+  });
 
   // 9. Fire-and-forget transcription if needed
   let transcript_pending = false;
