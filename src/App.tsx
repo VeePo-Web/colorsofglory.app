@@ -4,11 +4,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
-import GlobalCaptureFlow from "@/components/capture/GlobalCaptureFlow";
 import { PracticePlayerProvider } from "@/components/practice/PracticePlayerContext";
-import { MiniPracticePlayer } from "@/components/practice/MiniPracticePlayer";
 
 const PasswordGate = lazy(() => import("@/components/PasswordGate"));
+const GlobalCaptureFlow = lazy(() => import("@/components/capture/GlobalCaptureFlow"));
+const MiniPracticePlayer = lazy(() =>
+  import("@/components/practice/MiniPracticePlayer").then((module) => ({ default: module.MiniPracticePlayer })),
+);
 
 const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
@@ -192,8 +194,12 @@ const App = () => {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
-        <GlobalCaptureFlow />
-        <MiniPracticePlayer />
+        <Suspense fallback={null}>
+          <GlobalCaptureFlow />
+        </Suspense>
+        <Suspense fallback={null}>
+          <MiniPracticePlayer />
+        </Suspense>
         </PracticePlayerProvider>
       </BrowserRouter>
     </TooltipProvider>

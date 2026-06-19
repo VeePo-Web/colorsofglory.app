@@ -227,6 +227,20 @@ export function useVoiceRecorder(
         }
       }
 
+      const mediaDevices = navigator.mediaDevices;
+      if (!mediaDevices?.getUserMedia) {
+        safeCloseContext(audioCtx);
+        setState((s) => ({
+          ...s,
+          phase: "error",
+          error:
+            window.isSecureContext === false
+              ? "Recording needs a secure HTTPS connection. Open the published site to record."
+              : "Recording isn't supported in this browser.",
+        }));
+        return;
+      }
+
       let stream: MediaStream;
       try {
         stream = await mediaDevices.getUserMedia({
