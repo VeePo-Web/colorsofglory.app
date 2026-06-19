@@ -1,65 +1,80 @@
 
-# Step 2 — Capture → Canvas Promotion Pipeline
+# Step 3 — Realtime + Activity Layer for the Song Room
 
-Backend + SDK only. Closes the gap between `idea_captures` and `canvas_cards` so a captured idea becomes a first-class canvas card with its audio attached.
+Backend + thin SDK. Gives every song room a typed event stream so collaborators see changes live and returning users get a "what changed since you left" recap.
 
-## What I learned from the schema
-- `idea_captures.song_id` is **nullable** (unfiled captures exist). Promotion must accept an explicit `target_song_id` when capture has none.
-- Captures point at `voice_memo_id`, not `take_id`. A capture's "audio" lives in `voice_memos`; `takes` are committed derivatives of a voice memo. So linking a take = pick the most recent take with the same `voice_memo_id`, or null.
-- `activity` table does **not** exist yet — it's introduced in Step 3. Step 2 will not write activity rows; Step 3 will retro-fit a shared helper that wraps `promote-capture` and all other writers.
-- `canvas_cards.position` is NOT NULL; we'll seed it to `MAX(position)+1` per song.
+## Schema discoveries that shape the plan
+- No `activity` table exists yet. `audit_logs` exists but is admin/billing scoped — not safe to overload.
+- `song_notification_prefs` exists; we'll add `last_seen_at` there rather than creating a new table.
+- Writers we'll instrument: `commit-take`, `promote-capture` (new), `intake-voice-memo`, `voice-memo-finalize`, `song-invite-accept`, `song-leave`, `song-transfer-owner`, plus the 7 canvas RPCs from Step 1. All happen through edge functions or SECURITY DEFINER RPCs, so a single shared helper covers them.
+- `touch_song_activity()` already bumps `songs.last_activity_at` on memo writes — we'll extend the pattern.
 
 ## Deliverables
 
-### 1. Migration
-- `ALTER TABLE public.canvas_cards ADD COLUMN source_capture_id uuid NULL REFERENCES public.idea_captures(id) ON DELETE SET NULL` + unique partial index `(song_id, source_capture_id) WHERE source_capture_id IS NOT NULL` to enforce idempotency.
-- `ALTER TABLE public.idea_captures ADD COLUMN promoted_card_id uuid NULL REFERENCES public.canvas_cards(id) ON DELETE SET NULL` (denormalized pointer for fast "is this promoted?" reads).
-- Backfill index: `CREATE INDEX ON public.canvas_cards (source_capture_id)`.
-- RPC `capture_with_take(payload jsonb)` — single round-trip used by share/intake flows. Creates an `idea_captures` row, an associated `voice_memos` row (status='pending'), returns `{ capture_id, voice_memo_id, upload_path }`. Caller then uploads to the path via a signed URL produced from existing `voice-memo-upload-url` flow (no signed-URL minting in this RPC — keeps the function pure SQL). Grants: `authenticated` only.
+### 1. Migration — `song_activity` table + helpers
+- `CREATE TABLE public.song_activity` with columns: `id uuid pk default gen_random_uuid()`, `song_id uuid not null references songs(id) on delete cascade`, `actor_user_id uuid not null references auth.users(id) on delete set null`, `kind text not null`, `entity_type text not null`, `entity_id uuid null`, `payload jsonb not null default '{}'::jsonb` (IDs + event metadata only — never lyric/memo content per Core rule), `created_at timestamptz not null default now()`.
+- Indexes: `(song_id, created_at desc)`, `(song_id, actor_user_id, created_at desc)`.
+- GRANTs: `SELECT` to `authenticated`, `ALL` to `service_role`. No INSERT for authenticated — only SECURITY DEFINER writes.
+- RLS: `ENABLE`; one SELECT policy `using (is_song_member(song_id, auth.uid()))`. No INSERT/UPDATE/DELETE policies (locked from clients).
+- Allowed `kind` values defined via CHECK: `take_committed | capture_created | capture_promoted | memo_uploaded | memo_finalized | memo_transcribed | invite_accepted | member_left | owner_transferred | card_moved | card_linked | card_unlinked | card_grouped | card_section_set | card_promoted_final | card_deleted`.
+- Helper `public.log_song_activity(_song_id, _kind, _entity_type, _entity_id, _payload)` SECURITY DEFINER; no-op if `_song_id` null; uses `auth.uid()` as actor (falls back to NULL).
+- Helper `public.list_song_activity_since(_song_id uuid, _since timestamptz, _limit int default 200)` returns grouped digest: `(kind text, actor_user_id uuid, count int, last_at timestamptz, sample_entity_ids uuid[])`. Membership-gated; raises `not_a_member` if caller isn't on the song.
+- Helper `public.mark_song_seen(_song_id uuid)` UPSERTs `(_song_id, auth.uid(), last_seen_at=now())` into `song_notification_prefs`.
+- `ALTER TABLE song_notification_prefs ADD COLUMN IF NOT EXISTS last_seen_at timestamptz` (if not present).
 
-### 2. Edge function `promote-capture`
-- `verify_jwt = false`; validates session in code via `Authorization` bearer using `_shared/auth.ts` pattern.
-- Input (Zod):
+### 2. Migration — Realtime publication
+- `ALTER PUBLICATION supabase_realtime ADD TABLE public.song_activity, public.canvas_cards, public.takes, public.idea_captures` (skip duplicates with DO blocks).
+- `ALTER TABLE … REPLICA IDENTITY FULL` on each so DELETE payloads carry song_id for client-side filtering.
+- Confirm RLS exists on each so Realtime respects per-song access.
+
+### 3. Retro-fit writers — single shared helper
+- All seven Step 1 canvas RPCs get a `PERFORM public.log_song_activity(...)` line at the end of their bodies. Done in this same migration (re-issue `CREATE OR REPLACE` for each).
+- Edge functions that already use `_shared/auth.ts` get a tiny `_shared/activity.ts` helper:
   ```ts
-  { capture_id: uuid,
-    target_song_id?: uuid,        // required if capture.song_id IS NULL
-    target_tree: 'ideas'|'final' = 'ideas',
-    section_label?: string,
-    x?: number, y?: number }
+  export async function logActivity(admin, args: {song_id, kind, entity_type, entity_id?, payload?})
   ```
-- Flow:
-  1. Load capture; resolve `song_id = capture.song_id ?? target_song_id`. 400 if both null.
-  2. Assert caller is song member with role ∈ {owner, collaborator} via existing `song_role`.
-  3. **Idempotency:** if a `canvas_cards` row already exists with `source_capture_id = capture.id`, return it.
-  4. Pick most recent `takes` row where `voice_memo_id = capture.voice_memo_id` (may be null).
-  5. Insert new `canvas_cards`: `kind='idea'`, `body = capture.lyric_snippet ?? ''`, `label = capture.title`, `tree_kind`, `section_label`, `x`, `y`, `position = (max+1)`, `source_capture_id`, `take_id`, `created_by = caller`.
-  6. Update `idea_captures.promoted_card_id`.
-  7. If take exists and its `transcript_status IN ('none','failed')`, fire-and-forget invoke `transcribe-take` (non-blocking; failure logged, not raised).
-  8. Return `{ card_id, take_id: string|null, transcript_pending: boolean, already_promoted: boolean }`.
-- Errors: `not_a_member` 403, `capture_not_found` 404, `missing_song` 400, `invalid_input` 400.
-- CORS via `_shared/cors.ts` pattern already used in other functions.
+  Wired into:
+  - `promote-capture` → `capture_promoted`
+  - `commit-take` → `take_committed`
+  - `intake-voice-memo` → `memo_uploaded`
+  - `voice-memo-finalize` → `memo_finalized`
+  - `voice-memo-transcribe-worker` (or sibling) → `memo_transcribed`
+  - `song-invite-accept` → `invite_accepted`
+  - `song-leave` → `member_left`
+  - `song-transfer-owner` → `owner_transferred`
+- Each writer passes IDs only — never lyric body, memo title, or transcript text.
 
-### 3. SDK
-- `src/integrations/cog/capture.ts` adds:
-  - `promoteCapture(input): Promise<{ card_id: string; take_id: string|null; transcript_pending: boolean; already_promoted: boolean }>` calling `functions.invoke('promote-capture')`.
-- `src/integrations/cog/intake.ts` adds:
-  - `captureWithTake(input): Promise<{ capture_id; voice_memo_id; upload_path }>` calling the new RPC.
+### 4. SDK additions
+- `src/integrations/cog/activity.ts` (new or extend existing):
+  - `type SongActivityKind` union.
+  - `listActivitySince(song_id, since): Promise<DigestRow[]>` → calls the new RPC.
+  - `markSongSeen(song_id): Promise<void>` → calls the new RPC.
+- `src/integrations/cog/realtime.ts` (new):
+  - `subscribeSongRoom(song_id, handlers): () => void` — wraps `supabase.channel('song:'+id)` and routes postgres_changes events from `song_activity`, `canvas_cards`, `takes`, `idea_captures` (all filtered `song_id=eq.${id}`) to typed handlers `{ onActivity, onCardChange, onTakeChange, onCaptureChange }`. Returns an unsubscribe fn that calls `supabase.removeChannel`.
+- No UI files touched.
 
-### 4. Acceptance tests (via `supabase--curl_edge_functions` + `read_query`)
-- **Happy path:** create capture w/ voice_memo + take → promote → row appears in `canvas_cards` with `source_capture_id` set, `take_id` linked, `idea_captures.promoted_card_id` populated.
-- **Idempotency:** call promote twice → same `card_id`, `already_promoted=true` on second.
-- **Unfiled capture:** capture.song_id null + no `target_song_id` → 400 `missing_song`. With `target_song_id` → success.
-- **Authz:** viewer-role member → 403 `insufficient_role`.
-- **Transcript trigger:** capture w/ take whose `transcript_status='none'` → `transcript_pending=true`, status flips to `queued`/`processing` shortly.
+### 5. Edge function `digest-recap`
+- Input: `{ song_id, since }`. Auth-gated, member-checked.
+- Loads `list_song_activity_since` rows; resolves actor display names from `profiles`.
+- Calls Lovable AI Gateway (`google/gemini-2.5-flash`) with a strictly-IDs+counts prompt — no lyric, memo, or scripture text included. Output: one short paragraph.
+- Returns `{ digest: string, rows: DigestRow[] }`.
+- Logs the exact prompt at debug level (with a `NEVER_INCLUDE_CONTENT=true` assertion fence) so we can audit.
+- SDK: `getRecapDigest(song_id, since)` in `activity.ts`.
 
-## Out of scope (later steps)
-- Activity log writes (Step 3 retro-fits via shared helper).
-- AI section detection.
-- UI buttons / pages — Claude's lane.
-- Backfill of historical captures already on canvas — leave `source_capture_id` null; new promotions only.
+### 6. Acceptance
+- After Step 1 RPC call, a row appears in `song_activity` with the right `kind` and `actor_user_id`.
+- `list_song_activity_since` returns grouped counts for a burst of mixed kinds.
+- Realtime test: subscribe in one shell via `curl_edge_functions`-driven WS isn't feasible — instead, verify publication membership with `select * from pg_publication_tables where pubname='supabase_realtime'`.
+- `digest-recap` returns a sentence; manual prompt log inspection shows zero lyric/memo content.
+- Linter clean; no new "Public Can Execute SECURITY DEFINER" warnings (new fns explicitly `REVOKE EXECUTE … FROM PUBLIC, anon`).
+
+## Out of scope
+- Presence avatars + UI toasts (Claude).
+- Per-user notification preferences screen.
+- Email/push notification fan-out (a future Step would add `pg_net` + a notify-worker).
 
 ## Risk notes
-- Triggering `transcribe-take` from within an edge function: use `supabase.functions.invoke` with `Authorization` of the original caller; if that adds latency, switch to a `pg_net` deferred call in a follow-up.
-- Unique partial index on `(song_id, source_capture_id)` prevents duplicate promotions even under race.
+- Writer retro-fit touches several edge functions. To keep each change small, I'll patch one function per edit pass and validate the function still compiles before moving to the next.
+- `digest-recap` prompt: hard-coded allow-list of fields passed to the model; a unit-style assertion in code throws if anything outside the allow-list slips into the prompt object.
 
-Reply "go" to build Step 2.
+Reply "go" to build Step 3.
