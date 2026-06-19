@@ -1,4 +1,5 @@
 import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/auth.ts";
+import { logActivity } from "../_shared/activity.ts";
 
 // Maps SQL helper codes -> HTTP status
 const STATUS: Record<string, number> = {
@@ -30,6 +31,16 @@ Deno.serve(async (req) => {
     const row = Array.isArray(data) ? data[0] : data;
     const code = row?.code ?? "INTERNAL";
     if (code === "OK") {
+      if (row.song_id && !row.already_member) {
+        await logActivity(admin, {
+          song_id: row.song_id,
+          actor_user_id: user.id,
+          kind: "invite_accepted",
+          entity_type: "song_member",
+          entity_id: user.id,
+          payload: { role: row.role },
+        });
+      }
       return jsonResponse(
         {
           ok: true,
