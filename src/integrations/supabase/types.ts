@@ -1065,6 +1065,47 @@ export type Database = {
           },
         ]
       }
+      song_activity: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          kind: string
+          payload: Json
+          song_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          kind: string
+          payload?: Json
+          song_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          song_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_activity_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_invites: {
         Row: {
           accepted_at: string | null
@@ -1261,6 +1302,7 @@ export type Database = {
       song_notification_prefs: {
         Row: {
           created_at: string
+          last_seen_at: string | null
           notify_on_contribution: boolean
           notify_on_join: boolean
           push_enabled: boolean
@@ -1270,6 +1312,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          last_seen_at?: string | null
           notify_on_contribution?: boolean
           notify_on_join?: boolean
           push_enabled?: boolean
@@ -1279,6 +1322,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          last_seen_at?: string | null
           notify_on_contribution?: boolean
           notify_on_join?: boolean
           push_enabled?: boolean
@@ -2411,6 +2455,16 @@ export type Database = {
           voice_memo_count: number
         }[]
       }
+      list_song_activity_since: {
+        Args: { _limit?: number; _since: string; _song_id: string }
+        Returns: {
+          actor_user_id: string
+          event_count: number
+          kind: string
+          last_at: string
+          sample_entity_ids: string[]
+        }[]
+      }
       list_song_members: {
         Args: { _song_id: string }
         Returns: {
@@ -2440,6 +2494,16 @@ export type Database = {
           voice_memo_id: string
           waveform_peaks: Json
         }[]
+      }
+      log_song_activity: {
+        Args: {
+          _entity_id?: string
+          _entity_type: string
+          _kind: string
+          _payload?: Json
+          _song_id: string
+        }
+        Returns: string
       }
       mark_memo_failed: {
         Args: { _memo_id: string; _reason: string }
@@ -2500,6 +2564,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      mark_song_seen: { Args: { _song_id: string }; Returns: undefined }
       mature_holds: { Args: never; Returns: number }
       my_song_role: {
         Args: { _song_id: string }
