@@ -22,6 +22,7 @@ export type IdeaCapture = {
   voice_memo_id: string | null;
   created_at: string;
   updated_at: string;
+  promoted_card_id?: string | null;
 };
 
 /** Atomically save a quick-capture entry; bumps song last_activity_at when scoped to a song. */
@@ -66,4 +67,30 @@ export async function listMyUnfiledCaptures(): Promise<IdeaCapture[]> {
 export async function deleteCapture(id: string): Promise<void> {
   const { error } = await supabase.from("idea_captures").delete().eq("id", id);
   if (error) throw error;
+}
+
+export type PromoteCaptureInput = {
+  capture_id: string;
+  target_song_id?: string;
+  target_tree?: "ideas" | "final";
+  section_label?: string;
+  x?: number;
+  y?: number;
+};
+
+export type PromoteCaptureResult = {
+  card_id: string;
+  take_id: string | null;
+  transcript_pending: boolean;
+  already_promoted: boolean;
+};
+
+/** Promote an idea capture into a canvas card (idempotent per capture). */
+export async function promoteCapture(input: PromoteCaptureInput): Promise<PromoteCaptureResult> {
+  const { data, error } = await supabase.functions.invoke<PromoteCaptureResult>("promote-capture", {
+    body: input,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("promote-capture returned no data");
+  return data;
 }
