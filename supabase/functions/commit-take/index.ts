@@ -1,4 +1,5 @@
 import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/auth.ts";
+import { logActivity } from "../_shared/activity.ts";
 
 type IncomingBlock = {
   kind: "lyrics" | "chords" | "scripture" | "idea" | "section";
@@ -104,6 +105,15 @@ Deno.serve(async (req) => {
       entity_type: "take",
       entity_id: take_id,
       after: { song_id: targetSongId, card_count: inserted?.length ?? 0 },
+    });
+
+    await logActivity(admin, {
+      song_id: targetSongId,
+      actor_user_id: user.id,
+      kind: "take_committed",
+      entity_type: "take",
+      entity_id: take_id,
+      payload: { card_count: inserted?.length ?? 0 },
     });
 
     return jsonResponse({
