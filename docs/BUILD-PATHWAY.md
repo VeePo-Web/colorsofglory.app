@@ -101,7 +101,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **L4** Canvas / song-sections persistence + commit API → [`docs/prompts/L4-lovable-canvas-persistence.md`](prompts/L4-lovable-canvas-persistence.md)
 - ☑ **L5** Voice-memo storage + layering + analysis wiring → [`docs/prompts/L5-lovable-voice-memo-storage-analysis.md`](prompts/L5-lovable-voice-memo-storage-analysis.md)
 - ☑ **L6** Collaboration (collaborators, invite_tokens, roles, RLS) → [`docs/prompts/L6-lovable-collaboration-roles-rls.md`](prompts/L6-lovable-collaboration-roles-rls.md)
-- ☐ **L7** Activity log + version snapshots
+- ☑ **L7** Activity log + version snapshots → [`docs/prompts/L7-lovable-activity-versions.md`](prompts/L7-lovable-activity-versions.md)
 - ☐ **L8** Credits ledger
 - ☐ **L9** Storage quotas + plan gating + Stripe
 - ☐ **L10** Referrals + email automations
@@ -112,8 +112,8 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **C3** Lyrics + Chords editor → [`docs/prompts/C3-claude-lyrics-chords-editor.md`](prompts/C3-claude-lyrics-chords-editor.md)
 - ☑ **C4** Voice-memo list + playback → [`docs/prompts/C4-claude-voice-memo-list-playback.md`](prompts/C4-claude-voice-memo-list-playback.md)
 - ☑ **C5** Collaboration UI (invite + roles) → [`docs/prompts/C5-claude-collaboration-ui.md`](prompts/C5-claude-collaboration-ui.md)
-- ☐ **C6** Activity feed ("what changed")
-- ☐ **C7** Version-history timeline
+- ☑ **C6** Activity feed ("what changed") → [`docs/prompts/C6-claude-activity-feed.md`](prompts/C6-claude-activity-feed.md)
+- ☑ **C7** Version-history timeline → [`docs/prompts/C7-claude-version-history.md`](prompts/C7-claude-version-history.md)
 - ☐ **C8** Credits ledger UI
 - ☐ **C9** Catalog + navigation cohesion
 - ☐ **C10** Business-model screens (upgrade / storage / referral)
@@ -125,7 +125,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **Q4** Lyrics / chords QA + a11y → [`docs/prompts/Q4-codex-lyrics-chords-qa.md`](prompts/Q4-codex-lyrics-chords-qa.md)
 - ☑ **Q5** Audio playback + capture-intelligence QA → [`docs/prompts/Q5-codex-audio-playback-qa.md`](prompts/Q5-codex-audio-playback-qa.md)
 - ☑ **Q6** Collaboration + RLS-from-client QA → [`docs/prompts/Q6-codex-collaboration-rls-qa.md`](prompts/Q6-codex-collaboration-rls-qa.md)
-- ☐ **Q7** Activity / versions QA
+- ☑ **Q7** Activity / versions QA → [`docs/prompts/Q7-codex-activity-versions-qa.md`](prompts/Q7-codex-activity-versions-qa.md)
 - ☐ **Q8** Credits QA
 - ☐ **Q9** Payments QA (no live charges)
 - ☐ **Q10** Full Lighthouse / a11y / regression release sweep
