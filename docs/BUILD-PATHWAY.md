@@ -93,7 +93,7 @@ PDFs + reference images under `zip_extracted/…` (see `CLAUDE.md` §7).
 Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ### 🛠 LOVABLE — the data spine
-- ☐ **L1** Schema consolidation + RLS baseline (CLAUDE.md §5 model)
+- ☑ **L1** Schema consolidation + RLS baseline → [`docs/prompts/L1-lovable-schema-consolidation.md`](prompts/L1-lovable-schema-consolidation.md)
 - ☐ **L2** Auth finalize (email + phone OTP)
 - ☐ **L3** Capture intake + transcription pipeline (voice_memos, takes, transcripts)
 - ☐ **L4** Canvas / song-sections persistence + commit API
