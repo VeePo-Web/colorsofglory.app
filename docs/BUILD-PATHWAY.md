@@ -131,6 +131,13 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ---
 
+### Fix passes (ad hoc, from live audits)
+- ☐ **CF1** Mobile detail fixes (duplicate record FAB, sub-44px targets, record-gesture
+  consistency) → [`docs/prompts/CF1-claude-mobile-detail-fixes.md`](prompts/CF1-claude-mobile-detail-fixes.md)
+  — from [`docs/MOBILE-AUDIT-FINDINGS.md`](MOBILE-AUDIT-FINDINGS.md).
+
+---
+
 ## 5. EXECUTION RHYTHM
 
 1. Write the next prompt in depth (start: **L1 → C1 → Q1**).
