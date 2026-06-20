@@ -98,7 +98,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **L2** Auth finalize (email + phone OTP) → [`docs/prompts/L2-lovable-auth-finalize.md`](prompts/L2-lovable-auth-finalize.md)
 - ☑ **L3** Capture intake + transcription pipeline → [`docs/prompts/L3-lovable-capture-intake-transcription.md`](prompts/L3-lovable-capture-intake-transcription.md)
   - ☑ **LX** AI-enhanced capture (Dolby.io enhance · AssemblyAI/Deepgram · Moises/Music.ai · on-device Essentia) → [`docs/prompts/LX-lovable-capture-ai-intelligence.md`](prompts/LX-lovable-capture-ai-intelligence.md)
-- ☐ **L4** Canvas / song-sections persistence + commit API
+- ☑ **L4** Canvas / song-sections persistence + commit API → [`docs/prompts/L4-lovable-canvas-persistence.md`](prompts/L4-lovable-canvas-persistence.md)
 - ☑ **L5** Voice-memo storage + layering + analysis wiring → [`docs/prompts/L5-lovable-voice-memo-storage-analysis.md`](prompts/L5-lovable-voice-memo-storage-analysis.md)
 - ☐ **L6** Collaboration (collaborators, invite_tokens, roles, RLS)
 - ☐ **L7** Activity log + version snapshots
@@ -122,7 +122,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
 - ☑ **Q2** Capture QA (mic, cross-device) → [`docs/prompts/Q2-codex-capture-qa.md`](prompts/Q2-codex-capture-qa.md)
 - ☑ **Q3** Canvas QA + perf → [`docs/prompts/Q3-codex-canvas-qa.md`](prompts/Q3-codex-canvas-qa.md)
-- ☐ **Q4** Lyrics / chords QA + a11y
+- ☑ **Q4** Lyrics / chords QA + a11y → [`docs/prompts/Q4-codex-lyrics-chords-qa.md`](prompts/Q4-codex-lyrics-chords-qa.md)
 - ☑ **Q5** Audio playback + capture-intelligence QA → [`docs/prompts/Q5-codex-audio-playback-qa.md`](prompts/Q5-codex-audio-playback-qa.md)
 - ☐ **Q6** Collaboration + RLS-from-client QA
 - ☐ **Q7** Activity / versions QA
