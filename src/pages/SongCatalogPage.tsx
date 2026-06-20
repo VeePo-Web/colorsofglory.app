@@ -46,8 +46,7 @@ const SongCatalogPage = () => {
     try {
       const list = await listMySongs();
       setSongs(list);
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Couldn't load your songs");
     } finally {
       setLoading(false);
@@ -97,7 +96,6 @@ const SongCatalogPage = () => {
       setDialogOpen(false);
       navigate(`/songs/${song.id}/brainstorm`);
     } catch (err) {
-      console.error(err);
       toast.error(err instanceof Error ? err.message : "Couldn't create that song");
     } finally {
       setCreating(false);
@@ -143,10 +141,11 @@ const SongCatalogPage = () => {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className="mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150"
+                className="mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center"
                 style={{
                   color: activeTab === tab ? "#FFFFFF" : "rgba(255,255,255,0.40)",
                   fontFamily: "var(--font-body)",
+                  minHeight: 44,
                 }}
                 aria-selected={activeTab === tab}
               >
@@ -195,14 +194,17 @@ const SongCatalogPage = () => {
         )}
       </div>
 
-      {/* "+ New song" FAB - gold pill, above BottomNav */}
+      {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
+          raised center capture mic (one action never sits on another). */}
       <button
         onClick={handleCreateSong}
         disabled={isCheckingCreate}
         aria-busy={isCheckingCreate}
-        className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-3.5 rounded-full font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-80"
+        className="fixed flex items-center justify-center gap-2 px-5 rounded-full font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-80"
         style={{
-          bottom: 88,
+          bottom: 96,
+          right: 16,
+          minHeight: 48,
           backgroundColor: "#B5935A",
           boxShadow: "0 4px 20px rgba(181,147,90,0.45)",
           fontFamily: "var(--font-body)",

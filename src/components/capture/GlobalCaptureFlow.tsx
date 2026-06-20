@@ -53,15 +53,17 @@ const GlobalCaptureFlow = () => {
   }, [discard]);
 
   const path = location.pathname;
-  // One obvious record action per screen (CapCut/Apple). Hide the floating FAB
-  // anywhere a contextual mic already lives: the capture home (`/`), every song
-  // screen (`/songs/:id…` — detail/room/canvas all have their own record entry),
-  // the canvas, the Voice layer, and the full Capture screen. It survives only on
-  // neutral screens like the catalog (`/songs`) as a true "capture from anywhere."
+  // One obvious record action per screen (CapCut/Apple). The BottomNav already
+  // carries a raised capture mic on every top-level screen, and song screens have
+  // their own contextual mic — so the floating FAB is redundant everywhere and is
+  // effectively retired. Hide it on: capture home (`/`), the catalog (`/songs`),
+  // every song screen (`/songs/:id…`), the canvas, the Voice layer, and Capture.
   const isCaptureHome = path === "/";
+  const isCatalog = path === "/songs";
   const isSongScreen = path.startsWith("/songs/");
   const ownsItsOwnCapture =
     isCaptureHome ||
+    isCatalog ||
     isSongScreen ||
     path.includes("/canvas") ||
     path.endsWith("/voice") ||
