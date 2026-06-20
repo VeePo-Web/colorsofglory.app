@@ -103,8 +103,8 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **L6** Collaboration (collaborators, invite_tokens, roles, RLS) → [`docs/prompts/L6-lovable-collaboration-roles-rls.md`](prompts/L6-lovable-collaboration-roles-rls.md)
 - ☑ **L7** Activity log + version snapshots → [`docs/prompts/L7-lovable-activity-versions.md`](prompts/L7-lovable-activity-versions.md)
 - ☑ **L8** Credits ledger + export → [`docs/prompts/L8-lovable-credits-ledger.md`](prompts/L8-lovable-credits-ledger.md)
-- ☐ **L9** Storage quotas + plan gating + Stripe
-- ☐ **L10** Referrals + email automations
+- ☑ **L9** Storage quotas + plan gating + Stripe → [`docs/prompts/L9-lovable-storage-plans-stripe.md`](prompts/L9-lovable-storage-plans-stripe.md)
+- ☑ **L10** Referrals + email automations → [`docs/prompts/L10-lovable-referrals-email.md`](prompts/L10-lovable-referrals-email.md)
 
 ### 🎨 CLAUDE — the experience
 - ☑ **C1** Canvas cleanup (audit + restructure the weird one) → [`docs/prompts/C1-claude-canvas-cleanup.md`](prompts/C1-claude-canvas-cleanup.md)
@@ -115,8 +115,8 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **C6** Activity feed ("what changed") → [`docs/prompts/C6-claude-activity-feed.md`](prompts/C6-claude-activity-feed.md)
 - ☑ **C7** Version-history timeline → [`docs/prompts/C7-claude-version-history.md`](prompts/C7-claude-version-history.md)
 - ☑ **C8** Credits ledger UI → [`docs/prompts/C8-claude-credits-ui.md`](prompts/C8-claude-credits-ui.md)
-- ☐ **C9** Catalog + navigation cohesion
-- ☐ **C10** Business-model screens (upgrade / storage / referral)
+- ☑ **C9** Catalog + navigation cohesion → [`docs/prompts/C9-claude-catalog-navigation.md`](prompts/C9-claude-catalog-navigation.md)
+- ☑ **C10** Business-model screens (upgrade / storage / referral) → [`docs/prompts/C10-claude-business-screens.md`](prompts/C10-claude-business-screens.md)
 
 ### 🔬 CODEX — the quality gate
 - ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
@@ -127,8 +127,8 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **Q6** Collaboration + RLS-from-client QA → [`docs/prompts/Q6-codex-collaboration-rls-qa.md`](prompts/Q6-codex-collaboration-rls-qa.md)
 - ☑ **Q7** Activity / versions QA → [`docs/prompts/Q7-codex-activity-versions-qa.md`](prompts/Q7-codex-activity-versions-qa.md)
 - ☑ **Q8** Credits QA → [`docs/prompts/Q8-codex-credits-qa.md`](prompts/Q8-codex-credits-qa.md)
-- ☐ **Q9** Payments QA (no live charges)
-- ☐ **Q10** Full Lighthouse / a11y / regression release sweep
+- ☑ **Q9** Payments QA (no live charges) → [`docs/prompts/Q9-codex-payments-qa.md`](prompts/Q9-codex-payments-qa.md)
+- ☑ **Q10** Full Lighthouse / a11y / regression release sweep → [`docs/prompts/Q10-codex-release-sweep.md`](prompts/Q10-codex-release-sweep.md)
 
 ---
 
