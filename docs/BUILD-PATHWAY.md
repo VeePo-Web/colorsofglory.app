@@ -40,7 +40,8 @@ reaches across the seam.** In pages/components, auth comes from
 ### Hard frontend rules (Claude)
 Design tokens only (`var(--cog-*)`), no raw Tailwind colors · components < ~250 lines
 · no `console.log` · mobile-first, iOS-Safari-first · evidence before "done"
-(`tsc` + `build` + tests).
+(`tsc` + `build` + tests). **Every screen meets `docs/MOBILE-UX-BENCHMARK.md`**
+(Apple + CapCut standard).
 
 ---
 
@@ -94,7 +95,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ### 🛠 LOVABLE — the data spine
 - ☑ **L1** Schema consolidation + RLS baseline → [`docs/prompts/L1-lovable-schema-consolidation.md`](prompts/L1-lovable-schema-consolidation.md)
-- ☐ **L2** Auth finalize (email + phone OTP)
+- ☑ **L2** Auth finalize (email + phone OTP) → [`docs/prompts/L2-lovable-auth-finalize.md`](prompts/L2-lovable-auth-finalize.md)
 - ☐ **L3** Capture intake + transcription pipeline (voice_memos, takes, transcripts)
 - ☐ **L4** Canvas / song-sections persistence + commit API
 - ☐ **L5** Voice-memo storage + BPM/key analysis endpoints
@@ -106,7 +107,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ### 🎨 CLAUDE — the experience
 - ☑ **C1** Canvas cleanup (audit + restructure the weird one) → [`docs/prompts/C1-claude-canvas-cleanup.md`](prompts/C1-claude-canvas-cleanup.md)
-- ☐ **C2** Song Workspace / room hub
+- ☑ **C2** Song Workspace / room hub → [`docs/prompts/C2-claude-song-workspace-room.md`](prompts/C2-claude-song-workspace-room.md)
 - ☐ **C3** Lyrics + Chords editor
 - ☐ **C4** Voice-memo list + playback
 - ☐ **C5** Collaboration UI (invite + roles)
@@ -118,7 +119,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ### 🔬 CODEX — the quality gate
 - ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
-- ☐ **Q2** Capture QA (mic, cross-device)
+- ☑ **Q2** Capture QA (mic, cross-device) → [`docs/prompts/Q2-codex-capture-qa.md`](prompts/Q2-codex-capture-qa.md)
 - ☐ **Q3** Canvas QA + perf
 - ☐ **Q4** Lyrics / chords QA + a11y
 - ☐ **Q5** Audio playback QA + perf
