@@ -105,7 +105,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☐ **L10** Referrals + email automations
 
 ### 🎨 CLAUDE — the experience
-- ☐ **C1** Canvas cleanup (audit + restructure the weird one)
+- ☑ **C1** Canvas cleanup (audit + restructure the weird one) → [`docs/prompts/C1-claude-canvas-cleanup.md`](prompts/C1-claude-canvas-cleanup.md)
 - ☐ **C2** Song Workspace / room hub
 - ☐ **C3** Lyrics + Chords editor
 - ☐ **C4** Voice-memo list + playback
