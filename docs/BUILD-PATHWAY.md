@@ -100,7 +100,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
   - ☑ **LX** AI-enhanced capture (Dolby.io enhance · AssemblyAI/Deepgram · Moises/Music.ai · on-device Essentia) → [`docs/prompts/LX-lovable-capture-ai-intelligence.md`](prompts/LX-lovable-capture-ai-intelligence.md)
 - ☑ **L4** Canvas / song-sections persistence + commit API → [`docs/prompts/L4-lovable-canvas-persistence.md`](prompts/L4-lovable-canvas-persistence.md)
 - ☑ **L5** Voice-memo storage + layering + analysis wiring → [`docs/prompts/L5-lovable-voice-memo-storage-analysis.md`](prompts/L5-lovable-voice-memo-storage-analysis.md)
-- ☐ **L6** Collaboration (collaborators, invite_tokens, roles, RLS)
+- ☑ **L6** Collaboration (collaborators, invite_tokens, roles, RLS) → [`docs/prompts/L6-lovable-collaboration-roles-rls.md`](prompts/L6-lovable-collaboration-roles-rls.md)
 - ☐ **L7** Activity log + version snapshots
 - ☐ **L8** Credits ledger
 - ☐ **L9** Storage quotas + plan gating + Stripe
@@ -111,7 +111,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **C2** Song Workspace / room hub → [`docs/prompts/C2-claude-song-workspace-room.md`](prompts/C2-claude-song-workspace-room.md)
 - ☑ **C3** Lyrics + Chords editor → [`docs/prompts/C3-claude-lyrics-chords-editor.md`](prompts/C3-claude-lyrics-chords-editor.md)
 - ☑ **C4** Voice-memo list + playback → [`docs/prompts/C4-claude-voice-memo-list-playback.md`](prompts/C4-claude-voice-memo-list-playback.md)
-- ☐ **C5** Collaboration UI (invite + roles)
+- ☑ **C5** Collaboration UI (invite + roles) → [`docs/prompts/C5-claude-collaboration-ui.md`](prompts/C5-claude-collaboration-ui.md)
 - ☐ **C6** Activity feed ("what changed")
 - ☐ **C7** Version-history timeline
 - ☐ **C8** Credits ledger UI
@@ -124,7 +124,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **Q3** Canvas QA + perf → [`docs/prompts/Q3-codex-canvas-qa.md`](prompts/Q3-codex-canvas-qa.md)
 - ☑ **Q4** Lyrics / chords QA + a11y → [`docs/prompts/Q4-codex-lyrics-chords-qa.md`](prompts/Q4-codex-lyrics-chords-qa.md)
 - ☑ **Q5** Audio playback + capture-intelligence QA → [`docs/prompts/Q5-codex-audio-playback-qa.md`](prompts/Q5-codex-audio-playback-qa.md)
-- ☐ **Q6** Collaboration + RLS-from-client QA
+- ☑ **Q6** Collaboration + RLS-from-client QA → [`docs/prompts/Q6-codex-collaboration-rls-qa.md`](prompts/Q6-codex-collaboration-rls-qa.md)
 - ☐ **Q7** Activity / versions QA
 - ☐ **Q8** Credits QA
 - ☐ **Q9** Payments QA (no live charges)
