@@ -117,7 +117,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☐ **C10** Business-model screens (upgrade / storage / referral)
 
 ### 🔬 CODEX — the quality gate
-- ☐ **Q1** CI baseline + bundle / lint / typecheck gates
+- ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
 - ☐ **Q2** Capture QA (mic, cross-device)
 - ☐ **Q3** Canvas QA + perf
 - ☐ **Q4** Lyrics / chords QA + a11y
