@@ -4,6 +4,10 @@
 > This is the one live process doc. `CLAUDE.md` = product/design spec. This file
 > = *who does what, in what order, without colliding.* If anything here conflicts
 > with an older doc in `docs/`, this wins; archive the older one.
+>
+> **Run it with [`docs/EXECUTION-PLAN.md`](EXECUTION-PLAN.md)** — the cadence, the
+> branch/depends/done map for all 32 prompts, and the CapCut/Apple UX bar each screen
+> must clear. Bar reference: [`docs/MOBILE-UX-BENCHMARK.md`](MOBILE-UX-BENCHMARK.md).
 
 ---
 
