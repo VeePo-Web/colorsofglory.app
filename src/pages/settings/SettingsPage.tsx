@@ -1,4 +1,5 @@
-﻿import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   HardDrive,
   Gift,
@@ -12,35 +13,54 @@ import {
 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
+import { useCurrentAccount } from "@/integrations/cog/auth";
 
 interface SettingsRow {
+  id: string;
   icon: React.ElementType;
   label: string;
   sublabel?: string;
   to?: string;
+  action?: "signout";
   accent?: boolean;
   destructive?: boolean;
 }
 
-const ROWS: SettingsRow[] = [
-  { icon: User,      label: "Account",          sublabel: "officallulas@gmail.com", to: "#" },
-  { icon: Crown,     label: "Upgrade to Pro",   sublabel: "Unlock 50 songs - 100GB - exports", to: "/upgrade", accent: true },
-  { icon: CreditCard, label: "Billing",         sublabel: "Manage plan, invoices, and cancellation", to: "/settings/billing" },
-  { icon: HardDrive, label: "Storage",          sublabel: "850MB of 1GB used", to: "/settings/storage" },
-  { icon: Gift,      label: "Refer & Earn",     sublabel: "$10/month per active Pro referral", to: "/settings/referral" },
-  { icon: Bell,      label: "Notifications",    to: "#" },
-  { icon: ShieldCheck, label: "Privacy & Security", to: "#" },
-  { icon: LogOut,    label: "Sign out",         to: "/auth/login", destructive: true },
-];
-
 const SettingsPage = () => {
   const navigate = useNavigate();
+  const { user, profile, signOut } = useCurrentAccount();
+
+  // Real account identity — never hardcode a person's email.
+  const accountSublabel =
+    profile?.display_name?.trim() ||
+    user?.email ||
+    "Manage your account";
+
+  const rows = useMemo<SettingsRow[]>(
+    () => [
+      { id: "account", icon: User, label: "Account", sublabel: accountSublabel, to: "#" },
+      { id: "upgrade", icon: Crown, label: "Upgrade to Pro", sublabel: "More songs, storage, and exports", to: "/upgrade", accent: true },
+      { id: "billing", icon: CreditCard, label: "Billing", sublabel: "Manage plan, invoices, and cancellation", to: "/settings/billing" },
+      { id: "storage", icon: HardDrive, label: "Storage", sublabel: "Manage your space", to: "/settings/storage" },
+      { id: "referral", icon: Gift, label: "Refer & Earn", sublabel: "Invite a co-writer, you both benefit", to: "/settings/referral" },
+      { id: "notifications", icon: Bell, label: "Notifications", to: "#" },
+      { id: "privacy", icon: ShieldCheck, label: "Privacy & Security", to: "#" },
+      { id: "signout", icon: LogOut, label: "Sign out", action: "signout", destructive: true },
+    ],
+    [accountSublabel],
+  );
+
+  const handleRow = async (row: SettingsRow) => {
+    if (row.action === "signout") {
+      await signOut();
+      navigate("/auth/login", { replace: true });
+      return;
+    }
+    if (row.to) navigate(row.to);
+  };
 
   return (
-    <div
-      className="relative min-h-screen"
-      style={{ backgroundColor: "var(--cog-cream)" }}
-    >
+    <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream)" }}>
       {/* Warm glow */}
       <div
         className="pointer-events-none fixed inset-0"
@@ -75,17 +95,15 @@ const SettingsPage = () => {
             boxShadow: "0 2px 16px rgba(28,26,23,0.06)",
           }}
         >
-          {ROWS.map((row, idx) => {
+          {rows.map((row, idx) => {
             const Icon = row.icon;
-            const isLast = idx === ROWS.length - 1;
+            const isLast = idx === rows.length - 1;
             return (
               <button
-                key={row.label}
-                onClick={() => row.to && navigate(row.to)}
+                key={row.id}
+                onClick={() => { void handleRow(row); }}
                 className="w-full flex items-center gap-4 px-4 py-4 transition-all duration-150 active:bg-[rgba(184,149,58,0.06)] text-left"
-                style={{
-                  borderBottom: isLast ? "none" : "1px solid var(--cog-border)",
-                }}
+                style={{ borderBottom: isLast ? "none" : "1px solid var(--cog-border)" }}
               >
                 <div
                   className="flex items-center justify-center rounded-xl flex-shrink-0"
@@ -122,10 +140,7 @@ const SettingsPage = () => {
                     {row.label}
                   </p>
                   {row.sublabel && (
-                    <p
-                      className="text-xs mt-0.5 truncate"
-                      style={{ color: "var(--cog-muted)" }}
-                    >
+                    <p className="text-xs mt-0.5 truncate" style={{ color: "var(--cog-muted)" }}>
                       {row.sublabel}
                     </p>
                   )}
@@ -153,4 +168,3 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
-
