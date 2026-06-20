@@ -54,11 +54,32 @@ standard to match for craft.
 
 ---
 
+## IN-FLIGHT WORK TO BUILD ON (do not reinvent — coordinate)
+
+Another agent (Codex/Lovable) is **already unifying the canvas action surface**. Adopt it
+rather than rebuilding it:
+- **`src/components/cog/CreativeActionDock.tsx`** — a clean, reusable, accessible action
+  bar (primary action, haptics, loading, aria). **Use this as the canvas's single action
+  surface** instead of the old scattered FABs / action rows.
+- **`SHOW_LEGACY_CANVAS_FABS = false`** in `SongCanvasExperience.tsx` — the legacy FABs
+  are being retired. Don't bring them back; finish their removal.
+- **`src/components/cog/SongRoomSaveToast.tsx`** — the "save moment" confirmation. Reuse
+  it for canvas commit/approve/return feedback; don't invent a parallel toast.
+- New styles live in `index.css` (`cog-creation-dock*`). Reuse the tokens/classes.
+
+**Therefore C1's real remaining work is the structural core:** unify the data model,
+move to seam-only persistence, kill `sessionStorage`, and split the god component — NOT
+the action buttons (handled). **Sequencing:** wait until that in-flight work is committed
+to `main`, then branch from clean `main` so you build on the dock, not over it.
+
+---
+
 ## OBJECTIVE
 
 A **coherent, maintainable canvas** that (a) runs on **one** data model, (b) reads/
 writes through the **seam** to the **real** schema, (c) is split into focused
-components (< ~250 lines each), and (d) delivers a crisp **MVP** of the F4/F5 spec
+components (< ~250 lines each), **(d) uses the shared `CreativeActionDock` + `SongRoomSaveToast`
+as its action/feedback surface**, and (e) delivers a crisp **MVP** of the F4/F5 spec
 at capture-level craft — deferring the parts that aren't ready, explicitly.
 
 ---
