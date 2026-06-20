@@ -8,6 +8,7 @@
 > **Run it with [`docs/EXECUTION-PLAN.md`](EXECUTION-PLAN.md)** — the cadence, the
 > branch/depends/done map for all 32 prompts, and the CapCut/Apple UX bar each screen
 > must clear. Bar reference: [`docs/MOBILE-UX-BENCHMARK.md`](MOBILE-UX-BENCHMARK.md).
+> Codex no-touch reference: [`docs/CODEX-READONLY-QA-PLAN.md`](CODEX-READONLY-QA-PLAN.md).
 
 ---
 
@@ -29,16 +30,17 @@ What broke was *coordination*:
 
 | | **LOVABLE** 🛠 | **CLAUDE** 🎨 | **CODEX** 🔬 |
 |---|---|---|---|
-| **Mandate** | The data spine | The experience | The quality gate |
-| **Owns** | `supabase/` (schema, RLS, migrations), auth (OTP/email), Stripe, storage, edge functions, email automations | `src/` UI — screens, components, copy, animation, UX flows, design tokens | `src/test/`, `docs/codex-*`, `scripts/`, CI, Lighthouse, a11y, regression, perf |
-| **Publishes** | Typed SDK functions in `src/integrations/cog/*` | Screens that *call* that SDK | Test/audit reports + pass/fail gates |
-| **Never touches** | Frontend components, visual design, copy | Schema, RLS, auth backend, edge-function source, payments | Feature implementation, visual design |
-| **Branch lane** | `lovable/*` | `claude/*` | `codex/*` |
+| **Mandate** | The data spine | The experience | Read-only product intelligence and QA |
+| **Owns** | `supabase/` (schema, RLS, migrations), auth (OTP/email), Stripe, storage, edge functions, email automations | `src/` UI — screens, components, copy, animation, UX flows, design tokens | Audit reports, QA briefs, mobile UX findings, benchmark comparisons, release-readiness reports |
+| **Publishes** | Typed SDK functions in `src/integrations/cog/*` | Screens that *call* that SDK | Claude-ready and Lovable-ready reports with owner, severity, evidence, impact, and recommendation |
+| **Never touches** | Frontend components, visual design, copy | Schema, RLS, auth backend, edge-function source, payments | App source, tests, scripts, CI, Supabase, config, migrations, commits, pushes, feature implementation, visual design |
+| **Branch lane** | `lovable/*` | `claude/*` | No branch by default; report docs only when Parker asks |
 
 ### The seam
 `src/integrations/cog/*` is the **only contact point**. Lovable publishes typed
-functions there; Claude only imports and calls them; Codex tests them. **No agent
-reaches across the seam.** In pages/components, auth comes from
+functions there; Claude only imports and calls them; Codex audits the contract
+from the outside and reports mismatches. **No agent reaches across the seam.**
+In pages/components, auth comes from
 `@/integrations/cog/auth` — never the raw Supabase client (that lives in `lib/`/SDK).
 
 ### Hard frontend rules (Claude)
@@ -122,7 +124,12 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **C9** Catalog + navigation cohesion → [`docs/prompts/C9-claude-catalog-navigation.md`](prompts/C9-claude-catalog-navigation.md)
 - ☑ **C10** Business-model screens (upgrade / storage / referral) → [`docs/prompts/C10-claude-business-screens.md`](prompts/C10-claude-business-screens.md)
 
-### 🔬 CODEX — the quality gate
+### 🔬 CODEX — read-only QA & product intelligence
+> Per [`CODEX-READONLY-QA-PLAN.md`](CODEX-READONLY-QA-PLAN.md) (§17 overrides older docs),
+> Codex is **read-only**: it audits and reports (owner + severity + evidence + fix), and does
+> **not** write tests/CI/scripts or commit. Each Q-prompt below is now the **QA scope** for an
+> audit report; the tests/CI it describes are **implemented by Claude (frontend) / Lovable
+> (backend)**. All Q files carry a banner to this effect.
 - ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
 - ☑ **Q2** Capture QA (mic, cross-device) → [`docs/prompts/Q2-codex-capture-qa.md`](prompts/Q2-codex-capture-qa.md)
 - ☑ **Q3** Canvas QA + perf → [`docs/prompts/Q3-codex-canvas-qa.md`](prompts/Q3-codex-canvas-qa.md)

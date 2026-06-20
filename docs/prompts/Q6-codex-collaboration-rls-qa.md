@@ -1,3 +1,12 @@
+<!-- RECONCILED TO READ-ONLY CODEX -->
+> **⚠️ Codex is READ-ONLY** — see [`../CODEX-READONLY-QA-PLAN.md`](../CODEX-READONLY-QA-PLAN.md)
+> (§17 Conflict Rule overrides this file). Codex does **not** write tests, CI, scripts, or
+> commits. Treat the sections below as the **QA scope** for this feature; Codex delivers it
+> as an **audit report** (templates §14; owner + severity per §9–§10), and the tests / CI /
+> harness described are **implemented by Claude (frontend) or Lovable (backend)** when they
+> build — never by Codex. The "Lane: `codex/*`" header is superseded: Codex has no branch by
+> default and reports to `docs/codex-reports/` or `docs/codex-feature-audits/`.
+
 # Q6 — CODEX: Collaboration + RLS-from-Client QA
 ## Cluster 6 · Lane: `codex/*` · Owner: Codex (the quality gate)
 
