@@ -162,8 +162,9 @@ const EmailAuthPage = () => {
                 aria-selected={active}
                 type="button"
                 onClick={() => switchMode(m)}
-                className="flex-1 rounded-full py-2 text-[0.875rem] font-medium transition-all"
+                className="flex-1 rounded-full text-[0.875rem] font-medium transition-all"
                 style={{
+                  minHeight: 44,
                   backgroundColor: active ? "#FFFFFF" : "transparent",
                   color: active ? "#1C1A17" : "#6B6459",
                   boxShadow: active ? "0 1px 4px rgba(28,26,23,0.06)" : "none",

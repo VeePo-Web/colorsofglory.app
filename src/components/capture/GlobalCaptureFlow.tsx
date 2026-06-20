@@ -53,10 +53,16 @@ const GlobalCaptureFlow = () => {
   }, [discard]);
 
   const path = location.pathname;
-  // Hide on screens that own a dedicated mic so two recorders never fight over
-  // the same microphone: the canvas, the Voice layer, and the full Capture
-  // screen (/capture and /songs/:id/capture).
+  // One obvious record action per screen (CapCut/Apple). Hide the floating FAB
+  // anywhere a contextual mic already lives: the capture home (`/`), every song
+  // screen (`/songs/:id…` — detail/room/canvas all have their own record entry),
+  // the canvas, the Voice layer, and the full Capture screen. It survives only on
+  // neutral screens like the catalog (`/songs`) as a true "capture from anywhere."
+  const isCaptureHome = path === "/";
+  const isSongScreen = path.startsWith("/songs/");
   const ownsItsOwnCapture =
+    isCaptureHome ||
+    isSongScreen ||
     path.includes("/canvas") ||
     path.endsWith("/voice") ||
     path.endsWith("/capture");

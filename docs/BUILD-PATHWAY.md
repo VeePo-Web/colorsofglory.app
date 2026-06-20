@@ -132,9 +132,10 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 ---
 
 ### Fix passes (ad hoc, from live audits)
-- ☐ **CF1** Mobile detail fixes (duplicate record FAB, sub-44px targets, record-gesture
-  consistency) → [`docs/prompts/CF1-claude-mobile-detail-fixes.md`](prompts/CF1-claude-mobile-detail-fixes.md)
-  — from [`docs/MOBILE-AUDIT-FINDINGS.md`](MOBILE-AUDIT-FINDINGS.md).
+- ☑ **CF1** Mobile detail fixes — duplicate record FAB removed from `/`+room, capture
+  header/import/auth-tab targets ≥44px, record gesture aligned to tap (verified on the
+  390px viewport) → [`docs/prompts/CF1-claude-mobile-detail-fixes.md`](prompts/CF1-claude-mobile-detail-fixes.md).
+  Canvas nav overload + 32px canvas tabs deferred to **C1**.
 
 ---
 

@@ -323,7 +323,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             border: "none",
             color: "var(--cog-charcoal)",
             cursor: "pointer",
-            padding: 8,
+            padding: "8px 10px 8px 6px",
+            minHeight: 44,
           }}
         >
           <ChevronLeft size={20} />
@@ -386,6 +387,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             color: "var(--cog-charcoal)",
             cursor: "pointer",
             padding: 8,
+            minHeight: 44,
+            minWidth: 44,
           }}
         >
           <Settings size={20} />

@@ -10,8 +10,8 @@ const CHIPS = [
   {
     id: "hum",
     icon: Mic,
-    label: "Hold to hum",
-    sub: "Record a melody idea",
+    label: "Hum a melody",
+    sub: "Tap to record an idea",
     color: "#B5935A",
     bg: "rgba(181,147,90,0.10)",
   },

@@ -62,16 +62,17 @@ const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
         type="button"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
-        className="flex items-center transition-transform active:scale-95"
+        className="flex items-center justify-center transition-transform active:scale-95"
         style={{
           gap: 8,
-          padding: "8px 14px",
+          padding: "0 18px",
+          minHeight: 44,
           borderRadius: 999,
           background: "transparent",
           border: "1px solid rgba(184,149,58,0.30)",
           color: "var(--cog-charcoal)",
           fontFamily: "var(--font-display)",
-          fontSize: 12,
+          fontSize: 13,
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? "not-allowed" : "pointer",
         }}
