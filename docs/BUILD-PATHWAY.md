@@ -102,7 +102,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **L5** Voice-memo storage + layering + analysis wiring → [`docs/prompts/L5-lovable-voice-memo-storage-analysis.md`](prompts/L5-lovable-voice-memo-storage-analysis.md)
 - ☑ **L6** Collaboration (collaborators, invite_tokens, roles, RLS) → [`docs/prompts/L6-lovable-collaboration-roles-rls.md`](prompts/L6-lovable-collaboration-roles-rls.md)
 - ☑ **L7** Activity log + version snapshots → [`docs/prompts/L7-lovable-activity-versions.md`](prompts/L7-lovable-activity-versions.md)
-- ☐ **L8** Credits ledger
+- ☑ **L8** Credits ledger + export → [`docs/prompts/L8-lovable-credits-ledger.md`](prompts/L8-lovable-credits-ledger.md)
 - ☐ **L9** Storage quotas + plan gating + Stripe
 - ☐ **L10** Referrals + email automations
 
@@ -114,7 +114,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **C5** Collaboration UI (invite + roles) → [`docs/prompts/C5-claude-collaboration-ui.md`](prompts/C5-claude-collaboration-ui.md)
 - ☑ **C6** Activity feed ("what changed") → [`docs/prompts/C6-claude-activity-feed.md`](prompts/C6-claude-activity-feed.md)
 - ☑ **C7** Version-history timeline → [`docs/prompts/C7-claude-version-history.md`](prompts/C7-claude-version-history.md)
-- ☐ **C8** Credits ledger UI
+- ☑ **C8** Credits ledger UI → [`docs/prompts/C8-claude-credits-ui.md`](prompts/C8-claude-credits-ui.md)
 - ☐ **C9** Catalog + navigation cohesion
 - ☐ **C10** Business-model screens (upgrade / storage / referral)
 
@@ -126,7 +126,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 - ☑ **Q5** Audio playback + capture-intelligence QA → [`docs/prompts/Q5-codex-audio-playback-qa.md`](prompts/Q5-codex-audio-playback-qa.md)
 - ☑ **Q6** Collaboration + RLS-from-client QA → [`docs/prompts/Q6-codex-collaboration-rls-qa.md`](prompts/Q6-codex-collaboration-rls-qa.md)
 - ☑ **Q7** Activity / versions QA → [`docs/prompts/Q7-codex-activity-versions-qa.md`](prompts/Q7-codex-activity-versions-qa.md)
-- ☐ **Q8** Credits QA
+- ☑ **Q8** Credits QA → [`docs/prompts/Q8-codex-credits-qa.md`](prompts/Q8-codex-credits-qa.md)
 - ☐ **Q9** Payments QA (no live charges)
 - ☐ **Q10** Full Lighthouse / a11y / regression release sweep
 
