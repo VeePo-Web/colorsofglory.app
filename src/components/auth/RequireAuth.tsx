@@ -31,14 +31,24 @@ const Fallback = () => (
 );
 
 /**
+ * TEMP — AUTH WALL DISABLED FOR PREVIEW TESTING.
+ * The PasswordGate still protects the preview; this lets us walk the full
+ * songwriting golden path on mobile without a seeded account. RLS remains the
+ * real trust boundary on the backend.
+ * 🔒 RE-ENABLE BEFORE LAUNCH: set BYPASS_AUTH = false.
+ */
+const BYPASS_AUTH = true;
+
+/**
  * Lightweight client-side gate. RLS is the real trust boundary; this just
  * keeps anonymous users from staring at empty screens.
  */
 const RequireAuth = ({ children }: { children: ReactNode }) => {
-  const [status, setStatus] = useState<Status>("loading");
+  const [status, setStatus] = useState<Status>(BYPASS_AUTH ? "authed" : "loading");
   const location = useLocation();
 
   useEffect(() => {
+    if (BYPASS_AUTH) return;
     let mounted = true;
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {

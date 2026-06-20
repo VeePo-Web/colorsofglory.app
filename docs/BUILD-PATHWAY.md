@@ -96,7 +96,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 ### 🛠 LOVABLE — the data spine
 - ☑ **L1** Schema consolidation + RLS baseline → [`docs/prompts/L1-lovable-schema-consolidation.md`](prompts/L1-lovable-schema-consolidation.md)
 - ☑ **L2** Auth finalize (email + phone OTP) → [`docs/prompts/L2-lovable-auth-finalize.md`](prompts/L2-lovable-auth-finalize.md)
-- ☐ **L3** Capture intake + transcription pipeline (voice_memos, takes, transcripts)
+- ☑ **L3** Capture intake + transcription pipeline → [`docs/prompts/L3-lovable-capture-intake-transcription.md`](prompts/L3-lovable-capture-intake-transcription.md)
 - ☐ **L4** Canvas / song-sections persistence + commit API
 - ☐ **L5** Voice-memo storage + BPM/key analysis endpoints
 - ☐ **L6** Collaboration (collaborators, invite_tokens, roles, RLS)
@@ -108,7 +108,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 ### 🎨 CLAUDE — the experience
 - ☑ **C1** Canvas cleanup (audit + restructure the weird one) → [`docs/prompts/C1-claude-canvas-cleanup.md`](prompts/C1-claude-canvas-cleanup.md)
 - ☑ **C2** Song Workspace / room hub → [`docs/prompts/C2-claude-song-workspace-room.md`](prompts/C2-claude-song-workspace-room.md)
-- ☐ **C3** Lyrics + Chords editor
+- ☑ **C3** Lyrics + Chords editor → [`docs/prompts/C3-claude-lyrics-chords-editor.md`](prompts/C3-claude-lyrics-chords-editor.md)
 - ☐ **C4** Voice-memo list + playback
 - ☐ **C5** Collaboration UI (invite + roles)
 - ☐ **C6** Activity feed ("what changed")
@@ -120,7 +120,7 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 ### 🔬 CODEX — the quality gate
 - ☑ **Q1** CI baseline + bundle / lint / typecheck gates → [`docs/prompts/Q1-codex-ci-quality-gate.md`](prompts/Q1-codex-ci-quality-gate.md)
 - ☑ **Q2** Capture QA (mic, cross-device) → [`docs/prompts/Q2-codex-capture-qa.md`](prompts/Q2-codex-capture-qa.md)
-- ☐ **Q3** Canvas QA + perf
+- ☑ **Q3** Canvas QA + perf → [`docs/prompts/Q3-codex-canvas-qa.md`](prompts/Q3-codex-canvas-qa.md)
 - ☐ **Q4** Lyrics / chords QA + a11y
 - ☐ **Q5** Audio playback QA + perf
 - ☐ **Q6** Collaboration + RLS-from-client QA
