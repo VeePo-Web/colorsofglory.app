@@ -12,6 +12,7 @@ import {
   type ChordExtension,
 } from "@/lib/chords/nashville";
 import { MAJOR_KEYS, MINOR_KEYS, type Mode } from "@/lib/chords/keys";
+import TapTempo from "./TapTempo";
 
 type DisplayMode = "letters" | "numbers";
 
@@ -101,23 +102,33 @@ const ChordPicker = ({
         background: "white",
         border: "1px solid var(--cog-border)",
       }}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <KeyPicker tonic={tonic} mode={mode} onTonic={setTonic} onMode={setMode} />
-          <div className="flex items-center gap-1">
-            <input
-              inputMode="numeric"
-              value={bpm}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "").slice(0, 3);
-                const n = v === "" ? "" : Math.min(300, Math.max(20, Number(v)));
-                setBpm(n as number | "");
-                if (typeof n === "number") onBpmChange?.(n);
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <input
+                inputMode="numeric"
+                value={bpm}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+                  const n = v === "" ? "" : Math.min(300, Math.max(20, Number(v)));
+                  setBpm(n as number | "");
+                  if (typeof n === "number") onBpmChange?.(n);
+                }}
+                placeholder="BPM"
+                aria-label="Beats per minute"
+                className="w-16 text-center text-sm rounded-lg py-1.5"
+                style={{ background: "var(--cog-cream)", border: "1px solid var(--cog-border)" }}
+              />
+              <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>bpm</span>
+            </div>
+            {/* Tap tempo — set BPM by tapping in time, no typing. */}
+            <TapTempo
+              onBpm={(b) => {
+                setBpm(b);
+                onBpmChange?.(b);
               }}
-              placeholder="BPM"
-              className="w-16 text-center text-sm rounded-lg py-1.5"
-              style={{ background: "var(--cog-cream)", border: "1px solid var(--cog-border)" }}
             />
-            <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>bpm</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
