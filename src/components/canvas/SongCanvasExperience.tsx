@@ -46,6 +46,8 @@ import StackSheet from "@/components/voice/StackSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
+import { useCurrentAccount } from "@/integrations/cog/auth";
+import { subscribeSongRoom } from "@/integrations/cog/realtime";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -483,6 +485,16 @@ const SongCanvasExperience = () => {
   const [searchParams] = useSearchParams();
   const isViewer = searchParams.get("role") === "viewer";
 
+  // Real signed-in identity so contributions + presence carry the actual person,
+  // not a hardcoded "You". Falls back gracefully before the profile resolves.
+  const { profile } = useCurrentAccount();
+  const currentUserName = useMemo(() => {
+    const display = profile?.display_name?.trim();
+    if (display) return display;
+    const full = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim();
+    return full || "You";
+  }, [profile]);
+
   const [cards, setCards] = useState<CanvasCard[]>(() => getStoredCards(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
@@ -551,49 +563,57 @@ const SongCanvasExperience = () => {
     localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
   }, [cards, songId]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Pull any voice memos for this song from the backend and merge in the ones
+  // we don't already have. Reused on mount AND on every realtime event, so a
+  // collaborator's new memo/layer appears in the room without a reload.
+  const hydrateVoiceMemos = useCallback(async () => {
+    try {
+      const db = await loadVoiceMemosForCanvas(songId);
+      const dbCards: CanvasCard[] = db.nodes
+        .filter((node) => node.objectType === "idea_card")
+        .map((node): CanvasCard | null => {
+          const card = db.cards[node.objectId];
+          if (!card) return null;
+          return {
+            id: card.id,
+            tree: "ideas" as const,
+            type: "voice" as const,
+            title: card.title,
+            body: card.body || card.preview || "",
+            meta: card.preview || "Voice memo",
+            section: "Raw idea",
+            contributor: card.contributorName,
+            status: "raw" as const,
+            accent: card.contributorColor,
+            x: node.x,
+            y: node.y,
+          };
+        })
+        .filter((card): card is CanvasCard => Boolean(card));
 
-    loadVoiceMemosForCanvas(songId)
-      .then((db) => {
-        if (cancelled) return;
-        const dbCards: CanvasCard[] = db.nodes
-          .filter((node) => node.objectType === "idea_card")
-          .map((node): CanvasCard | null => {
-            const card = db.cards[node.objectId];
-            if (!card) return null;
-            return {
-              id: card.id,
-              tree: "ideas" as const,
-              type: "voice" as const,
-              title: card.title,
-              body: card.body || card.preview || "",
-              meta: card.preview || "Voice memo",
-              section: "Raw idea",
-              contributor: card.contributorName,
-              status: "raw" as const,
-              accent: card.contributorColor,
-              x: node.x,
-              y: node.y,
-            };
-          })
-          .filter((card): card is CanvasCard => Boolean(card));
-
-        if (dbCards.length === 0) return;
-        setCards((prev) => {
-          const existing = new Set(prev.map((card) => card.id));
-          const fresh = dbCards.filter((card) => !existing.has(card.id));
-          return fresh.length > 0 ? [...prev, ...fresh] : prev;
-        });
-      })
-      .catch(() => {
-        // The local canvas remains usable when backend hydration is unavailable.
+      if (dbCards.length === 0) return;
+      setCards((prev) => {
+        const existing = new Set(prev.map((card) => card.id));
+        const fresh = dbCards.filter((card) => !existing.has(card.id));
+        return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
-
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      // The local canvas remains usable when backend hydration is unavailable.
+    }
   }, [songId]);
+
+  // Mount hydration + live room channel. Any change in the song's room nudges a
+  // re-hydrate; the merge dedupes by id so nothing flickers or duplicates.
+  useEffect(() => {
+    void hydrateVoiceMemos();
+    const unsubscribe = subscribeSongRoom(songId, {
+      onActivity: () => void hydrateVoiceMemos(),
+      onCardChange: () => void hydrateVoiceMemos(),
+      onTakeChange: () => void hydrateVoiceMemos(),
+      onCaptureChange: () => void hydrateVoiceMemos(),
+    });
+    return unsubscribe;
+  }, [songId, hydrateVoiceMemos]);
 
   const dismissFirstAction = useCallback(() => {
     localStorage.setItem(FIRST_VISIT_KEY(songId), "1");
@@ -675,7 +695,7 @@ const SongCanvasExperience = () => {
       body: "",
       meta: "",
       section: "Raw idea",
-      contributor: "You",
+      contributor: currentUserName,
       status: "raw",
       accent: "#D4AE5C",
       x: 80 + (ideaIndex % 3) * 240,
@@ -685,7 +705,7 @@ const SongCanvasExperience = () => {
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
     showSavedMoment(newCard.title, "Ideas tree", "Note");
-  }, [cards, dismissFirstAction, isViewer, showSavedMoment]);
+  }, [cards, dismissFirstAction, isViewer, showSavedMoment, currentUserName]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
@@ -724,7 +744,7 @@ const SongCanvasExperience = () => {
       const newCard: CanvasCard = {
         id: tempId, tree: "ideas", type: "voice",
         title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-        section, contributor: "You", status: "raw", accent: "#D4AE5C",
+        section, contributor: currentUserName, status: "raw", accent: "#D4AE5C",
         x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
         parentMemoId, durationMs: pendingRecording.durationMs,
         isProcessing: true,
@@ -749,7 +769,7 @@ const SongCanvasExperience = () => {
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
       setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
     }
-  }, [pendingRecording, showSavedMoment, songId]);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
@@ -1054,7 +1074,7 @@ const SongCanvasExperience = () => {
               {activeLayer === "voice" ? (
                 <VoiceLayerPanel
                   songId={songId}
-                  currentUserName="You"
+                  currentUserName={currentUserName}
                   onRecord={() => { setShowWorkPanel(false); setActiveLayer("room"); void handleStartRecording(); }}
                 />
               ) : (
