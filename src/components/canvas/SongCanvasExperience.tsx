@@ -25,6 +25,8 @@ import {
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
+import CreativeActionDock from "@/components/cog/CreativeActionDock";
+import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
 import CanvasViewport from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
@@ -40,6 +42,10 @@ import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
 import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import StackSheet from "@/components/voice/StackSheet";
+import type { StackMemoView } from "@/components/voice/MemoStack";
+import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -63,9 +69,23 @@ export interface CanvasCard {
   accent: string;
   x: number;
   y: number;
+  /** Set when this voice memo is a layer recorded over a base ("Record over this"). */
+  parentMemoId?: string;
+  /** Recording length for stack playback/labels; voice cards only. */
+  durationMs?: number;
   isDimmedReference?: boolean;
   isProcessing?: boolean;
 }
+
+/** Canvas card → the shape the stack engine + sheet consume. */
+const toStackView = (c: CanvasCard): StackMemoView => ({
+  id: c.id,
+  parentMemoId: c.parentMemoId,
+  title: c.title,
+  contributor: c.contributor,
+  durationMs: c.durationMs ?? 0,
+  section: c.section,
+});
 
 type RecordingFlow = "idle" | "recording" | "reviewing";
 
@@ -165,6 +185,7 @@ const INITIAL_CARDS: CanvasCard[] = [
 
 const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
+const SHOW_LEGACY_CANVAS_FABS = false;
 
 const getStoredCards = (songId: string): CanvasCard[] => {
   try {
@@ -212,6 +233,8 @@ interface CanvasCardProps {
   onMoveToFinal: () => void;
   onMoveToIdeas: () => void;
   onDragStart: (e: React.PointerEvent, cardId: string) => void;
+  layerCount?: number;
+  onOpenStack?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -221,8 +244,11 @@ const CanvasCardEl = ({
   onMoveToFinal,
   onMoveToIdeas,
   onDragStart,
+  layerCount = 0,
+  onOpenStack,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
+  const isVoice = card.type === "voice" || card.type === "hum";
 
   return (
     <div
@@ -311,6 +337,22 @@ const CanvasCardEl = ({
         >
           {card.section}
         </span>
+        {isVoice && layerCount > 0 && (
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 9,
+              fontWeight: 700,
+              color: card.accent,
+              backgroundColor: `${card.accent}1A`,
+              borderRadius: 9999,
+              padding: "2px 7px",
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            {layerCount} layer{layerCount > 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       {/* Title */}
@@ -362,6 +404,26 @@ const CanvasCardEl = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {isVoice && onOpenStack && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: `${card.accent}16`,
+                color: card.accent,
+                fontSize: 11,
+                fontWeight: 700,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
+            >
+              {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
+            </button>
+          )}
           {card.tree === "ideas" && !card.isDimmedReference && (
             <button
               onClick={onMoveToFinal}
@@ -433,6 +495,7 @@ const SongCanvasExperience = () => {
     return isLayerId(layer) ? layer : "room";
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
+  const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -450,6 +513,15 @@ const SongCanvasExperience = () => {
     }
   }, [isPracticeLaunching, songId, songTitle, navigate]);
 
+  const showSavedMoment = useCallback((title: string, destination: string, detail?: string) => {
+    setSaveMoment({
+      id: `save-${Date.now()}`,
+      title,
+      destination,
+      detail,
+    });
+  }, []);
+
   // ── Voice recording state ────────────────────────────────────────────────────
   const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>("idle");
@@ -457,6 +529,10 @@ const SongCanvasExperience = () => {
   const [recordingNote, setRecordingNote] = useState("");
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
   const voiceMemoCountRef = useRef(0);
+  // When set, the next saved take is a layer recorded over this base memo.
+  const recordingParentIdRef = useRef<string | null>(null);
+  // The base memo whose stack sheet is currently open (null = closed).
+  const [stackBaseId, setStackBaseId] = useState<string | null>(null);
 
   // Drag tracking for card repositioning
   const draggingCardId = useRef<string | null>(null);
@@ -559,7 +635,8 @@ const SongCanvasExperience = () => {
     setSelectedId(null);
     setIsDragOver(false);
     setCanvasStatus("Moved. Undo?");
-  }, [isViewer]);
+    showSavedMoment("Approved idea", "Final tree", "Arrangement");
+  }, [isViewer, showSavedMoment]);
 
   const handleMoveToIdeas = useCallback((cardId: string) => {
     if (isViewer) return;
@@ -574,7 +651,8 @@ const SongCanvasExperience = () => {
     );
     setSelectedId(null);
     setCanvasStatus("Moved. Undo?");
-  }, [isViewer]);
+    showSavedMoment("Returned idea", "Ideas tree", "Arrangement");
+  }, [isViewer, showSavedMoment]);
 
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
@@ -606,12 +684,14 @@ const SongCanvasExperience = () => {
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
-  }, [cards, dismissFirstAction, isViewer]);
+    showSavedMoment(newCard.title, "Ideas tree", "Note");
+  }, [cards, dismissFirstAction, isViewer, showSavedMoment]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
-  const handleStartRecording = useCallback(async () => {
+  const handleStartRecording = useCallback(async (parentId?: string) => {
     if (isViewer) return;
-    setRecordingSection("Raw idea");
+    recordingParentIdRef.current = parentId ?? null;
+    setRecordingSection(parentId ? "Layer" : "Raw idea");
     setRecordingNote("");
     setRecordingFlow("recording");
     await startRecording();
@@ -632,6 +712,10 @@ const SongCanvasExperience = () => {
 
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
+    // Capture + clear the "record over" target before any async work so the
+    // next normal record can't inherit a stale parent.
+    const parentMemoId = recordingParentIdRef.current ?? undefined;
+    recordingParentIdRef.current = null;
     voiceMemoCountRef.current++;
     setCanvasStatus("Saving...");
     const tempId = `voice-${Date.now()}`;
@@ -642,22 +726,30 @@ const SongCanvasExperience = () => {
         title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
         section, contributor: "You", status: "raw", accent: "#D4AE5C",
         x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        parentMemoId, durationMs: pendingRecording.durationMs,
         isProcessing: true,
       };
       return [newCard, ...prev];
     });
+    showSavedMoment(
+      name || "Voice memo",
+      parentMemoId ? "Layer added to stack" : (section || "Raw idea"),
+      "Voice memo",
+    );
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
+    // Reopen the base's stack so the songwriter sees their layer land.
+    if (parentMemoId) setStackBaseId(parentMemoId);
     try {
-      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe });
+      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe, parentMemoId, idempotencyKey: tempId });
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
       setCanvasStatus("Saved to this song.");
     } catch {
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
       setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
     }
-  }, [pendingRecording, songId]);
+  }, [pendingRecording, showSavedMoment, songId]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
@@ -666,6 +758,11 @@ const SongCanvasExperience = () => {
     else alert("Click the 🔒 lock icon in your address bar → Site Settings → Microphone → Allow");
   }, []);
 
+  const handleRecordOver = useCallback((baseId: string) => {
+    setStackBaseId(null);
+    void handleStartRecording(baseId);
+  }, [handleStartRecording]);
+
   const chooseLayer = (layer: LayerId) => {
     setActiveLayer(layer);
     const show = layer !== "room" && layer !== "ideas";
@@ -673,8 +770,64 @@ const SongCanvasExperience = () => {
     navigate(`/songs/${songId}/canvas?layer=${layer}`, { replace: false });
   };
 
-  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas"), [cards]);
-  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final"), [cards]);
+  // Layers live inside their base's stack, not loose on the board.
+  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
+  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
+  const layerCountByBase = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of cards) {
+      if (c.parentMemoId) counts[c.parentMemoId] = (counts[c.parentMemoId] ?? 0) + 1;
+    }
+    return counts;
+  }, [cards]);
+
+  // Everyone whose hand is on this song — derived from who contributed cards.
+  // Stable color/initials per person so the room reads as collaborative at a glance.
+  const roomCollaborators = useMemo(() => {
+    const seen = new Map<string, { userId: string; firstName: string; lastName: string; avatarColor: string; avatarInitials: string }>();
+    for (const c of cards) {
+      if (!c.contributor || seen.has(c.contributor)) continue;
+      seen.set(c.contributor, {
+        userId: c.contributor,
+        firstName: c.contributor,
+        lastName: "",
+        avatarColor: getCreatorColor(c.contributor).base,
+        avatarInitials: getCreatorInitials(c.contributor),
+      });
+    }
+    return Array.from(seen.values());
+  }, [cards]);
+  const dockActions = useMemo(
+    () => [
+      {
+        id: "practice",
+        label: isPracticeLaunching ? "Loading" : "Practice",
+        icon: BookOpen,
+        onClick: () => { void handleLaunchPractice(); },
+        loading: isPracticeLaunching,
+        haptic: [4],
+      },
+      {
+        id: "record",
+        label: recordingFlow === "recording" ? "Recording" : "Record memo",
+        icon: Mic,
+        onClick: () => { void handleStartRecording(); },
+        primary: true,
+        disabled: isViewer || recordingFlow !== "idle",
+        haptic: [10],
+        ariaLabel: recordingFlow === "recording" ? "Recording voice memo" : "Record memo",
+      },
+      {
+        id: "idea",
+        label: "Add idea",
+        icon: Plus,
+        onClick: () => addCard("note"),
+        disabled: isViewer,
+        haptic: [5],
+      },
+    ],
+    [addCard, handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
+  );
 
   return (
     <div
@@ -747,11 +900,21 @@ const SongCanvasExperience = () => {
         >
           {canvasStatus}
         </p>
-        {isViewer && (
+        {isViewer ? (
           <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
             You can view this canvas. Ask the owner if you need to contribute.
           </p>
-        )}
+        ) : roomCollaborators.length > 0 ? (
+          <div className="flex items-center gap-2" aria-label={`In this room: ${roomCollaborators.length} ${roomCollaborators.length === 1 ? "person" : "people"}`}>
+            <span
+              className="hidden sm:inline"
+              style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#999", fontFamily: "var(--font-body)" }}
+            >
+              In this room
+            </span>
+            <CollaboratorAvatarStack collaborators={roomCollaborators} size={28} maxVisible={4} />
+          </div>
+        ) : null}
       </div>
 
       {/* ── Canvas viewport ──────────────────────────────────────────────── */}
@@ -767,6 +930,9 @@ const SongCanvasExperience = () => {
                   onChords={() => { addCard("chord"); dismissFirstAction(); }}
                 />
               )}
+              <CreativeActionDock actions={dockActions} />
+              {SHOW_LEGACY_CANVAS_FABS && (
+                <>
               {/* Practice FAB */}
               <button
                 type="button"
@@ -834,6 +1000,8 @@ const SongCanvasExperience = () => {
                 <Plus size={22} strokeWidth={2.5} />
                 <span>Add idea</span>
               </button>
+                </>
+              )}
             </>
           }
         >
@@ -852,6 +1020,12 @@ const SongCanvasExperience = () => {
               onMoveToFinal={() => handleMoveToFinal(card.id)}
               onMoveToIdeas={() => handleMoveToIdeas(card.id)}
               onDragStart={handleCardDragStart}
+              layerCount={layerCountByBase[card.id] ?? 0}
+              onOpenStack={
+                card.type === "voice" || card.type === "hum"
+                  ? () => setStackBaseId(card.id)
+                  : undefined
+              }
             />
           ))}
         </CanvasViewport>
@@ -899,6 +1073,10 @@ const SongCanvasExperience = () => {
       </div>
 
       <SongTabBar activeTab="canvas" />
+      <SongRoomSaveToast
+        moment={saveMoment}
+        onDone={() => setSaveMoment(null)}
+      />
 
       {/* Recording sheet */}
       {(recordingFlow === "recording" || recorderState.phase === "permission-denied") && (
@@ -927,6 +1105,22 @@ const SongCanvasExperience = () => {
           onDiscard={handleCancelRecording}
         />
       )}
+
+      {/* Voice memo stack — base + the layers recorded over it */}
+      {stackBaseId && (() => {
+        const base = cards.find((c) => c.id === stackBaseId);
+        if (!base) return null;
+        const stackLayers = cards.filter((c) => c.parentMemoId === stackBaseId);
+        return (
+          <StackSheet
+            base={toStackView(base)}
+            layers={stackLayers.map(toStackView)}
+            canRecordOver={!isViewer}
+            onRecordOver={handleRecordOver}
+            onClose={() => setStackBaseId(null)}
+          />
+        );
+      })()}
 
       <style>{`
         @keyframes mic-pulse {
