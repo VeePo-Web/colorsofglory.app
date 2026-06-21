@@ -80,6 +80,31 @@ export async function adminReferralsRecent(limit = 50) {
   return data ?? [];
 }
 
+export type FinanceSummary = {
+  generated_at: string;
+  mrr_cents: number;
+  active_subs: number;
+  mrr_by_plan: Record<string, number>;
+  subs_by_plan: Record<string, number>;
+  new_subs_30d: number;
+  churned_30d: number;
+  reward_liability_cents: number;
+  reward_pending_cents: number;
+  reward_payable_cents: number;
+  payouts_outstanding_cents: number;
+  payouts_paid_lifetime_cents: number;
+  payouts_paid_30d_cents: number;
+  refunds_30d_cents: number;
+  chargebacks_30d_cents: number;
+};
+
+/** Reconciled finance snapshot (admin only). Numbers trace to Stripe-sourced rows. */
+export async function adminFinanceSummary(): Promise<FinanceSummary> {
+  const { data, error } = await supabase.rpc("admin_finance_summary" as never);
+  if (error) throw error;
+  return data as unknown as FinanceSummary;
+}
+
 export async function adminMonthlyPayouts(month_start?: string) {
   const { data, error } = await supabase.rpc(
     "admin_monthly_payouts",
