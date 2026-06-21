@@ -152,3 +152,40 @@ Backend build/harden order (ours):
 ## 7. How to run a session
 
 Invoke `/cog-admin`. It scans the repo, prints the **Admin/Backend Intelligence Report**, and proposes the single highest-leverage subsystem. Approve, and it runs the 7-Lens + 10-Layer audit → bite-sized plan → approval → execute (earn-path + clawback together) → verify with evidence → commit → next subsystem.
+
+---
+
+## 8. Runbook — Phone OTP toll-fraud rails
+
+Shipped (backend): `otp_send_events` table + `check_and_record_otp_send()` RPC + `otp-guard` edge function + `sendPhoneOtp` gating in `src/integrations/cog/auth.ts`. Defense-in-depth, **fail-open** (a guard outage never blocks login).
+
+**The programmable layer (this codebase)** enforces, per `app_settings`:
+- `otp_geo_allowlist` (default `["+1"]`) — E.164 dial prefixes you serve. **Widen before launching outside North America** or legit users get `GEO_BLOCKED`.
+- `otp_max_per_phone_15m` (3), `otp_max_per_phone_day` (6), `otp_max_per_ip_hour` (8) — velocity caps.
+- `otp_daily_global_ceiling` (500) — hard 24h cap, the bill circuit breaker. Raise as real volume grows.
+
+Tune live (admin):
+```sql
+update app_settings set value = '["+1","+44"]'::jsonb where key = 'otp_geo_allowlist';
+update app_settings set value = '2000'::jsonb       where key = 'otp_daily_global_ceiling';
+```
+
+**The bypass-proof floor (Supabase DASHBOARD — required, not optional):** an attacker can call Supabase's `signInWithOtp` directly with the public anon key, bypassing our app's guard. Only dashboard controls stop that:
+1. **Enable CAPTCHA** (hCaptcha/Turnstile) on Auth — the single most effective anti-pumping control. *(If enabled, the login screen must pass a `captchaToken`; coordinate with the onboarding Claude — `sendPhoneOtp` would gain a `captchaToken` param.)*
+2. **Set Allowed Countries** on the SMS provider to match `otp_geo_allowlist`.
+3. **Set the provider SMS rate limit** conservatively.
+4. **A2P 10DLC**: register brand/campaign before any US SMS volume (deliverability gate).
+5. Set a Twilio **billing alert** mirroring the global ceiling.
+
+Deploy + verify:
+```bash
+supabase db push
+supabase functions deploy otp-guard
+supabase secrets set OTP_IP_SALT=$(openssl rand -hex 16)   # optional but recommended
+# smoke test (use a real allowed number):
+#   curl -X POST "$SUPABASE_URL/functions/v1/otp-guard" -H "apikey: $ANON" -H 'content-type: application/json' -d '{"phone":"+15555550123"}'
+#   → {"ok":true}; >3x in 15m → {"ok":false,"code":"RATE_LIMITED"}; non-+1 → {"ok":false,"code":"GEO_BLOCKED"}
+select count(*) from otp_send_events where created_at > now() - interval '24 hours';  -- monitoring
+```
+
+**Monitoring:** alert when 24h `otp_send_events` count approaches `otp_daily_global_ceiling` (you're either growing or being pumped — investigate which).
