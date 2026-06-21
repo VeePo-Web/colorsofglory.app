@@ -39,7 +39,7 @@ const SettingsPage = () => {
   const rows = useMemo<SettingsRow[]>(
     () => [
       { id: "account", icon: User, label: "Account", sublabel: accountSublabel, to: "#" },
-      { id: "upgrade", icon: Crown, label: "Upgrade to Pro", sublabel: "More songs, storage, and exports", to: "/upgrade", accent: true },
+      { id: "upgrade", icon: Crown, label: "Upgrade to Pro", sublabel: "More songs, more space, exports", to: "/upgrade", accent: true },
       { id: "billing", icon: CreditCard, label: "Billing", sublabel: "Manage plan, invoices, and cancellation", to: "/settings/billing" },
       { id: "storage", icon: HardDrive, label: "Storage", sublabel: "Manage your space", to: "/settings/storage" },
       { id: "referral", icon: Gift, label: "Refer & Earn", sublabel: "Invite a co-writer, you both benefit", to: "/settings/referral" },

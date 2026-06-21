@@ -11,6 +11,10 @@ const renderGlobalCaptureAt = (path: string) =>
   );
 
 describe("GlobalCaptureFlow route policy", () => {
+  // The floating capture FAB is retired in favor of the BottomNav center capture
+  // mic + each screen's own record action (CapCut "one obvious action"). It must
+  // not appear on app screens — a second floating mic only creates duplicate /
+  // overlapping record affordances. See GlobalCaptureFlow + CF1 mobile fixes.
   it.each([
     "/auth/login",
     "/auth/verify",
@@ -24,18 +28,17 @@ describe("GlobalCaptureFlow route policy", () => {
     "/admin",
     "/capture",
     "/songs/1/capture",
-  ])("does not show the capture action on %s", (path) => {
+    "/", // capture home — the hero mic is the one action
+    "/songs", // catalog — BottomNav carries the capture mic
+    "/songs/1", // song detail (capture) — its own mic
+    "/songs/1/room", // room has "Record memo"
+    "/songs/1/canvas", // canvas owns its capture
+    "/songs/1/practice",
+  ])("does not show the floating capture FAB on %s", (path) => {
     renderGlobalCaptureAt(path);
 
-    expect(screen.queryByRole("button", { name: /record a new idea/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /record a new idea/i }),
+    ).not.toBeInTheDocument();
   });
-
-  it.each(["/", "/songs/1", "/songs/1/practice"])(
-    "shows the capture action on creative workspace route %s",
-    (path) => {
-      renderGlobalCaptureAt(path);
-
-      expect(screen.getByRole("button", { name: /record a new idea/i })).toBeInTheDocument();
-    },
-  );
 });

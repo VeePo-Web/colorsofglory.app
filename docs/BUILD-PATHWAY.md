@@ -143,6 +143,11 @@ Written **one at a time, in depth**, in build order. Status legend: ☐ todo.
 
 ---
 
+### Claude infra (reassigned from Codex when it went read-only)
+- ☑ **CW1** Stand up CI — `.github/workflows/ci.yml` (typecheck + build + test hard;
+  lint + bundle-budget non-blocking) + vitest timeout fix → [`docs/prompts/CW1-claude-ci-setup.md`](prompts/CW1-claude-ci-setup.md).
+  Branch-protection on `main` is the remaining step (Parker, GitHub settings).
+
 ### Fix passes (ad hoc, from live audits)
 - ☑ **CF1** Mobile detail fixes — duplicate record FAB removed from `/`+room, capture
   header/import/auth-tab targets ≥44px, record gesture aligned to tap (verified on the
