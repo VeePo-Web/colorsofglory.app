@@ -1,32 +1,49 @@
-﻿import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, HardDrive } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
+import { getStorageUsage } from "@/integrations/cog/storage";
 
-interface StorageItem {
-  label: string;
-  used: string;
-  bytes: number;
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 0) return "0 MB";
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  const gb = mb / 1024;
+  return `${gb < 10 ? gb.toFixed(1) : Math.round(gb)} GB`;
 }
 
-const STORAGE_ITEMS: StorageItem[] = [
-  { label: "Voice memos", used: "620MB", bytes: 620 },
-  { label: "Song files", used: "180MB", bytes: 180 },
-  { label: "Exports", used: "50MB", bytes: 50 },
-];
-
-const TOTAL_GB = 1000; // 1GB in MB
-const USED_MB = 850;
-const USED_PERCENT = Math.round((USED_MB / TOTAL_GB) * 100);
+type LoadState = "loading" | "ready" | "unavailable";
 
 const StoragePage = () => {
   const navigate = useNavigate();
+  const [state, setState] = useState<LoadState>("loading");
+  const [usedBytes, setUsedBytes] = useState(0);
+  const [limitBytes, setLimitBytes] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { bytesUsed, bytesLimit } = await getStorageUsage();
+        if (cancelled) return;
+        setUsedBytes(bytesUsed);
+        setLimitBytes(bytesLimit);
+        setState("ready");
+      } catch {
+        if (!cancelled) setState("unavailable");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const percent =
+    limitBytes > 0 ? Math.min(100, Math.round((usedBytes / limitBytes) * 100)) : 0;
+  const nearFull = state === "ready" && percent >= 80;
+  const accent = nearFull ? "#E15E39" : "var(--cog-gold)";
 
   return (
-    <div
-      className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: "var(--cog-cream)" }}
-    >
+    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: "var(--cog-cream)" }}>
       {/* Warm glow */}
       <div
         className="pointer-events-none fixed inset-0"
@@ -45,7 +62,7 @@ const StoragePage = () => {
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-            style={{ color: "var(--cog-warm-gray)" }}
+            style={{ color: "var(--cog-warm-gray)", minHeight: 44 }}
           >
             <ArrowLeft size={15} />
             Back
@@ -56,132 +73,94 @@ const StoragePage = () => {
           <CogBrand variant="stacked" size="sm" />
         </div>
 
-        {/* Warning icon */}
+        {/* Icon — calm gold normally, coral only when actually near full */}
         <div
           className="flex items-center justify-center rounded-full mx-auto mb-6"
           style={{
             width: 64,
             height: 64,
-            backgroundColor: "rgba(225,94,57,0.10)",
-            border: "1.5px solid rgba(225,94,57,0.25)",
+            backgroundColor: nearFull ? "rgba(225,94,57,0.10)" : "rgba(184,149,58,0.12)",
+            border: `1.5px solid ${nearFull ? "rgba(225,94,57,0.25)" : "rgba(184,149,58,0.25)"}`,
           }}
         >
-          <HardDrive size={28} strokeWidth={1.5} style={{ color: "#E15E39" }} />
+          <HardDrive size={28} strokeWidth={1.5} style={{ color: accent }} />
         </div>
 
         <h1
           className="text-3xl font-semibold mb-2 text-center"
           style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", lineHeight: 1.1 }}
         >
-          You are almost out of storage
+          {nearFull ? "You're almost out of storage" : "Your storage"}
         </h1>
         <p
           className="text-base text-center mb-8"
           style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
         >
-          Your songs are safe, but new uploads may pause soon.
+          {nearFull
+            ? "Your songs are safe, but new uploads may pause soon."
+            : "Every idea you capture lives safely here."}
         </p>
 
         {/* Storage bar */}
         <div
-          className="rounded-2xl p-5 mb-6"
-          style={{
-            backgroundColor: "var(--cog-cream-light)",
-            border: "1.5px solid var(--cog-border)",
-          }}
+          className="rounded-2xl p-5 mb-8"
+          style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
         >
           <div className="flex justify-between items-center mb-2">
             <span
               className="text-sm font-medium"
               style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
             >
-              850MB of 1GB used
+              {state === "loading"
+                ? "Checking your space…"
+                : state === "unavailable"
+                ? "Storage usage unavailable"
+                : `${formatBytes(usedBytes)} of ${formatBytes(limitBytes)} used`}
             </span>
-            <span
-              className="text-sm font-semibold"
-              style={{ color: "#E15E39", fontFamily: "var(--font-body)" }}
-            >
-              {USED_PERCENT}% used
-            </span>
+            {state === "ready" && (
+              <span className="text-sm font-semibold" style={{ color: accent, fontFamily: "var(--font-body)" }}>
+                {percent}% used
+              </span>
+            )}
           </div>
 
           {/* Bar */}
           <div
             className="w-full rounded-full overflow-hidden"
-            style={{
-              height: 12,
-              backgroundColor: "var(--cog-gold-pale)",
-            }}
+            style={{ height: 12, backgroundColor: "var(--cog-gold-pale)" }}
           >
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${USED_PERCENT}%`,
-                background: "linear-gradient(90deg, var(--cog-gold) 0%, #E15E39 100%)",
+                width: `${state === "ready" ? percent : 0}%`,
+                background: nearFull
+                  ? "linear-gradient(90deg, var(--cog-gold) 0%, #E15E39 100%)"
+                  : "var(--cog-gold)",
               }}
             />
           </div>
         </div>
 
-        {/* Breakdown */}
-        <h2
-          className="text-sm font-semibold uppercase tracking-wider mb-3"
-          style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-        >
-          Breakdown
-        </h2>
-        <div className="flex flex-col gap-2.5 mb-8">
-          {STORAGE_ITEMS.map((item) => (
-            <div
-              key={item.label}
-              className="flex items-center justify-between rounded-xl px-4 py-3.5"
-              style={{
-                backgroundColor: "var(--cog-cream-light)",
-                border: "1.5px solid var(--cog-border)",
-              }}
-            >
-              <p
-                className="text-sm font-medium"
-                style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
-              >
-                {item.label}
-              </p>
-              <p
-                className="text-sm"
-                style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-              >
-                {item.used}
-              </p>
-            </div>
-          ))}
-        </div>
-
         {/* CTAs */}
         <button
           onClick={() => navigate("/upgrade")}
-          className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97] mb-3"
+          className="w-full rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97] mb-3"
           style={{
+            minHeight: 52,
             backgroundColor: "var(--cog-gold)",
             fontFamily: "var(--font-body)",
             boxShadow: "0 4px 20px rgba(184,149,58,0.35)",
           }}
         >
-          Add storage
-        </button>
-
-        <button
-          className="text-sm text-center w-full py-3 transition-opacity hover:opacity-70 mb-8"
-          style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-        >
-          Manage files
+          {nearFull ? "Add storage" : "Upgrade for more space"}
         </button>
 
         {/* Calm footer note */}
         <p
-          className="text-xs text-center"
+          className="text-xs text-center mt-4"
           style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)", lineHeight: 1.6 }}
         >
-          Your songs, lyrics, and memos will not be deleted.{"\n"}Only new uploads pause.
+          Your songs, lyrics, and memos are never deleted — only new uploads pause if you run out.
         </p>
       </div>
       <BottomNav active="settings" />
@@ -190,4 +169,3 @@ const StoragePage = () => {
 };
 
 export default StoragePage;
-
