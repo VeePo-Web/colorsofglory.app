@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.referral-resolve]
 verify_jwt = false
+
+[functions.otp-guard]
+verify_jwt = false

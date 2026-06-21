@@ -13,6 +13,7 @@ export type AuthErrorCode =
   | "WEAK_PASSWORD"
   | "RATE_LIMITED"
   | "PHONE_PROVIDER_DISABLED"
+  | "GEO_BLOCKED"
   | "INVALID_OTP"
   | "OAUTH_FAILED"
   | "NETWORK"
@@ -114,6 +115,31 @@ export async function signInWithGoogle(redirectTo?: string): Promise<void> {
 // ─── Phone OTP ───────────────────────────────────────────────────────────
 
 export async function sendPhoneOtp(e164: string): Promise<void> {
+  // Toll-fraud / SMS-pumping gate (server-enforced via the otp-guard edge fn:
+  // geo allowlist + per-phone/per-IP velocity caps + a global daily ceiling).
+  // FAILS OPEN: a guard error/outage never blocks login — the Supabase dashboard
+  // CAPTCHA + Allowed Countries + provider SMS rate limit remain the bypass-proof
+  // floor. See docs/admin/ADMIN-BACKEND-PLAN.md (OTP fraud-rails runbook).
+  try {
+    const { data, error } = await supabase.functions.invoke("otp-guard", { body: { phone: e164 } });
+    if (!error && data && (data as { ok?: boolean }).ok === false) {
+      const code = (data as { code?: string }).code;
+      if (code === "GEO_BLOCKED") {
+        throw new AuthError("GEO_BLOCKED", "SMS sign-in isn't available in your region yet. Try email instead.");
+      }
+      if (code === "RATE_LIMITED" || code === "CEILING") {
+        throw new AuthError("RATE_LIMITED", "Too many code requests. Please wait a minute and try again.");
+      }
+      if (code === "INVALID_PHONE") {
+        throw new AuthError("UNKNOWN", "That phone number doesn't look right. Check it and try again.");
+      }
+      // GUARD_ERROR / unknown → fall through and let the send proceed (fail open).
+    }
+  } catch (e) {
+    if (e instanceof AuthError) throw e; // a real block decision — surface it
+    // network/guard failure → fail open, proceed to send below.
+  }
+
   const { error } = await supabase.auth.signInWithOtp({ phone: e164 });
   if (error) throw classify(error);
 }
