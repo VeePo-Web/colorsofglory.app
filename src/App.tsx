@@ -60,6 +60,7 @@ const AdminFoundersPage = lazy(() => import("./pages/admin/FoundersPage"));
 const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPage"));
 const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
 const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
+const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -189,6 +190,7 @@ const App = () => {
             <Route path="/admin/founders/:id" element={<RequireAdmin><AdminFounderDetailPage /></RequireAdmin>} />
             <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
             <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
+            <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />
