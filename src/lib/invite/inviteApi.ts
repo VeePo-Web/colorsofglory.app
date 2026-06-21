@@ -385,12 +385,47 @@ export async function requestNewInvite(token: string, phone?: string): Promise<v
 // ─── Onboarding step updater ──────────────────────────────────────────────────
 
 /**
- * Update the user's onboarding step — non-blocking, fire-and-forget.
+ * Canonical onboarding step order. Mirrors the DB `onboarding_step` enum and
+ * lets us advance monotonically without an extra RPC round-trip.
+ * `dismissed` is treated as terminal (never auto-advanced past).
+ */
+const ONBOARDING_STEP_ORDER = [
+  'not_started',
+  'intent_selected',
+  'referral_program_seen',
+  'founder_code_seen',
+  'first_song_created',
+  'first_idea_captured',
+  'first_voice_memo_added',
+  'first_lyrics_added',
+  'first_collaborator_invited',
+  'completed',
+] as const;
+
+function stepRank(step: string | null | undefined): number {
+  if (step === 'dismissed') return Number.MAX_SAFE_INTEGER;
+  const i = ONBOARDING_STEP_ORDER.indexOf(step as (typeof ONBOARDING_STEP_ORDER)[number]);
+  return i === -1 ? 0 : i;
+}
+
+/**
+ * Advance the user's onboarding step — non-blocking, fire-and-forget, and
+ * **monotonic**: it never regresses a returning user to an earlier step, so the
+ * post-auth resume router always reflects the furthest point they reached.
  * Steps: not_started → intent_selected → ... → completed
  */
 export async function updateOnboardingStep(step: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
+
+  // Read current step and only move forward.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('onboarding_step')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (stepRank(step) <= stepRank(profile?.onboarding_step)) return;
 
   await supabase
     .from('profiles')

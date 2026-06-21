@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 const normalizeCode = (raw: string) =>
   raw.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
@@ -23,6 +24,7 @@ const FounderCodePage = () => {
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSuccess(true);
+      updateOnboardingStep("founder_code_seen").catch(() => {});
     }, 900);
   };
 
