@@ -26,6 +26,7 @@ const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedP
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
 
 // Invite flow - new frictionless join screens
+const JoinEntryPage      = lazy(() => import("./pages/invite/JoinEntryPage"));
 const InviteJoinPage     = lazy(() => import("./pages/invite/InviteJoinPage"));
 const InviteWelcomePage  = lazy(() => import("./pages/invite/InviteWelcomeBackPage"));
 const InviteVerifyPage   = lazy(() => import("./pages/invite/InviteVerifyPage"));
@@ -117,14 +118,14 @@ const App = () => {
         <PracticePlayerProvider>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            {/* Auth */}
+            {/* Auth — phone-first front door (Twilio SMS OTP); email is the fallback */}
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/auth/login" element={<EmailAuthPage />} />
+            <Route path="/auth/login" element={<PhoneLoginPage />} />
+            <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
+            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
+            <Route path="/auth/email" element={<EmailAuthPage />} />
             <Route path="/auth/reset" element={<ResetPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-            {/* Phone OTP — disabled until SMS provider is configured */}
-            <Route path="/auth/phone" element={<PhoneLoginPage />} />
-            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
 
             {/* Onboarding */}
             <Route path="/onboarding" element={<Navigate to="/auth/login" replace />} />
@@ -137,6 +138,7 @@ const App = () => {
             <Route path="/invite/:token" element={<InvitePreviewPage />} />
 
             {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
+            <Route path="/join"           element={<JoinEntryPage />} />
             <Route path="/join/:token"    element={<InviteJoinPage />} />
             <Route path="/invite/welcome" element={<InviteWelcomePage />} />
             <Route path="/invite/verify"  element={<InviteVerifyPage />} />

@@ -85,7 +85,7 @@ const FirstIntentPage = () => {
           icon={Users}
           title="Join a song"
           description="Use an invite from someone you are writing with."
-          onClick={() => navigate("/invite/demo")}
+          onClick={() => navigate("/join")}
         />
       </div>
 

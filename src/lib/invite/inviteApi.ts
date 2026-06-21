@@ -297,6 +297,67 @@ export async function generateInviteToken(
   };
 }
 
+// ─── sendInvite ───────────────────────────────────────────────────────────────
+
+export type InviteChannel = 'sms' | 'email';
+
+export interface SendInviteResult {
+  tokenId: string;
+  token: string;
+  inviteUrl: string;
+  channel: InviteChannel;
+  /** false → backend delivery unavailable; caller should fall back to copy/share. */
+  delivered: boolean;
+}
+
+/** Loose contact classifier: anything with "@" is an email, else treated as a phone. */
+export function classifyContact(contact: string): InviteChannel {
+  return contact.includes('@') ? 'email' : 'sms';
+}
+
+/**
+ * Send an invite directly to a person (the growth loop).
+ *
+ * Creates a single-use invite row, then asks the backend to deliver it. Delivery
+ * itself (Twilio SMS / transactional email) is a Lovable edge function — this is
+ * the frontend half of the contract. If the function isn't deployed yet, we
+ * degrade gracefully: the invite row still exists, `delivered: false` is returned,
+ * and the caller shows the copy/share link instead. No idea (or invite) is lost.
+ *
+ * Backend contract — edge function `send-invite`:
+ *   body: { token, invite_url, channel: 'sms'|'email', to, song_id }
+ *   returns: { delivered: boolean }   (sends via Twilio for sms / email provider)
+ */
+export async function sendInvite(
+  songId: string,
+  uiRole: string,
+  contact: string,
+): Promise<SendInviteResult> {
+  const channel = classifyContact(contact);
+  const to = channel === 'email' ? contact.trim().toLowerCase() : contact.replace(/\D/g, '');
+
+  // Directed invites are single-use.
+  const invite = await generateInviteToken(songId, uiRole, 1);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-invite', {
+      body: {
+        token: invite.token,
+        invite_url: invite.inviteUrl,
+        channel,
+        to,
+        song_id: songId,
+      },
+    });
+    if (error) throw error;
+    const delivered = (data as { delivered?: boolean } | null)?.delivered ?? true;
+    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered };
+  } catch {
+    // Backend send not available yet — caller falls back to copy/share link.
+    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered: false };
+  }
+}
+
 // ─── revokeInviteToken ────────────────────────────────────────────────────────
 
 export async function revokeInviteToken(tokenId: string): Promise<void> {
