@@ -53,16 +53,8 @@ const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedire
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-// Admin (internal-only)
-const RequireAdmin = lazy(() => import("./components/admin/RequireAdmin"));
-const AdminHomePage = lazy(() => import("./pages/admin/AdminHomePage"));
-const AdminFoundersPage = lazy(() => import("./pages/admin/FoundersPage"));
-const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPage"));
-const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
-const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
-const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
-const AdminWebhookOpsPage = lazy(() => import("./pages/admin/WebhookOpsPage"));
-const AdminPayoutBatchesPage = lazy(() => import("./pages/admin/PayoutBatchesPage"));
+// Admin (internal-only) — all admin routing lives in src/routes/AdminRoutes.tsx
+import { adminRoutes } from "@/routes/AdminRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -186,15 +178,8 @@ const App = () => {
             {/* Legacy upgrade placeholder */}
             <Route path="/upgrade-old" element={<UpgradePage />} />
 
-            {/* Admin (internal) */}
-            <Route path="/admin" element={<RequireAdmin><AdminHomePage /></RequireAdmin>} />
-            <Route path="/admin/founders" element={<RequireAdmin><AdminFoundersPage /></RequireAdmin>} />
-            <Route path="/admin/founders/:id" element={<RequireAdmin><AdminFounderDetailPage /></RequireAdmin>} />
-            <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
-            <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
-            <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
-            <Route path="/admin/payouts/batches" element={<RequireAdmin><AdminPayoutBatchesPage /></RequireAdmin>} />
-            <Route path="/admin/webhooks" element={<RequireAdmin><AdminWebhookOpsPage /></RequireAdmin>} />
+            {/* Admin (internal) — routes defined in src/routes/AdminRoutes.tsx */}
+            {adminRoutes}
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />
