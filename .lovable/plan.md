@@ -1,80 +1,66 @@
+## Stripe Payments — Lovable Seamless Integration
 
-# Step 3 — Realtime + Activity Layer for the Song Room
+Enable Lovable's built-in Stripe, create the COG plan-tier products, and ship the SDK + edge functions + thin checkout component so Claude Code can drop `<StripeEmbeddedCheckout priceId="pro_monthly" />` anywhere without touching backend.
 
-Backend + thin SDK. Gives every song room a typed event stream so collaborators see changes live and returning users get a "what changed since you left" recap.
+### 1. Enable + products
 
-## Schema discoveries that shape the plan
-- No `activity` table exists yet. `audit_logs` exists but is admin/billing scoped — not safe to overload.
-- `song_notification_prefs` exists; we'll add `last_seen_at` there rather than creating a new table.
-- Writers we'll instrument: `commit-take`, `promote-capture` (new), `intake-voice-memo`, `voice-memo-finalize`, `song-invite-accept`, `song-leave`, `song-transfer-owner`, plus the 7 canvas RPCs from Step 1. All happen through edge functions or SECURITY DEFINER RPCs, so a single shared helper covers them.
-- `touch_song_activity()` already bumps `songs.last_activity_at` on memo writes — we'll extend the pattern.
+- `enable_stripe_payments` (managed by Lovable, no keys for user to manage).
+- `batch_create_product` with tax code `txcd_10103001` (SaaS):
+  - `pro_plan` → `pro_monthly` $9/mo, `pro_yearly` $90/yr (single-purchase, qty 1/1)
+  - `storage_addon_50gb` → `storage_addon_50gb_monthly` $4/mo (single-purchase)
+- Update each product with `tax_code` via Stripe API call from a one-shot setup script in `supabase/functions/_setup/set-tax-codes.ts` (or inline at product creation — `batch_create_product` doesn't take tax_code, so a follow-up `stripe.products.update` is required).
 
-## Deliverables
+### 2. Backend (Lovable lane)
 
-### 1. Migration — `song_activity` table + helpers
-- `CREATE TABLE public.song_activity` with columns: `id uuid pk default gen_random_uuid()`, `song_id uuid not null references songs(id) on delete cascade`, `actor_user_id uuid not null references auth.users(id) on delete set null`, `kind text not null`, `entity_type text not null`, `entity_id uuid null`, `payload jsonb not null default '{}'::jsonb` (IDs + event metadata only — never lyric/memo content per Core rule), `created_at timestamptz not null default now()`.
-- Indexes: `(song_id, created_at desc)`, `(song_id, actor_user_id, created_at desc)`.
-- GRANTs: `SELECT` to `authenticated`, `ALL` to `service_role`. No INSERT for authenticated — only SECURITY DEFINER writes.
-- RLS: `ENABLE`; one SELECT policy `using (is_song_member(song_id, auth.uid()))`. No INSERT/UPDATE/DELETE policies (locked from clients).
-- Allowed `kind` values defined via CHECK: `take_committed | capture_created | capture_promoted | memo_uploaded | memo_finalized | memo_transcribed | invite_accepted | member_left | owner_transferred | card_moved | card_linked | card_unlinked | card_grouped | card_section_set | card_promoted_final | card_deleted`.
-- Helper `public.log_song_activity(_song_id, _kind, _entity_type, _entity_id, _payload)` SECURITY DEFINER; no-op if `_song_id` null; uses `auth.uid()` as actor (falls back to NULL).
-- Helper `public.list_song_activity_since(_song_id uuid, _since timestamptz, _limit int default 200)` returns grouped digest: `(kind text, actor_user_id uuid, count int, last_at timestamptz, sample_entity_ids uuid[])`. Membership-gated; raises `not_a_member` if caller isn't on the song.
-- Helper `public.mark_song_seen(_song_id uuid)` UPSERTs `(_song_id, auth.uid(), last_seen_at=now())` into `song_notification_prefs`.
-- `ALTER TABLE song_notification_prefs ADD COLUMN IF NOT EXISTS last_seen_at timestamptz` (if not present).
+**Files to create:**
+- `supabase/functions/_shared/stripe.ts` — verbatim `createStripeClient` + `verifyWebhook` from knowledge.
+- `supabase/functions/create-checkout/index.ts` — embedded mode, `managed_payments: { enabled: true }`, resolves Customer with `metadata.userId`, sets `payment_intent_data.description` for one-offs, subscription_data.metadata for recurring.
+- `supabase/functions/create-portal-session/index.ts` — billing portal, auth-guarded.
+- `supabase/functions/payments-webhook/index.ts` — handles `customer.subscription.{created,updated,deleted}` and `checkout.session.completed`, upserts into `subscriptions`, env-stamped.
+- `supabase/config.toml` — `verify_jwt = false` for `create-checkout`, `create-portal-session`, `payments-webhook`.
 
-### 2. Migration — Realtime publication
-- `ALTER PUBLICATION supabase_realtime ADD TABLE public.song_activity, public.canvas_cards, public.takes, public.idea_captures` (skip duplicates with DO blocks).
-- `ALTER TABLE … REPLICA IDENTITY FULL` on each so DELETE payloads carry song_id for client-side filtering.
-- Confirm RLS exists on each so Realtime respects per-song access.
+**Migration** (`subscriptions` table + `has_active_subscription` RPC) per knowledge schema, with GRANTs + RLS. Note: `subscriptions` table already exists in current schema (`<supabase-tables>`); migration will `ALTER TABLE` to add any missing columns (`environment`, `cancel_at_period_end`, `product_id`, `price_id` if missing) and create the helper function.
 
-### 3. Retro-fit writers — single shared helper
-- All seven Step 1 canvas RPCs get a `PERFORM public.log_song_activity(...)` line at the end of their bodies. Done in this same migration (re-issue `CREATE OR REPLACE` for each).
-- Edge functions that already use `_shared/auth.ts` get a tiny `_shared/activity.ts` helper:
-  ```ts
-  export async function logActivity(admin, args: {song_id, kind, entity_type, entity_id?, payload?})
-  ```
-  Wired into:
-  - `promote-capture` → `capture_promoted`
-  - `commit-take` → `take_committed`
-  - `intake-voice-memo` → `memo_uploaded`
-  - `voice-memo-finalize` → `memo_finalized`
-  - `voice-memo-transcribe-worker` (or sibling) → `memo_transcribed`
-  - `song-invite-accept` → `invite_accepted`
-  - `song-leave` → `member_left`
-  - `song-transfer-owner` → `owner_transferred`
-- Each writer passes IDs only — never lyric body, memo title, or transcript text.
+### 3. Frontend (thin, for Claude Code consumption)
 
-### 4. SDK additions
-- `src/integrations/cog/activity.ts` (new or extend existing):
-  - `type SongActivityKind` union.
-  - `listActivitySince(song_id, since): Promise<DigestRow[]>` → calls the new RPC.
-  - `markSongSeen(song_id): Promise<void>` → calls the new RPC.
-- `src/integrations/cog/realtime.ts` (new):
-  - `subscribeSongRoom(song_id, handlers): () => void` — wraps `supabase.channel('song:'+id)` and routes postgres_changes events from `song_activity`, `canvas_cards`, `takes`, `idea_captures` (all filtered `song_id=eq.${id}`) to typed handlers `{ onActivity, onCardChange, onTakeChange, onCaptureChange }`. Returns an unsubscribe fn that calls `supabase.removeChannel`.
-- No UI files touched.
+**Files to create:**
+- `src/lib/stripe.ts` — `getStripe()` + `getStripeEnvironment()` derived from `VITE_PAYMENTS_CLIENT_TOKEN` prefix; throws on missing token (no silent `live` fallback).
+- `src/components/cog/StripeEmbeddedCheckout.tsx` — `<EmbeddedCheckoutProvider>` wrapping `<EmbeddedCheckout>`, calls `create-checkout` edge function via `supabase.functions.invoke`.
+- `src/hooks/useStripeCheckout.tsx` — returns `{ openCheckout, closeCheckout, checkoutElement }`.
+- `src/hooks/useSubscription.ts` — TanStack Query hook reading `subscriptions` table with `getStripeEnvironment()` filter, exposes `{ subscription, isActive, tier, isLoading }`.
+- `src/components/cog/PaymentTestModeBanner.tsx` — shows orange test-mode banner in sandbox, red "go-live required" banner if token missing.
+- `src/pages/CheckoutReturn.tsx` — reads `session_id`, shows success state, navigates to catalog. (Single page — Claude can restyle to match COG cream/gold; structurally minimal.)
 
-### 5. Edge function `digest-recap`
-- Input: `{ song_id, since }`. Auth-gated, member-checked.
-- Loads `list_song_activity_since` rows; resolves actor display names from `profiles`.
-- Calls Lovable AI Gateway (`google/gemini-2.5-flash`) with a strictly-IDs+counts prompt — no lyric, memo, or scripture text included. Output: one short paragraph.
-- Returns `{ digest: string, rows: DigestRow[] }`.
-- Logs the exact prompt at debug level (with a `NEVER_INCLUDE_CONTENT=true` assertion fence) so we can audit.
-- SDK: `getRecapDigest(song_id, since)` in `activity.ts`.
+**SDK additions in COG lane** (`src/integrations/cog/`):
+- `src/integrations/cog/billing.ts` — typed wrappers: `openProCheckout(interval)`, `openStorageAddonCheckout()`, `openCustomerPortal()`, `getActiveTier()`. This is the only file Claude Code needs to import from.
 
-### 6. Acceptance
-- After Step 1 RPC call, a row appears in `song_activity` with the right `kind` and `actor_user_id`.
-- `list_song_activity_since` returns grouped counts for a burst of mixed kinds.
-- Realtime test: subscribe in one shell via `curl_edge_functions`-driven WS isn't feasible — instead, verify publication membership with `select * from pg_publication_tables where pubname='supabase_realtime'`.
-- `digest-recap` returns a sentence; manual prompt log inspection shows zero lyric/memo content.
-- Linter clean; no new "Public Can Execute SECURITY DEFINER" warnings (new fns explicitly `REVOKE EXECUTE … FROM PUBLIC, anon`).
+**Deps:** `@stripe/stripe-js@9.2.0` + `@stripe/react-stripe-js@6.2.0`.
 
-## Out of scope
-- Presence avatars + UI toasts (Claude).
-- Per-user notification preferences screen.
-- Email/push notification fan-out (a future Step would add `pg_net` + a notify-worker).
+### 4. Plan-gate enforcement (server-side)
 
-## Risk notes
-- Writer retro-fit touches several edge functions. To keep each change small, I'll patch one function per edit pass and validate the function still compiles before moving to the next.
-- `digest-recap` prompt: hard-coded allow-list of fields passed to the model; a unit-style assertion in code throws if anything outside the allow-list slips into the prompt object.
+Already-deployed `create-song` edge function: add a free-tier check that calls `has_active_subscription(user_id, 'live')` (and `'sandbox'` for previews) before allowing a 2nd active owned song. Update `.lovable/plan.md` to mark Payments step done.
 
-Reply "go" to build Step 3.
+### 5. Handoff doc for Claude Code
+
+`docs/claude-handoffs/2026-06-21-payments.md` documenting:
+- Where to call `openProCheckout('monthly' | 'yearly')` from `/upgrade` and storage warning screens.
+- Where to mount `<PaymentTestModeBanner />` (top of root layout).
+- How to read `useSubscription()` to gate UI.
+- Return URL convention: `${origin}/checkout/return?session_id={CHECKOUT_SESSION_ID}`.
+- Reminder that all styling, copy, and screen design stays in Claude's lane — the new components are unstyled scaffolds.
+
+### Out of scope
+
+- Designing `/upgrade` page visuals (Claude Code).
+- Storage warning screen visuals (Claude Code).
+- Referral payout logic (separate phase — already partial in DB).
+- Founder code stacking with Stripe coupons (separate phase).
+
+### Build order
+
+1. Enable Stripe + create products + set tax codes.
+2. Migration (subscriptions table delta + RPC).
+3. Shared utility + 3 edge functions + config.toml.
+4. Install deps + write 5 frontend files + COG SDK wrapper.
+5. Wire plan-gate into `create-song`.
+6. Update `.lovable/plan.md` + write Claude handoff doc.
