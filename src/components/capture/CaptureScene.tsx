@@ -59,6 +59,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const { phase, durationMs, analyserNode } = recorder.state;
   const live = useLiveTranscript();
   const metro = useMetronome();
+  // Stable method refs. The hook return objects are recreated every render, so
+  // using them directly in effect deps re-runs those effects — and their
+  // cleanups — on every render. These useCallback-stable methods are safe deps.
+  const { cancelRecording } = recorder;
+  const { start: startLive, stop: stopLive, reset: resetLive, supported: liveSupported } = live;
+  const { stop: stopMetro } = metro;
 
   // Optional count-in + click so a hummed idea lands in time. Off by default —
   // it only matters to people who reach for it, and never adds friction otherwise.
@@ -99,14 +105,26 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // can retry instead of re-recording.
   const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number } | null>(null);
 
-  // Reset state if the user navigates between contexts.
+  // Tear down live capture ONLY when the scene unmounts. Depending on the hook
+  // return objects here would fire this cleanup on every render — cancelling the
+  // in-progress recording ~10×/sec via the duration ticker (this was the "mic
+  // won't record" bug). Stable method refs keep it to a real unmount.
   useEffect(() => {
     return () => {
-      recorder.cancelRecording();
-      live.stop();
-      metro.stop();
+      cancelRecording();
+      stopLive();
+      stopMetro();
     };
-  }, [recorder, live, metro]);
+  }, [cancelRecording, stopLive, stopMetro]);
+
+  // On-device live transcript runs only while recording, and only after the
+  // recorder owns the mic — so Web-Speech never grabs the mic ahead of capture.
+  useEffect(() => {
+    if (phase !== "recording" || !liveSupported) return;
+    resetLive();
+    startLive();
+    return () => stopLive();
+  }, [phase, liveSupported, resetLive, startLive, stopLive]);
 
   const blocks = useMemo(() => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
@@ -180,8 +198,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // same upload path as a manual stop, so the idea lands in review either way.
   const handleAutoFinalize = useCallback(
     (result: RecordingResult | null) => {
-      live.stop();
-      metro.stop();
+      stopLive();
+      stopMetro();
       if (!result) {
         setStatus("idle");
         return;
@@ -198,7 +216,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       });
       void handleAudioFile(file, result.durationMs);
     },
-    [handleAudioFile, live, metro],
+    [handleAudioFile, stopLive, stopMetro],
   );
 
   useEffect(() => {
@@ -210,8 +228,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
     if (phase === "recording") {
       const result = await recorder.stopRecording();
-      live.stop();
-      metro.stop();
+      stopLive();
+      stopMetro();
       if (!result) return;
       const file = new File([result.blob], `take-${Date.now()}.webm`, {
         type: result.mimeType || "audio/webm",
@@ -229,11 +247,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       metro.prime();
       await metro.countIn(metroBpm, 4);
     }
-    live.reset();
-    if (live.supported) live.start();
+    // Recorder first (the must-not-fail path); the live transcript effect picks
+    // up once phase flips to "recording".
     await recorder.startRecording();
     if (clickOn && metroBpm) metro.start(metroBpm);
-  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm]);
+  }, [phase, recorder, saving, handleAudioFile, metro, clickOn, metroBpm]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {

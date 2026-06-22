@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronDown, ChevronUp, Loader2, Merge, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Loader2, Merge, Trash2 } from "lucide-react";
 
 import {
   requestTranscript,
@@ -266,6 +266,23 @@ const ReviewSheet = ({
           <p className="text-sm" style={{ color: "var(--cog-warm-gray)" }}>
             {songTitle ? `${songTitle} · ` : ""}{formatDuration(durationMs)}
           </p>
+          {/* Instant reassurance: the recording uploaded the moment it stopped,
+              so it's already attached to the song. The work below is optional
+              refinement — the idea is never lost waiting on the transcript. */}
+          <div
+            className="flex items-center gap-2 mt-2 rounded-full self-start"
+            style={{
+              padding: "5px 12px",
+              background: "rgba(122,150,90,0.12)",
+              border: "1px solid rgba(122,150,90,0.35)",
+              color: "#4f6b34",
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            <Check size={14} strokeWidth={2.5} />
+            <span>Saved to {songTitle ?? "your song"} — refining is optional</span>
+          </div>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-5 pb-3" style={{ scrollbarGutter: "stable" }}>
@@ -429,7 +446,7 @@ const ReviewSheet = ({
               opacity: committing ? 0.7 : 1,
             }}
           >
-            {committing ? "Adding to canvas…" : "Add to canvas"}
+            {committing ? "Adding to song…" : "Add to song"}
           </Button>
         </div>
       </SheetContent>
