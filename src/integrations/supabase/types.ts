@@ -685,6 +685,30 @@ export type Database = {
           },
         ]
       }
+      otp_send_events: {
+        Row: {
+          country_code: string | null
+          created_at: string
+          id: string
+          ip_hash: string | null
+          phone_e164: string
+        }
+        Insert: {
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          phone_e164: string
+        }
+        Update: {
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          phone_e164?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount_cents: number
@@ -2305,6 +2329,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      check_and_record_otp_send: {
+        Args: { _country: string; _ip_hash: string; _phone: string }
+        Returns: Json
       }
       check_phone_registered: {
         Args: { _phone: string }
