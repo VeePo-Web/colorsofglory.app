@@ -8,16 +8,36 @@
  * Priority order:
  *   1. Pending checkout  → /upgrade   (resume Stripe Embedded Checkout)
  *   2. Pending invite    → /invite/:token
- *   3. Onboarding step   → resume the right onboarding screen / song
+ *   3. Onboarding step   → resume the right onboarding screen, or land home
  *   4. Fallback          → songs exist ? /home : /onboarding/intent
+ *
+ * Resume rule — this function runs ONLY on an explicit fresh sign-in (phone OTP
+ * verify, email login/signup), never on silent session restore. So if a user has
+ * already created their first song, reaching this router means they left and came
+ * back in a new session — a returning user in steady state. We land them on /home
+ * (which surfaces "Continue last song" one tap away) instead of re-dropping them
+ * back inside that one song on every login, and we graduate them out of the
+ * guided first run exactly once by marking onboarding `completed`.
  *
  * lib/ may use the raw supabase client directly (pages must use the auth SDK).
  */
 
 import type { NavigateFunction } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 const REPLACE = { replace: true } as const;
+
+/**
+ * Onboarding steps that precede first-song creation. While the user is in this
+ * set they have no song yet, so a fresh sign-in keeps them in the guided
+ * create-first-song lane. Every later step means a song exists.
+ */
+const PRE_SONG_STEPS = new Set([
+  "intent_selected",
+  "referral_program_seen",
+  "founder_code_seen",
+]);
 
 export async function routeAfterAuth(navigate: NavigateFunction): Promise<void> {
   // 1. Pending checkout intent wins — bring the user straight back to /upgrade.
@@ -45,32 +65,29 @@ export async function routeAfterAuth(navigate: NavigateFunction): Promise<void> 
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("onboarding_step, first_song_id")
+      .select("onboarding_step")
       .eq("user_id", user.id)
       .maybeSingle();
 
     const step = profile?.onboarding_step ?? "not_started";
-    const firstSongId = profile?.first_song_id ?? null;
 
-    switch (step) {
-      case "not_started":
-      case "intent_selected":
-        // No song yet — keep them in the create-first-song lane.
-        navigate(
-          step === "not_started" ? "/onboarding/intent" : "/onboarding/start-song",
-          REPLACE,
-        );
-        return;
-      case "completed":
-      case "dismissed":
-        navigate("/home", REPLACE);
-        return;
-      default:
-        // Mid-onboarding (song created, capturing ideas, lyrics, etc.) —
-        // drop them back inside the song so momentum continues.
-        navigate(firstSongId ? `/songs/${firstSongId}` : "/home", REPLACE);
-        return;
+    // No song yet — keep them in the guided create-first-song lane.
+    if (step === "not_started") {
+      navigate("/onboarding/intent", REPLACE);
+      return;
     }
+    if (PRE_SONG_STEPS.has(step)) {
+      navigate("/onboarding/start-song", REPLACE);
+      return;
+    }
+
+    // A song exists. A fresh sign-in here = a returning user in steady state.
+    // Graduate them out of the guided first run exactly once, then land home.
+    if (step !== "completed" && step !== "dismissed") {
+      updateOnboardingStep("completed").catch(() => {});
+    }
+    navigate("/home", REPLACE);
+    return;
   } catch {
     // Fallback: route on whether any song is reachable.
     try {
