@@ -2138,6 +2138,22 @@ export type Database = {
           referrer_type: string
         }[]
       }
+      admin_referrer_ledger: {
+        Args: never
+        Returns: {
+          attributed_count: number
+          name: string
+          paid_cents: number
+          payable_cents: number
+          paying_count: number
+          payout_method: string
+          pending_cents: number
+          recipient_user_id: string
+          referral_code: string
+          referrer_id: string
+          referrer_type: string
+        }[]
+      }
       admin_resolve_fraud_flag: {
         Args: { _id: string; _note?: string }
         Returns: {
