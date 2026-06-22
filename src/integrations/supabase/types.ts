@@ -1888,6 +1888,30 @@ export type Database = {
           song_id: string
         }[]
       }
+      admin_billing_events: {
+        Args: { _limit?: number; _only_failed?: boolean }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          external_event_id: string
+          id: string
+          invoice_external_id: string | null
+          kind: Database["public"]["Enums"]["billing_event_kind"]
+          occurred_at: string
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          subscription_id: string | null
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "billing_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       admin_create_founder: {
         Args: {
           _display_name: string
@@ -1992,6 +2016,33 @@ export type Database = {
           status: string
           total_redemptions: number
         }[]
+      }
+      admin_list_payouts: {
+        Args: { _limit?: number }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string | null
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       admin_monthly_payouts: {
         Args: { _month_start?: string }
@@ -2692,6 +2743,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      retry_payout: {
+        Args: { _payout: string }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string | null
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
           isOneToOne: true
           isSetofReturn: false
         }
