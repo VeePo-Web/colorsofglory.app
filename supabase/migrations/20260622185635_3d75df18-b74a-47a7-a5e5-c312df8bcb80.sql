@@ -1,10 +1,3 @@
--- ============================================================
--- Admin ops: webhook event visibility + payout approval gate + payout retry
--- All admin-gated (has_role) + SECURITY DEFINER. Money mutations stay through
--- guarded transitions + audit rows.
--- ============================================================
-
--- ---- Webhook ops: list recent billing_events (optionally only failed/stuck) ----
 CREATE OR REPLACE FUNCTION public.admin_billing_events(_limit int DEFAULT 50, _only_failed boolean DEFAULT false)
 RETURNS SETOF public.billing_events
 LANGUAGE plpgsql
@@ -26,7 +19,6 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.admin_billing_events(int, boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_billing_events(int, boolean) TO authenticated;
 
--- ---- Payout console: recent payout batches across all statuses ----
 CREATE OR REPLACE FUNCTION public.admin_list_payouts(_limit int DEFAULT 100)
 RETURNS SETOF public.payouts
 LANGUAGE plpgsql
@@ -44,9 +36,6 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.admin_list_payouts(int) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_list_payouts(int) TO authenticated;
 
--- ---- Payout approval gate: recipient must have a payout method on file (KYC) ----
--- Replaces the prior approve_payout to add the method gate. Founder payouts
--- resolve the recipient via founders.user_id; user payouts use payouts.user_id.
 CREATE OR REPLACE FUNCTION public.approve_payout(_payout uuid)
 RETURNS public.payouts
 LANGUAGE plpgsql
@@ -70,7 +59,6 @@ BEGIN
     v_recipient := p.user_id;
   END IF;
 
-  -- KYC/method gate: never approve money to a recipient with no payout method.
   SELECT payout_method INTO v_method FROM public.profiles WHERE user_id = v_recipient;
   IF v_method IS NULL OR COALESCE(v_method->>'method', '') = '' THEN
     RAISE EXCEPTION 'no_payout_method';
@@ -88,7 +76,6 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.approve_payout(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.approve_payout(uuid) TO authenticated;
 
--- ---- Payout retry: failed -> draft so it can be corrected + re-approved ----
 CREATE OR REPLACE FUNCTION public.retry_payout(_payout uuid)
 RETURNS public.payouts
 LANGUAGE plpgsql

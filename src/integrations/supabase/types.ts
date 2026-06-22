@@ -685,6 +685,30 @@ export type Database = {
           },
         ]
       }
+      otp_send_events: {
+        Row: {
+          country_code: string | null
+          created_at: string
+          id: string
+          ip_hash: string | null
+          phone_e164: string
+        }
+        Insert: {
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          phone_e164: string
+        }
+        Update: {
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          phone_e164?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount_cents: number
@@ -1864,6 +1888,30 @@ export type Database = {
           song_id: string
         }[]
       }
+      admin_billing_events: {
+        Args: { _limit?: number; _only_failed?: boolean }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          external_event_id: string
+          id: string
+          invoice_external_id: string | null
+          kind: Database["public"]["Enums"]["billing_event_kind"]
+          occurred_at: string
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          subscription_id: string | null
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "billing_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       admin_create_founder: {
         Args: {
           _display_name: string
@@ -1925,6 +1973,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_create_fraud_flag: {
+        Args: {
+          _reason: string
+          _severity?: string
+          _subject_id: string
+          _subject_type: string
+        }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_deactivate_code: {
         Args: { _code_id: string }
         Returns: {
@@ -1950,6 +2023,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_finance_summary: { Args: never; Returns: Json }
       admin_founder_detail: { Args: { _founder_id: string }; Returns: Json }
       admin_founder_summary: {
         Args: never
@@ -1967,6 +2041,53 @@ export type Database = {
           status: string
           total_redemptions: number
         }[]
+      }
+      admin_fraud_flags: {
+        Args: { _limit?: number; _only_open?: boolean }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      admin_list_payouts: {
+        Args: { _limit?: number }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string | null
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       admin_monthly_payouts: {
         Args: { _month_start?: string }
@@ -2016,6 +2137,42 @@ export type Database = {
           referrer_founder_id: string
           referrer_type: string
         }[]
+      }
+      admin_referrer_ledger: {
+        Args: never
+        Returns: {
+          attributed_count: number
+          name: string
+          paid_cents: number
+          payable_cents: number
+          paying_count: number
+          payout_method: string
+          pending_cents: number
+          recipient_user_id: string
+          referral_code: string
+          referrer_id: string
+          referrer_type: string
+        }[]
+      }
+      admin_resolve_fraud_flag: {
+        Args: { _id: string; _note?: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_search_audit_logs: {
         Args: {
@@ -2306,6 +2463,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      check_and_record_otp_send: {
+        Args: { _country: string; _ip_hash: string; _phone: string }
+        Returns: Json
+      }
       check_phone_registered: {
         Args: { _phone: string }
         Returns: {
@@ -2332,6 +2493,7 @@ export type Database = {
         Args: { _created_at: string; _duration_ms: number; _tz: string }
         Returns: string
       }
+      create_monthly_payout_drafts: { Args: never; Returns: Json }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
@@ -2344,6 +2506,10 @@ export type Database = {
       current_plan: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["sub_plan"]
+      }
+      debug_seed_reward_chain: {
+        Args: { _amount_cents?: number; _kind?: string; _referred_user: string }
+        Returns: Json
       }
       effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
@@ -2662,6 +2828,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      retry_payout: {
+        Args: { _payout: string }
+        Returns: {
+          amount_cents: number
+          approved_at: string | null
+          approved_by_user_id: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          founder_id: string | null
+          id: string
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          provider: string | null
+          provider_payout_id: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
           isOneToOne: true
           isSetofReturn: false
         }

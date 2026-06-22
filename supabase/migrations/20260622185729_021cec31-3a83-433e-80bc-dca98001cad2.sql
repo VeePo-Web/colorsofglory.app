@@ -1,14 +1,3 @@
--- ============================================================
--- (1) FIX: approve_payout method gate read payout_method as jsonb (->>'method'),
---     but profiles.payout_method is a payout_method_kind ENUM. That would throw
---     at runtime. Correct it to a NULL check on the enum.
--- (2) NEW: admin_referrer_ledger() — per-referrer payments tracker so the admin
---     sees who referred whom, what's owed, and WHO IS BLOCKED FROM BEING PAID
---     (earned money but no payout method on file).
--- Both admin-gated + SECURITY DEFINER.
--- ============================================================
-
--- (1) ----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.approve_payout(_payout uuid)
 RETURNS public.payouts
 LANGUAGE plpgsql
@@ -32,7 +21,6 @@ BEGIN
     v_recipient := p.user_id;
   END IF;
 
-  -- KYC/method gate: payout_method is an enum (manual|paypal|stripe_connect).
   SELECT payout_method INTO v_method FROM public.profiles WHERE user_id = v_recipient;
   IF v_method IS NULL THEN RAISE EXCEPTION 'no_payout_method'; END IF;
 
@@ -48,10 +36,6 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.approve_payout(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.approve_payout(uuid) TO authenticated;
 
--- (2) ----------------------------------------------------------------------
--- One row per referrer (founders + user-referrers) with referral + earnings +
--- payout-method status. `payout_method IS NULL` while payable_cents > 0 means
--- "owed but cannot be paid yet".
 CREATE OR REPLACE FUNCTION public.admin_referrer_ledger()
 RETURNS TABLE (
   referrer_type     text,
@@ -73,7 +57,6 @@ AS $$
 BEGIN
   IF NOT public.has_role(auth.uid(), 'admin') THEN RAISE EXCEPTION 'forbidden'; END IF;
   RETURN QUERY
-  -- Founders
   SELECT
     'founder'::text,
     f.id,
@@ -88,7 +71,6 @@ BEGIN
     (SELECT pr.payout_method::text FROM profiles pr WHERE pr.user_id = f.user_id)
   FROM founders f
   UNION ALL
-  -- User referrers (anyone who has referred at least one paying user)
   SELECT
     'user'::text,
     u.uid,
@@ -103,7 +85,7 @@ BEGIN
     pr.payout_method::text
   FROM (SELECT DISTINCT referrer_user_id AS uid FROM reward_events WHERE referrer_user_id IS NOT NULL) u
   LEFT JOIN profiles pr ON pr.user_id = u.uid
-  ORDER BY 9 DESC, 8 DESC;  -- most payable, then most pending, first
+  ORDER BY 9 DESC, 8 DESC;
 END;
 $$;
 REVOKE EXECUTE ON FUNCTION public.admin_referrer_ledger() FROM PUBLIC, anon;
