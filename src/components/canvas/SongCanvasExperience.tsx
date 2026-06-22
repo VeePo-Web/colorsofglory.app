@@ -28,7 +28,7 @@ import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
 import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport from "@/components/canvas/CanvasViewport";
+import CanvasViewport, { useCanvasViewport } from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
@@ -48,6 +48,7 @@ import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
+import { toast } from "sonner";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -234,7 +235,8 @@ interface CanvasCardProps {
   onSelect: () => void;
   onMoveToFinal: () => void;
   onMoveToIdeas: () => void;
-  onDragStart: (e: React.PointerEvent, cardId: string) => void;
+  /** Called continuously during drag with the new canvas-space position */
+  onMove: (id: string, x: number, y: number) => void;
   layerCount?: number;
   onOpenStack?: () => void;
 }
@@ -245,12 +247,55 @@ const CanvasCardEl = ({
   onSelect,
   onMoveToFinal,
   onMoveToIdeas,
-  onDragStart,
+  onMove,
   layerCount = 0,
   onOpenStack,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
+
+  // Pointer-capture drag: card receives all pointer events even when the cursor
+  // leaves its bounds. screenToCanvas from the viewport context converts the
+  // pointer position to canvas coords so the card follows correctly even at
+  // non-1x zoom. This is intentionally separate from the canvas pan gesture.
+  const { screenToCanvas } = useCanvasViewport();
+  const dragState = useRef<{
+    pointerId: number;
+    startScreen: { x: number; y: number };
+    startCard: { x: number; y: number };
+  } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only primary button (left-click / single touch)
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation(); // prevent canvas pan from starting
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = {
+      pointerId: e.pointerId,
+      startScreen: { x: e.clientX, y: e.clientY },
+      startCard: { x: card.x, y: card.y },
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    // Convert both the start and current screen positions to canvas coords so
+    // the delta is expressed in canvas space (respects zoom level).
+    const startCanvas = screenToCanvas(
+      dragState.current.startScreen.x,
+      dragState.current.startScreen.y,
+    );
+    const currCanvas = screenToCanvas(e.clientX, e.clientY);
+    const newX = dragState.current.startCard.x + (currCanvas.x - startCanvas.x);
+    const newY = dragState.current.startCard.y + (currCanvas.y - startCanvas.y);
+    onMove(card.id, newX, newY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    e.currentTarget.releasePointerCapture(dragState.current.pointerId);
+    dragState.current = null;
+  };
 
   return (
     <div
@@ -261,7 +306,7 @@ const CanvasCardEl = ({
         width: 200,
         minHeight: 130,
         borderRadius: 16,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: "var(--cog-cream-light)",
         border: selected
           ? `2px solid ${card.accent}`
           : card.isDimmedReference
@@ -271,7 +316,7 @@ const CanvasCardEl = ({
           ? `0 8px 28px ${card.accent}30`
           : "0 4px 14px rgba(0,0,0,0.09)",
         opacity: card.isDimmedReference ? 0.42 : 1,
-        cursor: "pointer",
+        cursor: dragState.current ? "grabbing" : "grab",
         userSelect: "none",
         zIndex: selected ? 20 : 10,
         transform: selected ? "scale(1.03)" : "scale(1)",
@@ -280,10 +325,10 @@ const CanvasCardEl = ({
         boxSizing: "border-box",
       }}
       onClick={onSelect}
-      onPointerDown={(e) => {
-        e.stopPropagation(); // prevent canvas pan when interacting with a card
-        onDragStart(e, card.id);
-      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       role="button"
       aria-pressed={selected}
       aria-label={`${card.type} card: ${card.title}`}
@@ -546,10 +591,7 @@ const SongCanvasExperience = () => {
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
 
-  // Drag tracking for card repositioning
-  const draggingCardId = useRef<string | null>(null);
-  const dragStartCanvas = useRef({ x: 0, y: 0 });
-  const dragStartCard = useRef({ x: 0, y: 0 });
+  // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
   useEffect(() => {
     const layer = searchParams.get("layer");
@@ -622,15 +664,10 @@ const SongCanvasExperience = () => {
 
   // ── Card manipulation ──────────────────────────────────────────────────────
 
-  const handleCardDragStart = useCallback((e: React.PointerEvent, cardId: string) => {
-    draggingCardId.current = cardId;
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
-    dragStartCanvas.current = { x: e.clientX, y: e.clientY };
-    dragStartCard.current = { x: card.x, y: card.y };
-    setIsDragOver(true);
-    setSelectedId(cardId);
-  }, [cards]);
+  /** Called by CanvasCardEl's pointer-capture drag with the new canvas-space position. */
+  const handleCardMove = useCallback((id: string, x: number, y: number) => {
+    setCards((prev) => prev.map((c) => c.id === id ? { ...c, x, y } : c));
+  }, []);
 
   const handleMoveToFinal = useCallback((cardId: string) => {
     if (isViewer) return;
@@ -656,6 +693,19 @@ const SongCanvasExperience = () => {
     setIsDragOver(false);
     setCanvasStatus("Moved. Undo?");
     showSavedMoment("Approved idea", "Final tree", "Arrangement");
+    toast("Idea moved to Final", {
+      duration: 7000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setCards((prev) =>
+            prev
+              .filter((c) => c.id !== `${cardId}-final`)
+              .map((c) => c.id === cardId ? { ...c, isDimmedReference: false } : c)
+          );
+        },
+      },
+    });
   }, [isViewer, showSavedMoment]);
 
   const handleMoveToIdeas = useCallback((cardId: string) => {
@@ -697,7 +747,7 @@ const SongCanvasExperience = () => {
       section: "Raw idea",
       contributor: currentUserName,
       status: "raw",
-      accent: "#D4AE5C",
+      accent: getCreatorColor(currentUserName).base,
       x: 80 + (ideaIndex % 3) * 240,
       y: 700 + Math.floor(ideaIndex / 3) * 180,
     };
@@ -744,7 +794,7 @@ const SongCanvasExperience = () => {
       const newCard: CanvasCard = {
         id: tempId, tree: "ideas", type: "voice",
         title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-        section, contributor: currentUserName, status: "raw", accent: "#D4AE5C",
+        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
         x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
         parentMemoId, durationMs: pendingRecording.durationMs,
         isProcessing: true,
@@ -1039,7 +1089,7 @@ const SongCanvasExperience = () => {
               onSelect={() => setSelectedId(selectedId === card.id ? null : card.id)}
               onMoveToFinal={() => handleMoveToFinal(card.id)}
               onMoveToIdeas={() => handleMoveToIdeas(card.id)}
-              onDragStart={handleCardDragStart}
+              onMove={handleCardMove}
               layerCount={layerCountByBase[card.id] ?? 0}
               onOpenStack={
                 card.type === "voice" || card.type === "hum"
