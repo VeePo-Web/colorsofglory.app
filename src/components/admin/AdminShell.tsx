@@ -7,6 +7,7 @@ const links = [
   { to: "/admin/payouts", label: "Payouts" },
   { to: "/admin/finance", label: "Finance" },
   { to: "/admin/webhooks", label: "Webhooks" },
+  { to: "/admin/fraud", label: "Fraud" },
 ];
 
 export default function AdminShell({ children, title }: { children: React.ReactNode; title?: string }) {

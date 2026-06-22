@@ -14,6 +14,7 @@ const AdminPayoutsPage = lazy(() => import("@/pages/admin/PayoutsPage"));
 const AdminFinancePage = lazy(() => import("@/pages/admin/FinancePage"));
 const AdminWebhookOpsPage = lazy(() => import("@/pages/admin/WebhookOpsPage"));
 const AdminPayoutBatchesPage = lazy(() => import("@/pages/admin/PayoutBatchesPage"));
+const AdminFraudPage = lazy(() => import("@/pages/admin/FraudPage"));
 
 export const adminRoutes = (
   <>
@@ -25,5 +26,6 @@ export const adminRoutes = (
     <Route path="/admin/payouts/batches" element={<RequireAdmin><AdminPayoutBatchesPage /></RequireAdmin>} />
     <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
     <Route path="/admin/webhooks" element={<RequireAdmin><AdminWebhookOpsPage /></RequireAdmin>} />
+    <Route path="/admin/fraud" element={<RequireAdmin><AdminFraudPage /></RequireAdmin>} />
   </>
 );

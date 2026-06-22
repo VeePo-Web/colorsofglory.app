@@ -155,6 +155,53 @@ export async function adminBillingEvents(limit = 50, onlyFailed = false): Promis
 export const redriveBillingEvent = (id: string) =>
   callAdmin("admin-redrive-billing-event", { id });
 
+// ── Fraud review ─────────────────────────────────────────────────────────
+export type FraudFlag = {
+  id: string;
+  subject_type: "user" | "founder";
+  subject_id: string;
+  reason: string;
+  severity: string;
+  created_by_user_id: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+};
+
+export async function adminFraudFlags(onlyOpen = true, limit = 100): Promise<FraudFlag[]> {
+  const { data, error } = await supabase.rpc("admin_fraud_flags" as never, {
+    _only_open: onlyOpen,
+    _limit: limit,
+  } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as FraudFlag[];
+}
+
+export async function adminCreateFraudFlag(input: {
+  subject_type: "user" | "founder";
+  subject_id: string;
+  reason: string;
+  severity?: string;
+}): Promise<FraudFlag> {
+  const { data, error } = await supabase.rpc("admin_create_fraud_flag" as never, {
+    _subject_type: input.subject_type,
+    _subject_id: input.subject_id,
+    _reason: input.reason,
+    _severity: input.severity ?? "low",
+  } as never);
+  if (error) throw error;
+  return data as unknown as FraudFlag;
+}
+
+export async function adminResolveFraudFlag(id: string, note?: string): Promise<FraudFlag> {
+  const { data, error } = await supabase.rpc("admin_resolve_fraud_flag" as never, {
+    _id: id,
+    _note: note ?? null,
+  } as never);
+  if (error) throw error;
+  return data as unknown as FraudFlag;
+}
+
 export async function adminMonthlyPayouts(month_start?: string) {
   const { data, error } = await supabase.rpc(
     "admin_monthly_payouts",
