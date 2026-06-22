@@ -105,6 +105,56 @@ export async function adminFinanceSummary(): Promise<FinanceSummary> {
   return data as unknown as FinanceSummary;
 }
 
+// ── Payout console ───────────────────────────────────────────────────────
+export type PayoutRow = {
+  id: string;
+  founder_id: string | null;
+  user_id: string | null;
+  period_start: string;
+  period_end: string;
+  amount_cents: number;
+  currency: string;
+  status: "draft" | "approved" | "processing" | "paid" | "failed";
+  provider: string | null;
+  provider_payout_id: string | null;
+  failure_reason: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+export async function adminListPayouts(limit = 100): Promise<PayoutRow[]> {
+  const { data, error } = await supabase.rpc("admin_list_payouts" as never, { _limit: limit } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as PayoutRow[];
+}
+
+// ── Webhook ops ──────────────────────────────────────────────────────────
+export type BillingEventRow = {
+  id: string;
+  external_event_id: string;
+  kind: string;
+  user_id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  created_at: string;
+  processed_at: string | null;
+  processing_error: string | null;
+};
+
+export async function adminBillingEvents(limit = 50, onlyFailed = false): Promise<BillingEventRow[]> {
+  const { data, error } = await supabase.rpc("admin_billing_events" as never, {
+    _limit: limit,
+    _only_failed: onlyFailed,
+  } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as BillingEventRow[];
+}
+
+/** Re-drive a stuck billing event by re-running its idempotent money RPC. */
+export const redriveBillingEvent = (id: string) =>
+  callAdmin("admin-redrive-billing-event", { id });
+
 export async function adminMonthlyPayouts(month_start?: string) {
   const { data, error } = await supabase.rpc(
     "admin_monthly_payouts",
@@ -158,6 +208,7 @@ export const overrideAttribution = (
 ) => callAdmin("admin-attribution-override", { referred_user_id, new_referrer_type, new_referrer_id, reason });
 
 export const listDraftPayouts = () => callAdmin("admin-payouts", { action: "list_drafts" });
+export const retryPayout = (payout_id: string) => callAdmin("admin-payouts", { action: "retry", payout_id });
 export const createPayoutBatch = (founder_id: string, period_start: string, period_end: string) =>
   callAdmin("admin-payouts", { action: "create_batch", founder_id, period_start, period_end });
 export const approvePayout = (payout_id: string) => callAdmin("admin-payouts", { action: "approve", payout_id });

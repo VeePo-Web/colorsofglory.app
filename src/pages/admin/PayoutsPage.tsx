@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,7 @@ export default function PayoutsPage() {
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by founder name…" className="flex-1 min-w-[220px]" />
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[var(--cog-muted)]">Payable {money(totalPayable)} · Pending {money(totalPending)}</span>
+          <Link to="/admin/payouts/batches"><Button variant="outline">Batches →</Button></Link>
           <Button variant="outline" onClick={exportCSV}>Export CSV</Button>
         </div>
       </div>

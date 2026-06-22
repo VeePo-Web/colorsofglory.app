@@ -170,20 +170,25 @@ export default function FounderDetailPage() {
             />
           </div>
           <SimpleTable
-            head={["Code", "Status", "Used", "Expires", "Created", ""]}
-            rows={codes.map((code) => [
-              <span className="font-mono font-semibold">{code.value}</span>,
-              <Badge variant={code.status === "active" ? "default" : "outline"}>{code.status}</Badge>,
-              <span className="font-mono">
-                {code.redemption_count}
-                {code.max_redemptions ? ` / ${code.max_redemptions}` : ""}
-              </span>,
-              code.expires_at ? new Date(code.expires_at).toLocaleDateString() : "-",
-              new Date(code.created_at).toLocaleDateString(),
-              <button className="text-xs text-[var(--cog-gold)] hover:underline" onClick={() => openCodeDrilldown(code.id)}>
-                View referrals
-              </button>,
-            ])}
+            head={["Code", "Status", "Used", "Referred", "Payable", "Expires", "Created", ""]}
+            rows={codes.map((code) => {
+              const referred = usersByCode.get(code.id)?.length ?? 0;
+              return [
+                <span className="font-mono font-semibold">{code.value}</span>,
+                <Badge variant={code.status === "active" ? "default" : "outline"}>{code.status}</Badge>,
+                <span className="font-mono">
+                  {code.redemption_count}
+                  {code.max_redemptions ? ` / ${code.max_redemptions}` : ""}
+                </span>,
+                <span className="font-mono">{referred}</span>,
+                <span className="font-mono text-[var(--cog-gold)]">{money(payableByCode.get(code.id) ?? 0)}</span>,
+                code.expires_at ? new Date(code.expires_at).toLocaleDateString() : "-",
+                new Date(code.created_at).toLocaleDateString(),
+                <button className="text-xs text-[var(--cog-gold)] hover:underline" onClick={() => openCodeDrilldown(code.id)}>
+                  View referrals
+                </button>,
+              ];
+            })}
           />
         </TabsContent>
 
