@@ -2,9 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getCurrentPlan,
-  getEffectiveStorageLimit,
-  getLatestSubscription,
+  getMyBillingStatus,
+  type BillingStatus,
   type PlanId,
   type Subscription,
 } from "@/integrations/cog/billing";
@@ -16,6 +15,7 @@ export type SubscriptionState = {
   inGracePeriod: boolean;
   subscription: Subscription | null;
   storageLimitBytes: number;
+  status: BillingStatus | null;
   isLoading: boolean;
   refetch: () => void;
 };
@@ -39,14 +39,7 @@ export function useSubscription(): SubscriptionState {
   const subQuery = useQuery({
     queryKey: ["subscription", userId],
     enabled: !!userId,
-    queryFn: async () => {
-      const [plan, subscription, storageLimitBytes] = await Promise.all([
-        getCurrentPlan(userId!),
-        getLatestSubscription(userId!),
-        getEffectiveStorageLimit(userId!),
-      ]);
-      return { plan, subscription, storageLimitBytes };
-    },
+    queryFn: async () => getMyBillingStatus(),
   });
 
   useEffect(() => {
@@ -69,24 +62,26 @@ export function useSubscription(): SubscriptionState {
     };
   }, [userId, subQuery]);
 
-  const sub = subQuery.data?.subscription ?? null;
-  const plan: PlanId = subQuery.data?.plan ?? "free";
-  const status = sub?.status ?? null;
+  const status = subQuery.data ?? null;
+  const sub = status?.subscription ?? null;
+  const plan: PlanId = status?.plan ?? "free";
+  const subStatus = sub?.status ?? null;
   const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end) : null;
   const futurePeriod = !periodEnd || periodEnd.getTime() > Date.now();
 
   const isActive =
-    (status === "active" || status === "trialing" || status === "past_due") && futurePeriod;
-  const inGracePeriod = status === "canceled" && !!periodEnd && periodEnd.getTime() > Date.now();
-  const isPro = (plan === "pro" || plan === "founder_pro") && (isActive || inGracePeriod);
+    (subStatus === "active" || subStatus === "trialing" || subStatus === "past_due") && futurePeriod;
+  const inGracePeriod = subStatus === "canceled" && !!periodEnd && periodEnd.getTime() > Date.now();
+  const isPro = status?.is_pro ?? ((plan === "pro" || plan === "founder_pro") && (isActive || inGracePeriod));
 
   return {
     plan,
     isPro,
     isActive: isActive || inGracePeriod,
     inGracePeriod,
-    subscription: sub,
-    storageLimitBytes: subQuery.data?.storageLimitBytes ?? 0,
+    subscription: (sub as unknown as Subscription | null),
+    storageLimitBytes: status?.storage.limit_bytes ?? 0,
+    status,
     isLoading: userQuery.isLoading || subQuery.isLoading,
     refetch: subQuery.refetch,
   };
