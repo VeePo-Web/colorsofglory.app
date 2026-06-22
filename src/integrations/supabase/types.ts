@@ -1974,6 +1974,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_finance_summary: { Args: never; Returns: Json }
       admin_founder_detail: { Args: { _founder_id: string }; Returns: Json }
       admin_founder_summary: {
         Args: never
