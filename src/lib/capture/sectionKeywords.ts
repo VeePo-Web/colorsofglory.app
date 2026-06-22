@@ -23,31 +23,42 @@ interface KeywordRule {
   /** Lowercased phrase tokens (single or multi-word). */
   tokens: string[];
   kind: SectionKind;
-  /** Try to absorb a following ordinal token into the marker. */
+  /**
+   * Try to absorb a following ordinal/variant token into the marker
+   * ("verse 1", "chorus 2", "verse 1a"). Defaults to true so *every* section
+   * can be numbered by voice, not just the verse.
+   */
   takesOrdinal?: boolean;
+  /** Fixed ordinal baked into the phrase ("first verse" → 1). */
+  fixedOrdinal?: number;
 }
 
 // Order matters — longer phrases win, so list multi-word rules first.
+// Synonyms map a spoken word onto the canonical section kind a songwriter means
+// ("ending" → outro, "refrain" → chorus, "vamp" → tag, "turnaround" → bridge),
+// so the routing follows intent rather than exact vocabulary.
 const RULES: KeywordRule[] = [
   { tokens: ["pre", "chorus"], kind: "pre-chorus" },
   { tokens: ["pre-chorus"], kind: "pre-chorus" },
-  { tokens: ["first", "verse"], kind: "verse", takesOrdinal: false },
-  { tokens: ["second", "verse"], kind: "verse", takesOrdinal: false },
-  { tokens: ["third", "verse"], kind: "verse", takesOrdinal: false },
-  { tokens: ["verse"], kind: "verse", takesOrdinal: true },
+  { tokens: ["post", "chorus"], kind: "chorus" },
+  { tokens: ["first", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 1 },
+  { tokens: ["second", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 2 },
+  { tokens: ["third", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 3 },
+  { tokens: ["verse"], kind: "verse" },
   { tokens: ["chorus"], kind: "chorus" },
+  { tokens: ["refrain"], kind: "chorus" },
   { tokens: ["hook"], kind: "hook" },
   { tokens: ["bridge"], kind: "bridge" },
+  { tokens: ["turnaround"], kind: "bridge" },
   { tokens: ["intro"], kind: "intro" },
   { tokens: ["outro"], kind: "outro" },
+  { tokens: ["ending"], kind: "outro" },
+  { tokens: ["coda"], kind: "outro" },
   { tokens: ["tag"], kind: "tag" },
+  { tokens: ["vamp"], kind: "tag" },
   { tokens: ["interlude"], kind: "interlude" },
+  { tokens: ["breakdown"], kind: "interlude" },
 ];
-
-const ORDINAL_RULES: Record<string, number> = {
-  ...ORDINAL_WORDS,
-  // numeric tokens: "1", "2"…
-};
 
 /**
  * Filler tokens we'll silently consume *before* a marker phrase. Lets users
@@ -74,10 +85,60 @@ function parseOrdinal(token: string | undefined): number | undefined {
   if (!token) return undefined;
   const n = Number(token);
   if (Number.isFinite(n) && n > 0 && n < 20) return n;
-  return ORDINAL_RULES[token];
+  return ORDINAL_WORDS[token];
 }
 
-function defaultLabel(kind: SectionKind, ordinal?: number): string {
+interface OrdinalVariant {
+  ordinal?: number;
+  variant?: string;
+  /** How many tokens (after the section phrase) were consumed. */
+  consumed: number;
+}
+
+/**
+ * Read an optional ordinal and/or letter variant immediately after a section
+ * phrase. Handles the spoken forms a songwriter actually uses:
+ *   "verse one"     → { ordinal: 1 }
+ *   "verse 2"       → { ordinal: 2 }
+ *   "verse 1a"      → { ordinal: 1, variant: "A" }   (one fused token)
+ *   "verse 1 b"     → { ordinal: 1, variant: "B" }   (number then letter)
+ *   "chorus 2"      → { ordinal: 2 }
+ * A bare trailing letter is only treated as a variant when it follows a number
+ * AND is b–e — never a lone "a", which is far more often the article ("verse a
+ * morning…") than a variant.
+ */
+function consumeOrdinalVariant(
+  tokens: string[],
+  at: number,
+): OrdinalVariant {
+  const t0 = tokens[at];
+  if (!t0) return { consumed: 0 };
+
+  // Fused number+letter, e.g. "1a" / "2b".
+  const fused = /^(\d{1,2})([a-h])$/.exec(t0);
+  if (fused) {
+    const ordinal = Number(fused[1]);
+    if (ordinal > 0 && ordinal < 20) {
+      return { ordinal, variant: fused[2].toUpperCase(), consumed: 1 };
+    }
+  }
+
+  const ordinal = parseOrdinal(t0);
+  if (ordinal == null) return { consumed: 0 };
+
+  // Optional standalone variant letter right after the number.
+  const t1 = tokens[at + 1];
+  if (t1 && /^[b-e]$/.test(t1)) {
+    return { ordinal, variant: t1.toUpperCase(), consumed: 2 };
+  }
+  return { ordinal, consumed: 1 };
+}
+
+function defaultLabel(
+  kind: SectionKind,
+  ordinal?: number,
+  variant?: string,
+): string {
   const base = {
     intro: "Intro",
     verse: "Verse",
@@ -90,7 +151,10 @@ function defaultLabel(kind: SectionKind, ordinal?: number): string {
     hook: "Hook",
     unlabeled: "Section",
   }[kind];
-  return ordinal ? `${base} ${ordinal}` : base;
+  if (ordinal != null && variant) return `${base} ${ordinal}${variant}`;
+  if (ordinal != null) return `${base} ${ordinal}`;
+  if (variant) return `${base} ${variant}`;
+  return base;
 }
 
 /** Pre-fill ordinals for repeated verses if none were spoken. */
@@ -101,7 +165,7 @@ function backfillVerseOrdinals(markers: SectionMarker[]): SectionMarker[] {
     verseCount += 1;
     if (m.ordinal != null) return m;
     const next = { ...m, ordinal: verseCount };
-    next.label = defaultLabel("verse", verseCount);
+    next.label = defaultLabel("verse", verseCount, m.variant);
     return next;
   });
 }
@@ -135,12 +199,17 @@ export function detectSectionMarkers(
 
     const startWord = words[i];
     let ordinal: number | undefined;
+    let variant: string | undefined;
     let consumed = matched.len;
-    if (matched.rule.takesOrdinal) {
-      ordinal = parseOrdinal(tokens[i + matched.len]);
-      if (ordinal != null) consumed += 1;
-    } else if (matched.rule.tokens[0] in ORDINAL_RULES) {
-      ordinal = ORDINAL_RULES[matched.rule.tokens[0]];
+    if (matched.rule.fixedOrdinal != null) {
+      // "first verse" → ordinal baked in; nothing more to absorb.
+      ordinal = matched.rule.fixedOrdinal;
+    } else if (matched.rule.takesOrdinal !== false) {
+      // Every other section can be numbered + lettered by voice.
+      const ov = consumeOrdinalVariant(tokens, i + matched.len);
+      ordinal = ov.ordinal;
+      variant = ov.variant;
+      consumed += ov.consumed;
     }
 
     // Walk backwards over leading-filler tokens so the marker absorbs them.
@@ -163,8 +232,9 @@ export function detectSectionMarkers(
       contentStartMs: lastConsumedWord.endMs,
       kind: matched.rule.kind,
       ordinal,
+      variant,
       source: "voice",
-      label: defaultLabel(matched.rule.kind, ordinal),
+      label: defaultLabel(matched.rule.kind, ordinal, variant),
     });
     i += consumed;
   }
