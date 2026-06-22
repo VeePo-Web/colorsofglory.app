@@ -37,7 +37,7 @@ const Fallback = () => (
  * real trust boundary on the backend.
  * 🔒 RE-ENABLE BEFORE LAUNCH: set BYPASS_AUTH = false.
  */
-const BYPASS_AUTH = true;
+const BYPASS_AUTH = false;
 
 /**
  * Lightweight client-side gate. RLS is the real trust boundary; this just
