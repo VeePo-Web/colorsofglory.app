@@ -18,7 +18,9 @@ import ReviewSheet from "./ReviewSheet";
 import ImportMemoButton from "./ImportMemoButton";
 import LatestPeekStrip from "./LatestPeekStrip";
 import CommitRibbon from "./CommitRibbon";
+import HeardCuesStrip from "./HeardCuesStrip";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
+import { detectMusicCues } from "@/lib/capture/musicCues";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 
 interface CaptureSceneProps {
@@ -101,6 +103,10 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
     return buildTranscriptBlocks(live.words, markers);
   }, [live.words, manualMarkers]);
+
+  // Spoken key / tempo / chords heard inside the take, so the idea arrives
+  // song-ready without typing ("key of G, about 120 BPM, chords are G C D").
+  const musicCues = useMemo(() => detectMusicCues(live.words), [live.words]);
 
   const handleAudioFile = useCallback(
     async (file: File, fileDurationMs: number) => {
@@ -467,6 +473,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
                 : status
           }
         />
+
+        {/* "Heard" cues — quiet confirmation the app caught the key/tempo/chords. */}
+        {!review.open && <HeardCuesStrip cues={musicCues} />}
 
         {pendingBlocks.length > 0 && phase !== "recording" && !review.open && (
           <p
