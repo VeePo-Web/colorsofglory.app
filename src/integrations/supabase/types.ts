@@ -2332,6 +2332,7 @@ export type Database = {
         Args: { _created_at: string; _duration_ms: number; _tz: string }
         Returns: string
       }
+      create_monthly_payout_drafts: { Args: never; Returns: Json }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
