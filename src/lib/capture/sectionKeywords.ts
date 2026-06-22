@@ -61,6 +61,42 @@ const RULES: KeywordRule[] = [
 ];
 
 /**
+ * Real-world STT mishears + plurals, normalised to the canonical keyword so a
+ * sung section call still routes correctly when transcription fumbles it. Kept
+ * deliberately small and high-confidence — precision matters more than recall
+ * (a wrong section split is worse than a missed one). The classic "chorus" →
+ * "course" mishear is handled separately below, with an "of course" guard.
+ */
+const TOKEN_ALIASES: Record<string, string> = {
+  verses: "verse",
+  choruses: "chorus",
+  bridges: "bridge",
+  intros: "intro",
+  outros: "outro",
+  hooks: "hook",
+  tags: "tag",
+  vamps: "vamp",
+  interludes: "interlude",
+  refrains: "refrain",
+  endings: "ending",
+  codas: "coda",
+};
+
+/**
+ * Map each token to its canonical keyword form for matching. Only the keyword
+ * surface is canonicalised — ordinals, fillers, and timestamps still use the
+ * raw tokens, so nothing downstream shifts.
+ */
+function canonicalizeTokens(tokens: string[]): string[] {
+  return tokens.map((t, i) => {
+    // "course" is the single most common transcription of a sung "chorus" —
+    // but never inside "of course", which is ordinary speech, not a section call.
+    if (t === "course" && tokens[i - 1] !== "of") return "chorus";
+    return TOKEN_ALIASES[t] ?? t;
+  });
+}
+
+/**
  * Filler tokens we'll silently consume *before* a marker phrase. Lets users
  * say things like "okay chorus", "and now the bridge", "this is verse two"
  * without leaking those words into the section body.
@@ -180,13 +216,14 @@ export function detectSectionMarkers(
   manualMarkers: SectionMarker[] = [],
 ): SectionMarker[] {
   const tokens = words.map((w) => normalizeToken(w.text));
+  const canonical = canonicalizeTokens(tokens);
   const found: SectionMarker[] = [];
 
   let i = 0;
   while (i < tokens.length) {
     let matched: { rule: KeywordRule; len: number } | null = null;
     for (const rule of RULES) {
-      const slice = tokens.slice(i, i + rule.tokens.length).join(" ");
+      const slice = canonical.slice(i, i + rule.tokens.length).join(" ");
       if (slice === rule.tokens.join(" ")) {
         matched = { rule, len: rule.tokens.length };
         break;
