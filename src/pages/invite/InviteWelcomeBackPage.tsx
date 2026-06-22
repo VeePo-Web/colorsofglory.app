@@ -4,12 +4,47 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import { loadInviteContext, saveInviteContext, getAvatarColor } from "@/lib/invite/inviteContext";
 import { acceptInvite } from "@/lib/invite/inviteApi";
+import { getSessionUser, sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
+
+/** Last 10 digits — lets us compare an e164 against a session's stored phone. */
+function last10(s: string): string {
+  return s.replace(/\D/g, "").slice(-10);
+}
+
+function nationalDisplay(e164: string): string {
+  const d = last10(e164);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+function toFriendlyError(err: unknown): string {
+  if (err instanceof AuthError) {
+    switch (err.code) {
+      case "GEO_BLOCKED":
+        return "SMS sign-in isn't available in your region yet.";
+      case "RATE_LIMITED":
+        return "Too many attempts. Please wait a minute and try again.";
+      case "PHONE_PROVIDER_DISABLED":
+        return "SMS sign-in isn't available right now. Please try again shortly.";
+      case "NETWORK":
+        return "We couldn't reach the network. Check your connection and try again.";
+      default:
+        return err.message || "Something went wrong. Please try again.";
+    }
+  }
+  return "Something went wrong. Please try again.";
+}
 
 /**
  * Screen A2 — existing user detected.
  * Shows "Welcome back, [First Name]" and a single "Join [Song Title]" CTA.
- * No OTP needed — the session already exists.
- * Target: tap → inside the song in under 3 seconds.
+ *
+ * An existing account is detected by phone-registration lookup, which does NOT
+ * create a session. So a true one-tap join only works when a *matching* session
+ * already exists on THIS device. Otherwise we must send a real (guarded) OTP and
+ * route to verify — never assume "you're already in", which previously dead-ended
+ * the user on a verify screen showing a code that was never sent.
  */
 const InviteWelcomeBackPage = () => {
   const navigate = useNavigate();
@@ -23,17 +58,32 @@ const InviteWelcomeBackPage = () => {
   const avatarColor = getAvatarColor(ctx?.verifiedPhone ?? 'user');
 
   const handleJoin = async () => {
-    if (!ctx?.token) { navigate('/invite/verify'); return; }
+    if (!ctx?.token) { navigate('/join', { replace: true }); return; }
     setIsJoining(true);
     setError(null);
     try {
-      const result = await acceptInvite(ctx.token);
-      saveInviteContext({ userId: null, isExistingUser: true });
-      navigate('/invite/team');
-      void result;
-    } catch {
-      // If silent auth fails, fall back to OTP
+      const phone = ctx.verifiedPhone;
+      const user = await getSessionUser();
+
+      // True one-tap: a live session already exists on this device AND it
+      // belongs to the phone we're joining with — accept straight away.
+      if (user && phone && last10(user.phone ?? '') === last10(phone)) {
+        await acceptInvite(ctx.token);
+        saveInviteContext({ isExistingUser: true });
+        navigate('/invite/team');
+        return;
+      }
+
+      // Existing account but no matching session here (e.g. a new device).
+      // Send a real, toll-fraud-guarded code and route to verify with the
+      // phone stored, so verify never shows a "code sent" it never sent.
+      if (!phone) { navigate(`/join/${ctx.token}`, { replace: true }); return; }
+      await sendPhoneOtp(phone);
+      sessionStorage.setItem('cog:phone-e164', phone);
+      sessionStorage.setItem('cog:phone-display', nationalDisplay(phone));
       navigate('/invite/verify');
+    } catch (err) {
+      setError(toFriendlyError(err));
     } finally {
       setIsJoining(false);
     }
@@ -116,7 +166,7 @@ const InviteWelcomeBackPage = () => {
 
         {/* Trust line */}
         <p className="text-[0.75rem] text-center mt-3" style={{ color: '#999' }}>
-          No code needed — you're already in.
+          Tap to continue into your song.
         </p>
       </div>
     </div>
