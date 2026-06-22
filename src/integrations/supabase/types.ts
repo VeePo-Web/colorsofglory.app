@@ -1973,6 +1973,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_create_fraud_flag: {
+        Args: {
+          _reason: string
+          _severity?: string
+          _subject_id: string
+          _subject_type: string
+        }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_deactivate_code: {
         Args: { _code_id: string }
         Returns: {
@@ -2016,6 +2041,26 @@ export type Database = {
           status: string
           total_redemptions: number
         }[]
+      }
+      admin_fraud_flags: {
+        Args: { _limit?: number; _only_open?: boolean }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       admin_list_payouts: {
         Args: { _limit?: number }
@@ -2092,6 +2137,26 @@ export type Database = {
           referrer_founder_id: string
           referrer_type: string
         }[]
+      }
+      admin_resolve_fraud_flag: {
+        Args: { _id: string; _note?: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          severity: string
+          subject_id: string
+          subject_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fraud_flags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_search_audit_logs: {
         Args: {
