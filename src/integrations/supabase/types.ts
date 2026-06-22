@@ -2507,6 +2507,10 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["sub_plan"]
       }
+      debug_seed_reward_chain: {
+        Args: { _amount_cents?: number; _kind?: string; _referred_user: string }
+        Returns: Json
+      }
       effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
       expire_pending_invites: { Args: never; Returns: number }
