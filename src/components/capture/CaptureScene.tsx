@@ -16,6 +16,8 @@ import LiveTranscript from "./LiveTranscript";
 import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
 import ReviewSheet from "./ReviewSheet";
 import ImportMemoButton from "./ImportMemoButton";
+import MetronomeBar from "./MetronomeBar";
+import { useMetronome } from "@/hooks/useMetronome";
 import LatestPeekStrip from "./LatestPeekStrip";
 import CommitRibbon from "./CommitRibbon";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
@@ -54,6 +56,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   });
   const { phase, durationMs, analyserNode } = recorder.state;
   const live = useLiveTranscript();
+  const metro = useMetronome();
+
+  // Optional count-in + click so a hummed idea lands in time. Off by default —
+  // it only matters to people who reach for it, and never adds friction otherwise.
+  const [metroBpm, setMetroBpm] = useState<number | null>(null);
+  const [clickOn, setClickOn] = useState(false);
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
   const [status, setStatus] = useState<
@@ -94,8 +102,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     return () => {
       recorder.cancelRecording();
       live.stop();
+      metro.stop();
     };
-  }, [recorder, live]);
+  }, [recorder, live, metro]);
 
   const blocks = useMemo(() => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
@@ -166,6 +175,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const handleAutoFinalize = useCallback(
     (result: RecordingResult | null) => {
       live.stop();
+      metro.stop();
       if (!result) {
         setStatus("idle");
         return;
@@ -182,7 +192,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       });
       void handleAudioFile(file, result.durationMs);
     },
-    [handleAudioFile, live],
+    [handleAudioFile, live, metro],
   );
 
   useEffect(() => {
@@ -195,6 +205,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     if (phase === "recording") {
       const result = await recorder.stopRecording();
       live.stop();
+      metro.stop();
       if (!result) return;
       const file = new File([result.blob], `take-${Date.now()}.webm`, {
         type: result.mimeType || "audio/webm",
@@ -203,13 +214,20 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       return;
     }
 
-    // Start recording fresh.
+    // Start recording fresh. An optional count-in plays *before* the live
+    // transcript + recorder start, so the count clicks aren't transcribed and
+    // the singer comes in on the downbeat.
     setManualMarkers([]);
     setStatus("listening");
+    if (clickOn && metroBpm) {
+      metro.prime();
+      await metro.countIn(metroBpm, 4);
+    }
     live.reset();
     if (live.supported) live.start();
     await recorder.startRecording();
-  }, [phase, recorder, saving, live, handleAudioFile]);
+    if (clickOn && metroBpm) metro.start(metroBpm);
+  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -426,6 +444,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           analyser={analyserNode}
           onTap={handleMicTap}
         />
+
+        {/* Tap-tempo + optional count-in — quiet under the mic, idle only. */}
+        {phase !== "recording" && !saving && !review.open && (
+          <MetronomeBar
+            bpm={metroBpm}
+            clickOn={clickOn}
+            onBpmChange={setMetroBpm}
+            onClickToggle={setClickOn}
+          />
+        )}
 
         {/* Recovery path — a denied or errored mic must never be a dead end. */}
         {phase === "permission-denied" && (

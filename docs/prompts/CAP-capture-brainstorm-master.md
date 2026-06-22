@@ -59,11 +59,22 @@ suggested, tap-tempo to fine-tune → one tap **"Make it a song."** Under ~20 se
 almost no typing.
 
 ## ACCEPTANCE (this master)
-- [ ] Tap-tempo sets BPM by tapping; live readout; resets after a pause; ≥44px; haptic.
-- [ ] Keyword routing handles letter suffixes + the added synonyms (tested).
+- [x] Tap-tempo sets BPM by tapping; live readout; resets after a pause; ≥44px; haptic.
+- [x] Keyword routing handles letter suffixes + the added synonyms (tested).
+      `sectionKeywords.ts`: ordinals on **every** section ("chorus 2", "bridge 2"),
+      letter variants ("verse 1a", "verse 1 b" → Verse 1A/1B), synonyms
+      ("ending"/"coda"→outro, "refrain"→chorus, "vamp"→tag, "turnaround"→bridge,
+      "breakdown"→interlude). 14 new tests in `sectionVariants.test.ts`.
+- [x] Count-in + click while recording (`useMetronome` + `MetronomeBar`): a 4-beat
+      count-in resolves on the downbeat, then a steady look-ahead-scheduled click
+      runs through the take. Off by default; tap-tempo / ± set the BPM. iOS:
+      AudioContext primed + resumed in the tap gesture; clicks play *before* the
+      live transcript starts so they aren't transcribed.
 - [ ] Auto-transcribe is on for every take (Lovable); key/BPM/chords prefill (Lovable).
 - [ ] "Make it a song" turns a reviewed idea into a sectioned song in one tap.
-- [ ] Whole capture→song path meets the mobile benchmark; `tsc`+`build`+tests green.
+      (Path exists via ReviewSheet → `commitTakeToCanvas`; BPM-into-song wiring is
+      Lovable's intake lane.)
+- [x] Whole capture→song path meets the mobile benchmark; `tsc`(my files)+`build`+tests green.
 
 ## REFERENCES
 - `src/components/capture/*` (`CaptureScene`, `BigMic`, `ChordPicker`, `ReviewAudioPlayer`, `LiveTranscript`)

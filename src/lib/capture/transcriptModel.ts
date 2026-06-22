@@ -39,6 +39,13 @@ export interface SectionMarker {
   kind: SectionKind;
   /** Numeric ordinal when applicable (verse 1 → 1). */
   ordinal?: number;
+  /**
+   * Letter variant when spoken (verse 1a → "A", chorus 2b → "B"). Lets a
+   * songwriter sketch alternates of the same section ("verse 1a" vs "verse 1b")
+   * by voice. Always upper-cased. Appended to the ordinal in the label
+   * ("Verse 1A").
+   */
+  variant?: string;
   /** "voice" = detected via spoken keyword. "manual" = chip tap. */
   source: "voice" | "manual";
   /** Display label, user-editable in the Review sheet. */
