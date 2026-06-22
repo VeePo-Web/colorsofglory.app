@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -8,6 +8,7 @@ import { useSongTitle } from "@/lib/songContext";
 import { parseChordPro, renderChordsOverLyrics, toChordPro, transposeKeyLetter } from "@/lib/chords/sheet";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
+import PerformanceView from "@/components/songsheet/PerformanceView";
 
 /**
  * The Song Sheet — the structured, performable lyric & chord view, and a real
@@ -60,6 +61,7 @@ const SongSheetPage = () => {
   const [showSyllables, setShowSyllables] = useState(false);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [perform, setPerform] = useState(false);
 
   // Persist the draft so a captured chart is never lost.
   useEffect(() => writeDraft(id, source, sourceKey), [id, source, sourceKey]);
@@ -148,20 +150,30 @@ const SongSheetPage = () => {
               </Toggle>
             </div>
 
-            {/* Action row */}
+            {/* Perform — primary action (the stage view) */}
+            <button
+              type="button"
+              onClick={() => setPerform(true)}
+              className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-full text-sm font-semibold mb-3 transition-transform active:scale-[0.98]"
+              style={{ backgroundColor: "var(--cog-gold)", color: "#fff", fontFamily: "var(--font-body)", boxShadow: "0 4px 16px rgba(184,149,58,0.35)" }}
+            >
+              <Play size={16} strokeWidth={2.2} /> Perform
+            </button>
+
+            {/* Secondary actions */}
             <div className="flex gap-2.5 mb-6">
               <button
                 type="button"
                 onClick={() => setEditing(true)}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
-                style={{ backgroundColor: "var(--cog-gold)", color: "#fff", fontFamily: "var(--font-body)" }}
+                style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
               >
                 <Pencil size={14} strokeWidth={2} /> Edit chart
               </button>
               <button
                 type="button"
                 onClick={copyChordPro}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
                 style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
                 aria-label="Copy as ChordPro"
               >
@@ -210,6 +222,16 @@ const SongSheetPage = () => {
       </div>
 
       <SongTabBar activeTab="lyrics" />
+
+      {perform && (
+        <PerformanceView
+          sections={sections}
+          displayKey={displayKey}
+          display={display}
+          songTitle={songTitle}
+          onClose={() => setPerform(false)}
+        />
+      )}
     </div>
   );
 };
