@@ -202,6 +202,28 @@ export async function adminResolveFraudFlag(id: string, note?: string): Promise<
   return data as unknown as FraudFlag;
 }
 
+// ── Referrer payments ledger ─────────────────────────────────────────────
+export type ReferrerLedgerRow = {
+  referrer_type: "founder" | "user";
+  referrer_id: string;
+  recipient_user_id: string;
+  name: string | null;
+  referral_code: string | null;
+  attributed_count: number;
+  paying_count: number;
+  pending_cents: number;
+  payable_cents: number;
+  paid_cents: number;
+  payout_method: string | null;
+};
+
+/** Per-referrer tracker: referrals + earnings + whether they can be paid. */
+export async function adminReferrerLedger(): Promise<ReferrerLedgerRow[]> {
+  const { data, error } = await supabase.rpc("admin_referrer_ledger" as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as ReferrerLedgerRow[];
+}
+
 export async function adminMonthlyPayouts(month_start?: string) {
   const { data, error } = await supabase.rpc(
     "admin_monthly_payouts",
