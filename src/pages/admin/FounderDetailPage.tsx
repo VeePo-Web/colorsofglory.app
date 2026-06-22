@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
+import FounderActions from "@/components/admin/FounderActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,7 +62,7 @@ const EMPTY_REWARDS: Detail["reward_events"] = [];
 
 export default function FounderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin", "founder", id],
     queryFn: () => adminFounderDetail(id!) as Promise<Detail>,
     enabled: !!id,
@@ -140,12 +141,20 @@ export default function FounderDetailPage() {
         </Link>
       </div>
 
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{founder.display_name}</h1>
           <p className="font-mono text-sm text-[var(--cog-muted)]">{founder.slug}</p>
         </div>
-        <Badge>{founder.status}</Badge>
+        <div className="flex items-center gap-3">
+          <Badge>{founder.status}</Badge>
+          <FounderActions
+            founderId={founder.id}
+            status={founder.status}
+            rewardProfile={founder.reward_profile}
+            onChanged={() => refetch()}
+          />
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-3 gap-4">
