@@ -30,7 +30,7 @@ export type SongVersion = {
   parentVersionId: string | null;
 };
 
-function mapRow(row: {
+export type SongVersionRow = {
   id: string;
   song_id: string;
   version_number: number;
@@ -40,7 +40,10 @@ function mapRow(row: {
   created_by_user_id: string;
   created_at: string;
   parent_version_id: string | null;
-}): SongVersion {
+};
+
+/** Map a raw `song_versions` row to the camelCase UI shape. Pure. */
+export function mapVersionRow(row: SongVersionRow): SongVersion {
   return {
     id: row.id,
     songId: row.song_id,
@@ -76,7 +79,21 @@ export async function listSongVersions(
     if (error.code === "PGRST116") return [];
     throw new CogError(error.code ?? "INTERNAL", error.message);
   }
-  return (data ?? []).map(mapRow);
+  return (data ?? []).map(mapVersionRow);
+}
+
+/**
+ * True when a Postgres/PostgREST error means the called function does not exist
+ * yet (so the UI can degrade calmly instead of failing hard). Pure.
+ */
+export function isMissingFunctionError(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!error) return false;
+  if (error.code === "42883" || error.code === "PGRST202") return true;
+  return /function .* does not exist|could not find the function/i.test(
+    error.message ?? "",
+  );
 }
 
 export type RestoreResult = {
@@ -102,13 +119,7 @@ export async function restoreSongVersion(
   });
 
   if (error) {
-    const missing =
-      error.code === "42883" ||
-      error.code === "PGRST202" ||
-      /function .* does not exist|could not find the function/i.test(
-        error.message ?? "",
-      );
-    if (missing) {
+    if (isMissingFunctionError(error)) {
       throw new CogError(
         "RESTORE_UNAVAILABLE",
         "restore_song_version is not available yet",
