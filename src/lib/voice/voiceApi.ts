@@ -19,7 +19,12 @@ export interface VoiceMemoRecord {
   created_at: string;
   created_by: string;
   is_processing: boolean;
-  status?: VoiceMemoRow["status"];
+  /**
+   * `"queued"` is a client-only optimistic status used while a freshly captured
+   * take is held in the Capture Outbox (cached locally, waiting to sync). It is
+   * never written to the DB — the server uses the narrower `VoiceMemoRow` union.
+   */
+  status?: VoiceMemoRow["status"] | "queued";
 }
 
 const PROCESSING_STATUSES = new Set<VoiceMemoRow["status"]>([
