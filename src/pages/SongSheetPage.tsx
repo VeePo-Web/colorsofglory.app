@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2 } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -78,6 +78,7 @@ const SongSheetPage = () => {
   const [placing, setPlacing] = useState<{ lineIndex: number; at: number; word: string; current?: NumberChord } | null>(null);
   const [diagram, setDiagram] = useState<string | null>(null);
   const [capo, setCapo] = useState(0);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   // Place (or clear) a chord on exactly one source line — preserves all other
   // formatting/directives by only rewriting that line.
@@ -169,16 +170,16 @@ const SongSheetPage = () => {
           />
         ) : (
           <>
-            {/* Control bar */}
-            <div
-              className="flex items-center gap-2 mb-3 rounded-2xl p-2.5 flex-wrap"
-              style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}
-            >
-              <div className="flex items-center gap-1.5">
+            {/* Primary bar — the only chrome that's always up: transpose · Perform · Tools */}
+            <div className="flex items-center gap-2 mb-4">
+              <div
+                className="flex items-center gap-0.5 rounded-full px-1"
+                style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}
+              >
                 <KeyButton label="Lower key" onClick={() => stepKey(-1)} disabled={display === "numbers"}>
                   <Minus size={16} strokeWidth={2.2} />
                 </KeyButton>
-                <span className="text-sm font-semibold tabular-nums text-center" style={{ color: "var(--cog-charcoal)", minWidth: 34 }}>
+                <span className="text-sm font-semibold tabular-nums text-center" style={{ color: "var(--cog-charcoal)", minWidth: 28 }}>
                   {display === "numbers" ? "1–7" : displayKey}
                 </span>
                 <KeyButton label="Raise key" onClick={() => stepKey(1)} disabled={display === "numbers"}>
@@ -186,80 +187,119 @@ const SongSheetPage = () => {
                 </KeyButton>
               </div>
 
-              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={() => setPerform(true)}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full text-sm font-semibold transition-transform active:scale-[0.98]"
+                style={{ minHeight: 44, backgroundColor: "var(--cog-gold)", color: "#fff", fontFamily: "var(--font-body)", boxShadow: "0 4px 16px rgba(184,149,58,0.35)" }}
+              >
+                <Play size={16} strokeWidth={2.2} /> Perform
+              </button>
 
-              <div className="flex rounded-full p-0.5" style={{ backgroundColor: "var(--cog-cream)" }}>
-                <Toggle active={display === "letters"} onClick={() => setDisplay("letters")} label="Letters">
-                  <Type size={13} strokeWidth={2} />
-                </Toggle>
-                <Toggle active={display === "numbers"} onClick={() => setDisplay("numbers")} label="Numbers">
-                  <Hash size={13} strokeWidth={2} />
-                </Toggle>
-              </div>
-
-              <Toggle active={showSyllables} onClick={() => setShowSyllables((s) => !s)} label="Syllable counts" rounded>
-                <Ruler size={13} strokeWidth={2} />
-              </Toggle>
+              <button
+                type="button"
+                onClick={() => setToolsOpen((o) => !o)}
+                aria-label="Tools"
+                aria-expanded={toolsOpen}
+                className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+                style={{
+                  width: 44,
+                  height: 44,
+                  backgroundColor: toolsOpen ? "var(--cog-gold-pale)" : "var(--cog-cream-light)",
+                  border: "1px solid var(--cog-border)",
+                  color: "var(--cog-charcoal)",
+                }}
+              >
+                <SlidersHorizontal size={18} strokeWidth={2} />
+              </button>
             </div>
 
-            {/* Capo — play easier shapes; sounding key stays */}
-            <div className="flex items-center gap-2 mb-6" aria-label="Capo">
-              <span className="text-[0.6875rem] uppercase tracking-wide shrink-0" style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.08em" }}>
-                Capo
-              </span>
-              <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
-                {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+            {/* Tools — collapsed by default so the song stays the hero */}
+            {toolsOpen && (
+              <div
+                className="rounded-2xl p-3 mb-5 flex flex-col gap-3.5"
+                style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex rounded-full p-0.5" style={{ backgroundColor: "var(--cog-cream)" }}>
+                    <Toggle active={display === "letters"} onClick={() => setDisplay("letters")} label="Letters">
+                      <Type size={13} strokeWidth={2} /> Letters
+                    </Toggle>
+                    <Toggle active={display === "numbers"} onClick={() => setDisplay("numbers")} label="Numbers">
+                      <Hash size={13} strokeWidth={2} /> Numbers
+                    </Toggle>
+                  </div>
+                  <Toggle active={showSyllables} onClick={() => setShowSyllables((s) => !s)} label="Syllable counts" rounded>
+                    <Ruler size={13} strokeWidth={2} /> Syllables
+                  </Toggle>
+                </div>
+
+                <div className="flex items-center gap-2" aria-label="Capo">
+                  <span className="text-[0.6875rem] uppercase tracking-wide shrink-0" style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.08em" }}>
+                    Capo
+                  </span>
+                  <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setCapo(n)}
+                        aria-pressed={capo === n}
+                        aria-label={n === 0 ? "Capo off" : `Capo fret ${n}`}
+                        className="shrink-0 inline-flex items-center justify-center rounded-lg text-sm font-medium transition-transform active:scale-90"
+                        style={{
+                          minWidth: 38,
+                          minHeight: 38,
+                          backgroundColor: capo === n ? "var(--cog-gold)" : "rgba(28,26,23,0.05)",
+                          color: capo === n ? "#fff" : "var(--cog-warm-gray)",
+                        }}
+                      >
+                        {n === 0 ? "Off" : n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5">
                   <button
-                    key={n}
                     type="button"
-                    onClick={() => setCapo(n)}
-                    aria-pressed={capo === n}
-                    aria-label={n === 0 ? "Capo off" : `Capo fret ${n}`}
-                    className="shrink-0 inline-flex items-center justify-center rounded-lg text-sm font-medium transition-transform active:scale-90"
-                    style={{
-                      minWidth: 38,
-                      minHeight: 38,
-                      backgroundColor: capo === n ? "var(--cog-gold)" : "rgba(28,26,23,0.05)",
-                      color: capo === n ? "#fff" : "var(--cog-warm-gray)",
-                    }}
+                    onClick={() => setEditing(true)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
                   >
-                    {n === 0 ? "Off" : n}
+                    <Pencil size={14} strokeWidth={2} /> Edit chart
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={copyChordPro}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+                    aria-label="Copy as ChordPro"
+                  >
+                    {copied ? <Check size={14} strokeWidth={2.2} /> : <Copy size={14} strokeWidth={2} />}
+                    {copied ? "Copied" : "ChordPro"}
+                  </button>
+                </div>
+
+                <div className="flex rounded-full p-0.5" style={{ backgroundColor: "var(--cog-cream)" }}>
+                  {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
+                    const active = (v === "add") === chordMode;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setChordMode(v === "add")}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-medium transition-colors"
+                        style={{ backgroundColor: active ? "var(--cog-gold)" : "transparent", color: active ? "#fff" : "var(--cog-charcoal)" }}
+                      >
+                        {v === "add" && <Guitar size={14} strokeWidth={2} />}
+                        {lbl}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-
-            {/* Perform — primary action (the stage view) */}
-            <button
-              type="button"
-              onClick={() => setPerform(true)}
-              className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-full text-sm font-semibold mb-3 transition-transform active:scale-[0.98]"
-              style={{ backgroundColor: "var(--cog-gold)", color: "#fff", fontFamily: "var(--font-body)", boxShadow: "0 4px 16px rgba(184,149,58,0.35)" }}
-            >
-              <Play size={16} strokeWidth={2.2} /> Perform
-            </button>
-
-            {/* Secondary actions */}
-            <div className="flex gap-2.5 mb-6">
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
-                style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
-              >
-                <Pencil size={14} strokeWidth={2} /> Edit chart
-              </button>
-              <button
-                type="button"
-                onClick={copyChordPro}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
-                style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
-                aria-label="Copy as ChordPro"
-              >
-                {copied ? <Check size={14} strokeWidth={2.2} /> : <Copy size={14} strokeWidth={2} />}
-                {copied ? "Copied" : "ChordPro"}
-              </button>
-            </div>
+            )}
 
             {/* Chords in this song — tap for a fingering diagram */}
             {uniqueChords.length > 0 && (
@@ -291,27 +331,24 @@ const SongSheetPage = () => {
               </div>
             )}
 
-            {/* Read vs Add chords */}
-            <div className="flex rounded-full p-0.5 mb-2" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
-              {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
-                const active = (v === "add") === chordMode;
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setChordMode(v === "add")}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-medium transition-colors"
-                    style={{ backgroundColor: active ? "var(--cog-gold)" : "transparent", color: active ? "#fff" : "var(--cog-charcoal)" }}
-                  >
-                    {v === "add" && <Guitar size={14} strokeWidth={2} />}
-                    {lbl}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-xs mb-5" style={{ color: "var(--cog-muted)" }}>
-              {chordMode ? "Tap a word to place a chord over it." : "Read view · transpose, numbers, perform"}
-            </p>
+            {chordMode && (
+              <div
+                className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 mb-5"
+                style={{ backgroundColor: "rgba(184,149,58,0.10)", border: "1px solid var(--cog-border-gold, rgba(184,149,58,0.4))" }}
+              >
+                <span className="text-xs" style={{ color: "var(--cog-charcoal)" }}>
+                  Tap a word to place a chord over it.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChordMode(false)}
+                  className="text-xs font-semibold shrink-0 active:scale-95"
+                  style={{ color: "var(--cog-gold-alt, var(--cog-gold))", minHeight: 32, padding: "0 4px" }}
+                >
+                  Done
+                </button>
+              </div>
+            )}
 
             {/* The sheet */}
             <div className="flex flex-col gap-7">
