@@ -10,6 +10,7 @@ const links = [
   { to: "/admin/webhooks", label: "Webhooks" },
   { to: "/admin/fraud", label: "Fraud" },
   { to: "/admin/attribution", label: "Attribution" },
+  { to: "/admin/auth-security", label: "Auth" },
   { to: "/admin/audit", label: "Audit" },
 ];
 

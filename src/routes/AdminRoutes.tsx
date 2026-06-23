@@ -18,6 +18,7 @@ const AdminFraudPage = lazy(() => import("@/pages/admin/FraudPage"));
 const AdminReferralsPage = lazy(() => import("@/pages/admin/ReferralsPage"));
 const AdminAuditLogPage = lazy(() => import("@/pages/admin/AuditLogPage"));
 const AdminAttributionPage = lazy(() => import("@/pages/admin/AttributionPage"));
+const AdminAuthSecurityPage = lazy(() => import("@/pages/admin/AuthSecurityPage"));
 
 export const adminRoutes = (
   <>
@@ -32,6 +33,7 @@ export const adminRoutes = (
     <Route path="/admin/fraud" element={<RequireAdmin><AdminFraudPage /></RequireAdmin>} />
     <Route path="/admin/referrals" element={<RequireAdmin><AdminReferralsPage /></RequireAdmin>} />
     <Route path="/admin/attribution" element={<RequireAdmin><AdminAttributionPage /></RequireAdmin>} />
+    <Route path="/admin/auth-security" element={<RequireAdmin><AdminAuthSecurityPage /></RequireAdmin>} />
     <Route path="/admin/audit" element={<RequireAdmin><AdminAuditLogPage /></RequireAdmin>} />
   </>
 );

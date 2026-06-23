@@ -97,6 +97,28 @@ export async function adminAttentionSummary(): Promise<AttentionSummary> {
   return data as unknown as AttentionSummary;
 }
 
+// ── Auth security (phone OTP toll-fraud monitoring) ──────────────────────
+export type OtpStats = {
+  sends_24h: number;
+  sends_1h: number;
+  distinct_phones_24h: number;
+  distinct_ips_24h: number;
+  top_phones: Array<{ phone_e164: string; n: number }>;
+  settings: Record<string, unknown>;
+};
+
+export async function adminOtpStats(): Promise<OtpStats> {
+  const { data, error } = await supabase.rpc("admin_otp_stats" as never);
+  if (error) throw error;
+  return data as unknown as OtpStats;
+}
+
+/** Tune an otp_* app setting (e.g. geo allowlist, daily ceiling). Audited. */
+export async function adminSetAppSetting(key: string, value: unknown): Promise<void> {
+  const { error } = await supabase.rpc("admin_set_app_setting" as never, { _key: key, _value: value } as never);
+  if (error) throw error;
+}
+
 export type FinanceSummary = {
   generated_at: string;
   mrr_cents: number;
