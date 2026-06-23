@@ -93,12 +93,12 @@ const OTPInput = ({
               border: error
                 ? "1.5px solid #E05440"
                 : filled
-                ? "1.5px solid #B5935A"
+                ? "1.5px solid var(--cog-gold)"
                 : "1.5px solid rgba(0,0,0,0.12)",
               color: "#1A1A1A",
               fontFamily: "var(--font-body)",
               boxShadow: filled && !error
-                ? "0 0 0 3px rgba(181,147,90,0.15)"
+                ? "0 0 0 3px var(--cog-gold-glow)"
                 : "none",
             }}
           />
