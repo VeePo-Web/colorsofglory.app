@@ -33,6 +33,7 @@ import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
 import SongRootCard from "@/components/canvas/SongRootCard";
+import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
@@ -1076,6 +1077,7 @@ const SongCanvasExperience = () => {
           }
         >
           {/* Canvas content — all positioned absolutely */}
+          <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
           <SongRootCard title={songTitle} />
           <ZoneLabels />
           <CanvasDivider isDropActive={isDragOver} />
