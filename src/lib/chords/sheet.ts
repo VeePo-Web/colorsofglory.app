@@ -42,6 +42,9 @@ export interface SheetLine {
   text: string;
   /** Always normalized: sorted ascending by `at`, clamped to the line. */
   anchors: ChordAnchor[];
+  /** Index of the raw line in the source document (set by parseChordPro), so a
+   *  UI can edit exactly that source line without re-serializing the whole doc. */
+  sourceLineIndex?: number;
 }
 
 /** A labelled section (Verse 1, Chorus…) — the song's skeleton. */
@@ -338,7 +341,9 @@ export function parseChordPro(
     return current;
   };
 
-  for (const rawLine of source.split("\n")) {
+  const rawLines = source.split("\n");
+  for (let i = 0; i < rawLines.length; i++) {
+    const rawLine = rawLines[i];
     const trimmed = rawLine.trim();
     if (trimmed === "") continue;
 
@@ -362,7 +367,7 @@ export function parseChordPro(
       continue; // ignore other directives at this layer
     }
 
-    ensure().lines.push(parseChordProLine(rawLine, tonic, mode));
+    ensure().lines.push({ ...parseChordProLine(rawLine, tonic, mode), sourceLineIndex: i });
   }
 
   return sections;

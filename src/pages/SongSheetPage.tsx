@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
-import { parseChordPro, renderChordsOverLyrics, toChordPro, transposeKeyLetter } from "@/lib/chords/sheet";
+import {
+  parseChordPro,
+  parseChordProLine,
+  lineToChordPro,
+  renderChordsOverLyrics,
+  toChordPro,
+  transposeKeyLetter,
+  type SheetLine,
+} from "@/lib/chords/sheet";
+import { chordToLetters, type NumberChord } from "@/lib/chords/nashville";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
 import PerformanceView from "@/components/songsheet/PerformanceView";
+import ChordPlaceSheet from "@/components/songsheet/ChordPlaceSheet";
 
 /**
  * The Song Sheet — the structured, performable lyric & chord view, and a real
@@ -62,6 +72,22 @@ const SongSheetPage = () => {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [perform, setPerform] = useState(false);
+  const [chordMode, setChordMode] = useState(false);
+  const [placing, setPlacing] = useState<{ lineIndex: number; at: number; word: string; current?: NumberChord } | null>(null);
+
+  // Place (or clear) a chord on exactly one source line — preserves all other
+  // formatting/directives by only rewriting that line.
+  const setChordAt = (lineIndex: number, at: number, chord: NumberChord | null) => {
+    setSource((prev) => {
+      const lines = prev.split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return prev;
+      const parsed = parseChordProLine(lines[lineIndex], sourceKey);
+      let anchors = parsed.anchors.filter((a) => a.at !== at);
+      if (chord) anchors = [...anchors, { chord, at }].sort((a, b) => a.at - b.at);
+      lines[lineIndex] = lineToChordPro({ text: parsed.text, anchors }, sourceKey);
+      return lines.join("\n");
+    });
+  };
 
   // Persist the draft so a captured chart is never lost.
   useEffect(() => writeDraft(id, source, sourceKey), [id, source, sourceKey]);
@@ -182,6 +208,28 @@ const SongSheetPage = () => {
               </button>
             </div>
 
+            {/* Read vs Add chords */}
+            <div className="flex rounded-full p-0.5 mb-2" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
+              {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
+                const active = (v === "add") === chordMode;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setChordMode(v === "add")}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-medium transition-colors"
+                    style={{ backgroundColor: active ? "var(--cog-gold)" : "transparent", color: active ? "#fff" : "var(--cog-charcoal)" }}
+                  >
+                    {v === "add" && <Guitar size={14} strokeWidth={2} />}
+                    {lbl}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs mb-5" style={{ color: "var(--cog-muted)" }}>
+              {chordMode ? "Tap a word to place a chord over it." : "Read view · transpose, numbers, perform"}
+            </p>
+
             {/* The sheet */}
             <div className="flex flex-col gap-7">
               {sections.map((section, si) => (
@@ -192,27 +240,26 @@ const SongSheetPage = () => {
                     </h2>
                   )}
                   <div className="flex flex-col gap-3">
-                    {section.lines.map((line, li) => {
-                      const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
-                      return (
-                        <div key={li} className="flex items-end gap-3">
-                          <pre className="flex-1 m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: "0.875rem", lineHeight: 1.5 }}>
-                            <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700 }}>{chords || " "}</span>
-                            {"\n"}
-                            <span style={{ color: "var(--cog-charcoal)" }}>{lyrics || " "}</span>
-                          </pre>
-                          {showSyllables && lyrics.trim() && (
-                            <span
-                              className="text-[0.6875rem] font-medium tabular-nums mb-0.5 flex-shrink-0"
-                              style={{ color: "var(--cog-muted)" }}
-                              aria-label={`${countLineSyllables(line.text)} syllables`}
-                            >
-                              {countLineSyllables(line.text)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {section.lines.map((line, li) =>
+                      chordMode ? (
+                        <EditableLine
+                          key={li}
+                          line={line}
+                          sourceKey={sourceKey}
+                          onTapWord={(at, word, current) =>
+                            setPlacing({ lineIndex: line.sourceLineIndex ?? -1, at, word, current })
+                          }
+                        />
+                      ) : (
+                        <ReadLine
+                          key={li}
+                          line={line}
+                          displayKey={displayKey}
+                          display={display}
+                          showSyllables={showSyllables}
+                        />
+                      ),
+                    )}
                   </div>
                 </section>
               ))}
@@ -232,9 +279,105 @@ const SongSheetPage = () => {
           onClose={() => setPerform(false)}
         />
       )}
+
+      {placing && (
+        <ChordPlaceSheet
+          word={placing.word}
+          currentLabel={placing.current ? chordToLetters(placing.current, sourceKey) : undefined}
+          sourceKey={sourceKey}
+          mode="major"
+          onPick={(chord) => {
+            setChordAt(placing.lineIndex, placing.at, chord);
+            setPlacing(null);
+          }}
+          onRemove={() => {
+            setChordAt(placing.lineIndex, placing.at, null);
+            setPlacing(null);
+          }}
+          onClose={() => setPlacing(null)}
+        />
+      )}
     </div>
   );
 };
+
+// ─── line renderers ──────────────────────────────────────────────────────────
+
+function ReadLine({
+  line,
+  displayKey,
+  display,
+  showSyllables,
+}: {
+  line: SheetLine;
+  displayKey: string;
+  display: "letters" | "numbers";
+  showSyllables: boolean;
+}) {
+  const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
+  return (
+    <div className="flex items-end gap-3">
+      <pre className="flex-1 m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: "0.875rem", lineHeight: 1.5 }}>
+        <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700 }}>{chords || " "}</span>
+        {"\n"}
+        <span style={{ color: "var(--cog-charcoal)" }}>{lyrics || " "}</span>
+      </pre>
+      {showSyllables && lyrics.trim() && (
+        <span
+          className="text-[0.6875rem] font-medium tabular-nums mb-0.5 flex-shrink-0"
+          style={{ color: "var(--cog-muted)" }}
+          aria-label={`${countLineSyllables(line.text)} syllables`}
+        >
+          {countLineSyllables(line.text)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function EditableLine({
+  line,
+  sourceKey,
+  onTapWord,
+}: {
+  line: SheetLine;
+  sourceKey: string;
+  onTapWord: (at: number, word: string, current?: NumberChord) => void;
+}) {
+  const words = [...line.text.matchAll(/\S+/g)];
+  if (words.length === 0) return <div style={{ height: 6 }} />;
+  return (
+    <div className="flex flex-wrap items-end gap-x-1.5 gap-y-1">
+      {words.map((m, i) => {
+        const start = m.index ?? 0;
+        const text = m[0];
+        const end = start + text.length;
+        const anchor = line.anchors.find((a) => a.at >= start && a.at < end);
+        const label = anchor ? chordToLetters(anchor.chord, sourceKey) : null;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onTapWord(anchor?.at ?? start, text, anchor?.chord)}
+            className="flex flex-col items-start rounded-lg px-0.5 active:opacity-60"
+            style={{ minHeight: 44 }}
+            aria-label={label ? `${text}, chord ${label} — tap to change` : `${text} — tap to add a chord`}
+          >
+            <span
+              className="text-[0.8125rem] font-bold leading-none mb-0.5"
+              style={{ color: label ? "var(--cog-gold-alt, var(--cog-gold))" : "var(--cog-muted)", opacity: label ? 1 : 0.45 }}
+            >
+              {label ?? "+"}
+            </span>
+            <span className="text-[0.9375rem] leading-snug" style={{ color: "var(--cog-charcoal)" }}>
+              {text}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── ChordPro edit / import panel (the power view) ────────────────────────────
 

@@ -188,4 +188,17 @@ describe("parseChordPro — section structure", () => {
     expect(sections[1].label).toBe("Chorus");
     expect(sections[1].lines[0].text).toBe("You are the anchor");
   });
+
+  it("tags each line with its source line index for precise edits", () => {
+    const src = [
+      "{start_of_verse: Verse 1}", // 0
+      "[C]Lord I [G]wait", // 1
+      "{end_of_verse}", // 2
+      "{start_of_chorus: Chorus}", // 3
+      "[F]You are the [C]anchor", // 4
+    ].join("\n");
+    const sections = parseChordPro(src, "C");
+    expect(sections[0].lines[0].sourceLineIndex).toBe(1);
+    expect(sections[1].lines[0].sourceLineIndex).toBe(4);
+  });
 });
