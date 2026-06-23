@@ -124,7 +124,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Verse 1",
     contributor: "Parker",
     status: "raw",
-    accent: "#D4AE5C",
+    accent: getCreatorColor("Parker").base,
     x: 80,
     y: 200,
   },
@@ -138,7 +138,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Verse 1",
     contributor: "Sarah",
     status: "shortlisted",
-    accent: "#53AB8B",
+    accent: getCreatorColor("Sarah").base,
     x: 320,
     y: 200,
   },
@@ -152,7 +152,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Meaning",
     contributor: "Parker",
     status: "meaning",
-    accent: "#8070C4",
+    accent: getCreatorColor("Parker").base,
     x: 80,
     y: 440,
   },
@@ -166,7 +166,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Chorus",
     contributor: "Parker",
     status: "approved",
-    accent: "#D4AE5C",
+    accent: getCreatorColor("Parker").base,
     x: DIVIDER_X + 80,
     y: 200,
   },
@@ -180,7 +180,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Arrangement",
     contributor: "Caleb",
     status: "approved",
-    accent: "#8070C4",
+    accent: getCreatorColor("Caleb").base,
     x: DIVIDER_X + 80,
     y: 420,
   },
@@ -378,7 +378,7 @@ const CanvasCardEl = ({
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: "0.12em",
-            color: "#999",
+            color: "var(--cog-muted)",
             fontFamily: "var(--font-body)",
           }}
         >
@@ -407,7 +407,7 @@ const CanvasCardEl = ({
         style={{
           fontSize: 13,
           fontWeight: 700,
-          color: "#1A1A1A",
+          color: "var(--cog-charcoal)",
           fontFamily: "var(--font-display)",
           marginBottom: 6,
           lineHeight: 1.3,
@@ -420,7 +420,7 @@ const CanvasCardEl = ({
       <p
         style={{
           fontSize: 12,
-          color: "#666",
+          color: "var(--cog-warm-gray)",
           lineHeight: 1.5,
           fontFamily: "var(--font-body)",
           overflow: "hidden",
@@ -478,7 +478,7 @@ const CanvasCardEl = ({
                 flex: 1,
                 height: 30,
                 borderRadius: 8,
-                backgroundColor: "#B5935A",
+                backgroundColor: "var(--cog-gold)",
                 color: "#FFF",
                 fontSize: 11,
                 fontWeight: 600,
@@ -498,7 +498,7 @@ const CanvasCardEl = ({
                 height: 30,
                 borderRadius: 8,
                 backgroundColor: "rgba(0,0,0,0.06)",
-                color: "#666",
+                color: "var(--cog-warm-gray)",
                 fontSize: 11,
                 fontWeight: 600,
                 border: "none",
@@ -902,19 +902,19 @@ const SongCanvasExperience = () => {
   return (
     <div
       className="relative flex flex-col"
-      style={{ height: "100dvh", backgroundColor: "#FAFAF6", overflow: "hidden" }}
+      style={{ height: "100dvh", backgroundColor: "var(--cog-cream)", overflow: "hidden" }}
     >
       <SongCanvasSemanticSummary />
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <header
         className="relative z-30 flex items-center justify-between gap-3 px-5 pb-3 flex-shrink-0"
-        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: 48 }}
+        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
         <button
           type="button"
           onClick={() => navigate("/")}
           className="flex min-h-11 items-center gap-1.5 rounded-full px-1 text-sm transition-opacity hover:opacity-70 active:scale-[0.97]"
-          style={{ color: "#666", flexShrink: 0 }}
+          style={{ color: "var(--cog-warm-gray)", flexShrink: 0 }}
           aria-label="Back to songs"
         >
           <ArrowLeft size={16} strokeWidth={2} />
@@ -926,7 +926,7 @@ const SongCanvasExperience = () => {
           <CogBrand variant="stacked" size="sm" />
           <h1
             className="text-center font-bold leading-tight truncate"
-            style={{ fontSize: 15, color: "#1A1A1A", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
+            style={{ fontSize: 15, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
           >
             {songTitle}
           </h1>
@@ -950,7 +950,7 @@ const SongCanvasExperience = () => {
                 style={{
                   backgroundColor: active ? "#FFFFFF" : "transparent",
                   border: active ? "1px solid rgba(181,147,90,0.30)" : "1px solid transparent",
-                  color: active ? "#B5935A" : "#999",
+                  color: active ? "var(--cog-gold)" : "var(--cog-muted)",
                   boxShadow: active ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
                 }}
               >
@@ -966,7 +966,7 @@ const SongCanvasExperience = () => {
         <p
           aria-live="polite"
           className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
-          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "#B5935A" }}
+          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}
         >
           {canvasStatus}
         </p>
@@ -978,7 +978,7 @@ const SongCanvasExperience = () => {
           <div className="flex items-center gap-2" aria-label={`In this room: ${roomCollaborators.length} ${roomCollaborators.length === 1 ? "person" : "people"}`}>
             <span
               className="hidden sm:inline"
-              style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#999", fontFamily: "var(--font-body)" }}
+              style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
             >
               In this room
             </span>

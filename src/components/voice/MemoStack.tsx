@@ -54,7 +54,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
         layerCount ? `, ${layerCount} layer${layerCount > 1 ? "s" : ""}` : ""
       }`}
       style={{
-        backgroundColor: "#FFFDF8",
+        backgroundColor: "var(--cog-cream-light)",
         borderRadius: 20,
         border: `1px solid ${baseColor.base}28`,
         boxShadow: "0 12px 32px rgba(31,37,42,0.10)",
@@ -87,12 +87,12 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
             <Mic size={12} strokeWidth={1.8} style={{ color: baseColor.base, flexShrink: 0 }} />
             <p style={{
               margin: 0, fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700,
-              color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              color: "var(--cog-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>
               {base.title}
             </p>
           </div>
-          <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "#999" }}>
+          <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "var(--cog-muted)" }}>
             {base.contributor} · base · {formatDuration(base.durationMs)}
             {bpm ? ` · ${bpm} BPM` : ""}
           </p>
@@ -143,10 +143,10 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
               {getCreatorInitials(layer.contributor)}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "#1A1A1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "var(--cog-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {layer.title}
               </p>
-              <p style={{ margin: "1px 0 0", fontFamily: "var(--font-body)", fontSize: 10, color: "#999" }}>
+              <p style={{ margin: "1px 0 0", fontFamily: "var(--font-body)", fontSize: 10, color: "var(--cog-muted)" }}>
                 {layer.contributor} · layer · {formatDuration(layer.durationMs)}
               </p>
             </div>
@@ -194,7 +194,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
           onClick={() => onRecordOver?.(base.id)}
           style={{
             width: "100%", height: 52, marginTop: 4, borderRadius: 14,
-            backgroundColor: "#B8953A", color: "#FFF", border: "none", cursor: "pointer",
+            backgroundColor: "var(--cog-gold)", color: "#FFF", border: "none", cursor: "pointer",
             fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             boxShadow: "0 4px 16px rgba(184,149,58,0.35)",
