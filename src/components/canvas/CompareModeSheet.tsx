@@ -1,0 +1,492 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GitCompare, Pause, Play, X } from "lucide-react";
+import type { CanvasCard } from "./SongCanvasExperience";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface CompareModeSheetProps {
+  /** Exactly two canvas cards to compare. */
+  cards: [CanvasCard, CanvasCard];
+  /** Called with the winning card id when the songwriter chooses a direction. */
+  onChoose: (winnerId: string) => void;
+  /** Called when the songwriter keeps both ideas active. */
+  onKeepBoth: () => void;
+  /** Dismisses the sheet without making a decision. */
+  onClose: () => void;
+}
+
+// ─── Idea card view ───────────────────────────────────────────────────────────
+
+interface IdeaCardViewProps {
+  card: CanvasCard;
+  label: string;
+  isPlaying: boolean;
+  isSelected: boolean;
+  onTogglePlay: () => void;
+  onSelect: () => void;
+}
+
+const IdeaCardView = ({
+  card,
+  label,
+  isPlaying,
+  isSelected,
+  onTogglePlay,
+  onSelect,
+}: IdeaCardViewProps) => {
+  const isVoice = card.type === "voice" || card.type === "hum";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={isSelected}
+      aria-label={`${label}: ${card.title} by ${card.contributor}${isSelected ? ", selected" : ""}`}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        borderRadius: 20,
+        backgroundColor: "var(--cog-cream-light)",
+        border: isSelected ? `2px solid ${card.accent}` : "2px solid transparent",
+        boxShadow: isSelected
+          ? `0 8px 28px ${card.accent}30`
+          : "0 4px 16px rgba(0,0,0,0.07)",
+        padding: "16px 16px 14px",
+        cursor: "pointer",
+        transition: "border-color 180ms ease, box-shadow 180ms ease, transform 150ms ease",
+        transform: isSelected ? "scale(1.015)" : "scale(1)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        outline: "none",
+        flexShrink: 0,
+      }}
+    >
+      {/* Header: label + contributor */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            textTransform: "uppercase",
+            letterSpacing: "0.14em",
+            color: card.accent,
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          {label}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <div
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              backgroundColor: card.accent,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 7,
+              fontWeight: 800,
+              color: "#FFF",
+              flexShrink: 0,
+            }}
+            aria-hidden="true"
+          >
+            {card.contributor.slice(0, 2).toUpperCase()}
+          </div>
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--cog-warm-gray)",
+              fontFamily: "var(--font-body)",
+              fontWeight: 600,
+            }}
+          >
+            {card.contributor}
+          </span>
+        </div>
+      </div>
+
+      {/* Title */}
+      <p
+        style={{
+          fontSize: 15,
+          fontWeight: 700,
+          color: "var(--cog-charcoal)",
+          fontFamily: "var(--font-display)",
+          lineHeight: 1.3,
+          margin: 0,
+        }}
+      >
+        {card.title}
+      </p>
+
+      {/* Body / lyric preview */}
+      {card.body ? (
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--cog-warm-gray)",
+            lineHeight: 1.6,
+            fontFamily: "var(--font-body)",
+            margin: 0,
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: "vertical",
+          }}
+        >
+          {card.body}
+        </p>
+      ) : null}
+
+      {/* Signal / duration meta */}
+      {card.meta && (
+        <p
+          style={{
+            fontSize: 11,
+            color: card.accent,
+            fontFamily: "var(--font-body)",
+            fontWeight: 600,
+            margin: 0,
+          }}
+        >
+          {card.meta}
+        </p>
+      )}
+
+      {/* Play toggle — voice / hum cards only */}
+      {isVoice && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePlay();
+          }}
+          aria-label={isPlaying ? `Pause ${label}` : `Play ${label}`}
+          style={{
+            alignSelf: "flex-start",
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            minHeight: 36,
+            paddingInline: 14,
+            borderRadius: 999,
+            backgroundColor: isPlaying ? card.accent : `${card.accent}1A`,
+            color: isPlaying ? "#FFF" : card.accent,
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: "var(--font-body)",
+            border: "none",
+            cursor: "pointer",
+            transition: "background-color 150ms ease, color 150ms ease",
+          }}
+        >
+          {isPlaying ? (
+            <Pause size={13} strokeWidth={2.5} aria-hidden="true" />
+          ) : (
+            <Play size={13} strokeWidth={2.5} aria-hidden="true" />
+          )}
+          {isPlaying ? "Pause" : `Play ${label}`}
+        </button>
+      )}
+    </button>
+  );
+};
+
+// ─── Compare mode sheet ───────────────────────────────────────────────────────
+
+const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeSheetProps) => {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDone, setIsDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Idempotency: block double-tap on the CTA
+  const decisionKeyRef = useRef<string | null>(null);
+
+  const section = cards[0].section || "Idea";
+  const labelA = `${section} A`;
+  const labelB = `${section} B`;
+
+  const togglePlay = useCallback((id: string) => {
+    setPlayingId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const handleChoose = useCallback(async () => {
+    if (!selectedId || isSaving || decisionKeyRef.current) return;
+    decisionKeyRef.current = `choose-${Date.now()}`;
+    setIsSaving(true);
+    setError(null);
+    try {
+      // Brief optimistic delay — real save happens in onChoose via parent state
+      await new Promise<void>((res) => setTimeout(res, 420));
+      onChoose(selectedId);
+      setIsDone(true);
+      setTimeout(onClose, 800);
+    } catch {
+      decisionKeyRef.current = null;
+      setIsSaving(false);
+      setError("We could not save this direction. Please try again.");
+    }
+  }, [selectedId, isSaving, onChoose, onClose]);
+
+  const handleKeepBoth = useCallback(async () => {
+    if (isSaving || decisionKeyRef.current) return;
+    decisionKeyRef.current = `both-${Date.now()}`;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await new Promise<void>((res) => setTimeout(res, 280));
+      onKeepBoth();
+      setIsDone(true);
+      setTimeout(onClose, 700);
+    } catch {
+      decisionKeyRef.current = null;
+      setIsSaving(false);
+      setError("We could not save this decision. Please try again.");
+    }
+  }, [isSaving, onKeepBoth, onClose]);
+
+  // Keyboard dismiss
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const statusText = isDone
+    ? "Direction saved."
+    : isSaving
+    ? "Saving direction..."
+    : null;
+
+  return (
+    <>
+      {/* ── Backdrop ─────────────────────────────────────────────────────── */}
+      <div
+        role="presentation"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(28, 26, 23, 0.48)",
+          zIndex: 60,
+          animation: "cog-fade-in 200ms ease forwards",
+        }}
+      />
+
+      {/* ── Sheet ────────────────────────────────────────────────────────── */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Compare ${section} ideas`}
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 61,
+          backgroundColor: "var(--cog-cream)",
+          borderRadius: "28px 28px 0 0",
+          paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.18)",
+          animation: "cog-sheet-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards",
+          maxHeight: "90dvh",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, marginBottom: 4 }}>
+          <div
+            aria-hidden="true"
+            style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.12)" }}
+          />
+        </div>
+
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 20px 0",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <GitCompare
+              size={16}
+              strokeWidth={2}
+              style={{ color: "var(--cog-gold)", flexShrink: 0 }}
+              aria-hidden="true"
+            />
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: "var(--cog-charcoal)",
+                fontFamily: "var(--font-display)",
+                margin: 0,
+              }}
+            >
+              Compare {section} Ideas
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close compare mode"
+            style={{
+              minWidth: 32,
+              minHeight: 32,
+              borderRadius: "50%",
+              backgroundColor: "rgba(0,0,0,0.06)",
+              color: "var(--cog-warm-gray)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "none",
+              cursor: "pointer",
+              flexShrink: 0,
+              transition: "opacity 150ms ease",
+            }}
+          >
+            <X size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--cog-warm-gray)",
+            padding: "6px 20px 16px",
+            fontFamily: "var(--font-body)",
+            lineHeight: 1.5,
+            margin: 0,
+          }}
+        >
+          Tap a card to select a direction. Neither idea will be deleted.
+        </p>
+
+        {/* Cards — stacked vertically (mobile-first) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 16px 20px" }}>
+          <IdeaCardView
+            card={cards[0]}
+            label={labelA}
+            isPlaying={playingId === cards[0].id}
+            isSelected={selectedId === cards[0].id}
+            onTogglePlay={() => togglePlay(cards[0].id)}
+            onSelect={() =>
+              setSelectedId((prev) => (prev === cards[0].id ? null : cards[0].id))
+            }
+          />
+          <IdeaCardView
+            card={cards[1]}
+            label={labelB}
+            isPlaying={playingId === cards[1].id}
+            isSelected={selectedId === cards[1].id}
+            onTogglePlay={() => togglePlay(cards[1].id)}
+            onSelect={() =>
+              setSelectedId((prev) => (prev === cards[1].id ? null : cards[1].id))
+            }
+          />
+        </div>
+
+        {/* Status message */}
+        <p
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            padding: "0 20px 10px",
+            fontSize: 13,
+            fontFamily: "var(--font-body)",
+            fontWeight: 600,
+            margin: 0,
+            minHeight: 20,
+            color: error
+              ? "#C0392B"
+              : isDone
+              ? "var(--cog-gold)"
+              : "var(--cog-warm-gray)",
+          }}
+        >
+          {error ?? statusText ?? ""}
+        </p>
+
+        {/* Actions */}
+        <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Primary: Choose direction */}
+          <button
+            type="button"
+            onClick={() => void handleChoose()}
+            disabled={!selectedId || isSaving}
+            aria-disabled={!selectedId || isSaving}
+            style={{
+              minHeight: 54,
+              borderRadius: 16,
+              backgroundColor:
+                !selectedId || isSaving ? "rgba(181,147,90,0.35)" : "var(--cog-gold)",
+              color: "#FFF",
+              fontSize: 16,
+              fontWeight: 700,
+              fontFamily: "var(--font-body)",
+              border: "none",
+              cursor: !selectedId || isSaving ? "default" : "pointer",
+              transition: "background-color 180ms ease",
+              width: "100%",
+            }}
+          >
+            {isSaving && !isDone ? "Saving direction..." : "Choose direction"}
+          </button>
+
+          {/* Secondary: Keep both */}
+          <button
+            type="button"
+            onClick={() => void handleKeepBoth()}
+            disabled={isSaving}
+            style={{
+              minHeight: 48,
+              borderRadius: 14,
+              backgroundColor: "transparent",
+              color: "var(--cog-warm-gray)",
+              fontSize: 14,
+              fontWeight: 600,
+              fontFamily: "var(--font-body)",
+              border: "1.5px solid var(--cog-border)",
+              cursor: isSaving ? "default" : "pointer",
+              opacity: isSaving ? 0.5 : 1,
+              transition: "opacity 150ms ease",
+              width: "100%",
+            }}
+          >
+            Keep both
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes cog-fade-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes cog-sheet-rise {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .cog-compare-backdrop,
+          .cog-compare-sheet {
+            animation: none !important;
+          }
+        }
+      `}</style>
+    </>
+  );
+};
+
+export default CompareModeSheet;

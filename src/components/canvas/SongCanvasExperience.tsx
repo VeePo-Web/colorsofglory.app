@@ -44,6 +44,7 @@ import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
+import CompareModeSheet from "@/components/canvas/CompareModeSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
@@ -240,6 +241,8 @@ interface CanvasCardProps {
   onMove: (id: string, x: number, y: number) => void;
   layerCount?: number;
   onOpenStack?: () => void;
+  canCompare?: boolean;
+  onCompare?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -251,6 +254,8 @@ const CanvasCardEl = ({
   onMove,
   layerCount = 0,
   onOpenStack,
+  canCompare = false,
+  onCompare,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -445,21 +450,85 @@ const CanvasCardEl = ({
         <div
           style={{
             display: "flex",
-            gap: 6,
+            flexDirection: "column",
+            gap: 4,
             marginTop: 10,
             borderTop: "1px solid rgba(0,0,0,0.07)",
             paddingTop: 8,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {isVoice && onOpenStack && (
+          {/* Primary action row */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {isVoice && onOpenStack && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
+                style={{
+                  flex: 1,
+                  height: 30,
+                  borderRadius: 8,
+                  backgroundColor: `${card.accent}16`,
+                  color: card.accent,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                }}
+                aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
+              >
+                {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
+              </button>
+            )}
+            {card.tree === "ideas" && !card.isDimmedReference && (
+              <button
+                onClick={onMoveToFinal}
+                style={{
+                  flex: 1,
+                  height: 30,
+                  borderRadius: 8,
+                  backgroundColor: "var(--cog-gold)",
+                  color: "#FFF",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                }}
+              >
+                → Final
+              </button>
+            )}
+            {card.tree === "final" && (
+              <button
+                onClick={onMoveToIdeas}
+                style={{
+                  flex: 1,
+                  height: 30,
+                  borderRadius: 8,
+                  backgroundColor: "rgba(0,0,0,0.06)",
+                  color: "var(--cog-warm-gray)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                }}
+              >
+                ← Ideas
+              </button>
+            )}
+          </div>
+          {/* Compare row — only for ideas cards that have at least one peer */}
+          {card.tree === "ideas" && !card.isDimmedReference && canCompare && onCompare && (
             <button
-              onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
+              onClick={(e) => { e.stopPropagation(); onCompare(); }}
+              aria-label="Compare this idea with another"
               style={{
-                flex: 1,
+                width: "100%",
                 height: 30,
                 borderRadius: 8,
-                backgroundColor: `${card.accent}16`,
+                backgroundColor: `${card.accent}14`,
                 color: card.accent,
                 fontSize: 11,
                 fontWeight: 700,
@@ -467,47 +536,8 @@ const CanvasCardEl = ({
                 cursor: "pointer",
                 fontFamily: "var(--font-body)",
               }}
-              aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
             >
-              {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
-            </button>
-          )}
-          {card.tree === "ideas" && !card.isDimmedReference && (
-            <button
-              onClick={onMoveToFinal}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "var(--cog-gold)",
-                color: "#FFF",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              → Final
-            </button>
-          )}
-          {card.tree === "final" && (
-            <button
-              onClick={onMoveToIdeas}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "rgba(0,0,0,0.06)",
-                color: "var(--cog-warm-gray)",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              ← Ideas
+              Compare ▸
             </button>
           )}
         </div>
@@ -591,6 +621,8 @@ const SongCanvasExperience = () => {
   const recordingParentIdRef = useRef<string | null>(null);
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
+  // The two cards being compared in Compare Mode (null = closed).
+  const [compareCards, setCompareCards] = useState<[CanvasCard, CanvasCard] | null>(null);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -834,6 +866,50 @@ const SongCanvasExperience = () => {
     void handleStartRecording(baseId);
   }, [handleStartRecording]);
 
+  // ── Compare Mode (F21) ────────────────────────────────────────────────────
+
+  const handleOpenCompare = useCallback((cardId: string) => {
+    const card = cards.find((c) => c.id === cardId);
+    if (!card) return;
+    // Prefer a peer in the same section; fall back to any other non-dimmed ideas card.
+    const peers = cards.filter(
+      (c) => c.id !== cardId && c.tree === "ideas" && !c.isDimmedReference && !c.parentMemoId,
+    );
+    const peer = peers.find((c) => c.section === card.section) ?? peers[0];
+    if (!peer) return;
+    setCompareCards([card, peer]);
+    setSelectedId(null);
+  }, [cards]);
+
+  const handleChooseDirection = useCallback((winnerId: string) => {
+    setCompareCards((prev) => {
+      if (!prev) return null;
+      const [a, b] = prev;
+      setCards((existing) =>
+        existing.map((c) => {
+          if (c.id === winnerId) return { ...c, status: "approved" as const };
+          if (c.id === a.id || c.id === b.id) return { ...c, status: "shortlisted" as const };
+          return c;
+        }),
+      );
+      return null;
+    });
+  }, []);
+
+  const handleKeepBoth = useCallback(() => {
+    setCompareCards((prev) => {
+      if (!prev) return null;
+      const [a, b] = prev;
+      setCards((existing) =>
+        existing.map((c) => {
+          if (c.id === a.id || c.id === b.id) return { ...c, status: "shortlisted" as const };
+          return c;
+        }),
+      );
+      return null;
+    });
+  }, []);
+
   const chooseLayer = (layer: LayerId) => {
     setActiveLayer(layer);
     const show = layer !== "room" && layer !== "ideas";
@@ -851,6 +927,17 @@ const SongCanvasExperience = () => {
     }
     return counts;
   }, [cards]);
+
+  // A card can open Compare Mode when there is at least one other non-dimmed ideas card.
+  const canCompareById = useMemo<Record<string, boolean>>(() => {
+    const result: Record<string, boolean> = {};
+    for (const card of ideasCards) {
+      if (card.isDimmedReference) continue;
+      const hasPeer = ideasCards.some((c) => c.id !== card.id && !c.isDimmedReference);
+      result[card.id] = hasPeer;
+    }
+    return result;
+  }, [ideasCards]);
 
   // Everyone whose hand is on this song — derived from who contributed cards.
   // Stable color/initials per person so the room reads as collaborative at a glance.
@@ -1098,6 +1185,8 @@ const SongCanvasExperience = () => {
                   ? () => setStackBaseId(card.id)
                   : undefined
               }
+              canCompare={canCompareById[card.id] ?? false}
+              onCompare={() => handleOpenCompare(card.id)}
             />
           ))}
         </CanvasViewport>
@@ -1193,6 +1282,16 @@ const SongCanvasExperience = () => {
           />
         );
       })()}
+
+      {/* Compare Mode (F21) — calm creative discernment between two ideas */}
+      {compareCards && (
+        <CompareModeSheet
+          cards={compareCards}
+          onChoose={handleChooseDirection}
+          onKeepBoth={handleKeepBoth}
+          onClose={() => setCompareCards(null)}
+        />
+      )}
 
       <style>{`
         @keyframes mic-pulse {
