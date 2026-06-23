@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -19,6 +19,7 @@ import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
 import PerformanceView from "@/components/songsheet/PerformanceView";
 import ChordPlaceSheet from "@/components/songsheet/ChordPlaceSheet";
+import { looksLikeChordsOverLyrics, chordsOverLyricsToChordPro } from "@/lib/chords/importChart";
 
 /**
  * The Song Sheet — the structured, performable lyric & chord view, and a real
@@ -394,8 +395,23 @@ function ChordProEditPanel({
   onSourceKey: (k: string) => void;
   onDone: () => void;
 }) {
+  const canConvert = looksLikeChordsOverLyrics(source);
   return (
     <div className="flex flex-col gap-4">
+      {canConvert && (
+        <button
+          type="button"
+          onClick={() => onSource(chordsOverLyricsToChordPro(source, sourceKey))}
+          className="flex items-center gap-2.5 rounded-2xl px-4 py-3 text-left transition-transform active:scale-[0.99]"
+          style={{ backgroundColor: "rgba(184,149,58,0.10)", border: "1px solid var(--cog-border-gold, rgba(184,149,58,0.4))" }}
+        >
+          <Wand2 size={18} strokeWidth={2} style={{ color: "var(--cog-gold-alt, var(--cog-gold))", flexShrink: 0 }} />
+          <span className="flex-1 text-sm" style={{ color: "var(--cog-charcoal)" }}>
+            Looks like a chords-over-lyrics chart.{" "}
+            <span style={{ fontWeight: 600, color: "var(--cog-gold-alt, var(--cog-gold))" }}>Convert to chords</span>
+          </span>
+        </button>
+      )}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs uppercase tracking-wide" style={{ color: "var(--cog-warm-gray)" }}>
           This chart is in
