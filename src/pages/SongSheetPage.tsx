@@ -19,6 +19,7 @@ import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
 import PerformanceView from "@/components/songsheet/PerformanceView";
 import ChordPlaceSheet from "@/components/songsheet/ChordPlaceSheet";
+import ChordDiagramSheet from "@/components/songsheet/ChordDiagramSheet";
 import { looksLikeChordsOverLyrics, chordsOverLyricsToChordPro } from "@/lib/chords/importChart";
 
 /**
@@ -75,6 +76,7 @@ const SongSheetPage = () => {
   const [perform, setPerform] = useState(false);
   const [chordMode, setChordMode] = useState(false);
   const [placing, setPlacing] = useState<{ lineIndex: number; at: number; word: string; current?: NumberChord } | null>(null);
+  const [diagram, setDiagram] = useState<string | null>(null);
 
   // Place (or clear) a chord on exactly one source line — preserves all other
   // formatting/directives by only rewriting that line.
@@ -97,6 +99,24 @@ const SongSheetPage = () => {
 
   const sections = useMemo(() => parseChordPro(source, sourceKey), [source, sourceKey]);
   const stepKey = (s: number) => setDisplayKey((k) => transposeKeyLetter(k, "major", s));
+
+  // Unique chords used in the song (in the current display key) for the diagram strip.
+  const uniqueChords = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const section of sections) {
+      for (const line of section.lines) {
+        for (const a of line.anchors) {
+          const label = chordToLetters(a.chord, displayKey, "major");
+          if (!seen.has(label)) {
+            seen.add(label);
+            list.push(label);
+          }
+        }
+      }
+    }
+    return list;
+  }, [sections, displayKey]);
 
   const copyChordPro = async () => {
     try {
@@ -209,6 +229,36 @@ const SongSheetPage = () => {
               </button>
             </div>
 
+            {/* Chords in this song — tap for a fingering diagram */}
+            {uniqueChords.length > 0 && (
+              <div className="mb-5">
+                <p className="text-[0.6875rem] uppercase tracking-wide mb-1.5" style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.08em" }}>
+                  Chords
+                </p>
+                <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1" style={{ scrollbarWidth: "none" }}>
+                  {uniqueChords.map((lbl) => (
+                    <button
+                      key={lbl}
+                      type="button"
+                      onClick={() => setDiagram(lbl)}
+                      className="shrink-0 inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-transform active:scale-95"
+                      style={{
+                        minWidth: 46,
+                        minHeight: 40,
+                        padding: "0 12px",
+                        backgroundColor: "var(--cog-gold-pale)",
+                        color: "var(--cog-charcoal)",
+                        border: "1px solid rgba(184,149,58,0.3)",
+                      }}
+                      aria-label={`${lbl} chord — show fingering`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Read vs Add chords */}
             <div className="flex rounded-full p-0.5 mb-2" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
               {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
@@ -298,6 +348,8 @@ const SongSheetPage = () => {
           onClose={() => setPlacing(null)}
         />
       )}
+
+      {diagram && <ChordDiagramSheet label={diagram} onClose={() => setDiagram(null)} />}
     </div>
   );
 };
