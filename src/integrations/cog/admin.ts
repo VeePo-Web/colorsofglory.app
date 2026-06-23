@@ -224,6 +224,24 @@ export async function adminReferrerLedger(): Promise<ReferrerLedgerRow[]> {
   return (data ?? []) as unknown as ReferrerLedgerRow[];
 }
 
+// ── Attribution override ─────────────────────────────────────────────────
+export type CurrentAttribution = {
+  exists: boolean;
+  referrer_type?: "user" | "founder";
+  referrer_user_id?: string | null;
+  referrer_founder_id?: string | null;
+  source?: string | null;
+  locked?: boolean;
+  referrer_name?: string | null;
+};
+
+/** Read the current referral attribution for a referred user (admin). */
+export async function adminAttributionForUser(userId: string): Promise<CurrentAttribution> {
+  const { data, error } = await supabase.rpc("admin_attribution_for_user" as never, { _user: userId } as never);
+  if (error) throw error;
+  return data as unknown as CurrentAttribution;
+}
+
 export async function adminMonthlyPayouts(month_start?: string) {
   const { data, error } = await supabase.rpc(
     "admin_monthly_payouts",
