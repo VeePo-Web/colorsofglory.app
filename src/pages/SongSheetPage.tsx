@@ -77,6 +77,7 @@ const SongSheetPage = () => {
   const [chordMode, setChordMode] = useState(false);
   const [placing, setPlacing] = useState<{ lineIndex: number; at: number; word: string; current?: NumberChord } | null>(null);
   const [diagram, setDiagram] = useState<string | null>(null);
+  const [capo, setCapo] = useState(0);
 
   // Place (or clear) a chord on exactly one source line — preserves all other
   // formatting/directives by only rewriting that line.
@@ -100,14 +101,18 @@ const SongSheetPage = () => {
   const sections = useMemo(() => parseChordPro(source, sourceKey), [source, sourceKey]);
   const stepKey = (s: number) => setDisplayKey((k) => transposeKeyLetter(k, "major", s));
 
-  // Unique chords used in the song (in the current display key) for the diagram strip.
+  // With a capo, you PLAY the shapes of a lower key while it SOUNDS in displayKey.
+  // Everything visual (chords, diagrams, performance) renders in the play key.
+  const playKey = capo > 0 ? transposeKeyLetter(displayKey, "major", -capo) : displayKey;
+
+  // Unique chords used in the song (as played, capo-aware) for the diagram strip.
   const uniqueChords = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];
     for (const section of sections) {
       for (const line of section.lines) {
         for (const a of line.anchors) {
-          const label = chordToLetters(a.chord, displayKey, "major");
+          const label = chordToLetters(a.chord, playKey, "major");
           if (!seen.has(label)) {
             seen.add(label);
             list.push(label);
@@ -116,7 +121,7 @@ const SongSheetPage = () => {
       }
     }
     return list;
-  }, [sections, displayKey]);
+  }, [sections, playKey]);
 
   const copyChordPro = async () => {
     try {
@@ -151,7 +156,7 @@ const SongSheetPage = () => {
         <p className="text-xs text-center mb-5" style={{ color: "var(--cog-muted)" }}>
           {editing
             ? "Edit chart · ChordPro"
-            : `Song sheet · ${display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}${displayKey !== sourceKey ? ` (from ${sourceKey})` : ""}`}
+            : `Song sheet · ${display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}${capo > 0 && display !== "numbers" ? ` · Capo ${capo} (play ${playKey})` : ""}`}
         </p>
 
         {editing ? (
@@ -166,7 +171,7 @@ const SongSheetPage = () => {
           <>
             {/* Control bar */}
             <div
-              className="flex items-center gap-2 mb-6 rounded-2xl p-2.5 flex-wrap"
+              className="flex items-center gap-2 mb-3 rounded-2xl p-2.5 flex-wrap"
               style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}
             >
               <div className="flex items-center gap-1.5">
@@ -195,6 +200,33 @@ const SongSheetPage = () => {
               <Toggle active={showSyllables} onClick={() => setShowSyllables((s) => !s)} label="Syllable counts" rounded>
                 <Ruler size={13} strokeWidth={2} />
               </Toggle>
+            </div>
+
+            {/* Capo — play easier shapes; sounding key stays */}
+            <div className="flex items-center gap-2 mb-6" aria-label="Capo">
+              <span className="text-[0.6875rem] uppercase tracking-wide shrink-0" style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.08em" }}>
+                Capo
+              </span>
+              <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
+                {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setCapo(n)}
+                    aria-pressed={capo === n}
+                    aria-label={n === 0 ? "Capo off" : `Capo fret ${n}`}
+                    className="shrink-0 inline-flex items-center justify-center rounded-lg text-sm font-medium transition-transform active:scale-90"
+                    style={{
+                      minWidth: 38,
+                      minHeight: 38,
+                      backgroundColor: capo === n ? "var(--cog-gold)" : "rgba(28,26,23,0.05)",
+                      color: capo === n ? "#fff" : "var(--cog-warm-gray)",
+                    }}
+                  >
+                    {n === 0 ? "Off" : n}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Perform — primary action (the stage view) */}
@@ -305,7 +337,7 @@ const SongSheetPage = () => {
                         <ReadLine
                           key={li}
                           line={line}
-                          displayKey={displayKey}
+                          displayKey={playKey}
                           display={display}
                           showSyllables={showSyllables}
                         />
@@ -324,8 +356,9 @@ const SongSheetPage = () => {
       {perform && (
         <PerformanceView
           sections={sections}
-          displayKey={displayKey}
+          displayKey={playKey}
           display={display}
+          capo={capo}
           songTitle={songTitle}
           onClose={() => setPerform(false)}
         />

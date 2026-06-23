@@ -30,12 +30,14 @@ export default function PerformanceView({
   sections,
   displayKey,
   display,
+  capo = 0,
   songTitle,
   onClose,
 }: {
   sections: SheetSection[];
   displayKey: string;
   display: "letters" | "numbers";
+  capo?: number;
   songTitle: string;
   onClose: () => void;
 }) {
@@ -119,6 +121,7 @@ export default function PerformanceView({
           </p>
           <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
             {display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}
+            {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}
           </p>
         </div>
         <button
