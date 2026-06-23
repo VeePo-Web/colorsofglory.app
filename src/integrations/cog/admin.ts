@@ -80,6 +80,23 @@ export async function adminReferralsRecent(limit = 50) {
   return data ?? [];
 }
 
+export type AttentionSummary = {
+  open_fraud_flags: number;
+  stuck_webhooks: number;
+  draft_payouts_count: number;
+  draft_payouts_cents: number;
+  reward_payable_cents: number;
+  blocked_payout_count: number;
+  blocked_payout_cents: number;
+};
+
+/** Admin Home "needs attention" cockpit — things requiring intervention now. */
+export async function adminAttentionSummary(): Promise<AttentionSummary> {
+  const { data, error } = await supabase.rpc("admin_attention_summary" as never);
+  if (error) throw error;
+  return data as unknown as AttentionSummary;
+}
+
 export type FinanceSummary = {
   generated_at: string;
   mrr_cents: number;
