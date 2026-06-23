@@ -26,6 +26,35 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+/** Keep the screen awake while performing — no more dimming mid-song. */
+function useWakeLock() {
+  useEffect(() => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } };
+    if (!nav.wakeLock) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let released = false;
+    const acquire = async () => {
+      try {
+        sentinel = await nav.wakeLock!.request("screen");
+      } catch {
+        /* denied or unsupported — fine, the chart still works */
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !released) acquire();
+    };
+    acquire();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      released = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      sentinel?.release().catch(() => {});
+    };
+  }, []);
+}
+
+const FONT_KEY = "cog-perform-fontscale";
+
 export default function PerformanceView({
   sections,
   displayKey,
@@ -47,7 +76,25 @@ export default function PerformanceView({
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [shown, setShown] = useState(false);
+  const [fontScale, setFontScale] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(FONT_KEY));
+      return v >= 0.8 && v <= 1.8 ? v : 1;
+    } catch {
+      return 1;
+    }
+  });
   const reduced = usePrefersReducedMotion();
+  useWakeLock();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FONT_KEY, String(fontScale));
+    } catch {
+      /* best-effort */
+    }
+  }, [fontScale]);
+  const stepFont = (d: number) => setFontScale((s) => Math.max(0.8, Math.min(1.8, +(s + d).toFixed(2))));
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setShown(true)); // gentle fade-in
@@ -124,15 +171,39 @@ export default function PerformanceView({
             {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close performance view"
-          className="flex items-center justify-center rounded-full transition-transform active:scale-90"
-          style={{ width: 44, height: 44, backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
-        >
-          <X size={20} strokeWidth={2} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center rounded-full" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
+            <button
+              type="button"
+              onClick={() => stepFont(-0.1)}
+              aria-label="Smaller text"
+              disabled={fontScale <= 0.8}
+              className="flex items-center justify-center rounded-full transition-transform active:scale-90 disabled:opacity-30"
+              style={{ width: 40, height: 40, color: "var(--cog-charcoal)", fontSize: "0.8rem", fontWeight: 700 }}
+            >
+              A
+            </button>
+            <button
+              type="button"
+              onClick={() => stepFont(0.1)}
+              aria-label="Larger text"
+              disabled={fontScale >= 1.8}
+              className="flex items-center justify-center rounded-full transition-transform active:scale-90 disabled:opacity-30"
+              style={{ width: 40, height: 40, color: "var(--cog-charcoal)", fontSize: "1.15rem", fontWeight: 700 }}
+            >
+              A
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close performance view"
+            className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+            style={{ width: 44, height: 44, backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+          >
+            <X size={20} strokeWidth={2} />
+          </button>
+        </div>
       </div>
 
       {/* Scrollable chart — tap toggles play */}
@@ -146,7 +217,7 @@ export default function PerformanceView({
           {sections.map((section, si) => (
             <section key={si} className="mb-8">
               {section.label && (
-                <h2 className="text-lg mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
+                <h2 className="mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", fontSize: `${1.2 * fontScale}rem` }}>
                   {section.label}
                 </h2>
               )}
@@ -154,7 +225,7 @@ export default function PerformanceView({
                 {section.lines.map((line, li) => {
                   const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
                   return (
-                    <pre key={li} className="m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: "1.0625rem", lineHeight: 1.5 }}>
+                    <pre key={li} className="m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: `${1.0625 * fontScale}rem`, lineHeight: 1.5 }}>
                       <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700 }}>{chords || " "}</span>
                       {"\n"}
                       <span style={{ color: "var(--cog-charcoal)" }}>{lyrics || " "}</span>
