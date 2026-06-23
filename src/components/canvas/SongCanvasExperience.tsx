@@ -45,6 +45,7 @@ import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
 import CompareModeSheet from "@/components/canvas/CompareModeSheet";
+import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
@@ -623,6 +624,8 @@ const SongCanvasExperience = () => {
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
   // The two cards being compared in Compare Mode (null = closed).
   const [compareCards, setCompareCards] = useState<[CanvasCard, CanvasCard] | null>(null);
+  // What Changed Smart Recap (F12) — shown on first canvas load for returning collaborators.
+  const [showRecap, setShowRecap] = useState(true);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -1290,6 +1293,14 @@ const SongCanvasExperience = () => {
           onChoose={handleChooseDirection}
           onKeepBoth={handleKeepBoth}
           onClose={() => setCompareCards(null)}
+        />
+      )}
+
+      {/* What Changed Smart Recap (F12) — re-entry digest for returning collaborators */}
+      {showRecap && (
+        <WhatChangedRecapSheet
+          songId={songId}
+          onDismiss={() => setShowRecap(false)}
         />
       )}
 
