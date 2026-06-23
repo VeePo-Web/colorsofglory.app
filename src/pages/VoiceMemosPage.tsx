@@ -23,6 +23,7 @@ import {
   getFileExtension,
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
+import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -67,6 +68,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
   const statusMeta = STATUS_LABELS[memo.status ?? "ready"] ?? STATUS_LABELS.ready;
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
+  const isQueued = memo.status === "queued";
 
   const togglePlay = useCallback(async () => {
     if (!isReady) return;
@@ -158,7 +160,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
           </p>
 
           {/* Status chip */}
-          {(isProcessing || memo.status === "failed") && (
+          {(isProcessing || isQueued || memo.status === "failed") && (
             <span
               style={{
                 display: "inline-block",
@@ -417,13 +419,36 @@ const VoiceMemosPage = () => {
 
     memoCountRef.current++;
     const title = name.trim() || `Voice Memo ${memoCountRef.current}`;
+    const recording = pendingRecording;
 
-    // Optimistic — add processing card immediately
+    // Close the review sheet immediately — the take is about to be made durable.
+    setFlow("idle");
+    setRecordingNote("");
+    setPendingRecording(null);
+    setUploadError(null);
+
+    // Route through the Capture Outbox: the blob is cached to IndexedDB BEFORE
+    // any network call, so a dropped connection or offline phone can no longer
+    // delete the only copy of a take the songwriter just sang. The outbox
+    // uploads in the background and auto-retries on reconnect.
+    const { outboxId } = await enqueueCaptureUpload({
+      blob: recording.blob,
+      songId,
+      title,
+      mimeType: recording.mimeType,
+      durationMs: recording.durationMs,
+      sectionLabel: section,
+      transcribe,
+    });
+
+    // Optimistic card keyed by the outbox id — it is already safe, so it is
+    // NEVER removed on failure; it simply shows "Saved · will sync" until the
+    // upload lands.
     const optimisticMemo: VoiceMemoRecord = {
-      id: `opt-${Date.now()}`,
+      id: outboxId,
       song_id: songId,
       title,
-      duration_ms: pendingRecording.durationMs,
+      duration_ms: recording.durationMs,
       section_label: section,
       storage_path: "",
       created_at: new Date().toISOString(),
@@ -432,33 +457,25 @@ const VoiceMemosPage = () => {
       status: "uploading",
     };
     setMemos((prev) => [optimisticMemo, ...prev]);
-    setFlow("idle");
-    setRecordingNote("");
-    setPendingRecording(null);
-
-    try {
-      const memoId = await uploadVoiceMemo({
-        songId,
-        blob: pendingRecording.blob,
-        mimeType: pendingRecording.mimeType,
-        durationMs: pendingRecording.durationMs,
-        title,
-        sectionLabel: section,
-        transcribe,
-      });
-      // Replace optimistic with real record
-      setMemos((prev) => prev.filter((m) => m.id !== optimisticMemo.id));
-      // Re-fetch to get the real DB record
-      const real = await listVoiceMemos(songId);
-      setMemos(real);
-      // Cache audio blob for instant first play
-      audioCache.set(memoId, pendingRecording.blob);
-    } catch {
-      // Remove optimistic and show error
-      setMemos((prev) => prev.filter((m) => m.id !== optimisticMemo.id));
-      setUploadError("Upload failed — please try again.");
-    }
   }, [pendingRecording, songId, currentUserId]);
+
+  // Reflect outbox results on the optimistic cards: swap to the real record on
+  // success, or calmly flip to "Saved · will sync" if the upload is still
+  // pending. The take is safe throughout — this only updates how it reads.
+  useEffect(() => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.songId !== songId) return;
+      if (event.type === "success") {
+        setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
+        void listVoiceMemos(songId).then(setMemos).catch(() => {});
+      } else if (event.type === "failed") {
+        setMemos((prev) =>
+          prev.map((m) => (m.id === event.outboxId ? { ...m, status: "queued", is_processing: true } : m)),
+        );
+      }
+    });
+    return unsubscribe;
+  }, [songId]);
 
   // ── File upload handler ─────────────────────────────────────────────────────
 
