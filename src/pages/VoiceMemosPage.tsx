@@ -23,6 +23,7 @@ import {
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
 import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
+import { canPlayMemo } from "@/lib/voice/memoPlayback";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -60,6 +61,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
+  const [hasLocalBlob, setHasLocalBlob] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -68,9 +70,30 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
   const isQueued = memo.status === "queued";
+  // Play-before-upload: a just-captured take is playable the instant it exists,
+  // straight from the cached blob the outbox stored under this card's id — even
+  // while it is still queued/uploading (Apple Voice Memos behavior).
+  const canPlay = canPlayMemo({ isReady, hasLocalBlob });
+
+  // Detect a locally cached blob so a still-syncing take can play immediately.
+  useEffect(() => {
+    if (isReady) return; // ready takes resolve their source on demand
+    let active = true;
+    void audioCache.get(memo.id).then((blob) => {
+      if (active) setHasLocalBlob(!!blob);
+    });
+    return () => { active = false; };
+  }, [memo.id, isReady]);
+
+  // Free the object URL + stop audio when this card unmounts (e.g. an optimistic
+  // card is swapped for its real record once the take finishes syncing).
+  useEffect(() => () => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    audioRef.current?.pause();
+  }, []);
 
   const togglePlay = useCallback(async () => {
-    if (!isReady) return;
+    if (!canPlay) return;
     if (isPlaying) {
       audioRef.current?.pause();
       setIsPlaying(false);
@@ -83,12 +106,16 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
       let url: string;
 
       if (cached) {
+        // Local-first: plays instantly, works offline, before the upload lands.
         url = URL.createObjectURL(cached);
         if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = url;
-      } else {
+      } else if (isReady) {
         url = await getSignedUrl(memo.id);
         audioCache.prefetch(memo.id, url);
+      } else {
+        // Not ready and no cached blob — nothing to play yet.
+        return;
       }
 
       if (!audioRef.current) audioRef.current = new Audio();
@@ -103,7 +130,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [memo.id, isReady, isPlaying]);
+  }, [memo.id, canPlay, isReady, isPlaying]);
 
   return (
     <div
@@ -183,19 +210,19 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
         <button
           type="button"
           onClick={togglePlay}
-          disabled={!isReady || isLoading}
+          disabled={!canPlay || isLoading}
           style={{
             width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-            backgroundColor: isReady ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
+            backgroundColor: canPlay ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
             color: "#FFF",
             border: "none",
-            cursor: isReady ? "pointer" : "not-allowed",
+            cursor: canPlay ? "pointer" : "not-allowed",
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: isReady ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
+            boxShadow: canPlay ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
             transition: "transform 120ms ease",
             opacity: isLoading ? 0.7 : 1,
           }}
-          onMouseDown={(e) => isReady && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
+          onMouseDown={(e) => canPlay && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
           onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
           aria-label={isPlaying ? `Pause ${memo.title}` : `Play ${memo.title}`}
         >
@@ -254,9 +281,9 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
       <div
         style={{
           display: "flex", alignItems: "flex-end", gap: 3, height: WAVEFORM_MAX_H,
-          cursor: isReady ? "pointer" : "default",
+          cursor: canPlay ? "pointer" : "default",
         }}
-        onClick={isReady ? togglePlay : undefined}
+        onClick={canPlay ? togglePlay : undefined}
         aria-hidden="true"
       >
         {bars.map((h, i) => {
