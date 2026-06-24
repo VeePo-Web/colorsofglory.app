@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Search, X } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import { loadMemory } from "@/integrations/cog/memory";
+import { searchMemory } from "@/lib/memory/searchMemory";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import MemoryClusterCard from "@/components/memory/MemoryClusterCard";
+import MemorySearchResults from "@/components/memory/MemorySearchResults";
 import MemorySourceSheet from "@/components/memory/MemorySourceSheet";
 import ObsidianExportSheet from "@/components/memory/ObsidianExportSheet";
 
@@ -40,6 +42,7 @@ const MemoryPage = () => {
   const navigate = useNavigate();
   const [active, setActive] = useState<MemoryCluster | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   const { data, isLoading, isError } = useQuery({ queryKey: ["memory"], queryFn: loadMemory });
   const graph = data?.graph ?? null;
@@ -47,6 +50,13 @@ const MemoryPage = () => {
   const recurring = useMemo(() => graph?.clusters.filter((c) => c.recurring) ?? [], [graph]);
   const single = useMemo(() => graph?.clusters.filter((c) => !c.recurring) ?? [], [graph]);
   const hasSongs = (graph?.stats.songCount ?? 0) > 0;
+
+  const searching = query.trim().length > 0;
+  const results = useMemo(
+    () => (graph && data?.bundle && searching ? searchMemory(graph, data.bundle, query) : null),
+    [graph, data?.bundle, query, searching],
+  );
+  const openSong = (id: string) => navigate(`/songs/${id}/room`);
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: "var(--cog-cream)" }}>
@@ -111,42 +121,83 @@ const MemoryPage = () => {
               </div>
             ) : (
               <>
-                <div
-                  className="flex rounded-2xl py-4 mb-7"
-                  style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
-                >
-                  <Stat value={graph.stats.songCount} label="Songs" />
-                  <Stat value={graph.stats.themeCount} label="Themes" />
-                  <Stat value={graph.stats.scriptureCount} label="Scripture" />
-                  <Stat value={graph.stats.personCount} label="People" />
+                {/* Search Memory — the F33 primary action: instant recall */}
+                <div className="relative mb-6">
+                  <Search
+                    size={17}
+                    strokeWidth={1.8}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: "var(--cog-muted)" }}
+                  />
+                  <input
+                    type="text"
+                    inputMode="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search your memory"
+                    aria-label="Search your memory"
+                    className="w-full rounded-2xl py-3.5 pl-11 pr-10 text-base outline-none"
+                    style={{
+                      backgroundColor: "var(--cog-cream-light)",
+                      border: "1.5px solid var(--cog-border)",
+                      color: "var(--cog-charcoal)",
+                      fontFamily: "var(--font-body)",
+                    }}
+                  />
+                  {searching && (
+                    <button
+                      onClick={() => setQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full"
+                      style={{ width: 32, height: 32, color: "var(--cog-warm-gray)" }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
 
-                {graph.clusters.length === 0 ? (
-                  <p className="text-sm rounded-2xl p-4 mb-6" style={{ backgroundColor: "var(--cog-cream-light)", color: "var(--cog-warm-gray)" }}>
-                    Add tags or a scripture to an idea and your memory will start connecting songs.
-                  </p>
+                {searching && results ? (
+                  <MemorySearchResults results={results} onOpenCluster={setActive} onOpenSong={openSong} />
                 ) : (
                   <>
-                    <Section title="Recurring across your songs" clusters={recurring} onOpen={setActive} />
-                    <Section title="Threads" clusters={single} onOpen={setActive} />
+                    <div
+                      className="flex rounded-2xl py-4 mb-7"
+                      style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
+                    >
+                      <Stat value={graph.stats.songCount} label="Songs" />
+                      <Stat value={graph.stats.themeCount} label="Themes" />
+                      <Stat value={graph.stats.scriptureCount} label="Scripture" />
+                      <Stat value={graph.stats.personCount} label="People" />
+                    </div>
+
+                    {graph.clusters.length === 0 ? (
+                      <p className="text-sm rounded-2xl p-4 mb-6" style={{ backgroundColor: "var(--cog-cream-light)", color: "var(--cog-warm-gray)" }}>
+                        Add tags or a scripture to an idea and your memory will start connecting songs.
+                      </p>
+                    ) : (
+                      <>
+                        <Section title="Recurring across your songs" clusters={recurring} onOpen={setActive} />
+                        <Section title="Threads" clusters={single} onOpen={setActive} />
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => setExportOpen(true)}
+                      className="w-full py-4 rounded-2xl font-medium text-base transition-all duration-150 active:scale-[0.97]"
+                      style={{
+                        backgroundColor: "var(--cog-cream-light)",
+                        border: "1.5px solid var(--cog-border)",
+                        color: "var(--cog-charcoal)",
+                        fontFamily: "var(--font-body)",
+                      }}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        <FileText size={16} strokeWidth={1.8} style={{ color: "var(--cog-warm-gray)" }} />
+                        Export to Obsidian
+                      </span>
+                    </button>
                   </>
                 )}
-
-                <button
-                  onClick={() => setExportOpen(true)}
-                  className="w-full py-4 rounded-2xl font-medium text-base transition-all duration-150 active:scale-[0.97]"
-                  style={{
-                    backgroundColor: "var(--cog-cream-light)",
-                    border: "1.5px solid var(--cog-border)",
-                    color: "var(--cog-charcoal)",
-                    fontFamily: "var(--font-body)",
-                  }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <FileText size={16} strokeWidth={1.8} style={{ color: "var(--cog-warm-gray)" }} />
-                    Export to Obsidian
-                  </span>
-                </button>
               </>
             )}
           </>
