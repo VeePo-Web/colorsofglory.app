@@ -12,6 +12,11 @@ export type MyReferralsSummary = {
   share_message: string | null;
   /** What the referred friend gets — surface this in the share UI. */
   referee_benefit: string;
+  /** New referrals since the user last viewed — drive a "N new" badge. */
+  new_referral_count: number;
+  /** New reward cents accrued since last viewed. */
+  new_reward_cents: number;
+  referrals_seen_at: string | null;
   attributed_count: number;
   paying_count: number;
   per_referral_cents: number;
@@ -49,6 +54,13 @@ export async function getMyReferrals(): Promise<MyReferralsSummary> {
  */
 export async function claimReferralCode(code: string): Promise<string> {
   const { data, error } = await supabase.rpc("claim_referral_code" as never, { _code: code } as never);
+  if (error) throw error;
+  return data as unknown as string;
+}
+
+/** Mark referral activity as seen (clears the "N new" badge). Returns the timestamp. */
+export async function markReferralsSeen(): Promise<string> {
+  const { data, error } = await supabase.rpc("mark_referrals_seen" as never);
   if (error) throw error;
   return data as unknown as string;
 }

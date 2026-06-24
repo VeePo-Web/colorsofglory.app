@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   try {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("referral_code, payout_method, payout_email, payout_country")
+      .select("referral_code, payout_method, payout_email, payout_country, referrals_seen_at")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // Reward totals for this referrer
     const { data: rewards } = await supabase
       .from("reward_events")
-      .select("amount_cents, status, reward_kind, referred_user_id")
+      .select("amount_cents, status, reward_kind, referred_user_id, created_at")
       .eq("referrer_type", "user")
       .eq("referrer_user_id", user.id)
       .eq("reward_kind", "cash");
@@ -113,6 +113,13 @@ Deno.serve(async (req) => {
     const perReferralCents = Number(settingRow?.value ?? 500) || 500;
     const monthly_recurring_cents = payingCount * perReferralCents;
 
+    // Instant acknowledgment: what's new since the referrer last looked.
+    const seenMs = profile?.referrals_seen_at ? new Date(profile.referrals_seen_at as string).getTime() : 0;
+    const new_referral_count = (attrs ?? []).filter((a: any) => new Date(a.created_at).getTime() > seenMs).length;
+    const new_reward_cents = (rewards ?? [])
+      .filter((r: any) => r.status !== "reversed" && new Date(r.created_at).getTime() > seenMs)
+      .reduce((acc: number, r: any) => acc + (r.amount_cents ?? 0), 0);
+
     // Referee-side benefit + a prefilled, on-brand share message so every
     // surface can ship identical one-tap sharing (referral-UX audit P0 #1/#2).
     const referee_benefit = "Your first song is free";
@@ -125,6 +132,9 @@ Deno.serve(async (req) => {
       link,
       share_message,
       referee_benefit,
+      new_referral_count,
+      new_reward_cents,
+      referrals_seen_at: profile?.referrals_seen_at ?? null,
       attributed_count: referredIds.length,
       paying_count: payingCount,
       per_referral_cents: perReferralCents,
