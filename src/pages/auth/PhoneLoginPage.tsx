@@ -49,7 +49,10 @@ const PhoneLoginPage = () => {
   const isValid = digits.length === DIGITS_MAX;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "").slice(0, DIGITS_MAX);
+    let raw = e.target.value.replace(/\D/g, "");
+    // Tolerate a pasted/autofilled US country code: "1XXXXXXXXXX" → "XXXXXXXXXX".
+    if (raw.length === 11 && raw.startsWith("1")) raw = raw.slice(1);
+    raw = raw.slice(0, DIGITS_MAX);
     setDigits(raw);
     if (error) setError(null);
   };
