@@ -40,6 +40,8 @@ const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
+const MemoryPage = lazy(() => import("./pages/MemoryPage"));
+const SongMemoryPage = lazy(() => import("./pages/SongMemoryPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
@@ -174,6 +176,10 @@ const App = () => {
             <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
             <Route path="/songs/:id/activity" element={<CanvasLayerRedirect layer="room" />} />
             <Route path="/songs/:id/credits" element={<CanvasLayerRedirect layer="people" />} />
+            <Route path="/songs/:id/memory" element={<RequireAuth><SongMemoryPage /></RequireAuth>} />
+
+            {/* Personal Memory Graph / Zettelkasten (Feature 33) */}
+            <Route path="/memory" element={<RequireAuth><MemoryPage /></RequireAuth>} />
 
             {/* Settings */}
             <Route path="/settings" element={<SettingsPage />} />
