@@ -16,7 +16,10 @@ All in `src/integrations/cog/referrals.ts`:
   - `next_payout_estimate_cents`
   - `recent_referrals[]`: `{ referred_at, is_paying, has_paid_before, total_earned_cents }`
   - `payout_method`: `{ kind: 'manual'|'paypal'|'stripe_connect'|null, email, country }`
+  - **`share_message`** (NEW) — prefilled, on-brand share text incl. the link. Use it verbatim for one-tap share (`navigator.share({ text: share_message })`) so every surface is identical and on-brand.
+  - **`referee_benefit`** (NEW) — what the friend gets (e.g. "Your first song is free"). Show it in the share UI so the offer is explicit (two-sided clarity).
 - **`setMyPayoutMethod({ method, email?, country? })`** — save how they get paid. `method` ∈ `manual|paypal|stripe_connect`. Email is required for `manual` and `paypal` (enforced server-side; surface the validation error).
+- **`claimReferralCode(code)`** (NEW, from `referrals.ts`) — let the user claim a memorable/vanity code (3–20 chars A–Z/0–9). Returns the normalized code; throws `code_taken` / `invalid_code`. Offer a "personalize your code" field — memorable codes share far better than the random default. The DB keeps `/r/:code` resolution in sync automatically.
 
 ## Suggested page shape (`/settings/referrals` or onboarding `EarnPage`)
 1. **Share block** — big copy-able `link`, share button. This is the primary action.

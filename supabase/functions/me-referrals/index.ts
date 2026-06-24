@@ -113,9 +113,18 @@ Deno.serve(async (req) => {
     const perReferralCents = Number(settingRow?.value ?? 500) || 500;
     const monthly_recurring_cents = payingCount * perReferralCents;
 
+    // Referee-side benefit + a prefilled, on-brand share message so every
+    // surface can ship identical one-tap sharing (referral-UX audit P0 #1/#2).
+    const referee_benefit = "Your first song is free";
+    const share_message = link
+      ? `Come write with me on Colors of Glory — every lyric, voice memo, and chord for a song stays in one place. ${referee_benefit} when you start here: ${link}`
+      : null;
+
     return json({
       code,
       link,
+      share_message,
+      referee_benefit,
       attributed_count: referredIds.length,
       paying_count: payingCount,
       per_referral_cents: perReferralCents,
