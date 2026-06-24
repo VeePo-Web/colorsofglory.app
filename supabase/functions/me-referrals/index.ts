@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   try {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("referral_code, payout_method, payout_email, payout_country, referrals_seen_at")
+      .select("referral_code, payout_method, payout_email, payout_country")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // Reward totals for this referrer
     const { data: rewards } = await supabase
       .from("reward_events")
-      .select("amount_cents, status, reward_kind, referred_user_id, created_at")
+      .select("amount_cents, status, reward_kind, referred_user_id, created_at, invoice_external_id")
       .eq("referrer_type", "user")
       .eq("referrer_user_id", user.id)
       .eq("reward_kind", "cash");
@@ -113,12 +113,16 @@ Deno.serve(async (req) => {
     const perReferralCents = Number(settingRow?.value ?? 500) || 500;
     const monthly_recurring_cents = payingCount * perReferralCents;
 
-    // Instant acknowledgment: what's new since the referrer last looked.
-    const seenMs = profile?.referrals_seen_at ? new Date(profile.referrals_seen_at as string).getTime() : 0;
-    const new_referral_count = (attrs ?? []).filter((a: any) => new Date(a.created_at).getTime() > seenMs).length;
-    const new_reward_cents = (rewards ?? [])
-      .filter((r: any) => r.status !== "reversed" && new Date(r.created_at).getTime() > seenMs)
-      .reduce((acc: number, r: any) => acc + (r.amount_cents ?? 0), 0);
+    const event_timeline = (rewards ?? [])
+      .slice()
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 50)
+      .map((r: any) => ({
+        status: r.status,
+        amount_cents: r.amount_cents,
+        invoice_external_id: r.invoice_external_id,
+        created_at: r.created_at,
+      }));
 
     // Referee-side benefit + a prefilled, on-brand share message so every
     // surface can ship identical one-tap sharing (referral-UX audit P0 #1/#2).
@@ -132,9 +136,6 @@ Deno.serve(async (req) => {
       link,
       share_message,
       referee_benefit,
-      new_referral_count,
-      new_reward_cents,
-      referrals_seen_at: profile?.referrals_seen_at ?? null,
       attributed_count: referredIds.length,
       paying_count: payingCount,
       per_referral_cents: perReferralCents,
@@ -146,7 +147,9 @@ Deno.serve(async (req) => {
         kind: profile?.payout_method ?? null,
         email: profile?.payout_email ?? null,
         country: profile?.payout_country ?? null,
+        complete: !!profile?.payout_method,
       },
+      event_timeline,
     });
   } catch (e) {
     console.error("me-referrals error", e);
