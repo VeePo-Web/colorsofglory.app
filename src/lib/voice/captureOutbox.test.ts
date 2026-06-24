@@ -29,6 +29,7 @@ import {
   retryOutbox,
   subscribeOutbox,
   type OutboxEvent,
+  type OutboxJob,
 } from "./captureOutbox";
 
 function setOnline(online: boolean): void {
@@ -245,7 +246,10 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
 
   describe("pluggable uploader registry — every pipeline gets the same safety", () => {
     it("routes a take to a registered custom uploader by key, passing its extras", async () => {
-      const memosUploader = vi.fn(async () => "memo-from-brainstorm");
+      // Typed params so mock.calls[0] is [OutboxJob, Blob], not an empty tuple.
+      const memosUploader = vi.fn(
+        (_job: OutboxJob, _blob: Blob): Promise<string> => Promise.resolve("memo-from-brainstorm"),
+      );
       registerOutboxUploader("memos", memosUploader);
 
       const blob = makeBlob("brainstorm idea");
