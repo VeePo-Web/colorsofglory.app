@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Copy, Check, TrendingUp, Users, DollarSign } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import { useCurrentAccount } from "@/integrations/cog/auth";
+import { fetchReferralStats, type ReferralStats } from "@/lib/pricing/pricingApi";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
-// Placeholder referral link — Lovable replaces with real user code from Supabase
-const DEMO_REF_CODE = "PARKER123";
-const DEMO_REF_LINK = `app.colorsofglory.com/ref/${DEMO_REF_CODE}`;
+// Documented floor for the per-referral monthly reward (backend default is 500¢).
+// The real value comes from fetchReferralStats().perReferralCents the moment it
+// loads, so this only governs the very first paint and the offline fallback.
+const DEFAULT_PER_REFERRAL_CENTS = 500;
 
 interface StatRowProps {
   people: number;
@@ -46,13 +50,55 @@ const StatRow = ({ people, monthly, yearly, highlight }: StatRowProps) => (
 
 const EarnPage = () => {
   const navigate = useNavigate();
+  const { profile } = useCurrentAccount();
   const [copied, setCopied] = useState(false);
+  const [stats, setStats] = useState<ReferralStats | null>(null);
+
+  // Record that the referral program was seen (monotonic onboarding step) and
+  // pull the user's REAL referral link + reward rate from the same source the
+  // settings Refer & Earn screen uses — never a hardcoded demo link.
+  useEffect(() => {
+    updateOnboardingStep("referral_program_seen").catch(() => {});
+    fetchReferralStats()
+      .then(setStats)
+      .catch(() => {/* offline / not signed in yet — fall back below */});
+  }, []);
+
+  // Real per-referral monthly reward, in whole dollars, sourced from the backend.
+  const perReferralDollars = Math.round(
+    (stats?.perReferralCents ?? DEFAULT_PER_REFERRAL_CENTS) / 100,
+  );
+
+  // Real referral link: prefer the canonical stats link, fall back to building
+  // one from the profile's referral code so the user always sees THEIR link.
+  const referralLink =
+    stats?.link ??
+    (profile?.referral_code ? `colorsofglory.app/r/${profile.referral_code}` : null);
+  const fullLink = referralLink
+    ? referralLink.startsWith("http")
+      ? referralLink
+      : `https://${referralLink}`
+    : "";
+
+  // Projection table scales off the real reward rate.
+  const projections = useMemo(
+    () =>
+      [10, 100, 1000, 5000].map((people, i) => ({
+        people,
+        monthly: people * perReferralDollars,
+        yearly: people * perReferralDollars * 12,
+        highlight: i === 3,
+      })),
+    [perReferralDollars],
+  );
+  const headline = projections[projections.length - 1];
 
   const handleCopy = async () => {
+    if (!fullLink) return;
     try {
-      await navigator.clipboard.writeText(`https://${DEMO_REF_LINK}`);
+      await navigator.clipboard.writeText(fullLink);
     } catch {
-      // fallback — select text
+      // fallback — clipboard unavailable; the link stays visible to copy manually
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -95,7 +141,7 @@ const EarnPage = () => {
       <p className="text-[1rem] text-center mb-2" style={{ color: "#666" }}>
         You earn{" "}
         <span className="font-bold" style={{ color: "#1A1A1A" }}>
-          $5 / month
+          ${perReferralDollars} / month
         </span>{" "}
         for every songwriter who joins Pro through your link.
       </p>
@@ -123,19 +169,28 @@ const EarnPage = () => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <StatRow people={10}    monthly={50}     yearly={600}     />
-          <StatRow people={100}   monthly={500}    yearly={6000}    />
-          <StatRow people={1000}  monthly={5000}   yearly={60000}   />
-          <StatRow people={5000}  monthly={25000}  yearly={300000}  highlight />
+          {projections.map((row) => (
+            <StatRow
+              key={row.people}
+              people={row.people}
+              monthly={row.monthly}
+              yearly={row.yearly}
+              highlight={row.highlight}
+            />
+          ))}
         </div>
 
-        {/* 5000 emphasis */}
+        {/* Top-tier emphasis */}
         <div className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "rgba(181,147,90,0.06)" }}>
           <p className="text-[0.875rem] text-center leading-relaxed" style={{ color: "#666" }}>
             Refer{" "}
-            <span className="font-bold" style={{ color: "#1A1A1A" }}>5,000 songwriters</span>
+            <span className="font-bold" style={{ color: "#1A1A1A" }}>
+              {headline.people.toLocaleString()} songwriters
+            </span>
             {" "}→{" "}
-            <span className="font-bold" style={{ color: "#B5935A" }}>$300,000 / year</span>
+            <span className="font-bold" style={{ color: "#B5935A" }}>
+              ${headline.yearly.toLocaleString()} / year
+            </span>
             {" "}recurring cash — direct into your account, every month, for as long as they stay.
           </p>
         </div>
@@ -159,18 +214,20 @@ const EarnPage = () => {
         <div className="flex items-center gap-2 px-4 pb-3">
           <p
             className="flex-1 text-[0.9375rem] font-medium truncate"
-            style={{ color: "#1A1A1A", fontFamily: "monospace" }}
+            style={{ color: referralLink ? "#1A1A1A" : "#999", fontFamily: "monospace" }}
           >
-            {DEMO_REF_LINK}
+            {referralLink ?? "Generating your link…"}
           </p>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 active:scale-95 flex-shrink-0"
+            disabled={!fullLink}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-50"
             style={{
               backgroundColor: copied ? "rgba(181,147,90,0.12)" : "rgba(0,0,0,0.04)",
               color: copied ? "#B5935A" : "#666",
               border: copied ? "1px solid rgba(181,147,90,0.25)" : "1px solid transparent",
             }}
+            aria-label="Copy referral link"
           >
             {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.5} />}
             {copied ? "Copied!" : "Copy"}

@@ -17,14 +17,17 @@ const OnboardingShell = ({
 }: OnboardingShellProps) => (
   <div
     className={`relative min-h-screen flex flex-col ${className}`}
-    style={{ backgroundColor: "#FAFAF6" }}
+    // min-h-screen (100vh) is the fallback; 100dvh tracks the real mobile
+    // viewport as the iOS/Android URL bar shows/hides. Unsupported browsers
+    // ignore the dvh value and keep the class's 100vh.
+    style={{ backgroundColor: "#FAFAF6", minHeight: "100dvh" }}
   >
     {glow && (
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 55% 40% at 85% 95%, rgba(181,147,90,0.10) 0%, transparent 65%)",
+            "radial-gradient(ellipse 55% 40% at 85% 95%, rgba(184,149,58,0.10) 0%, transparent 65%)",
         }}
         aria-hidden="true"
       />
@@ -32,7 +35,14 @@ const OnboardingShell = ({
 
     <div
       className="relative flex flex-col flex-1 w-full mx-auto px-6"
-      style={{ maxWidth: 430 }}
+      // Real safe-area padding (the comment promised it; it was missing) so
+      // content clears the notch + home indicator on notched devices. Insets
+      // are 0 on non-notched/desktop, so this is a no-op there.
+      style={{
+        maxWidth: 430,
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
     >
       {children}
     </div>

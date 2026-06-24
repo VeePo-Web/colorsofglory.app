@@ -97,6 +97,17 @@ const FirstIntentPage = () => {
       <p className="text-[13px] text-center" style={{ color: "#999" }}>
         You can always do both later.
       </p>
+
+      {/* Quiet founder/beta code path — a post-verification route by intent for
+          users who hold a founder, beta, friend, or lifetime code. Kept quiet so
+          it reads as private access, not a public coupon. */}
+      <button
+        onClick={() => navigate("/onboarding/founder-code")}
+        className="mt-6 text-[13px] text-center w-full py-2 transition-opacity hover:opacity-70 underline"
+        style={{ color: "#999", fontFamily: "var(--font-body)" }}
+      >
+        Have a founder or beta code?
+      </button>
     </OnboardingShell>
   );
 };

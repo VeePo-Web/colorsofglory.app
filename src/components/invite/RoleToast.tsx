@@ -60,14 +60,14 @@ const RoleToast = ({ role, delay = 500, duration = 3200 }: RoleToastProps) => {
           backgroundColor: 'rgba(250,250,246,0.96)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(181,147,90,0.25)',
+          border: '1px solid rgba(184,149,58,0.25)',
           boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
         }}
       >
         {/* Role chip */}
         <span
           className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.75rem] font-semibold flex-shrink-0"
-          style={{ backgroundColor: 'rgba(181,147,90,0.12)', color: '#B5935A', border: '1px solid rgba(181,147,90,0.25)' }}
+          style={{ backgroundColor: 'rgba(184,149,58,0.12)', color: 'var(--cog-gold)', border: '1px solid rgba(184,149,58,0.25)' }}
         >
           {ROLE_LABEL[role]}
         </span>

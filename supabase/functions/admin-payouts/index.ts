@@ -58,6 +58,11 @@ Deno.serve(async (req) => {
       if (error) return j({ error: error.message }, 400)
       return j({ ok: true, payout: data })
     }
+    if (action === 'retry') {
+      const { data, error } = await userClient.rpc('retry_payout', { _payout: body.payout_id })
+      if (error) return j({ error: error.message }, 400)
+      return j({ ok: true, payout: data })
+    }
     return j({ error: 'unknown_action' }, 400)
   } catch (e) {
     return j({ error: String(e) }, 500)
