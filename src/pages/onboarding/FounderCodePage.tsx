@@ -4,30 +4,78 @@ import { ArrowLeft } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
+import { validateCode } from "@/lib/pricing/pricingApi";
+import { supabase } from "@/integrations/supabase/client";
 
 const normalizeCode = (raw: string) =>
   raw.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
+
+const INVALID_CODE_MESSAGES: Record<string, string> = {
+  invalid_code: "That code didn't work. Check it and try again.",
+  code_exhausted: "That founder code has reached its limit.",
+  exhausted: "That founder code has reached its limit.",
+  already_attributed: "You've already applied a code to this account.",
+  network_error: "We couldn't check that code. Check your connection and try again.",
+};
+const friendlyReason = (reason?: string): string =>
+  (reason && INVALID_CODE_MESSAGES[reason]) || "That code didn't work. Check it and try again.";
 
 const FounderCodePage = () => {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [successKind, setSuccessKind] = useState<"founder" | "referral" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleUnlock = () => {
-    if (!code.trim()) return;
+  const handleUnlock = async () => {
+    const trimmed = code.trim();
+    if (!trimmed || isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
-    // Lovable wires real server-side founder code validation
-    setTimeout(() => {
+    try {
+      const result = await validateCode(trimmed, "pro");
+
+      if (result.kind === "founder") {
+        // A real founder code grants founder access directly (no checkout) via
+        // the server-side redemption RPC. Only after it succeeds is "access
+        // unlocked" actually true — previously ANY string faked success.
+        if (!result.codeId) {
+          setError(friendlyReason(result.reason));
+          return;
+        }
+        const { data: redeemed, error: rpcError } = await supabase.rpc(
+          "claim_founder_code_redemption",
+          { _code_id: result.codeId },
+        );
+        if (rpcError || redeemed !== true) {
+          setError("That founder code couldn't be redeemed — it may already be used.");
+          return;
+        }
+        updateOnboardingStep("founder_code_seen").catch(() => {});
+        setSuccessKind("founder");
+        return;
+      }
+
+      if (result.kind === "member_referral") {
+        // A referral (not founder) code: carry it to checkout for the discount.
+        sessionStorage.setItem("cog:referral-code", trimmed);
+        updateOnboardingStep("founder_code_seen").catch(() => {});
+        setSuccessKind("referral");
+        return;
+      }
+
+      setError(friendlyReason(result.reason));
+    } catch {
+      setError("We couldn't check that code. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 900);
+    }
   };
 
   // ── Success state ─────────────────────────────────────────────────────────
-  if (isSuccess) {
+  if (successKind) {
+    const isFounder = successKind === "founder";
     return (
       <div
         className="relative min-h-screen flex flex-col"
@@ -52,10 +100,12 @@ const FounderCodePage = () => {
               className="text-[2.8rem] font-bold text-center mb-4 leading-[1.05]"
               style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
             >
-              Founder access unlocked
+              {isFounder ? "Founder access unlocked" : "Code applied"}
             </h1>
             <p className="text-[1.0625rem] text-center" style={{ color: "#666" }}>
-              Your Pro workspace is ready.
+              {isFounder
+                ? "Your Pro workspace is ready."
+                : "Your discount is saved — it'll apply when you upgrade."}
             </p>
           </div>
 
