@@ -685,6 +685,42 @@ export type Database = {
           },
         ]
       }
+      notification_queue: {
+        Row: {
+          attempts: number
+          created_at: string
+          id: string
+          kind: string
+          last_error: string | null
+          payload: Json
+          sent_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          kind: string
+          last_error?: string | null
+          payload?: Json
+          sent_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          sent_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       otp_send_events: {
         Row: {
           country_code: string | null
@@ -967,6 +1003,39 @@ export type Database = {
           timezone?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      reconciliation_reports: {
+        Row: {
+          drift_count: number
+          drift_invoice_ids: string[]
+          id: string
+          local_event_count: number
+          notes: string | null
+          ran_at: string
+          stripe_invoice_count: number
+          window_hours: number
+        }
+        Insert: {
+          drift_count?: number
+          drift_invoice_ids?: string[]
+          id?: string
+          local_event_count?: number
+          notes?: string | null
+          ran_at?: string
+          stripe_invoice_count?: number
+          window_hours: number
+        }
+        Update: {
+          drift_count?: number
+          drift_invoice_ids?: string[]
+          id?: string
+          local_event_count?: number
+          notes?: string | null
+          ran_at?: string
+          stripe_invoice_count?: number
+          window_hours?: number
         }
         Relationships: []
       }
@@ -2272,7 +2341,7 @@ export type Database = {
         Returns: undefined
       }
       approve_payout: {
-        Args: { _payout: string }
+        Args: { _payout_id: string }
         Returns: {
           amount_cents: number
           approved_at: string | null

@@ -1,81 +1,90 @@
+## Payments + Referral System Audit & World-Class Hardening
 
-# Payments + Referral System — World-Class Benchmark & Gap Closure
+### Current state (already shipped)
+- **Founder codes**: `$50 off` first paid month via Stripe coupon, attribution stamped on checkout metadata
+- **Reward minting**: `record_invoice_paid` → Founder gets $25 (first invoice) / $10 (recurring), regular Members get $5
+- **30-day hold → maturation cron (07:17 UTC daily)** → monthly payout drafts cron (1st @ 07:25 UTC)
+- **Admin ops**: `approve_payout`, `admin_finance_summary`, `admin_referrer_ledger`, `admin_billing_events`, `admin_list_payouts`, `admin_fraud_flags`
+- **Founder dashboard endpoint**: `me-founder-stats` (code, share link, redemptions, earnings buckets, next draft date)
+- **Tax**: `payout_tax_profiles` (W-9/W-8) + `me-set-tax-profile`
+- **Fraud**: self-referral trigger auto-flags into `fraud_flags`; OTP toll-fraud rail
+- **Tracking**: `billing_events`, `reward_events`, `referral_attributions`, `payouts`, `fraud_flags`
+- **Self-service**: `me-earnings-export` (CSV), `referral-resolve` returns lifetime social-proof count
 
-## Part 1 — Deep research (world-class reference programs)
+### World-class benchmark gaps to close
+Based on Dropbox / Notion / ConvertKit / Superhuman / Rewardful / Tolt / Wise patterns, five gaps remain:
 
-I'll run targeted web research on programs that match COG's shape (SaaS subscription, two-sided rewards: power-user "founder/ambassador" tier + regular member referrals, recurring payouts). Then I'll distill what each does well into a one-page checklist we benchmark COG against.
+1. **Lifecycle notifications** (Dropbox/ConvertKit pattern)
+   - Resend emails: `referral_first_redeemed`, `reward_matured`, `payout_sent`, `payout_failed`
+   - New edge fn `notify-referral-event` triggered by DB triggers on `reward_events` and `payouts` status changes
+   - Per-user mute toggle in `profiles.notification_prefs`
 
-Programs to study:
-1. **Dropbox** — the canonical referral flywheel (in-product placement, friction-free share).
-2. **Notion / Linear ambassador programs** — creator-tier rewards layered on top of plain referrals.
-3. **Superhuman / Cron ambassador codes** — invite-only "founder code" mechanics; perceived scarcity.
-4. **ConvertKit / Beehiiv** — recurring cash payouts to creators with public earnings dashboards.
-5. **Stripe Atlas / Stripe Apps Partner Program** — clean tax + payout compliance copy.
-6. **Rewardful, Tolt, PartnerStack, FirstPromoter** — the de-facto SaaS affiliate tooling — for UX patterns of dashboards, attribution windows, payout cadence, fraud controls.
-7. **Webflow Experts / Framer Partners** — tiered status badges that drive ongoing engagement.
-8. **PayPal / Wise / Cash App referral mechanics** — best-in-class for instant trust + transparent ledger.
+2. **Referrer-side dashboard endpoint for regular Members** (parity with founders)
+   - `me-referral-stats` mirroring `me-founder-stats` for non-founder users (regular $5/referral track)
+   - Returns: personal referral code, share link, redemptions, pending/payable/paid buckets, next payout date
 
-For each I capture: attribution window, cookie/code precedence rules, payout cadence, minimum payout, fraud rails, dashboard layout, share-link UX, email lifecycle, tax handling, churn-clawback policy, in-app placement.
+3. **Payout method capture** (Wise/Stripe Connect pattern, minimum viable)
+   - Extend `payout_tax_profiles` → add `payout_method` (paypal_email | stripe_connect_id | manual_check) + payout instructions
+   - New endpoint `me-set-payout-method`; admin `approve_payout` blocks if missing
+   - Surface in `me-founder-stats` / `me-referral-stats` as a "complete payout setup" prompt
 
-**Deliverable:** `docs/payments/2026-06-22-referral-benchmark.md` — one-page comparison matrix + 10 concrete patterns we should copy.
+4. **Operational alerting + reconciliation** (Stripe Atlas pattern)
+   - Daily `reconcile-billing-events` cron: scans Stripe invoices vs `billing_events` last 48h, inserts a `fraud_flags` row with `kind = 'reconciliation_drift'` on mismatch
+   - Admin endpoint `admin_reconciliation_report` to list drifts
 
-## Part 2 — Audit COG against the benchmark
+5. **Public ledger transparency** (Notion/Superhuman trust pattern)
+   - Extend `me-founder-stats` and `me-referral-stats` with per-event timeline (status transitions: minted → matured → drafted → paid)
+   - Already have data in `reward_events` + `payouts`; just compose the response
 
-Re-walk the stack now that all 6 pending migrations are applied. For each pillar, mark PRESENT / PARTIAL / MISSING and link the code:
+### Out of scope
+- Frontend dashboards (Claude territory — handoffs already written)
+- Stripe Connect onboarding UX (defer; PayPal/manual covers v1)
+- Multi-currency payouts (USD only at launch)
+- Changing reward amounts, hold days, or cohort definitions (live-tunable in `app_settings`)
 
-| Pillar | What "world-class" looks like |
-|---|---|
-| Code creation + uniqueness | Auto-mint founder code on grant; auto-mint personal referral code on signup; collision-safe |
-| Attribution capture | Link click → cookie/profile stash → checkout metadata → DB row, with one-attribution-per-buyer lock |
-| Discount delivery | $50 off Pro (founder code → $49 price), zero overshoot of `max_redemptions`, atomic claim/release |
-| Reward minting | Founder $25×3 then $10/mo life; Member $5/mo life; deterministic per invoice |
-| Hold + clawback | 30-day hold; refund/chargeback reverses pending; documented |
-| Maturation | Daily cron at 07:17 UTC matures `pending → payable` |
-| Payout drafts | Monthly cron creates per-recipient drafts; admin approval; mark paid/failed |
-| Recipient dashboards | `me-referrals` (member) + `me-founder-stats` (founder): code, link, active subs, pending/payable/paid, next draft date, recent invoices |
-| Admin oversight | Finance summary, referrer ledger, billing events, payouts, fraud flags, attribution override, event redrive |
-| Fraud rails | OTP throttle, self-referral block, duplicate-payment-method flags, manual review queue |
-| Notifications | Email when first reward matures, when payout sent, when code redeemed |
-| Tax / 1099 readiness | Yearly earnings export per recipient; W-9/W-8 capture before first payout |
-| Live mode readiness | Live Stripe key + webhook arrive automatically on go-live (already documented) |
+### Files
 
-## Part 3 — Gap closure (implementation)
+**Migrations (1 new):**
+- Extend `payout_tax_profiles` with payout method columns
+- Add notification preference JSONB to `profiles`
+- Triggers on `reward_events.status` and `payouts.status` → enqueue notification rows
+- `notification_queue` table (id, user_id, kind, payload, sent_at, attempts, error)
 
-Based on Part 2, the likely concrete additions (final list confirmed after the audit pass — none ship until you approve):
+**Edge functions (3 new, 0 modified):**
+- `notify-referral-event` (cron every 5min, drains `notification_queue` via Resend)
+- `me-referral-stats` (parity with `me-founder-stats` for regular members)
+- `me-set-payout-method`
+- `reconcile-billing-events` (daily cron)
 
-1. **Notifications layer** — three transactional emails via Resend connector:
-   - `referral_first_redeemed` — fires when a code is first redeemed.
-   - `reward_matured` — fires when a recipient's first reward moves to `payable`.
-   - `payout_sent` — fires when admin marks a draft `paid`.
-   Edge function `notify-referral-event` triggered by DB triggers on `reward_events` + `payouts`.
+**Existing endpoints extended:**
+- `me-founder-stats` → adds `payout_method_complete`, `event_timeline[]`
+- `approve_payout` SQL fn → block when `payout_method` missing
 
-2. **Recipient yearly earnings export** — `me-earnings-export` edge function returns CSV (date, invoice id, gross cents, reward cents, status) for the calendar year. Powers tax-time self-service.
+**SDK (`src/integrations/cog/`):**
+- `payouts.ts` → add `setMyPayoutMethod`, `getMyPayoutMethod`
+- `referrals.ts` → add `getMyReferralStats`
+- `founders.ts` → updated response type
 
-3. **Tax info capture** — `payout_tax_profiles` table (W-9/W-8 minimal: legal_name, country, tax_id_last4, form_type, signed_at). Required before `approve_payout`. Migration + `me-set-tax-profile` edge function + SDK wrapper. RLS: user reads/writes own; service_role full.
+**Docs:**
+- Append "Notifications + Payout Method + Reconciliation" section to `docs/claude-handoffs/2026-06-22-payments.md`
+- Update `.lovable/plan.md` audit log
+- Update `docs/payments/2026-06-22-referral-benchmark.md` with final gap-closure matrix
 
-4. **Self-referral + duplicate-card fraud rail** — extend `record_invoice_paid` to flag `reward_events.status = 'review'` (not `pending`) when buyer's `payment_method.fingerprint` matches referrer's prior payment method, or buyer email domain matches referrer's. Surfaces in admin `fraud_flags` queue. New `app_settings.fraud_review_enabled` bool default true.
+### Verification
+After build:
+1. Run `debug_seed_reward_chain` for both founder + regular member to confirm both dashboards populate
+2. Verify notification triggers fire (check `notification_queue`)
+3. Approve a test payout with missing payout method → expect error
+4. Trigger `reconcile-billing-events` → expect zero drifts on clean state
 
-5. **Public earnings counter on referral share page** — extend `referral-resolve` to return `owner_lifetime_referred_count` so the landing page can show "Join 47 songwriters who used Parker's code" social proof (a Dropbox/ConvertKit pattern).
+Approve to ship?
+---
 
-6. **Docs** — append benchmark findings + new endpoints to `docs/claude-handoffs/2026-06-22-payments.md` and update `.lovable/plan.md`.
+## 2026-06-24 — Hardening shipped
 
-## Out of scope
-
-- Frontend (Claude owns Settings → Referrals, Settings → Founder, Settings → Payouts pages).
-- Stripe Connect / instant payouts — manual PayPal/e-transfer approval flow stays.
-- Tiered ambassador status badges (defer — needs design pass first).
-- Changing reward amounts or hold days (live-tunable via `app_settings`).
-
-## Files touched (estimated)
-
-- `docs/payments/2026-06-22-referral-benchmark.md` (new — research output)
-- `supabase/migrations/20260622190000_cog_payout_tax_profiles.sql` (new)
-- `supabase/migrations/20260622190100_cog_fraud_review_minting.sql` (new)
-- `supabase/functions/notify-referral-event/index.ts` (new)
-- `supabase/functions/me-earnings-export/index.ts` (new)
-- `supabase/functions/me-set-tax-profile/index.ts` (new)
-- `supabase/functions/referral-resolve/index.ts` (extend payload)
-- `src/integrations/cog/{founders.ts,referrals.ts,billing.ts}` (SDK wrappers)
-- `docs/claude-handoffs/2026-06-22-payments.md`, `.lovable/plan.md` (notes)
-
-Approve and I'll execute Part 1 (research) first, share the benchmark doc, then proceed to Parts 2–3.
+- Migration: `notification_queue` table + auto-triggers on `reward_events` and `payouts`; `reconciliation_reports` table; `approve_payout` now requires `profiles.payout_method`.
+- Edge fns: `notify-referral-event` (5-min cron drain via Resend gateway; logs-only fallback if RESEND not linked); `reconcile-billing-events` (daily cron, Stripe-vs-local invoice diff).
+- Extended `me-founder-stats` + `me-referrals` with `event_timeline[]` + `payout_method_complete`.
+- SDK types updated: `FounderStats.event_timeline`, `MyReferralsSummary.payout_method.complete`.
+- Cron schedules registered: `cog-notify-referral-event` (*/5 * * * *), `cog-reconcile-billing-events` (35 7 * * *).
+- Action item for user: link the Resend connector to enable real email delivery; until then, notifications are queued and marked sent in logs only.
