@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, EyeOff } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import type { MemoryCluster, MemorySong } from "@/lib/memory/memoryTypes";
 import { CLUSTER_NOUN } from "./clusterIcon";
@@ -8,10 +8,11 @@ interface Props {
   cluster: MemoryCluster | null;
   songs: MemorySong[];
   onClose: () => void;
+  onHide?: (id: string) => void;
 }
 
 /** Bottom sheet showing the source trail — the songs a cluster connects. */
-const MemorySourceSheet = ({ cluster, songs, onClose }: Props) => {
+const MemorySourceSheet = ({ cluster, songs, onClose, onHide }: Props) => {
   const navigate = useNavigate();
   const open = cluster !== null;
   const connected = cluster ? songs.filter((s) => cluster.songIds.includes(s.id)) : [];
@@ -65,6 +66,17 @@ const MemorySourceSheet = ({ cluster, songs, onClose }: Props) => {
                   </button>
                 ))}
               </div>
+
+              {onHide && (
+                <button
+                  onClick={() => onHide(cluster.id)}
+                  className="mt-4 w-full rounded-xl py-3 flex items-center justify-center gap-2 text-sm font-medium transition-all duration-150 active:scale-[0.98]"
+                  style={{ color: "var(--cog-warm-gray)", border: "1.5px solid var(--cog-border)" }}
+                >
+                  <EyeOff size={15} strokeWidth={1.8} />
+                  Hide from Memory
+                </button>
+              )}
             </>
           )}
         </div>

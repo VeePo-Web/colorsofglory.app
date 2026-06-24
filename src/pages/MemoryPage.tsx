@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Search, X } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, FileText, Search, X, RotateCcw } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import { loadMemory } from "@/integrations/cog/memory";
 import { searchMemory } from "@/lib/memory/searchMemory";
+import { applyHidden, toggleHidden, loadHiddenIds, saveHiddenIds } from "@/lib/memory/hidden";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import MemoryClusterCard from "@/components/memory/MemoryClusterCard";
 import MemorySearchResults from "@/components/memory/MemorySearchResults";
@@ -43,20 +45,43 @@ const MemoryPage = () => {
   const [active, setActive] = useState<MemoryCluster | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [hidden, setHidden] = useState<string[]>(() => loadHiddenIds());
 
   const { data, isLoading, isError } = useQuery({ queryKey: ["memory"], queryFn: loadMemory });
   const graph = data?.graph ?? null;
 
-  const recurring = useMemo(() => graph?.clusters.filter((c) => c.recurring) ?? [], [graph]);
-  const single = useMemo(() => graph?.clusters.filter((c) => !c.recurring) ?? [], [graph]);
+  const recurring = useMemo(() => applyHidden(graph?.clusters.filter((c) => c.recurring) ?? [], hidden), [graph, hidden]);
+  const single = useMemo(() => applyHidden(graph?.clusters.filter((c) => !c.recurring) ?? [], hidden), [graph, hidden]);
+  const hiddenCount = useMemo(() => (graph ? graph.clusters.filter((c) => hidden.includes(c.id)).length : 0), [graph, hidden]);
   const hasSongs = (graph?.stats.songCount ?? 0) > 0;
 
   const searching = query.trim().length > 0;
-  const results = useMemo(
-    () => (graph && data?.bundle && searching ? searchMemory(graph, data.bundle, query) : null),
-    [graph, data?.bundle, query, searching],
-  );
+  const results = useMemo(() => {
+    if (!graph || !data?.bundle || !searching) return null;
+    const r = searchMemory(graph, data.bundle, query);
+    return {
+      ...r,
+      themes: applyHidden(r.themes, hidden),
+      scriptures: applyHidden(r.scriptures, hidden),
+      people: applyHidden(r.people, hidden),
+    };
+  }, [graph, data?.bundle, query, searching, hidden]);
   const openSong = (id: string) => navigate(`/songs/${id}/room`);
+
+  const persistHidden = (next: string[]) => {
+    setHidden(next);
+    saveHiddenIds(next);
+  };
+  const hideCluster = (id: string) => {
+    const before = hidden;
+    persistHidden(toggleHidden(before, id));
+    setActive(null);
+    toast("Hidden from Memory", { action: { label: "Undo", onClick: () => persistHidden(before) } });
+  };
+  const restoreAll = () => {
+    persistHidden([]);
+    toast("Restored hidden items");
+  };
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: "var(--cog-cream)" }}>
@@ -181,6 +206,17 @@ const MemoryPage = () => {
                       </>
                     )}
 
+                    {hiddenCount > 0 && (
+                      <button
+                        onClick={restoreAll}
+                        className="w-full mb-3 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-all duration-150 active:scale-[0.98]"
+                        style={{ color: "var(--cog-warm-gray)", border: "1.5px dashed var(--cog-border)" }}
+                      >
+                        <RotateCcw size={15} strokeWidth={1.8} />
+                        Restore {hiddenCount} hidden {hiddenCount === 1 ? "item" : "items"}
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setExportOpen(true)}
                       className="w-full py-4 rounded-2xl font-medium text-base transition-all duration-150 active:scale-[0.97]"
@@ -204,7 +240,7 @@ const MemoryPage = () => {
         )}
       </div>
 
-      <MemorySourceSheet cluster={active} songs={graph?.songs ?? []} onClose={() => setActive(null)} />
+      <MemorySourceSheet cluster={active} songs={graph?.songs ?? []} onClose={() => setActive(null)} onHide={hideCluster} />
       <ObsidianExportSheet open={exportOpen} graph={graph} bundle={data?.bundle ?? null} onClose={() => setExportOpen(false)} />
     </div>
   );
