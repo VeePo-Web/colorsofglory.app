@@ -44,14 +44,14 @@ import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
-import CompareModeSheet from "@/components/canvas/CompareModeSheet";
-import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { toast } from "sonner";
+import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
+import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -244,6 +244,7 @@ interface CanvasCardProps {
   onOpenStack?: () => void;
   canCompare?: boolean;
   onCompare?: () => void;
+  onSuggestLine?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -257,6 +258,7 @@ const CanvasCardEl = ({
   onOpenStack,
   canCompare = false,
   onCompare,
+  onSuggestLine,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -451,85 +453,21 @@ const CanvasCardEl = ({
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: 4,
+            gap: 6,
             marginTop: 10,
             borderTop: "1px solid rgba(0,0,0,0.07)",
             paddingTop: 8,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Primary action row */}
-          <div style={{ display: "flex", gap: 6 }}>
-            {isVoice && onOpenStack && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
-                style={{
-                  flex: 1,
-                  height: 30,
-                  borderRadius: 8,
-                  backgroundColor: `${card.accent}16`,
-                  color: card.accent,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-body)",
-                }}
-                aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
-              >
-                {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
-              </button>
-            )}
-            {card.tree === "ideas" && !card.isDimmedReference && (
-              <button
-                onClick={onMoveToFinal}
-                style={{
-                  flex: 1,
-                  height: 30,
-                  borderRadius: 8,
-                  backgroundColor: "var(--cog-gold)",
-                  color: "#FFF",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                → Final
-              </button>
-            )}
-            {card.tree === "final" && (
-              <button
-                onClick={onMoveToIdeas}
-                style={{
-                  flex: 1,
-                  height: 30,
-                  borderRadius: 8,
-                  backgroundColor: "rgba(0,0,0,0.06)",
-                  color: "var(--cog-warm-gray)",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                ← Ideas
-              </button>
-            )}
-          </div>
-          {/* Compare row — only for ideas cards that have at least one peer */}
-          {card.tree === "ideas" && !card.isDimmedReference && canCompare && onCompare && (
+          {isVoice && onOpenStack && (
             <button
-              onClick={(e) => { e.stopPropagation(); onCompare(); }}
-              aria-label="Compare this idea with another"
+              onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
               style={{
-                width: "100%",
+                flex: 1,
                 height: 30,
                 borderRadius: 8,
-                backgroundColor: `${card.accent}14`,
+                backgroundColor: `${card.accent}16`,
                 color: card.accent,
                 fontSize: 11,
                 fontWeight: 700,
@@ -537,8 +475,87 @@ const CanvasCardEl = ({
                 cursor: "pointer",
                 fontFamily: "var(--font-body)",
               }}
+              aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
+            >
+              {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
+            </button>
+          )}
+          {card.tree === "ideas" && !card.isDimmedReference && (
+            <button
+              onClick={onMoveToFinal}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "var(--cog-gold)",
+                color: "#FFF",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+            >
+              → Final
+            </button>
+          )}
+          {card.tree === "final" && (
+            <button
+              onClick={onMoveToIdeas}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "rgba(0,0,0,0.06)",
+                color: "var(--cog-warm-gray)",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+            >
+              ← Ideas
+            </button>
+          )}
+          {canCompare && onCompare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCompare(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "rgba(0,0,0,0.06)",
+                color: "var(--cog-warm-gray)",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label="Compare versions"
             >
               Compare ▸
+            </button>
+          )}
+          {card.type === "lyric" && onSuggestLine && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSuggestLine(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "rgba(184,149,58,0.10)",
+                color: "var(--cog-gold)",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label="Suggest a line change"
+            >
+              Suggest line ▸
             </button>
           )}
         </div>
@@ -585,6 +602,12 @@ const SongCanvasExperience = () => {
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
   const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
+  const [showRecap, setShowRecap] = useState(false);
+  const [lineSuggest, setLineSuggest] = useState<{
+    cardId: string;
+    originalLine: string;
+    sectionLabel: string;
+  } | null>(null);
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -622,10 +645,6 @@ const SongCanvasExperience = () => {
   const recordingParentIdRef = useRef<string | null>(null);
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
-  // The two cards being compared in Compare Mode (null = closed).
-  const [compareCards, setCompareCards] = useState<[CanvasCard, CanvasCard] | null>(null);
-  // What Changed Smart Recap (F12) — shown on first canvas load for returning collaborators.
-  const [showRecap, setShowRecap] = useState(true);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -869,50 +888,6 @@ const SongCanvasExperience = () => {
     void handleStartRecording(baseId);
   }, [handleStartRecording]);
 
-  // ── Compare Mode (F21) ────────────────────────────────────────────────────
-
-  const handleOpenCompare = useCallback((cardId: string) => {
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
-    // Prefer a peer in the same section; fall back to any other non-dimmed ideas card.
-    const peers = cards.filter(
-      (c) => c.id !== cardId && c.tree === "ideas" && !c.isDimmedReference && !c.parentMemoId,
-    );
-    const peer = peers.find((c) => c.section === card.section) ?? peers[0];
-    if (!peer) return;
-    setCompareCards([card, peer]);
-    setSelectedId(null);
-  }, [cards]);
-
-  const handleChooseDirection = useCallback((winnerId: string) => {
-    setCompareCards((prev) => {
-      if (!prev) return null;
-      const [a, b] = prev;
-      setCards((existing) =>
-        existing.map((c) => {
-          if (c.id === winnerId) return { ...c, status: "approved" as const };
-          if (c.id === a.id || c.id === b.id) return { ...c, status: "shortlisted" as const };
-          return c;
-        }),
-      );
-      return null;
-    });
-  }, []);
-
-  const handleKeepBoth = useCallback(() => {
-    setCompareCards((prev) => {
-      if (!prev) return null;
-      const [a, b] = prev;
-      setCards((existing) =>
-        existing.map((c) => {
-          if (c.id === a.id || c.id === b.id) return { ...c, status: "shortlisted" as const };
-          return c;
-        }),
-      );
-      return null;
-    });
-  }, []);
-
   const chooseLayer = (layer: LayerId) => {
     setActiveLayer(layer);
     const show = layer !== "room" && layer !== "ideas";
@@ -930,17 +905,6 @@ const SongCanvasExperience = () => {
     }
     return counts;
   }, [cards]);
-
-  // A card can open Compare Mode when there is at least one other non-dimmed ideas card.
-  const canCompareById = useMemo<Record<string, boolean>>(() => {
-    const result: Record<string, boolean> = {};
-    for (const card of ideasCards) {
-      if (card.isDimmedReference) continue;
-      const hasPeer = ideasCards.some((c) => c.id !== card.id && !c.isDimmedReference);
-      result[card.id] = hasPeer;
-    }
-    return result;
-  }, [ideasCards]);
 
   // Everyone whose hand is on this song — derived from who contributed cards.
   // Stable color/initials per person so the room reads as collaborative at a glance.
@@ -1188,8 +1152,11 @@ const SongCanvasExperience = () => {
                   ? () => setStackBaseId(card.id)
                   : undefined
               }
-              canCompare={canCompareById[card.id] ?? false}
-              onCompare={() => handleOpenCompare(card.id)}
+              onSuggestLine={
+                card.type === "lyric" && !isViewer
+                  ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
+                  : undefined
+              }
             />
           ))}
         </CanvasViewport>
@@ -1286,21 +1253,28 @@ const SongCanvasExperience = () => {
         );
       })()}
 
-      {/* Compare Mode (F21) — calm creative discernment between two ideas */}
-      {compareCards && (
-        <CompareModeSheet
-          cards={compareCards}
-          onChoose={handleChooseDirection}
-          onKeepBoth={handleKeepBoth}
-          onClose={() => setCompareCards(null)}
-        />
+      {/* What Changed recap sheet */}
+      {showRecap && (
+        <WhatChangedRecapSheet onDismiss={() => setShowRecap(false)} />
       )}
 
-      {/* What Changed Smart Recap (F12) — re-entry digest for returning collaborators */}
-      {showRecap && (
-        <WhatChangedRecapSheet
-          songId={songId}
-          onDismiss={() => setShowRecap(false)}
+      {/* Line-level suggestion sheet (F19) */}
+      {lineSuggest && (
+        <LineSuggestionSheet
+          mode={isViewer ? "review" : "create"}
+          originalLine={lineSuggest.originalLine}
+          sectionLabel={lineSuggest.sectionLabel}
+          onSend={(text) => {
+            void text;
+            toast.success("Suggestion sent");
+            setLineSuggest(null);
+          }}
+          onAccept={() => {
+            toast.success("Line accepted");
+            setLineSuggest(null);
+          }}
+          onKeep={() => setLineSuggest(null)}
+          onDismiss={() => setLineSuggest(null)}
         />
       )}
 
