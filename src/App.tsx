@@ -26,6 +26,7 @@ const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedP
 const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
 
 // Invite flow - new frictionless join screens
+const JoinEntryPage      = lazy(() => import("./pages/invite/JoinEntryPage"));
 const InviteJoinPage     = lazy(() => import("./pages/invite/InviteJoinPage"));
 const InviteWelcomePage  = lazy(() => import("./pages/invite/InviteWelcomeBackPage"));
 const InviteVerifyPage   = lazy(() => import("./pages/invite/InviteVerifyPage"));
@@ -38,6 +39,8 @@ const PracticePlayerPage = lazy(() => import("./pages/PracticePlayerPage"));
 const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
+const MemoryPage = lazy(() => import("./pages/MemoryPage"));
+const SongMemoryPage = lazy(() => import("./pages/SongMemoryPage"));
 const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
@@ -54,6 +57,14 @@ const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedire
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// Admin (internal-only)
+const RequireAdmin = lazy(() => import("./components/admin/RequireAdmin"));
+const AdminHomePage = lazy(() => import("./pages/admin/AdminHomePage"));
+const AdminFoundersPage = lazy(() => import("./pages/admin/FoundersPage"));
+const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPage"));
+const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
+const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
+const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
 // Admin (internal-only) — all admin routing lives in src/routes/AdminRoutes.tsx
 import { adminRoutes } from "@/routes/AdminRoutes";
 
@@ -113,14 +124,14 @@ const App = () => {
         <PracticePlayerProvider>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            {/* Auth */}
+            {/* Auth — phone-first front door (Twilio SMS OTP); email is the fallback */}
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/auth/login" element={<EmailAuthPage />} />
+            <Route path="/auth/login" element={<PhoneLoginPage />} />
+            <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
+            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
+            <Route path="/auth/email" element={<EmailAuthPage />} />
             <Route path="/auth/reset" element={<ResetPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-            {/* Phone OTP — disabled until SMS provider is configured */}
-            <Route path="/auth/phone" element={<PhoneLoginPage />} />
-            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
 
             {/* Onboarding */}
             <Route path="/onboarding" element={<Navigate to="/auth/login" replace />} />
@@ -133,6 +144,7 @@ const App = () => {
             <Route path="/invite/:token" element={<InvitePreviewPage />} />
 
             {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
+            <Route path="/join"           element={<JoinEntryPage />} />
             <Route path="/join/:token"    element={<InviteJoinPage />} />
             <Route path="/invite/welcome" element={<InviteWelcomePage />} />
             <Route path="/invite/verify"  element={<InviteVerifyPage />} />
@@ -164,6 +176,10 @@ const App = () => {
             <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
             <Route path="/songs/:id/activity" element={<CanvasLayerRedirect layer="room" />} />
             <Route path="/songs/:id/credits" element={<CanvasLayerRedirect layer="people" />} />
+            <Route path="/songs/:id/memory" element={<RequireAuth><SongMemoryPage /></RequireAuth>} />
+
+            {/* Personal Memory Graph / Zettelkasten (Feature 33) */}
+            <Route path="/memory" element={<RequireAuth><MemoryPage /></RequireAuth>} />
 
             {/* Settings */}
             <Route path="/settings" element={<SettingsPage />} />
@@ -180,6 +196,13 @@ const App = () => {
             {/* Legacy upgrade placeholder */}
             <Route path="/upgrade-old" element={<UpgradePage />} />
 
+            {/* Admin (internal) */}
+            <Route path="/admin" element={<RequireAdmin><AdminHomePage /></RequireAdmin>} />
+            <Route path="/admin/founders" element={<RequireAdmin><AdminFoundersPage /></RequireAdmin>} />
+            <Route path="/admin/founders/:id" element={<RequireAdmin><AdminFounderDetailPage /></RequireAdmin>} />
+            <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
+            <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
+            <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
             {/* Admin (internal) — routes defined in src/routes/AdminRoutes.tsx */}
             {adminRoutes}
 

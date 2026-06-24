@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 interface IntentCardProps {
   icon: React.ElementType;
@@ -78,14 +79,17 @@ const FirstIntentPage = () => {
           icon={PenLine}
           title="Start a song"
           description="Create a private space for lyrics, voice memos, chords, and ideas."
-          onClick={() => navigate("/onboarding/start-song")}
+          onClick={() => {
+            updateOnboardingStep("intent_selected").catch(() => {});
+            navigate("/onboarding/start-song");
+          }}
           accent
         />
         <IntentCard
           icon={Users}
           title="Join a song"
           description="Use an invite from someone you are writing with."
-          onClick={() => navigate("/invite/demo")}
+          onClick={() => navigate("/join")}
         />
       </div>
 
