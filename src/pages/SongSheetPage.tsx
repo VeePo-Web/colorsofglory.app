@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal, Music } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal, Music, Printer, Share2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -13,6 +13,7 @@ import {
   toChordPro,
   transposeKeyLetter,
   type SheetLine,
+  type SheetSection,
 } from "@/lib/chords/sheet";
 import { chordToLetters, type NumberChord } from "@/lib/chords/nashville";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
@@ -139,6 +140,17 @@ const SongSheetPage = () => {
       setTimeout(() => setCopied(false), 1800);
     } catch {
       /* clipboard may be blocked; silently no-op */
+    }
+  };
+
+  const shareSheet = async () => {
+    const text = toChordPro(sections, displayKey, "major");
+    try {
+      const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string }) => Promise<void> };
+      if (nav.share) await nav.share({ title: songTitle, text });
+      else await navigator.clipboard.writeText(text);
+    } catch {
+      /* user cancelled or unsupported — fine */
     }
   };
 
@@ -319,6 +331,27 @@ const SongSheetPage = () => {
                   </button>
                 </div>
 
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+                    aria-label="Print or save as PDF"
+                  >
+                    <Printer size={14} strokeWidth={2} /> Print · PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareSheet}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+                    aria-label="Share chart"
+                  >
+                    <Share2 size={14} strokeWidth={2} /> Share
+                  </button>
+                </div>
+
                 <div className="flex rounded-full p-0.5" style={{ backgroundColor: "var(--cog-cream)" }}>
                   {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
                     const active = (v === "add") === chordMode;
@@ -458,9 +491,66 @@ const SongSheetPage = () => {
       )}
 
       {diagram && <ChordDiagramSheet label={diagram} onClose={() => setDiagram(null)} />}
+
+      {/* Print / PDF — hidden on screen, the only thing visible when printing */}
+      {!isEmpty && (
+        <PrintSheet songTitle={songTitle} sections={sections} playKey={playKey} display={display} capo={capo} />
+      )}
+      <style>{`
+        .cog-print { display: none; }
+        @media print {
+          body * { visibility: hidden !important; }
+          .cog-print, .cog-print * { visibility: visible !important; }
+          .cog-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 24px; color: #000; background: #fff; }
+          .cog-print h1 { font-size: 20pt; margin: 0 0 2px; font-family: var(--font-display); }
+          .cog-print .cog-print-sub { font-size: 10pt; color: #444; margin: 0 0 14px; }
+          .cog-print h2 { font-size: 12pt; margin: 12px 0 4px; font-family: var(--font-display); }
+          .cog-print pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5pt; line-height: 1.5; margin: 0 0 2px; white-space: pre-wrap; }
+          .cog-print section { break-inside: avoid; margin-bottom: 8px; }
+        }
+      `}</style>
     </div>
   );
 };
+
+function PrintSheet({
+  songTitle,
+  sections,
+  playKey,
+  display,
+  capo,
+}: {
+  songTitle: string;
+  sections: SheetSection[];
+  playKey: string;
+  display: "letters" | "numbers";
+  capo: number;
+}) {
+  return (
+    <div className="cog-print" aria-hidden="true">
+      <h1>{songTitle}</h1>
+      <p className="cog-print-sub">
+        {display === "numbers" ? "Nashville numbers" : `Key of ${playKey}`}
+        {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}
+      </p>
+      {sections.map((section, si) => (
+        <section key={si}>
+          {section.label && <h2>{section.label}</h2>}
+          {section.lines.map((line, li) => {
+            const { chords, lyrics } = renderChordsOverLyrics(line, playKey, "major", display);
+            return (
+              <pre key={li}>
+                {chords || " "}
+                {"\n"}
+                {lyrics || " "}
+              </pre>
+            );
+          })}
+        </section>
+      ))}
+    </div>
+  );
+}
 
 // ─── line renderers ──────────────────────────────────────────────────────────
 
