@@ -52,6 +52,8 @@ const CodeVerifyPage = () => {
     setError(null);
     try {
       await verifyPhoneOtp(e164, code);
+      // Tasteful success confirmation (Android only; iOS has no vibrate API).
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(12);
       // The centralized router decides where they land (invite / onboarding / home).
       await routeAfterAuth(navigate);
     } catch (err) {
@@ -180,6 +182,16 @@ const CodeVerifyPage = () => {
           Change number
         </button>
       </div>
+
+      {/* Never a dead end — escape to email if the SMS never arrives */}
+      <button
+        type="button"
+        onClick={() => navigate("/auth/email")}
+        className="mt-4 text-sm text-center w-full py-2 transition-opacity hover:opacity-70 underline"
+        style={{ color: "#B5935A", fontFamily: "var(--font-body)" }}
+      >
+        Use email instead
+      </button>
     </OnboardingShell>
   );
 };
