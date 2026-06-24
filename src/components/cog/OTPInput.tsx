@@ -1,4 +1,4 @@
-import { useRef, useEffect, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useRef, useEffect } from "react";
 
 interface OTPInputProps {
   length?: number;
@@ -10,12 +10,13 @@ interface OTPInputProps {
 }
 
 /**
- * 6-box OTP input with:
- * - Auto-advance on digit entry
- * - Backspace moves to previous box
- * - Full-code paste support
- * - Auto-submit callback when all digits filled
- * - Gold border on focused/filled state
+ * 6-digit OTP entry, built for frictionless autofill.
+ *
+ * One real <input autocomplete="one-time-code"> spans the whole row (transparent),
+ * with the styled gold cells rendered on top. This is the web.dev-recommended
+ * single-field pattern: iOS Security-Code AutoFill, Android autofill, and full-code
+ * paste all land cleanly with no per-box truncation. Props/behaviour (auto-submit on
+ * full code) are identical to the prior box version; the gold-cell look is unchanged.
  */
 const OTPInput = ({
   length = 6,
@@ -25,12 +26,16 @@ const OTPInput = ({
   disabled = false,
   error = false,
 }: OTPInputProps) => {
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const code = value.join("").replace(/\D/g, "").slice(0, length);
 
   useEffect(() => {
-    refs.current[0]?.focus();
+    inputRef.current?.focus();
   }, []);
 
+  const setCode = (raw: string) => {
+    const clean = raw.replace(/\D/g, "").slice(0, length);
+    const next = Array.from({ length }, (_, i) => clean[i] ?? "");
   // WebOTP — auto-read the SMS code so the user never types it (Android Chrome).
   // Frictionless by default: the browser shows a one-tap "Verify 123456" prompt,
   // we fill the boxes and auto-submit. Progressive enhancement — unsupported
@@ -62,74 +67,62 @@ const OTPInput = ({
     const next = [...value];
     next[idx] = char;
     onChange(next);
-
-    if (char && idx < length - 1) {
-      refs.current[idx + 1]?.focus();
-    }
-    if (char && idx === length - 1) {
-      const code = next.join("");
-      if (code.length === length) onComplete?.(code);
-    }
+    if (clean.length === length) onComplete?.(clean);
   };
 
-  const handleKeyDown = (idx: number, e: KeyboardEvent) => {
-    if (e.key === "Backspace" && !value[idx] && idx > 0) {
-      refs.current[idx - 1]?.focus();
-    }
-    if (e.key === "ArrowLeft" && idx > 0) refs.current[idx - 1]?.focus();
-    if (e.key === "ArrowRight" && idx < length - 1) refs.current[idx + 1]?.focus();
-  };
-
-  const handlePaste = (e: ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, length);
-    if (!pasted) return;
-    const next = Array(length).fill("");
-    pasted.split("").forEach((c, i) => { next[i] = c; });
-    onChange(next);
-    const focusIdx = Math.min(pasted.length, length - 1);
-    refs.current[focusIdx]?.focus();
-    if (pasted.length === length) onComplete?.(pasted);
-  };
+  // The active cell acts as the visible "caret" since the real input is transparent.
+  const focusedIndex = Math.min(code.length, length - 1);
 
   return (
-    <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-      {Array.from({ length }).map((_, idx) => {
-        const filled = !!value[idx];
-        return (
-          <input
-            key={idx}
-            ref={(el) => { refs.current[idx] = el; }}
-            type="text"
-            inputMode="numeric"
-            autoComplete={idx === 0 ? "one-time-code" : "off"}
-            name={idx === 0 ? "one-time-code" : undefined}
-            pattern="[0-9]*"
-            maxLength={1}
-            value={value[idx] ?? ""}
-            onChange={(e) => handleChange(idx, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(idx, e)}
-            disabled={disabled}
-            aria-label={`Code digit ${idx + 1} of ${length}`}
-            className="text-center text-2xl font-bold rounded-2xl outline-none transition-all duration-150 disabled:opacity-40"
-            style={{
-              width: 48,
-              height: 64,
-              backgroundColor: "#FFFFFF",
-              border: error
-                ? "1.5px solid #E05440"
-                : filled
-                ? "1.5px solid var(--cog-gold)"
-                : "1.5px solid rgba(0,0,0,0.12)",
-              color: "#1A1A1A",
-              fontFamily: "var(--font-body)",
-              boxShadow: filled && !error
-                ? "0 0 0 3px var(--cog-gold-glow)"
-                : "none",
-            }}
-          />
-        );
-      })}
+    <div className="relative">
+      {/* Real input — transparent, covers the row, owns autofill / paste / keyboard */}
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        name="one-time-code"
+        pattern="[0-9]*"
+        maxLength={length}
+        value={code}
+        disabled={disabled}
+        aria-label={`Enter the ${length}-digit code`}
+        onChange={(e) => setCode(e.target.value)}
+        className="absolute inset-0 z-10 h-full w-full opacity-0 disabled:cursor-not-allowed"
+        style={{ caretColor: "transparent" }}
+      />
+
+      {/* Visual cells (decorative — taps fall through to the input) */}
+      <div className="flex gap-2 justify-center pointer-events-none">
+        {Array.from({ length }).map((_, idx) => {
+          const char = code[idx] ?? "";
+          const filled = char !== "";
+          const isActive = idx === focusedIndex && !disabled;
+          const highlight = (filled || isActive) && !error;
+          return (
+            <div
+              key={idx}
+              className="flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-150"
+              style={{
+                width: 48,
+                height: 64,
+                backgroundColor: "#FFFFFF",
+                border: error
+                  ? "1.5px solid #E05440"
+                  : highlight
+                  ? "1.5px solid var(--cog-gold)"
+                  : "1.5px solid rgba(0,0,0,0.12)",
+                color: "#1A1A1A",
+                fontFamily: "var(--font-body)",
+                boxShadow: highlight ? "0 0 0 3px var(--cog-gold-glow)" : "none",
+                opacity: disabled ? 0.4 : 1,
+              }}
+            >
+              {char}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
