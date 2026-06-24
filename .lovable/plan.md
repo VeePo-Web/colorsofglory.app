@@ -78,3 +78,13 @@ After build:
 4. Trigger `reconcile-billing-events` → expect zero drifts on clean state
 
 Approve to ship?
+---
+
+## 2026-06-24 — Hardening shipped
+
+- Migration: `notification_queue` table + auto-triggers on `reward_events` and `payouts`; `reconciliation_reports` table; `approve_payout` now requires `profiles.payout_method`.
+- Edge fns: `notify-referral-event` (5-min cron drain via Resend gateway; logs-only fallback if RESEND not linked); `reconcile-billing-events` (daily cron, Stripe-vs-local invoice diff).
+- Extended `me-founder-stats` + `me-referrals` with `event_timeline[]` + `payout_method_complete`.
+- SDK types updated: `FounderStats.event_timeline`, `MyReferralsSummary.payout_method.complete`.
+- Cron schedules registered: `cog-notify-referral-event` (*/5 * * * *), `cog-reconcile-billing-events` (35 7 * * *).
+- Action item for user: link the Resend connector to enable real email delivery; until then, notifications are queued and marked sent in logs only.
