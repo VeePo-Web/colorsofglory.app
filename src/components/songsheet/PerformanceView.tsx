@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Play, Pause, Minus, Plus } from "lucide-react";
-import { type SheetSection } from "@/lib/chords/sheet";
-import ChordLine from "@/components/songsheet/ChordLine";
+import { X, Play, Pause, Minus, Plus, Moon, Sun } from "lucide-react";
+import { renderChordsOverLyrics, type SheetSection } from "@/lib/chords/sheet";
 
 /**
  * Performance / Stage view — the teleprompter. The most-requested chord-app
@@ -10,6 +9,7 @@ import ChordLine from "@/components/songsheet/ChordLine";
  * scroll), reduced-motion aware, safe-area aware. Frontend-only, COG tokens.
  */
 
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const MIN_SPEED = 8;
 const MAX_SPEED = 80;
 const DEFAULT_SPEED = 26; // px / second
@@ -54,6 +54,7 @@ function useWakeLock() {
 }
 
 const FONT_KEY = "cog-perform-fontscale";
+const THEME_KEY = "cog-perform-theme";
 
 export default function PerformanceView({
   sections,
@@ -62,7 +63,6 @@ export default function PerformanceView({
   capo = 0,
   songTitle,
   onClose,
-  onStepKey,
 }: {
   sections: SheetSection[];
   displayKey: string;
@@ -70,8 +70,6 @@ export default function PerformanceView({
   capo?: number;
   songTitle: string;
   onClose: () => void;
-  /** Transpose without leaving the stage view (OnSong-style). Letters only. */
-  onStepKey?: (semitones: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>();
@@ -98,6 +96,26 @@ export default function PerformanceView({
     }
   }, [fontScale]);
   const stepFont = (d: number) => setFontScale((s) => Math.max(0.8, Math.min(1.8, +(s + d).toFixed(2))));
+
+  const [dark, setDark] = useState(() => {
+    try {
+      return localStorage.getItem(THEME_KEY) === "dark";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+    } catch {
+      /* best-effort */
+    }
+  }, [dark]);
+
+  // Stage theme — a glare-free dark chart for low-light stages (OnSong-style).
+  const c = dark
+    ? { bg: "#15120d", ink: "#EDE7DA", chord: "#D9B463", sub: "rgba(237,231,218,0.55)", surface: "rgba(255,255,255,0.08)", border: "rgba(255,255,255,0.16)" }
+    : { bg: "var(--cog-cream)", ink: "var(--cog-charcoal)", chord: "var(--cog-gold-alt, var(--cog-gold))", sub: "var(--cog-muted)", surface: "var(--cog-cream-light)", border: "var(--cog-border)" };
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setShown(true)); // gentle fade-in
@@ -153,9 +171,9 @@ export default function PerformanceView({
       className="fixed inset-0 z-50 flex flex-col"
       style={{
         height: "100dvh",
-        backgroundColor: "var(--cog-cream)",
+        backgroundColor: c.bg,
         opacity: shown ? 1 : 0,
-        transition: "opacity 240ms var(--cog-ease-reveal, ease-out)",
+        transition: "opacity 240ms var(--cog-ease-reveal, ease-out), background-color 200ms ease",
       }}
       role="dialog"
       aria-label="Performance view"
@@ -166,53 +184,23 @@ export default function PerformanceView({
         style={{ paddingTop: "max(env(safe-area-inset-top), 14px)", paddingBottom: 10 }}
       >
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
+          <p className="truncate text-sm font-semibold" style={{ fontFamily: "var(--font-display)", color: c.ink }}>
             {songTitle}
           </p>
-          <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+          <p className="text-[0.6875rem]" style={{ color: c.sub }}>
             {display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}
             {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* Transpose on stage — no need to leave the chart (OnSong-style). */}
-          {onStepKey && display === "letters" && (
-            <div className="flex items-center rounded-full" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
-              <button
-                type="button"
-                onClick={() => onStepKey(-1)}
-                aria-label="Lower the key"
-                className="flex items-center justify-center rounded-full transition-transform active:scale-90"
-                style={{ width: 40, height: 40, color: "var(--cog-charcoal)" }}
-              >
-                <Minus size={16} strokeWidth={2.2} />
-              </button>
-              <span
-                className="text-sm font-bold tabular-nums text-center"
-                style={{ color: "var(--cog-charcoal)", minWidth: 24 }}
-                aria-label={`Key of ${displayKey}`}
-              >
-                {displayKey}
-              </span>
-              <button
-                type="button"
-                onClick={() => onStepKey(1)}
-                aria-label="Raise the key"
-                className="flex items-center justify-center rounded-full transition-transform active:scale-90"
-                style={{ width: 40, height: 40, color: "var(--cog-charcoal)" }}
-              >
-                <Plus size={16} strokeWidth={2.2} />
-              </button>
-            </div>
-          )}
-          <div className="flex items-center rounded-full" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
+          <div className="flex items-center rounded-full" style={{ backgroundColor: c.surface, border: `1px solid ${c.border}` }}>
             <button
               type="button"
               onClick={() => stepFont(-0.1)}
               aria-label="Smaller text"
               disabled={fontScale <= 0.8}
               className="flex items-center justify-center rounded-full transition-transform active:scale-90 disabled:opacity-30"
-              style={{ width: 40, height: 40, color: "var(--cog-charcoal)", fontSize: "0.8rem", fontWeight: 700 }}
+              style={{ width: 40, height: 40, color: c.ink, fontSize: "0.8rem", fontWeight: 700 }}
             >
               A
             </button>
@@ -222,17 +210,27 @@ export default function PerformanceView({
               aria-label="Larger text"
               disabled={fontScale >= 1.8}
               className="flex items-center justify-center rounded-full transition-transform active:scale-90 disabled:opacity-30"
-              style={{ width: 40, height: 40, color: "var(--cog-charcoal)", fontSize: "1.15rem", fontWeight: 700 }}
+              style={{ width: 40, height: 40, color: c.ink, fontSize: "1.15rem", fontWeight: 700 }}
             >
               A
             </button>
           </div>
           <button
             type="button"
+            onClick={() => setDark((d) => !d)}
+            aria-label={dark ? "Light theme" : "Dark stage theme"}
+            aria-pressed={dark}
+            className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+            style={{ width: 44, height: 44, backgroundColor: c.surface, border: `1px solid ${c.border}`, color: c.ink }}
+          >
+            {dark ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             aria-label="Close performance view"
             className="flex items-center justify-center rounded-full transition-transform active:scale-90"
-            style={{ width: 44, height: 44, backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+            style={{ width: 44, height: 44, backgroundColor: c.surface, border: `1px solid ${c.border}`, color: c.ink }}
           >
             <X size={20} strokeWidth={2} />
           </button>
@@ -250,21 +248,21 @@ export default function PerformanceView({
           {sections.map((section, si) => (
             <section key={si} className="mb-8">
               {section.label && (
-                <h2 className="mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", fontSize: `${1.2 * fontScale}rem` }}>
+                <h2 className="mb-3" style={{ fontFamily: "var(--font-display)", color: c.ink, fontSize: `${1.2 * fontScale}rem` }}>
                   {section.label}
                 </h2>
               )}
               <div className="flex flex-col gap-3.5">
-                {section.lines.map((line, li) => (
-                  <ChordLine
-                    key={li}
-                    line={line}
-                    displayKey={displayKey}
-                    display={display}
-                    lyricRem={1.0625 * fontScale}
-                    chordRem={0.9 * fontScale}
-                  />
-                ))}
+                {section.lines.map((line, li) => {
+                  const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
+                  return (
+                    <pre key={li} className="m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: `${1.0625 * fontScale}rem`, lineHeight: 1.5 }}>
+                      <span style={{ color: c.chord, fontWeight: 700 }}>{chords || " "}</span>
+                      {"\n"}
+                      <span style={{ color: c.ink }}>{lyrics || " "}</span>
+                    </pre>
+                  );
+                })}
               </div>
             </section>
           ))}
@@ -275,9 +273,9 @@ export default function PerformanceView({
       <div className="flex justify-center px-5" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 16px)", paddingTop: 10 }}>
         <div
           className="flex items-center gap-1.5 rounded-full px-2 py-2"
-          style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)", boxShadow: "var(--cog-shadow-sm, 0 4px 16px rgba(0,0,0,0.08))" }}
+          style={{ backgroundColor: c.surface, border: `1px solid ${c.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.18)" }}
         >
-          <PillButton label="Slower" onClick={() => stepSpeed(-6)}>
+          <PillButton label="Slower" color={c.ink} onClick={() => stepSpeed(-6)}>
             <Minus size={18} strokeWidth={2.2} />
           </PillButton>
           <button
@@ -289,14 +287,14 @@ export default function PerformanceView({
           >
             {playing ? <Pause size={24} strokeWidth={2.2} /> : <Play size={24} strokeWidth={2.2} style={{ marginLeft: 2 }} />}
           </button>
-          <PillButton label="Faster" onClick={() => stepSpeed(6)}>
+          <PillButton label="Faster" color={c.ink} onClick={() => stepSpeed(6)}>
             <Plus size={18} strokeWidth={2.2} />
           </PillButton>
         </div>
       </div>
 
       {reduced && (
-        <p className="text-center text-[0.6875rem] pb-2" style={{ color: "var(--cog-muted)" }}>
+        <p className="text-center text-[0.6875rem] pb-2" style={{ color: c.sub }}>
           Reduced-motion is on — scroll by hand or tap play
         </p>
       )}
@@ -304,14 +302,14 @@ export default function PerformanceView({
   );
 }
 
-function PillButton({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) {
+function PillButton({ children, onClick, label, color }: { children: React.ReactNode; onClick: () => void; label: string; color: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       className="flex items-center justify-center rounded-full transition-transform active:scale-90"
-      style={{ width: 44, height: 44, color: "var(--cog-charcoal)" }}
+      style={{ width: 44, height: 44, color }}
     >
       {children}
     </button>
