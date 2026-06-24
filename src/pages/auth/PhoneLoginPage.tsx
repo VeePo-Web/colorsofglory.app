@@ -132,6 +132,8 @@ const PhoneLoginPage = () => {
             type="tel"
             inputMode="numeric"
             autoComplete="tel-national"
+            enterKeyHint="send"
+            autoFocus
             value={formatDisplay(digits)}
             onChange={handleChange}
             placeholder="(555) 555-5555"

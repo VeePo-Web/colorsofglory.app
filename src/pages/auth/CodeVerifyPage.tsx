@@ -62,6 +62,29 @@ const CodeVerifyPage = () => {
     }
   }, [e164, isVerifying, navigate]);
 
+  // WebOTP — one-tap autofill on Android Chrome. Progressive enhancement: silent
+  // where unsupported (iOS uses native QuickType). Fires once the SMS is domain-bound
+  // (`@host #code`); harmless until then. Aborts on unmount.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("OTPCredential" in window)) return;
+    const ac = new AbortController();
+    navigator.credentials
+      .get({ otp: { transport: ["sms"] }, signal: ac.signal } as unknown as CredentialRequestOptions)
+      .then((cred) => {
+        const clean = ((cred as { code?: string } | null)?.code ?? "")
+          .replace(/\D/g, "")
+          .slice(0, CODE_LENGTH);
+        if (clean.length === CODE_LENGTH) {
+          setDigits(clean.split(""));
+          void handleVerify(clean);
+        }
+      })
+      .catch(() => {
+        /* dismissed / unsupported / aborted — stay silent */
+      });
+    return () => ac.abort();
+  }, [handleVerify]);
+
   const handleResend = async () => {
     if (!e164 || isResending || countdown > 0) return;
     setIsResending(true);
