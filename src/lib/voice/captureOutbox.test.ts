@@ -204,4 +204,41 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
       expect(readRawIndex().some((j) => j.id === outboxId)).toBe(false);
     });
   });
+
+  describe("change events — the sync pill's contract", () => {
+    it("reports the pending count rising on enqueue and falling to zero on success", async () => {
+      const counts: number[] = [];
+      subscribeOutbox((e) => {
+        if (e.type === "change") counts.push(e.pending);
+      });
+
+      await enqueueCaptureUpload(baseParams()); // queued → pending 1
+      await enqueueCaptureUpload(baseParams({ title: "Second" })); // queued → pending 2
+      expect(pendingCount()).toBe(2);
+
+      await processOutbox(); // both upload successfully → pending 0
+
+      // The pill is driven entirely by these change events; the last one must
+      // reach 0 so the pill disappears when everything has synced.
+      expect(counts[0]).toBe(1);
+      expect(counts).toContain(2);
+      expect(counts[counts.length - 1]).toBe(0);
+      expect(pendingCount()).toBe(0);
+    });
+
+    it("keeps a non-zero pending count while a take is still failing to sync", async () => {
+      mockUpload.mockRejectedValue(new Error("network unreachable"));
+      let lastPending = -1;
+      subscribeOutbox((e) => {
+        if (e.type === "change") lastPending = e.pending;
+      });
+
+      await enqueueCaptureUpload(baseParams());
+      await processOutbox(); // fails, but the take is retained
+
+      // The pill must keep showing the unsynced take — it is safe but not yet sent.
+      expect(pendingCount()).toBe(1);
+      expect(lastPending).toBe(1);
+    });
+  });
 });

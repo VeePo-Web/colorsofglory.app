@@ -12,7 +12,6 @@ import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import {
   listVoiceMemos,
   getSignedUrl,
-  uploadVoiceMemo,
   deleteMemo,
   type VoiceMemoRecord,
 } from "@/lib/voice/voiceApi";
@@ -24,6 +23,7 @@ import {
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
 import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
+import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -492,23 +492,40 @@ const VoiceMemosPage = () => {
       const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${count}`;
       const fileName = `${title.replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
 
-      await uploadVoiceMemo({
-        songId,
+      // Route imports through the same Capture Outbox as recorded takes: the file
+      // is cached locally first and the upload auto-retries, so a dropped network
+      // never strands an import either. The outbox subscription reconciles the
+      // optimistic card on success / "will sync" on failure.
+      const { outboxId } = await enqueueCaptureUpload({
         blob: file,
+        songId,
+        title,
         mimeType,
         durationMs,
-        title,
         sectionLabel: "Raw idea",
         fileName,
       });
-
-      await loadMemos();
+      setMemos((prev) => [
+        {
+          id: outboxId,
+          song_id: songId,
+          title,
+          duration_ms: durationMs,
+          section_label: "Raw idea",
+          storage_path: "",
+          created_at: new Date().toISOString(),
+          created_by: currentUserId ?? "You",
+          is_processing: true,
+          status: "uploading",
+        },
+        ...prev,
+      ]);
     } catch {
-      setUploadError("Upload failed — please try again.");
+      setUploadError("Couldn't read that file — please try another.");
     } finally {
       setIsUploading(false);
     }
-  }, [songId, memos.length, loadMemos]);
+  }, [songId, memos.length, currentUserId]);
 
   const handleDelete = useCallback(async (memoId: string) => {
     setMemos((prev) => prev.filter((m) => m.id !== memoId));
@@ -589,9 +606,14 @@ const VoiceMemosPage = () => {
         >
           Voice memos
         </h1>
-        <p className="text-sm mb-6" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+        <p className="text-sm mb-3" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
           {songTitle}
         </p>
+
+        {/* Calm reassurance that any take still uploading is already safe locally */}
+        <div className="mb-6">
+          <OutboxSyncPill />
+        </div>
 
         {/* Upload zone */}
         {showUpload && (
