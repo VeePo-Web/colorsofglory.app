@@ -33,7 +33,14 @@ export type MyReferralsSummary = {
     kind: "manual" | "paypal" | "stripe_connect" | null;
     email: string | null;
     country: string | null;
+    complete: boolean;
   };
+  event_timeline?: Array<{
+    status: string;
+    amount_cents: number;
+    invoice_external_id: string | null;
+    created_at: string;
+  }>;
 };
 
 export async function getMyReferrals(): Promise<MyReferralsSummary> {
