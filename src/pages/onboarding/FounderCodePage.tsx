@@ -70,9 +70,6 @@ const FounderCodePage = () => {
       setError("We couldn't check that code. Please try again.");
     } finally {
       setIsSubmitting(false);
-      setIsSuccess(true);
-      updateOnboardingStep("founder_code_seen").catch(() => {});
-    }, 900);
     }
   };
 
