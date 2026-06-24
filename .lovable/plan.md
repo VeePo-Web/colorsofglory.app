@@ -1,100 +1,80 @@
-# Payments System Audit — Colors of Glory
+## Payments + Referral System Audit & World-Class Hardening
 
-## What's already shipped and verified working
+### Current state (already shipped)
+- **Founder codes**: `$50 off` first paid month via Stripe coupon, attribution stamped on checkout metadata
+- **Reward minting**: `record_invoice_paid` → Founder gets $25 (first invoice) / $10 (recurring), regular Members get $5
+- **30-day hold → maturation cron (07:17 UTC daily)** → monthly payout drafts cron (1st @ 07:25 UTC)
+- **Admin ops**: `approve_payout`, `admin_finance_summary`, `admin_referrer_ledger`, `admin_billing_events`, `admin_list_payouts`, `admin_fraud_flags`
+- **Founder dashboard endpoint**: `me-founder-stats` (code, share link, redemptions, earnings buckets, next draft date)
+- **Tax**: `payout_tax_profiles` (W-9/W-8) + `me-set-tax-profile`
+- **Fraud**: self-referral trigger auto-flags into `fraud_flags`; OTP toll-fraud rail
+- **Tracking**: `billing_events`, `reward_events`, `referral_attributions`, `payouts`, `fraud_flags`
+- **Self-service**: `me-earnings-export` (CSV), `referral-resolve` returns lifetime social-proof count
 
-**Stripe catalog (CAD, sandbox)** — `cog_starter_cad`, `cog_pro_cad`, `cog_pro_referral_cad` products with lookup keys `starter_monthly_cad` ($5), `pro_monthly_cad` ($100), `pro_monthly_referral_50_cad` ($49). Wired to `plan_tiers` rows. Tax code `txcd_10103001` (SaaS), full compliance handling.
+### World-class benchmark gaps to close
+Based on Dropbox / Notion / ConvertKit / Superhuman / Rewardful / Tolt / Wise patterns, five gaps remain:
 
-**Checkout** — `create-checkout` is plan-key-driven. Validates plan, atomically claims founder code redemption (`claim_founder_code_redemption` RPC, releases on Stripe error → no overshoot of `max_redemptions`), routes Pro+founder to the $49 price and stamps `applied_code_kind=founder` + `attribution_founder_id` on the subscription, routes Pro+member-referral to full price and stamps `attribution_referrer_user_id`. Reads `profiles.pending_code` as fallback. Starter blocks codes. One attribution per buyer enforced by UNIQUE `referral_attributions.referred_user_id`.
+1. **Lifecycle notifications** (Dropbox/ConvertKit pattern)
+   - Resend emails: `referral_first_redeemed`, `reward_matured`, `payout_sent`, `payout_failed`
+   - New edge fn `notify-referral-event` triggered by DB triggers on `reward_events` and `payouts` status changes
+   - Per-user mute toggle in `profiles.notification_prefs`
 
-**Webhook (`payments-webhook`)** — Handles `checkout.session.completed`, `subscription.*`, `invoice.paid` (with dahlia-correct `invoice.parent.subscription_details.subscription` resolution + legacy fallback), `charge.refunded`, `charge.dispute.created`. Idempotent via `billing_events.external_event_id`. Calls `apply_song_lock_for_quota` + `unlock_songs_up_to_quota` on every sub change. Writes attribution row from session metadata if not already present.
+2. **Referrer-side dashboard endpoint for regular Members** (parity with founders)
+   - `me-referral-stats` mirroring `me-founder-stats` for non-founder users (regular $5/referral track)
+   - Returns: personal referral code, share link, redemptions, pending/payable/paid buckets, next payout date
 
-**Reward minting** — `record_invoice_paid` RPC mints rewards on every paid invoice:
-- Founder code attribution → $25/mo for first 3 months, $10/mo for life of sub (driven by `founders.reward_profile` + `app_settings.founder_reward_*`)
-- Member referral attribution → $5/mo for life of sub (`app_settings.user_referral_cash_cents=500`)
-- Both held 30 days (`reward_hold_days=30`), then matured by `mature_holds()` (daily cron `cog-mature-holds-daily` at 07:17 UTC — active)
-- Clawbacks: `record_invoice_refunded` and `record_chargeback` reverse pending rewards.
+3. **Payout method capture** (Wise/Stripe Connect pattern, minimum viable)
+   - Extend `payout_tax_profiles` → add `payout_method` (paypal_email | stripe_connect_id | manual_check) + payout instructions
+   - New endpoint `me-set-payout-method`; admin `approve_payout` blocks if missing
+   - Surface in `me-founder-stats` / `me-referral-stats` as a "complete payout setup" prompt
 
-**Apply founder code post-purchase** — `apply-founder-code-to-active-sub` swaps existing Pro sub to the $49 referral price with proration, writes attribution, increments redemption count.
+4. **Operational alerting + reconciliation** (Stripe Atlas pattern)
+   - Daily `reconcile-billing-events` cron: scans Stripe invoices vs `billing_events` last 48h, inserts a `fraud_flags` row with `kind = 'reconciliation_drift'` on mismatch
+   - Admin endpoint `admin_reconciliation_report` to list drifts
 
-**Admin tooling** — `admin-payouts` (list_drafts / create_batch / approve / mark_paid / mark_failed / retry), `admin-founders`, `admin-attribution-override`, `admin-redrive-billing-event`, `admin-audit-search`.
+5. **Public ledger transparency** (Notion/Superhuman trust pattern)
+   - Extend `me-founder-stats` and `me-referral-stats` with per-event timeline (status transitions: minted → matured → drafted → paid)
+   - Already have data in `reward_events` + `payouts`; just compose the response
 
-**User-facing SDK** — `getMyBillingStatus`, `startCheckout`, `validateCode`, `openBillingPortal`, `cancelSubscription`, `applyFounderCodeToActiveSub`, `getMyReferrals` (code + link + earnings breakdown + recent referrals + payout method), `setMyPayoutMethod`.
+### Out of scope
+- Frontend dashboards (Claude territory — handoffs already written)
+- Stripe Connect onboarding UX (defer; PayPal/manual covers v1)
+- Multi-currency payouts (USD only at launch)
+- Changing reward amounts, hold days, or cohort definitions (live-tunable in `app_settings`)
 
-## Gaps found and what to fix
+### Files
 
-### 1. Six migrations sit in `supabase/migrations/` but were never applied (`max(version)=20260619040155`)
+**Migrations (1 new):**
+- Extend `payout_tax_profiles` with payout method columns
+- Add notification preference JSONB to `profiles`
+- Triggers on `reward_events.status` and `payouts.status` → enqueue notification rows
+- `notification_queue` table (id, user_id, kind, payload, sent_at, attempts, error)
 
-This is the headline bug. The repo *thinks* these are live, but the DB does not have them:
+**Edge functions (3 new, 0 modified):**
+- `notify-referral-event` (cron every 5min, drains `notification_queue` via Resend)
+- `me-referral-stats` (parity with `me-founder-stats` for regular members)
+- `me-set-payout-method`
+- `reconcile-billing-events` (daily cron)
 
-| File | What it adds |
-|---|---|
-| `20260620000000_cog_monthly_payout_drafts_cron.sql` | **Monthly payout-draft auto-creation** (`create_monthly_payout_drafts` + pg_cron job `cog-create-payout-drafts-monthly` at `25 7 1 * *`). Without this, payable rewards mature to `payable` and sit there forever — no founder/referrer gets auto-drafted into a payout. |
-| `20260621000000_cog_otp_fraud_rails.sql` | OTP fraud rails (separate but pending). |
-| `20260621000100_cog_admin_finance_summary.sql` | `admin_finance_summary` RPC powering the admin finance dashboard. |
-| `20260621000200_cog_admin_ops.sql` | Admin ops RPCs. |
-| `20260622000000_cog_fraud_review.sql` | Fraud review queue. |
-| `20260622000100_cog_admin_referrer_ledger.sql` | Per-referrer ledger view for admins. |
+**Existing endpoints extended:**
+- `me-founder-stats` → adds `payout_method_complete`, `event_timeline[]`
+- `approve_payout` SQL fn → block when `payout_method` missing
 
-**Action:** Re-apply the six pending migrations in version order via `supabase--migration`. After they land, verify `cron.job` contains `cog-create-payout-drafts-monthly` and the finance/referrer-ledger RPCs are callable.
+**SDK (`src/integrations/cog/`):**
+- `payouts.ts` → add `setMyPayoutMethod`, `getMyPayoutMethod`
+- `referrals.ts` → add `getMyReferralStats`
+- `founders.ts` → updated response type
 
-### 2. Live webhook + live Stripe key not provisioned yet
+**Docs:**
+- Append "Notifications + Payout Method + Reconciliation" section to `docs/claude-handoffs/2026-06-22-payments.md`
+- Update `.lovable/plan.md` audit log
+- Update `docs/payments/2026-06-22-referral-benchmark.md` with final gap-closure matrix
 
-Sandbox secrets only (`STRIPE_SANDBOX_API_KEY`, `PAYMENTS_SANDBOX_WEBHOOK_SECRET`). `STRIPE_LIVE_API_KEY` / `PAYMENTS_LIVE_WEBHOOK_SECRET` arrive automatically when you finish Stripe go-live and install the Lovable app on the live account. No code change required — call this out so you know the user-driven step is pending.
+### Verification
+After build:
+1. Run `debug_seed_reward_chain` for both founder + regular member to confirm both dashboards populate
+2. Verify notification triggers fire (check `notification_queue`)
+3. Approve a test payout with missing payout method → expect error
+4. Trigger `reconcile-billing-events` → expect zero drifts on clean state
 
-**Action:** Surface a one-line reminder in chat + extend `docs/claude-handoffs/2026-06-22-payments.md` with the go-live status check.
-
-### 3. No automated end-to-end test of the payout pipeline
-
-`reward_events` minting is RPC-only; there's no integration smoke test that proves "$100 invoice → 1 payable founder reward + 1 payable user reward after 30 days → 1 payout draft on day 1 of next month."
-
-**Action:** Add a SQL-level smoke-test migration helper (`debug_simulate_invoice_paid(user_uuid, amount, attribution_kind)`) that drives `record_invoice_paid` end-to-end against a synthetic subscription so the user can manually verify the chain in the admin UI without waiting for real Stripe traffic. SECURITY DEFINER, service-role only. No prod data risk.
-
-### 4. `me-referrals` payload missing one field
-
-Returns lifetime + recent refs, but no breakdown of how many of the user's referrals are still on Pro (active vs churned). Claude's Settings → Referrals page needs this for the "active 4 / lifetime 7" stat. Already collectable from the existing data, just not exposed.
-
-**Action:** Add `active_subscriptions_count` to the `MyReferralsSummary` response and compute server-side by joining `referral_attributions` → `subscriptions` (status in active/trialing/past_due). Bump SDK type.
-
-### 5. Founder dashboard equivalent of `me-referrals` does not exist
-
-`getMyFounderProfile` / `getMyMonthlyEarnings` exist but there's no single endpoint that returns the founder-facing summary (code, redemption count, redemption cap, lifetime $ earned, pending $, payable $, next draft date, recent paid invoices) in one round-trip.
-
-**Action:** Add `me-founder-stats` edge function returning the consolidated payload, plus `getMyFounderStats()` SDK wrapper. Mirrors the structure of `me-referrals`.
-
-## Out of scope for this pass
-
-- No frontend changes (Settings → Referrals and Settings → Founder pages are Claude's lane).
-- No re-architecture of payouts — manual approval flow stays (admin clicks approve → mark_paid).
-- No changes to reward amounts / hold days (those are `app_settings` rows the user can edit live).
-- Stripe Connect / direct deposit payouts (still ledger-only; payouts are manually executed via PayPal / e-transfer by admin).
-
-## Technical implementation
-
-1. **Apply pending migrations**
-   - Run each of the six pending migrations in order via the migration tool. Verify `cron.job` includes `cog-create-payout-drafts-monthly` and that `create_monthly_payout_drafts()` exists.
-
-2. **Add reward pipeline smoke-test helper** (new migration)
-   - `public.debug_seed_reward_chain(_user uuid, _amount_cents int, _kind text)` — creates a synthetic subscription + invoice and calls `record_invoice_paid`. SECURITY DEFINER, REVOKE FROM PUBLIC, GRANT to service_role. Tagged in `audit_logs`.
-
-3. **Extend `me-referrals`**
-   - Add `active_subscriptions_count` to the response by joining `referral_attributions` → `subscriptions` (status in `('active','trialing','past_due')`).
-   - Update `MyReferralsSummary` type in `src/integrations/cog/referrals.ts`.
-
-4. **New `me-founder-stats` edge function + SDK wrapper**
-   - Returns: `{ code, share_link, redemptions_used, redemptions_cap, active_subscriptions_count, lifetime_paid_cents, pending_cents, payable_cents, next_draft_date, recent_paid_invoices: [...] }`.
-   - SDK: `getMyFounderStats()` in `src/integrations/cog/founders.ts`.
-
-5. **Doc updates**
-   - Append audit findings + new endpoints to `docs/claude-handoffs/2026-06-22-payments.md`.
-   - Note in chat: live webhook is provisioned automatically after Stripe go-live (no manual action needed in code).
-
-## Files touched
-
-- `supabase/migrations/20260622000200_cog_payments_audit_smoke_test.sql` (new)
-- `supabase/functions/me-referrals/index.ts` (add `active_subscriptions_count`)
-- `supabase/functions/me-founder-stats/index.ts` (new)
-- `src/integrations/cog/referrals.ts` (bump type)
-- `src/integrations/cog/founders.ts` (add `getMyFounderStats`)
-- `docs/claude-handoffs/2026-06-22-payments.md` (audit notes + new endpoints)
-
-Plus: re-apply the six pending migrations via the migration tool.
+Approve to ship?

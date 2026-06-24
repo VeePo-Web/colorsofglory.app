@@ -709,6 +709,42 @@ export type Database = {
         }
         Relationships: []
       }
+      payout_tax_profiles: {
+        Row: {
+          country: string
+          created_at: string
+          form_type: string
+          id: string
+          legal_name: string
+          signed_at: string
+          tax_id_last4: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          form_type: string
+          id?: string
+          legal_name: string
+          signed_at?: string
+          tax_id_last4?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          form_type?: string
+          id?: string
+          legal_name?: string
+          signed_at?: string
+          tax_id_last4?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount_cents: number
@@ -2588,6 +2624,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_tax_profile: { Args: { _user: string }; Returns: boolean }
       increment_founder_code_redemption: {
         Args: { _code_id: string }
         Returns: undefined
