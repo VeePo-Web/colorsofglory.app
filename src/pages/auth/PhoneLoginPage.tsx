@@ -38,7 +38,11 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
-  const [digits, setDigits] = useState("");
+  // Returning from verify (e.g. "Change number" / back) keeps the number — zero retype.
+  const [digits, setDigits] = useState(() => {
+    const m = (sessionStorage.getItem("cog:phone-e164") ?? "").match(/^\+1(\d{10})$/);
+    return m ? m[1] : "";
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
