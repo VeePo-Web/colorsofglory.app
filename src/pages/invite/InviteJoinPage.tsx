@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
+import { sendPhoneOtp, AuthError, useCurrentAccount } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
 import InviteErrorCard from "@/components/invite/InviteErrorCard";
-import { previewInvite, checkPhoneRegistered, type InvitePreview } from "@/lib/invite/inviteApi";
+import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview } from "@/lib/invite/inviteApi";
 import { saveInviteContext } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
 import { requestNewInvite } from "@/integrations/cog/songs";
@@ -75,6 +75,13 @@ const InviteJoinPage = () => {
   const [existingName, setExistingName] = useState<string | null>(null);
   const [requestSent, setRequestSent] = useState(false);
   const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Already-signed-in fast path (Church Center one-tap): if a session exists we
+  // skip phone entry entirely and let them accept in a single tap.
+  const { loading: accountLoading, user: accountUser, profile: accountProfile } = useCurrentAccount();
+  const [useDifferentNumber, setUseDifferentNumber] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const signedInFirstName = accountProfile?.display_name?.trim().split(/\s+/)[0] || "you";
 
   const isValid = digits.length === DIGITS_MAX;
 
@@ -158,6 +165,22 @@ const InviteJoinPage = () => {
     }
   };
 
+  // Already signed in → one-tap accept, no phone re-entry.
+  const handleOneTapJoin = async () => {
+    if (state.type !== 'input' || joining) return;
+    setJoining(true);
+    setPhoneError(null);
+    try {
+      await acceptInvite(token);
+      saveInviteContext({ isExistingUser: true, existingFirstName: signedInFirstName });
+      navigate('/invite/team');
+    } catch {
+      // One-tap accept failed — fall back to the phone path.
+      setJoining(false);
+      setUseDifferentNumber(true);
+    }
+  };
+
   const handleRequestNew = async () => {
     // Actually record the request (invite_requests) so the owner can re-send —
     // previously this faked "Request sent" and did nothing. Best-effort: the
@@ -174,7 +197,7 @@ const InviteJoinPage = () => {
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────
-  if (state.type === 'loading') {
+  if (state.type === 'loading' || accountLoading) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6' }}>
         <div className="flex flex-col flex-1 px-6 pt-20 mx-auto w-full" style={{ maxWidth: 430 }}>
@@ -279,6 +302,25 @@ const InviteJoinPage = () => {
           )}
         </div>
 
+        {/* Already signed in → one tap to join, no phone needed (Church Center). */}
+        {accountUser && !useDifferentNumber ? (
+          <>
+            <GoldButton loading={joining} loadingText="Joining..." onClick={handleOneTapJoin}>
+              Join as {signedInFirstName} →
+            </GoldButton>
+            <button
+              onClick={() => setUseDifferentNumber(true)}
+              className="text-[0.8125rem] text-center w-full py-4 transition-opacity hover:opacity-70 underline"
+              style={{ color: '#999', fontFamily: 'var(--font-body)' }}
+            >
+              Use a different number
+            </button>
+            <p className="text-[0.75rem] text-center" style={{ color: '#999' }}>
+              Invited songs don't use your free song.
+            </p>
+          </>
+        ) : (
+        <>
         {/* Divider */}
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.08)' }} />
@@ -347,6 +389,8 @@ const InviteJoinPage = () => {
         <p className="text-[0.75rem] text-center mt-3" style={{ color: '#999' }}>
           Invited songs don't use your free song.
         </p>
+        </>
+        )}
 
         {/* T&C */}
         <p className="text-[0.6875rem] text-center mt-auto pt-8" style={{ color: '#CCC' }}>
