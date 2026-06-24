@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // and record the `referral_program_seen` onboarding step — never a demo link.
 
 const fetchReferralStats = vi.fn();
-const updateOnboardingStep = vi.fn(() => Promise.resolve());
+const updateOnboardingStep = vi.fn((_step: string) => Promise.resolve());
 
 vi.mock("@/lib/pricing/pricingApi", () => ({
   fetchReferralStats: () => fetchReferralStats(),
