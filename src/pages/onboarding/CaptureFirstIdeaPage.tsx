@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PenLine } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 // ─── Animated waveform ────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ const CaptureFirstIdeaPage = () => {
 
   const handleStop = () => {
     setIsRecording(false);
+    updateOnboardingStep("first_idea_captured").catch(() => {});
     // Navigate to voice memo saved screen
     setTimeout(() => navigate(`/songs/${songId}/voice-added`), 300);
   };

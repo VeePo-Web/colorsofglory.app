@@ -35,11 +35,21 @@ const StartFirstSongPage = () => {
     setIsSubmitting(true);
     setError(null);
 
+    // Resolve the signed-in user. A network failure resolving the session is
+    // treated as "no session" so the demo/preview path still works offline.
+    let user: { id: string } | null = null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    } catch {
+      user = null;
+    }
 
-      if (user) {
-        // Create the song in Supabase
+    if (user) {
+      // Authenticated: create the REAL song. If any step fails, surface a
+      // retryable error — never silently drop the user onto demo song "1"
+      // (which isn't theirs), making them think a song was created when it wasn't.
+      try {
         const { data: song, error: songErr } = await supabase
           .from("songs")
           .insert({
@@ -51,38 +61,34 @@ const StartFirstSongPage = () => {
           })
           .select("id, title")
           .single();
-
         if (songErr) throw songErr;
 
-        // Add owner to song_members
         await supabase.from("song_members").insert({
           song_id: song.id,
           user_id: user.id,
           role: "owner",
         });
 
-        // Update profile with first_song_id and onboarding step
         await supabase.from("profiles").update({
           first_song_id: song.id,
           updated_at: new Date().toISOString(),
         }).eq("user_id", user.id);
 
-        // Non-blocking onboarding step update
         updateOnboardingStep("first_song_created").catch(() => {});
 
-        // Cache locally for UI
         setSong({ id: song.id, title: song.title, key: key || null, bpm: bpm || null });
         sessionStorage.setItem("cog:first-song", JSON.stringify({ id: song.id, title: song.title, key, bpm }));
 
         navigate(`/songs/${song.id}?first=1`);
-        return;
+      } catch (err) {
+        console.error("[StartFirstSong] song creation failed:", err);
+        setError("We couldn't create your song just now. Please try again.");
+        setIsSubmitting(false);
       }
-    } catch (err) {
-      // Auth not available or song creation failed — fall back to local demo mode
-      console.warn("[StartFirstSong] Supabase unavailable, using local mode:", err);
+      return;
     }
 
-    // Local fallback (no auth session — demo/preview mode)
+    // No auth session at all — demo/preview only.
     setSong({ id: "1", title: songTitle, key: key || null, bpm: bpm || null });
     sessionStorage.setItem("cog:first-song", JSON.stringify({ id: "1", title: songTitle, key, bpm }));
     setIsSubmitting(false);
@@ -178,6 +184,18 @@ const StartFirstSongPage = () => {
           />
         </div>
       </div>
+
+      {/* Error — retryable, never a silent drop onto the wrong song */}
+      {error && (
+        <p
+          className="text-sm text-center mb-4"
+          style={{ color: "#E05440" }}
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      )}
 
       {/* Create song — pill CTA */}
       <GoldButton

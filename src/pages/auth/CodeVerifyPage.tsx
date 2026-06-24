@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPhoneOtp, verifyPhoneOtp } from "@/integrations/cog/auth";
+import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
-import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import OTPInput from "@/components/cog/OTPInput";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 
@@ -46,52 +46,21 @@ const CodeVerifyPage = () => {
     if (!e164) navigate("/auth/login", { replace: true });
   }, [e164, navigate]);
 
-  const routeAfterAuth = useCallback(async () => {
-    // Pending checkout intent wins — bring the user straight back to /upgrade
-    // where the resume effect will reopen Stripe Embedded Checkout.
-    const pendingCheckout = sessionStorage.getItem("cog:pending-checkout");
-    if (pendingCheckout) {
-      navigate("/upgrade", { replace: true });
-      return;
-    }
-    const inviteToken = sessionStorage.getItem("cog:invite-token");
-    if (inviteToken) {
-      navigate(`/invite/${inviteToken}`, { replace: true });
-      return;
-    }
-    try {
-      const { data } = await supabase.from("songs").select("id").limit(1);
-      if (data && data.length > 0) {
-        navigate("/", { replace: true });
-      } else {
-        navigate("/onboarding/intent", { replace: true });
-      }
-    } catch {
-      navigate("/onboarding/intent", { replace: true });
-    }
-  }, [navigate]);
-
   const handleVerify = useCallback(async (code: string) => {
     if (!e164 || code.length < CODE_LENGTH || isVerifying) return;
     setIsVerifying(true);
     setError(null);
     try {
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        phone: e164,
-        token: code,
-        type: "sms",
-      });
-      if (verifyError) throw verifyError;
-      // Non-blocking — update onboarding step for new users
-      updateOnboardingStep('intent_selected').catch(() => {});
-      await routeAfterAuth();
+      await verifyPhoneOtp(e164, code);
+      // The centralized router decides where they land (invite / onboarding / home).
+      await routeAfterAuth(navigate);
     } catch (err) {
       setError(toFriendlyError(err));
       setDigits(Array(CODE_LENGTH).fill(""));
     } finally {
       setIsVerifying(false);
     }
-  }, [e164, isVerifying, routeAfterAuth]);
+  }, [e164, isVerifying, navigate]);
 
   const handleResend = async () => {
     if (!e164 || isResending || countdown > 0) return;
@@ -100,7 +69,7 @@ const CodeVerifyPage = () => {
     setDigits(Array(CODE_LENGTH).fill(""));
     setCountdown(RESEND_SECONDS);
     try {
-      await supabase.auth.signInWithOtp({ phone: e164 });
+      await sendPhoneOtp(e164);
     } catch {
       setError("We could not resend the code. Please try again.");
     } finally {

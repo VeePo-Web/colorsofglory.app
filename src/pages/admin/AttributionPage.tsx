@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
+import { PromptDialog } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { adminAttributionForUser, overrideAttribution, type CurrentAttribution } from "@/integrations/cog/admin";
@@ -14,6 +15,7 @@ export default function AttributionPage() {
   const [newId, setNewId] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const lookup = async () => {
     const uid = referredId.trim();
@@ -29,17 +31,21 @@ export default function AttributionPage() {
     }
   };
 
-  const override = async () => {
+  const requestOverride = () => {
+    if (!referredId.trim() || !newId.trim()) return;
+    if (!reason.trim()) { toast.error("A reason is required (it's recorded in the audit log)."); return; }
+    setConfirmOpen(true);
+  };
+
+  const doOverride = async () => {
     const uid = referredId.trim();
     const rid = newId.trim();
-    if (!uid || !rid) return;
-    if (!reason.trim()) { toast.error("A reason is required (it's recorded in the audit log)."); return; }
-    if (!window.confirm(`Re-attribute this user to ${newType} ${rid.slice(0, 8)}…? This changes who earns their future rewards.`)) return;
     setSaving(true);
     try {
       await overrideAttribution(uid, newType, rid, reason.trim());
       toast.success("Attribution overridden");
       setNewId(""); setReason("");
+      setConfirmOpen(false);
       await lookup();
     } catch (e) {
       toast.error((e as Error).message ?? "Override failed");
@@ -89,9 +95,20 @@ export default function AttributionPage() {
           </select>
           <Input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder={newType === "founder" ? "founder id" : "user id"} className="w-[300px] font-mono text-xs" />
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="reason (recorded in audit log)" className="flex-1 min-w-[220px]" />
-          <Button disabled={saving || !referredId.trim() || !newId.trim()} onClick={override}>{saving ? "Saving…" : "Override"}</Button>
+          <Button disabled={saving || !referredId.trim() || !newId.trim()} onClick={requestOverride}>{saving ? "Saving…" : "Override"}</Button>
         </div>
       </div>
+
+      <PromptDialog
+        open={confirmOpen}
+        title="Confirm re-attribution"
+        description={`Re-attribute this user to ${newType} ${newId.trim().slice(0, 8)}… ? This changes who earns their future rewards. Already-minted rewards are unaffected.`}
+        confirmLabel="Re-attribute"
+        tone="danger"
+        busy={saving}
+        onConfirm={doOverride}
+        onOpenChange={(o) => { if (!o) setConfirmOpen(false); }}
+      />
     </AdminShell>
   );
 }

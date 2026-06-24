@@ -31,6 +31,32 @@ const OTPInput = ({
     refs.current[0]?.focus();
   }, []);
 
+  // WebOTP — auto-read the SMS code so the user never types it (Android Chrome).
+  // Frictionless by default: the browser shows a one-tap "Verify 123456" prompt,
+  // we fill the boxes and auto-submit. Progressive enhancement — unsupported
+  // browsers (incl. iOS) fall back to the one-time-code autofill hint already on
+  // the inputs. Needs a secure context + an SMS ending in "@<origin> #<code>"
+  // (the Twilio template); a harmless no-op until that's in place.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("OTPCredential" in window) || !navigator.credentials) return;
+    const ac = new AbortController();
+    const opts = { otp: { transport: ["sms"] }, signal: ac.signal } as unknown as CredentialRequestOptions;
+    navigator.credentials
+      .get(opts)
+      .then((cred) => {
+        const code = (cred as { code?: string } | null)?.code?.replace(/\D/g, "").slice(0, length) ?? "";
+        if (!code) return;
+        const next = Array(length).fill("");
+        code.split("").forEach((c, i) => { next[i] = c; });
+        onChange(next);
+        if (code.length === length) onComplete?.(code);
+      })
+      .catch(() => {/* dismissed / unsupported / aborted — silent no-op */});
+    return () => ac.abort();
+    // Arm once per mount; length is effectively constant for a given screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleChange = (idx: number, raw: string) => {
     const char = raw.replace(/\D/g, "").slice(-1);
     const next = [...value];
@@ -93,12 +119,12 @@ const OTPInput = ({
               border: error
                 ? "1.5px solid #E05440"
                 : filled
-                ? "1.5px solid #B5935A"
+                ? "1.5px solid var(--cog-gold)"
                 : "1.5px solid rgba(0,0,0,0.12)",
               color: "#1A1A1A",
               fontFamily: "var(--font-body)",
               boxShadow: filled && !error
-                ? "0 0 0 3px rgba(181,147,90,0.15)"
+                ? "0 0 0 3px var(--cog-gold-glow)"
                 : "none",
             }}
           />

@@ -1,8 +1,9 @@
-﻿import { useMemo } from "react";
+﻿import { useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
+import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 const WAVEFORM = [18, 32, 24, 42, 28, 52, 36, 26, 46, 34, 22, 38, 30, 48, 26, 36, 20, 30];
 
@@ -22,6 +23,11 @@ const VoiceMemoAddedPage = () => {
   const { id } = useParams();
   const songId = id ?? "1";
   const songTitle = useMemo(readSongTitle, []);
+
+  // The aha moment reached — the song now has memory.
+  useEffect(() => {
+    updateOnboardingStep("first_voice_memo_added").catch(() => {});
+  }, []);
 
   return (
     <div

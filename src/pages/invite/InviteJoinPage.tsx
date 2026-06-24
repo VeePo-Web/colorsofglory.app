@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
@@ -8,6 +8,7 @@ import InviteErrorCard from "@/components/invite/InviteErrorCard";
 import { previewInvite, checkPhoneRegistered, type InvitePreview } from "@/lib/invite/inviteApi";
 import { saveInviteContext } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
+import { requestNewInvite } from "@/integrations/cog/songs";
 
 // ─── Phone formatting ─────────────────────────────────────────────────────────
 
@@ -21,6 +22,24 @@ function formatDisplay(d: string): string {
 
 function toE164(digits: string): string {
   return `+1${digits}`;
+}
+
+function toFriendlyError(err: unknown): string {
+  if (err instanceof AuthError) {
+    switch (err.code) {
+      case "GEO_BLOCKED":
+        return "SMS sign-in isn't available in your region yet.";
+      case "RATE_LIMITED":
+        return "Too many attempts. Please wait a minute and try again.";
+      case "PHONE_PROVIDER_DISABLED":
+        return "SMS sign-in isn't available right now. Please try again shortly.";
+      case "NETWORK":
+        return "We couldn't send the code. Check your connection and try again.";
+      default:
+        return err.message || "We couldn't send the code. Please try again.";
+    }
+  }
+  return "We couldn't send the code. Please try again.";
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -121,18 +140,16 @@ const InviteJoinPage = () => {
     setPhoneError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: e164 });
-      if (error) throw error;
+      // Route through the auth SDK so the invite OTP path gets the same
+      // toll-fraud / SMS-pumping rails (geo allowlist + per-phone/IP velocity
+      // caps + global daily ceiling) as the main phone login — never a raw,
+      // unguarded send. The resend on /invite/verify already uses sendPhoneOtp.
+      await sendPhoneOtp(e164);
       sessionStorage.setItem('cog:phone-e164', e164);
       sessionStorage.setItem('cog:phone-display', formatDisplay(digits));
       navigate('/invite/verify');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setPhoneError(
-        msg.includes('rate') ? 'Too many attempts. Please wait a moment.' :
-        msg.includes('invalid') ? 'Enter a valid US phone number.' :
-        'We could not send the code. Check your connection.'
-      );
+      setPhoneError(toFriendlyError(err));
       setState((prev) =>
         prev.type === 'submitting' || prev.type === 'input'
           ? { type: 'input', preview: prev.preview }
@@ -142,9 +159,18 @@ const InviteJoinPage = () => {
   };
 
   const handleRequestNew = async () => {
+    // Actually record the request (invite_requests) so the owner can re-send —
+    // previously this faked "Request sent" and did nothing. Best-effort: the
+    // owner notification is non-critical, so we acknowledge regardless.
+    try {
+      await requestNewInvite({
+        original_token: token,
+        phone: digits.length === DIGITS_MAX ? toE164(digits) : null,
+      });
+    } catch {
+      /* swallow — acknowledged below either way */
+    }
     setRequestSent(true);
-    // Fire and forget — requestNewInvite(token) wired when Lovable delivers
-    setTimeout(() => {}, 0);
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────

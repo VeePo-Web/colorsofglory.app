@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal, Music } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal, Music, Printer, Share2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -13,9 +13,11 @@ import {
   toChordPro,
   transposeKeyLetter,
   type SheetLine,
+  type SheetSection,
 } from "@/lib/chords/sheet";
 import { chordToLetters, type NumberChord } from "@/lib/chords/nashville";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
+import { rhymeScheme } from "@/lib/lyrics/rhyme";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
 import PerformanceView from "@/components/songsheet/PerformanceView";
 import ChordPlaceSheet from "@/components/songsheet/ChordPlaceSheet";
@@ -75,7 +77,7 @@ const SongSheetPage = () => {
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [perform, setPerform] = useState(false);
-  const [chordMode, setChordMode] = useState(false);
+  const [view, setView] = useState<"read" | "chords" | "craft">("read");
   const [placing, setPlacing] = useState<{ lineIndex: number; at: number; word: string; current?: NumberChord } | null>(null);
   const [diagram, setDiagram] = useState<string | null>(null);
   const [capo, setCapo] = useState(0);
@@ -139,6 +141,17 @@ const SongSheetPage = () => {
       setTimeout(() => setCopied(false), 1800);
     } catch {
       /* clipboard may be blocked; silently no-op */
+    }
+  };
+
+  const shareSheet = async () => {
+    const text = toChordPro(sections, displayKey, "major");
+    try {
+      const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string }) => Promise<void> };
+      if (nav.share) await nav.share({ title: songTitle, text });
+      else await navigator.clipboard.writeText(text);
+    } catch {
+      /* user cancelled or unsupported — fine */
     }
   };
 
@@ -319,18 +332,39 @@ const SongSheetPage = () => {
                   </button>
                 </div>
 
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+                    aria-label="Print or save as PDF"
+                  >
+                    <Printer size={14} strokeWidth={2} /> Print · PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareSheet}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-full text-sm font-medium transition-transform active:scale-[0.97]"
+                    style={{ backgroundColor: "var(--cog-cream)", border: "1px solid var(--cog-border)", color: "var(--cog-charcoal)" }}
+                    aria-label="Share chart"
+                  >
+                    <Share2 size={14} strokeWidth={2} /> Share
+                  </button>
+                </div>
+
                 <div className="flex rounded-full p-0.5" style={{ backgroundColor: "var(--cog-cream)" }}>
-                  {([["read", "Read"], ["add", "Add chords"]] as const).map(([v, lbl]) => {
-                    const active = (v === "add") === chordMode;
+                  {([["read", "Read"], ["chords", "Chords"], ["craft", "Rhyme"]] as const).map(([v, lbl]) => {
+                    const active = view === v;
                     return (
                       <button
                         key={v}
                         type="button"
-                        onClick={() => setChordMode(v === "add")}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-full text-sm font-medium transition-colors"
+                        onClick={() => setView(v)}
+                        className="flex-1 inline-flex items-center justify-center gap-1 py-2 rounded-full text-sm font-medium transition-colors"
                         style={{ backgroundColor: active ? "var(--cog-gold)" : "transparent", color: active ? "#fff" : "var(--cog-charcoal)" }}
                       >
-                        {v === "add" && <Guitar size={14} strokeWidth={2} />}
+                        {v === "chords" && <Guitar size={13} strokeWidth={2} />}
                         {lbl}
                       </button>
                     );
@@ -369,7 +403,7 @@ const SongSheetPage = () => {
               </div>
             )}
 
-            {chordMode && (
+            {view === "chords" && (
               <div
                 className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 mb-5"
                 style={{ backgroundColor: "rgba(184,149,58,0.10)", border: "1px solid var(--cog-border-gold, rgba(184,149,58,0.4))" }}
@@ -379,7 +413,7 @@ const SongSheetPage = () => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setChordMode(false)}
+                  onClick={() => setView("read")}
                   className="text-xs font-semibold shrink-0 active:scale-95"
                   style={{ color: "var(--cog-gold-alt, var(--cog-gold))", minHeight: 32, padding: "0 4px" }}
                 >
@@ -389,39 +423,43 @@ const SongSheetPage = () => {
             )}
 
             {/* The sheet */}
-            <div className="flex flex-col gap-7">
-              {sections.map((section, si) => (
-                <section key={si}>
-                  {section.label && (
-                    <h2 className="text-[1.0625rem] mb-2.5" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
-                      {section.label}
-                    </h2>
-                  )}
-                  <div className="flex flex-col gap-3">
-                    {section.lines.map((line, li) =>
-                      chordMode ? (
-                        <EditableLine
-                          key={li}
-                          line={line}
-                          sourceKey={sourceKey}
-                          onTapWord={(at, word, current) =>
-                            setPlacing({ lineIndex: line.sourceLineIndex ?? -1, at, word, current })
-                          }
-                        />
-                      ) : (
-                        <ReadLine
-                          key={li}
-                          line={line}
-                          displayKey={playKey}
-                          display={display}
-                          showSyllables={showSyllables}
-                        />
-                      ),
+            {view === "craft" ? (
+              <CraftView sections={sections} />
+            ) : (
+              <div className="flex flex-col gap-7">
+                {sections.map((section, si) => (
+                  <section key={si}>
+                    {section.label && (
+                      <h2 className="text-[1.0625rem] mb-2.5" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
+                        {section.label}
+                      </h2>
                     )}
-                  </div>
-                </section>
-              ))}
-            </div>
+                    <div className="flex flex-col gap-3">
+                      {section.lines.map((line, li) =>
+                        view === "chords" ? (
+                          <EditableLine
+                            key={li}
+                            line={line}
+                            sourceKey={sourceKey}
+                            onTapWord={(at, word, current) =>
+                              setPlacing({ lineIndex: line.sourceLineIndex ?? -1, at, word, current })
+                            }
+                          />
+                        ) : (
+                          <ReadLine
+                            key={li}
+                            line={line}
+                            displayKey={playKey}
+                            display={display}
+                            showSyllables={showSyllables}
+                          />
+                        ),
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -458,9 +496,114 @@ const SongSheetPage = () => {
       )}
 
       {diagram && <ChordDiagramSheet label={diagram} onClose={() => setDiagram(null)} />}
+
+      {/* Print / PDF — hidden on screen, the only thing visible when printing */}
+      {!isEmpty && (
+        <PrintSheet songTitle={songTitle} sections={sections} playKey={playKey} display={display} capo={capo} />
+      )}
+      <style>{`
+        .cog-print { display: none; }
+        @media print {
+          body * { visibility: hidden !important; }
+          .cog-print, .cog-print * { visibility: visible !important; }
+          .cog-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 24px; color: #000; background: #fff; }
+          .cog-print h1 { font-size: 20pt; margin: 0 0 2px; font-family: var(--font-display); }
+          .cog-print .cog-print-sub { font-size: 10pt; color: #444; margin: 0 0 14px; }
+          .cog-print h2 { font-size: 12pt; margin: 12px 0 4px; font-family: var(--font-display); }
+          .cog-print pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5pt; line-height: 1.5; margin: 0 0 2px; white-space: pre-wrap; }
+          .cog-print section { break-inside: avoid; margin-bottom: 8px; }
+        }
+      `}</style>
     </div>
   );
 };
+
+function PrintSheet({
+  songTitle,
+  sections,
+  playKey,
+  display,
+  capo,
+}: {
+  songTitle: string;
+  sections: SheetSection[];
+  playKey: string;
+  display: "letters" | "numbers";
+  capo: number;
+}) {
+  return (
+    <div className="cog-print" aria-hidden="true">
+      <h1>{songTitle}</h1>
+      <p className="cog-print-sub">
+        {display === "numbers" ? "Nashville numbers" : `Key of ${playKey}`}
+        {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}
+      </p>
+      {sections.map((section, si) => (
+        <section key={si}>
+          {section.label && <h2>{section.label}</h2>}
+          {section.lines.map((line, li) => {
+            const { chords, lyrics } = renderChordsOverLyrics(line, playKey, "major", display);
+            return (
+              <pre key={li}>
+                {chords || " "}
+                {"\n"}
+                {lyrics || " "}
+              </pre>
+            );
+          })}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// ─── rhyme & meter view ──────────────────────────────────────────────────────
+
+function CraftView({ sections }: { sections: SheetSection[] }) {
+  // Rhyme scheme is computed across all lyric lines in order, so matching
+  // endings share a letter throughout the song (Lazyjot-style). Syllable count
+  // per line makes meter visible (Pattison: parallel lines should match).
+  const allLines = sections.flatMap((s) => s.lines.map((l) => l.text));
+  const scheme = rhymeScheme(allLines);
+  let idx = 0;
+  return (
+    <div className="flex flex-col gap-7">
+      {sections.map((section, si) => (
+        <section key={si}>
+          {section.label && (
+            <h2 className="text-[1.0625rem] mb-2.5" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
+              {section.label}
+            </h2>
+          )}
+          <div className="flex flex-col gap-1.5">
+            {section.lines.map((line, li) => {
+              const label = scheme[idx];
+              const hasText = line.text.trim() !== "";
+              const syl = hasText ? countLineSyllables(line.text) : "";
+              idx++;
+              return (
+                <div key={li} className="flex items-baseline gap-2.5">
+                  <span
+                    className="text-xs font-bold tabular-nums text-center shrink-0"
+                    style={{ color: "var(--cog-gold-alt, var(--cog-gold))", width: 14 }}
+                  >
+                    {hasText ? label : ""}
+                  </span>
+                  <span className="text-[0.6875rem] tabular-nums text-right shrink-0" style={{ color: "var(--cog-muted)", width: 18 }}>
+                    {syl}
+                  </span>
+                  <span className="text-[0.9375rem]" style={{ color: "var(--cog-charcoal)" }}>
+                    {line.text || " "}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
 
 // ─── line renderers ──────────────────────────────────────────────────────────
 

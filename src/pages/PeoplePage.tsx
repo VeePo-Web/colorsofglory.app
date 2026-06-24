@@ -1,24 +1,43 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, Check, Share2, Crown, Pencil, X } from "lucide-react";
+import { ArrowLeft, Copy, Check, Share2, Crown, Pencil, X, Send, Link2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { useSongTitle } from "@/lib/songContext";
-import { generateInviteToken, revokeInviteToken, type GeneratedInvite, updateOnboardingStep } from "@/lib/invite/inviteApi";
+import {
+  generateInviteToken,
+  revokeInviteToken,
+  sendInvite,
+  type GeneratedInvite,
+  updateOnboardingStep,
+} from "@/lib/invite/inviteApi";
 import { supabase } from "@/integrations/supabase/client";
 import { getAvatarColor, getAvatarInitials } from "@/lib/invite/inviteContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type InviteRole = "viewer" | "contributor" | "reviewer";
+// Two roles only — matches the DB enum (collaborator / viewer). Reviewer is
+// deferred until the backend adds the enum value.
+type InviteRole = "viewer" | "contributor";
 
 const ROLE_DETAILS: Record<InviteRole, { label: string; desc: string }> = {
   viewer:      { label: "Viewer",      desc: "Can listen and read." },
   contributor: { label: "Contributor", desc: "Can add lyrics, memos, comments, and ideas." },
-  reviewer:    { label: "Reviewer",    desc: "Can comment and approve changes." },
 };
+
+// ─── Contact validation ────────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Valid if it's a sane email or a 10-digit US phone. */
+function isValidContact(contact: string): boolean {
+  const trimmed = contact.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("@")) return EMAIL_RE.test(trimmed);
+  return trimmed.replace(/\D/g, "").length === 10;
+}
 
 interface Collab {
   userId: string;
@@ -34,7 +53,7 @@ interface Collab {
 const MOCK_COLLABS: Collab[] = [
   { userId: "u1", firstName: "Parker", lastName: "Kim",    role: "Owner",       isOwner: true,  avatarColor: "#D4AE5C", avatarInitials: "PK" },
   { userId: "u2", firstName: "Sarah",  lastName: "Miller", role: "Contributor", isOwner: false, avatarColor: "#53AB8B", avatarInitials: "SM" },
-  { userId: "u3", firstName: "Caleb",  lastName: "Rivera", role: "Reviewer",    isOwner: false, avatarColor: "#8070C4", avatarInitials: "CR" },
+  { userId: "u3", firstName: "Caleb",  lastName: "Rivera", role: "Viewer",      isOwner: false, avatarColor: "#8070C4", avatarInitials: "CR" },
 ];
 
 // ─── Role selection card ─────────────────────────────────────────────────────
@@ -264,6 +283,11 @@ const PeoplePage = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedInvite, setGeneratedInvite] = useState<GeneratedInvite | null>(null);
 
+  // Send-to-person state
+  const [contact, setContact] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [sent, setSent] = useState<{ channel: "sms" | "email"; to: string } | null>(null);
+
   // Load real collaborators from Supabase
   const [collabs, setCollabs] = useState<Collab[]>(MOCK_COLLABS);
   useEffect(() => {
@@ -320,6 +344,40 @@ const PeoplePage = () => {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSend = async () => {
+    if (!isValidContact(contact) || isSending) return;
+    setIsSending(true);
+    setError(null);
+    try {
+      const result = await sendInvite(songId, selectedRole, contact);
+      updateOnboardingStep("first_collaborator_invited").catch(() => {});
+      if (result.delivered) {
+        setSent({ channel: result.channel, to: contact.trim() });
+        setContact("");
+      } else {
+        // Backend delivery not available — fall back to a shareable link.
+        setGeneratedInvite({
+          tokenId: result.tokenId,
+          token: result.token,
+          inviteUrl: result.inviteUrl,
+          assignedRole: selectedRole,
+          maxUses: 1,
+        });
+        setError("We couldn't send it automatically — share this link instead.");
+      }
+    } catch {
+      setError("Couldn't send the invite. Please try again.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const resetInvite = () => {
+    setSent(null);
+    setGeneratedInvite(null);
+    setError(null);
   };
 
   return (
@@ -397,51 +455,120 @@ const PeoplePage = () => {
             Invite someone into this song
           </h2>
           <p className="text-[0.8125rem] mb-5" style={{ color: "#666" }}>
-            They can listen, write, comment, or review depending on the role you choose.
+            They can listen, write, or comment depending on the role you choose.
           </p>
 
-          {/* Role cards */}
-          <div className="flex gap-2 mb-5">
-            {(["viewer", "contributor", "reviewer"] as InviteRole[]).map((r) => (
-              <RoleCard
-                key={r}
-                role={r}
-                selected={selectedRole === r}
-                onSelect={() => { setSelectedRole(r); setGeneratedInvite(null); }}
+          {sent ? (
+            /* ── Sent success state ──────────────────────────────────────── */
+            <div className="text-center py-2">
+              <div
+                className="mx-auto mb-3 flex items-center justify-center rounded-full"
+                style={{ width: 48, height: 48, backgroundColor: "rgba(83,171,139,0.12)", border: "1.5px solid rgba(83,171,139,0.35)" }}
+                aria-hidden="true"
+              >
+                <Check size={22} strokeWidth={2} style={{ color: "#53AB8B" }} />
+              </div>
+              <p className="text-[1rem] font-semibold mb-1" style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}>
+                Invite sent
+              </p>
+              <p className="text-[0.8125rem] mb-4" style={{ color: "#666" }}>
+                We {sent.channel === "email" ? "emailed" : "texted"} the invite to{" "}
+                <span style={{ color: "#1A1A1A", fontWeight: 500 }}>{sent.to}</span>.
+              </p>
+              <button
+                onClick={resetInvite}
+                className="text-[0.875rem] font-medium transition-opacity hover:opacity-70"
+                style={{ color: "#B5935A", minHeight: 44 }}
+              >
+                Invite another person
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Role cards */}
+              <div className="flex gap-2 mb-5">
+                {(["viewer", "contributor"] as InviteRole[]).map((r) => (
+                  <RoleCard
+                    key={r}
+                    role={r}
+                    selected={selectedRole === r}
+                    onSelect={() => { setSelectedRole(r); setGeneratedInvite(null); }}
+                  />
+                ))}
+              </div>
+
+              {/* Contact input */}
+              <input
+                type="text"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={contact}
+                onChange={(e) => { setContact(e.target.value); if (error) setError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && isValidContact(contact)) handleSend(); }}
+                placeholder="Phone number or email"
+                aria-label="Phone number or email"
+                className="w-full rounded-xl mb-3"
+                style={{
+                  height: 52,
+                  padding: "0 16px",
+                  backgroundColor: "#FFFFFF",
+                  border: isValidContact(contact) ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.10)",
+                  boxShadow: isValidContact(contact) ? "0 0 0 3px rgba(181,147,90,0.10)" : "0 1px 3px rgba(0,0,0,0.04)",
+                  color: "#1A1A1A",
+                  fontFamily: "var(--font-body)",
+                  fontSize: "1rem",
+                  outline: "none",
+                  caretColor: "#B5935A",
+                  transition: "border 150ms, box-shadow 150ms",
+                }}
               />
-            ))}
-          </div>
 
-          {/* Error */}
-          {error && (
-            <p className="text-[0.8125rem] text-center mb-3" style={{ color: "#E05440" }} role="alert">
-              {error}
-            </p>
+              {/* Error */}
+              {error && (
+                <p className="text-[0.8125rem] text-center mb-3" style={{ color: "#E05440" }} role="alert">
+                  {error}
+                </p>
+              )}
+
+              {/* Primary: send invite */}
+              <GoldButton
+                disabled={!isValidContact(contact)}
+                loading={isSending}
+                loadingText="Sending..."
+                onClick={handleSend}
+              >
+                <Send size={16} strokeWidth={1.8} /> Send invite
+              </GoldButton>
+
+              {/* Secondary: or share a link */}
+              {!generatedInvite && (
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="flex items-center justify-center gap-2 w-full mt-3 text-[0.875rem] font-medium transition-opacity hover:opacity-70 disabled:opacity-50"
+                  style={{ color: "#666", minHeight: 44 }}
+                >
+                  <Link2 size={15} strokeWidth={1.8} />
+                  {isGenerating ? "Creating link..." : "Or share a link instead"}
+                </button>
+              )}
+
+              {/* Microcopy */}
+              <p className="text-[0.75rem] text-center mt-3" style={{ color: "#999" }}>
+                Invited songs don't use their free song.
+              </p>
+            </>
           )}
-
-          {/* Generate link button */}
-          {!generatedInvite && (
-            <GoldButton
-              loading={isGenerating}
-              loadingText="Creating link..."
-              onClick={handleGenerate}
-            >
-              Create invite link
-            </GoldButton>
-          )}
-
-          {/* Microcopy */}
-          <p className="text-[0.75rem] text-center mt-3" style={{ color: "#999" }}>
-            Invited songs don't use their free song.
-          </p>
         </div>
 
         {/* ── GENERATED LINK ───────────────────────────────────────────────── */}
         {generatedInvite && (
           <GeneratedLinkPanel
             invite={generatedInvite}
-            onRevoke={() => setGeneratedInvite(null)}
-            onClose={() => setGeneratedInvite(null)}
+            onRevoke={resetInvite}
+            onClose={resetInvite}
           />
         )}
 

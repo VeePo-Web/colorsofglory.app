@@ -43,10 +43,11 @@ const GoldButton = ({
       `}
       style={{
         height: 56,
-        backgroundColor: "#B5935A",
+        // Locked brand gold token (CLAUDE.md §2) — was a near-miss #B5935A.
+        backgroundColor: "var(--cog-gold)",
         fontFamily: "var(--font-body)",
         fontSize: "1rem",
-        boxShadow: isDisabled ? "none" : "0 4px 16px rgba(181,147,90,0.35)",
+        boxShadow: isDisabled ? "none" : "0 4px 16px rgba(184,149,58,0.35)",
       }}
     >
       {loading && <Loader2 size={18} className="animate-spin opacity-80" />}
