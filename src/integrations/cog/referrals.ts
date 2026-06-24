@@ -8,6 +8,15 @@ export function buildReferralShareUrl(code: string): string {
 export type MyReferralsSummary = {
   code: string | null;
   link: string | null;
+  /** Prefilled, on-brand message for one-tap sharing (null until a code exists). */
+  share_message: string | null;
+  /** What the referred friend gets — surface this in the share UI. */
+  referee_benefit: string;
+  /** New referrals since the user last viewed — drive a "N new" badge. */
+  new_referral_count: number;
+  /** New reward cents accrued since last viewed. */
+  new_reward_cents: number;
+  referrals_seen_at: string | null;
   attributed_count: number;
   paying_count: number;
   per_referral_cents: number;
@@ -38,6 +47,24 @@ export async function getMyReferrals(): Promise<MyReferralsSummary> {
   return data as MyReferralsSummary;
 }
 
+/**
+ * Claim a memorable/vanity referral code (3–20 chars, A–Z/0–9). Returns the
+ * normalized code. Throws 'code_taken' / 'invalid_code' on conflict. The DB
+ * trigger keeps the /r/:code resolver in sync automatically.
+ */
+export async function claimReferralCode(code: string): Promise<string> {
+  const { data, error } = await supabase.rpc("claim_referral_code" as never, { _code: code } as never);
+  if (error) throw error;
+  return data as unknown as string;
+}
+
+/** Mark referral activity as seen (clears the "N new" badge). Returns the timestamp. */
+export async function markReferralsSeen(): Promise<string> {
+  const { data, error } = await supabase.rpc("mark_referrals_seen" as never);
+  if (error) throw error;
+  return data as unknown as string;
+}
+
 export type PayoutMethodInput = {
   method: "manual" | "paypal" | "stripe_connect";
   email?: string | null;
@@ -55,6 +82,8 @@ export type ResolvedCode = {
   owner_display_name?: string | null;
   code?: string | null;
   discount_cents?: number;
+  /** Lifetime count of buyers attributed to this code's owner — for social proof on the landing page. */
+  owner_lifetime_referred_count?: number;
 };
 
 export async function resolveCode(input: { code?: string; slug?: string }): Promise<ResolvedCode> {

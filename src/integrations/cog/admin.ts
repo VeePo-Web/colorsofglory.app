@@ -80,6 +80,45 @@ export async function adminReferralsRecent(limit = 50) {
   return data ?? [];
 }
 
+export type AttentionSummary = {
+  open_fraud_flags: number;
+  stuck_webhooks: number;
+  draft_payouts_count: number;
+  draft_payouts_cents: number;
+  reward_payable_cents: number;
+  blocked_payout_count: number;
+  blocked_payout_cents: number;
+};
+
+/** Admin Home "needs attention" cockpit — things requiring intervention now. */
+export async function adminAttentionSummary(): Promise<AttentionSummary> {
+  const { data, error } = await supabase.rpc("admin_attention_summary" as never);
+  if (error) throw error;
+  return data as unknown as AttentionSummary;
+}
+
+// ── Auth security (phone OTP toll-fraud monitoring) ──────────────────────
+export type OtpStats = {
+  sends_24h: number;
+  sends_1h: number;
+  distinct_phones_24h: number;
+  distinct_ips_24h: number;
+  top_phones: Array<{ phone_e164: string; n: number }>;
+  settings: Record<string, unknown>;
+};
+
+export async function adminOtpStats(): Promise<OtpStats> {
+  const { data, error } = await supabase.rpc("admin_otp_stats" as never);
+  if (error) throw error;
+  return data as unknown as OtpStats;
+}
+
+/** Tune an otp_* app setting (e.g. geo allowlist, daily ceiling). Audited. */
+export async function adminSetAppSetting(key: string, value: unknown): Promise<void> {
+  const { error } = await supabase.rpc("admin_set_app_setting" as never, { _key: key, _value: value } as never);
+  if (error) throw error;
+}
+
 export type FinanceSummary = {
   generated_at: string;
   mrr_cents: number;
@@ -103,6 +142,143 @@ export async function adminFinanceSummary(): Promise<FinanceSummary> {
   const { data, error } = await supabase.rpc("admin_finance_summary" as never);
   if (error) throw error;
   return data as unknown as FinanceSummary;
+}
+
+// ── Payout console ───────────────────────────────────────────────────────
+export type PayoutRow = {
+  id: string;
+  founder_id: string | null;
+  user_id: string | null;
+  period_start: string;
+  period_end: string;
+  amount_cents: number;
+  currency: string;
+  status: "draft" | "approved" | "processing" | "paid" | "failed";
+  provider: string | null;
+  provider_payout_id: string | null;
+  failure_reason: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+export async function adminListPayouts(limit = 100): Promise<PayoutRow[]> {
+  const { data, error } = await supabase.rpc("admin_list_payouts" as never, { _limit: limit } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as PayoutRow[];
+}
+
+// ── Webhook ops ──────────────────────────────────────────────────────────
+export type BillingEventRow = {
+  id: string;
+  external_event_id: string;
+  kind: string;
+  user_id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  created_at: string;
+  processed_at: string | null;
+  processing_error: string | null;
+};
+
+export async function adminBillingEvents(limit = 50, onlyFailed = false): Promise<BillingEventRow[]> {
+  const { data, error } = await supabase.rpc("admin_billing_events" as never, {
+    _limit: limit,
+    _only_failed: onlyFailed,
+  } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as BillingEventRow[];
+}
+
+/** Re-drive a stuck billing event by re-running its idempotent money RPC. */
+export const redriveBillingEvent = (id: string) =>
+  callAdmin("admin-redrive-billing-event", { id });
+
+// ── Fraud review ─────────────────────────────────────────────────────────
+export type FraudFlag = {
+  id: string;
+  subject_type: "user" | "founder";
+  subject_id: string;
+  reason: string;
+  severity: string;
+  created_by_user_id: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+};
+
+export async function adminFraudFlags(onlyOpen = true, limit = 100): Promise<FraudFlag[]> {
+  const { data, error } = await supabase.rpc("admin_fraud_flags" as never, {
+    _only_open: onlyOpen,
+    _limit: limit,
+  } as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as FraudFlag[];
+}
+
+export async function adminCreateFraudFlag(input: {
+  subject_type: "user" | "founder";
+  subject_id: string;
+  reason: string;
+  severity?: string;
+}): Promise<FraudFlag> {
+  const { data, error } = await supabase.rpc("admin_create_fraud_flag" as never, {
+    _subject_type: input.subject_type,
+    _subject_id: input.subject_id,
+    _reason: input.reason,
+    _severity: input.severity ?? "low",
+  } as never);
+  if (error) throw error;
+  return data as unknown as FraudFlag;
+}
+
+export async function adminResolveFraudFlag(id: string, note?: string): Promise<FraudFlag> {
+  const { data, error } = await supabase.rpc("admin_resolve_fraud_flag" as never, {
+    _id: id,
+    _note: note ?? null,
+  } as never);
+  if (error) throw error;
+  return data as unknown as FraudFlag;
+}
+
+// ── Referrer payments ledger ─────────────────────────────────────────────
+export type ReferrerLedgerRow = {
+  referrer_type: "founder" | "user";
+  referrer_id: string;
+  recipient_user_id: string;
+  name: string | null;
+  referral_code: string | null;
+  attributed_count: number;
+  paying_count: number;
+  pending_cents: number;
+  payable_cents: number;
+  paid_cents: number;
+  payout_method: string | null;
+};
+
+/** Per-referrer tracker: referrals + earnings + whether they can be paid. */
+export async function adminReferrerLedger(): Promise<ReferrerLedgerRow[]> {
+  const { data, error } = await supabase.rpc("admin_referrer_ledger" as never);
+  if (error) throw error;
+  return (data ?? []) as unknown as ReferrerLedgerRow[];
+}
+
+// ── Attribution override ─────────────────────────────────────────────────
+export type CurrentAttribution = {
+  exists: boolean;
+  referrer_type?: "user" | "founder";
+  referrer_user_id?: string | null;
+  referrer_founder_id?: string | null;
+  source?: string | null;
+  locked?: boolean;
+  referrer_name?: string | null;
+};
+
+/** Read the current referral attribution for a referred user (admin). */
+export async function adminAttributionForUser(userId: string): Promise<CurrentAttribution> {
+  const { data, error } = await supabase.rpc("admin_attribution_for_user" as never, { _user: userId } as never);
+  if (error) throw error;
+  return data as unknown as CurrentAttribution;
 }
 
 export async function adminMonthlyPayouts(month_start?: string) {
@@ -158,6 +334,7 @@ export const overrideAttribution = (
 ) => callAdmin("admin-attribution-override", { referred_user_id, new_referrer_type, new_referrer_id, reason });
 
 export const listDraftPayouts = () => callAdmin("admin-payouts", { action: "list_drafts" });
+export const retryPayout = (payout_id: string) => callAdmin("admin-payouts", { action: "retry", payout_id });
 export const createPayoutBatch = (founder_id: string, period_start: string, period_end: string) =>
   callAdmin("admin-payouts", { action: "create_batch", founder_id, period_start, period_end });
 export const approvePayout = (payout_id: string) => callAdmin("admin-payouts", { action: "approve", payout_id });

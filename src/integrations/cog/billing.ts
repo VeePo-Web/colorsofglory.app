@@ -6,6 +6,48 @@ export type StorageAddon = Database["public"]["Tables"]["storage_addons"]["Row"]
 export type PlanId = "free" | "starter" | "pro" | "founder_pro";
 export type PlanKey = "free" | "starter" | "pro";
 
+export type BillingStatus = {
+  authenticated: boolean;
+  user_id: string | null;
+  plan: PlanId;
+  is_pro: boolean;
+  subscription: {
+    id: string;
+    plan: PlanId;
+    status: string;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    cancelled_at: string | null;
+    unit_amount_cents: number;
+    currency: string;
+  } | null;
+  storage: {
+    used_bytes: number;
+    included_bytes: number;
+    addon_bytes: number;
+    limit_bytes: number;
+    pct_used: number;
+  };
+  addons: Array<{
+    id: string;
+    bytes: number;
+    status: string;
+    current_period_end: string | null;
+  }>;
+  song_quota: { owned_limit: number; can_create_song: boolean };
+};
+
+/**
+ * One-shot server snapshot of the caller's plan, subscription, storage, and
+ * song quota. Prefer this over composing `current_plan` + `subscriptions` +
+ * `storage_addons` reads on the client.
+ */
+export async function getMyBillingStatus(): Promise<BillingStatus> {
+  const { data, error } = await supabase.functions.invoke("me-billing-status", { body: {} });
+  if (error) throw error;
+  return data as BillingStatus;
+}
+
 export type PlanTier = {
   key: PlanKey;
   display_name: string;

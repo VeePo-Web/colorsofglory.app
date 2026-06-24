@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const fetchReferralStats = vi.fn();
 const updateOnboardingStep = vi.fn(() => Promise.resolve());
+const updateOnboardingStep = vi.fn((_step: string) => Promise.resolve());
 
 vi.mock("@/lib/pricing/pricingApi", () => ({
   fetchReferralStats: () => fetchReferralStats(),
