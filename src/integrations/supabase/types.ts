@@ -685,6 +685,42 @@ export type Database = {
           },
         ]
       }
+      notification_queue: {
+        Row: {
+          attempts: number
+          created_at: string
+          id: string
+          kind: string
+          last_error: string | null
+          payload: Json
+          sent_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          kind: string
+          last_error?: string | null
+          payload?: Json
+          sent_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          sent_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       otp_send_events: {
         Row: {
           country_code: string | null
@@ -706,6 +742,42 @@ export type Database = {
           id?: string
           ip_hash?: string | null
           phone_e164?: string
+        }
+        Relationships: []
+      }
+      payout_tax_profiles: {
+        Row: {
+          country: string
+          created_at: string
+          form_type: string
+          id: string
+          legal_name: string
+          signed_at: string
+          tax_id_last4: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          form_type: string
+          id?: string
+          legal_name: string
+          signed_at?: string
+          tax_id_last4?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          form_type?: string
+          id?: string
+          legal_name?: string
+          signed_at?: string
+          tax_id_last4?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -931,6 +1003,39 @@ export type Database = {
           timezone?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      reconciliation_reports: {
+        Row: {
+          drift_count: number
+          drift_invoice_ids: string[]
+          id: string
+          local_event_count: number
+          notes: string | null
+          ran_at: string
+          stripe_invoice_count: number
+          window_hours: number
+        }
+        Insert: {
+          drift_count?: number
+          drift_invoice_ids?: string[]
+          id?: string
+          local_event_count?: number
+          notes?: string | null
+          ran_at?: string
+          stripe_invoice_count?: number
+          window_hours: number
+        }
+        Update: {
+          drift_count?: number
+          drift_invoice_ids?: string[]
+          id?: string
+          local_event_count?: number
+          notes?: string | null
+          ran_at?: string
+          stripe_invoice_count?: number
+          window_hours?: number
         }
         Relationships: []
       }
@@ -2236,7 +2341,7 @@ export type Database = {
         Returns: undefined
       }
       approve_payout: {
-        Args: { _payout: string }
+        Args: { _payout_id: string }
         Returns: {
           amount_cents: number
           approved_at: string | null
@@ -2588,6 +2693,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_tax_profile: { Args: { _user: string }; Returns: boolean }
       increment_founder_code_redemption: {
         Args: { _code_id: string }
         Returns: undefined

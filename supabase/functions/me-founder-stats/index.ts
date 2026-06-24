@@ -27,13 +27,20 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: "unauthorized" }, 401);
 
   try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("payout_method, payout_email, payout_country")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const payout_method_complete = !!profile?.payout_method;
+
     const { data: founder } = await supabase
       .from("founders")
       .select("id, display_name, status, user_id")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (!founder) return json({ is_founder: false }, 200);
+    if (!founder) return json({ is_founder: false, payout_method_complete }, 200);
 
     // Founder code (one active code per founder; pick most recent active)
     const { data: codes } = await supabase
@@ -101,8 +108,21 @@ Deno.serve(async (req) => {
         created_at: r.created_at,
       }));
 
+    const event_timeline = (rewards ?? [])
+      .slice()
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 50)
+      .map((r: any) => ({
+        status: r.status,
+        amount_cents: r.amount_cents,
+        invoice_external_id: r.invoice_external_id,
+        created_at: r.created_at,
+      }));
+
     return json({
       is_founder: true,
+      payout_method_complete,
+      payout_method: profile?.payout_method ?? null,
       display_name: founder.display_name,
       status: founder.status,
       code: activeCode?.value ?? null,
@@ -116,6 +136,7 @@ Deno.serve(async (req) => {
       next_payout_estimate_cents: payable_cents,
       next_draft_date: nextDraft.toISOString(),
       recent_paid_invoices,
+      event_timeline,
     });
   } catch (e) {
     console.error("me-founder-stats error", e);

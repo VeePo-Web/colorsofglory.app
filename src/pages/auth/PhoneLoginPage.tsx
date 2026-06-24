@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPhoneOtp } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
@@ -60,11 +60,7 @@ const PhoneLoginPage = () => {
     const e164 = toE164(digits);
 
     try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: e164,
-      });
-
-      if (otpError) throw otpError;
+      await sendPhoneOtp(e164);
 
       // Store for display in verify screen
       sessionStorage.setItem("cog:phone-e164", e164);
@@ -186,28 +182,30 @@ const PhoneLoginPage = () => {
       {/* Email fallback */}
       <button
         type="button"
-        onClick={() => navigate("/auth/login")}
+        onClick={() => navigate("/auth/email")}
         className="mt-4 text-sm text-center w-full py-2 transition-opacity hover:opacity-70 underline"
         style={{ color: "#B5935A", fontFamily: "var(--font-body)" }}
       >
         Use email instead
       </button>
 
-      {/* Demo fast-track — very subtle, for demos when Twilio isn't available */}
-      <div className="mt-auto pb-8 pt-10">
-        <div
-          className="h-px mx-auto mb-4 w-12"
-          style={{ backgroundColor: "rgba(0,0,0,0.08)" }}
-        />
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="text-[11px] text-center w-full py-1.5 transition-opacity hover:opacity-60"
-          style={{ color: "#BBBBBB", fontFamily: "var(--font-body)" }}
-        >
-          Preview demo ›
-        </button>
-      </div>
+      {/* Demo fast-track — dev-only; never ships in production builds. */}
+      {import.meta.env.DEV && (
+        <div className="mt-auto pb-8 pt-10">
+          <div
+            className="h-px mx-auto mb-4 w-12"
+            style={{ backgroundColor: "rgba(0,0,0,0.08)" }}
+          />
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="text-[11px] text-center w-full py-1.5 transition-opacity hover:opacity-60"
+            style={{ color: "#BBBBBB", fontFamily: "var(--font-body)" }}
+          >
+            Preview demo ›
+          </button>
+        </div>
+      )}
     </OnboardingShell>
   );
 };

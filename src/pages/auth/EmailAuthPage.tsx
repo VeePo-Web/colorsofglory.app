@@ -11,6 +11,7 @@ import {
   requestPasswordReset,
   AuthError,
 } from "@/integrations/cog/auth";
+import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
 
 type Mode = "signin" | "signup";
 
@@ -68,7 +69,7 @@ const EmailAuthPage = () => {
     try {
       if (mode === "signin") {
         await signInWithPassword({ email: emailParsed.data, password });
-        navigate("/", { replace: true });
+        await routeAfterAuth(navigate);
       } else {
         const { needsConfirmation } = await signUpWithPassword({
           email: emailParsed.data,
@@ -80,7 +81,7 @@ const EmailAuthPage = () => {
           setPassword("");
           setConfirmPassword("");
         } else {
-          navigate("/", { replace: true });
+          await routeAfterAuth(navigate);
         }
       }
     } catch (err) {
@@ -291,7 +292,7 @@ const EmailAuthPage = () => {
         <div className="mt-6 flex items-center justify-center gap-2 text-[0.875rem]">
           <span style={{ color: "#6B6459" }}>Prefer your phone?</span>
           <Link
-            to="/auth/phone"
+            to="/auth/login"
             className="font-medium underline-offset-4 hover:underline"
             style={{ color: "var(--cog-gold, #B8953A)" }}
           >

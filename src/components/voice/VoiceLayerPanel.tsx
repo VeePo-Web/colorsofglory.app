@@ -3,7 +3,8 @@ import { Mic } from "lucide-react";
 import UploadDropZone from "./UploadDropZone";
 import VoiceMemoListItem from "./VoiceMemoListItem";
 import type { VoiceMemoRecord } from "@/lib/voice/voiceApi";
-import { listVoiceMemos, deleteMemo, uploadVoiceMemo } from "@/lib/voice/voiceApi";
+import { listVoiceMemos, deleteMemo } from "@/lib/voice/voiceApi";
+import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
 import {
   getAudioFileDuration,
   getBestMimeType,
@@ -90,19 +91,21 @@ const VoiceLayerPanel = ({
       const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${memoCount}`;
       const fileName = `${title.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.${ext}`;
 
-      const memoId = await uploadVoiceMemo({
-        songId,
+      // Cache-first + auto-retry: the import is durable before any network call,
+      // so a dropped connection never strands it. The outbox subscription below
+      // swaps the optimistic card for the real record once it syncs.
+      const { outboxId } = await enqueueCaptureUpload({
         blob: file,
+        songId,
+        title,
         mimeType,
         durationMs,
-        title,
         sectionLabel: "Raw idea",
         fileName,
       });
 
-      // Optimistic new memo
       const optimisticMemo: VoiceMemoRecord = {
-        id: memoId,
+        id: outboxId,
         song_id: songId,
         title,
         duration_ms: durationMs,
@@ -110,18 +113,37 @@ const VoiceLayerPanel = ({
         storage_path: "",
         created_at: new Date().toISOString(),
         created_by: currentUserName,
-        is_processing: false,
+        is_processing: true,
+        status: "uploading",
       };
 
       setMemos((prev) => [optimisticMemo, ...prev]);
       onMemoAdded?.(optimisticMemo);
-    } catch (err) {
-      setUploadError("Upload failed. Please try again.");
-      console.error("Upload error:", err);
+    } catch {
+      setUploadError("Couldn't read that file — please try another.");
     } finally {
       setUploading(false);
     }
   }, [songId, memos.length, currentUserName, onMemoAdded]);
+
+  // Reconcile optimistic import cards as the outbox syncs them: swap to the real
+  // record on success, or mark "still saving" if a retry is pending. The take is
+  // safe throughout.
+  useEffect(() => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.type === "change") return;
+      if (event.songId !== songId) return;
+      if (event.type === "success") {
+        setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
+        void loadMemos();
+      } else if (event.type === "failed") {
+        setMemos((prev) =>
+          prev.map((m) => (m.id === event.outboxId ? { ...m, status: "queued", is_processing: true } : m)),
+        );
+      }
+    });
+    return unsubscribe;
+  }, [songId, loadMemos]);
 
   const handleDelete = useCallback(async (memoId: string) => {
     setMemos((prev) => prev.filter((m) => m.id !== memoId));

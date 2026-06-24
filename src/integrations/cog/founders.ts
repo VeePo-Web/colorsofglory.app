@@ -2,6 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type FounderStats = {
   is_founder: boolean;
+  payout_method_complete?: boolean;
+  payout_method?: string | null;
   display_name?: string | null;
   status?: string | null;
   code?: string | null;
@@ -24,6 +26,12 @@ export type FounderStats = {
     amount_cents: number;
     month_index: number | null;
     status: string;
+    created_at: string;
+  }>;
+  event_timeline?: Array<{
+    status: string;
+    amount_cents: number;
+    invoice_external_id: string | null;
     created_at: string;
   }>;
 };

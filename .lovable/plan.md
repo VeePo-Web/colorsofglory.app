@@ -1,100 +1,178 @@
-# Payments System Audit — Colors of Glory
+## Payments + Referral System Audit & World-Class Hardening
 
-## What's already shipped and verified working
+### Current state (already shipped)
+- **Founder codes**: `$50 off` first paid month via Stripe coupon, attribution stamped on checkout metadata
+- **Reward minting**: `record_invoice_paid` → Founder gets $25 (first invoice) / $10 (recurring), regular Members get $5
+- **30-day hold → maturation cron (07:17 UTC daily)** → monthly payout drafts cron (1st @ 07:25 UTC)
+- **Admin ops**: `approve_payout`, `admin_finance_summary`, `admin_referrer_ledger`, `admin_billing_events`, `admin_list_payouts`, `admin_fraud_flags`
+- **Founder dashboard endpoint**: `me-founder-stats` (code, share link, redemptions, earnings buckets, next draft date)
+- **Tax**: `payout_tax_profiles` (W-9/W-8) + `me-set-tax-profile`
+- **Fraud**: self-referral trigger auto-flags into `fraud_flags`; OTP toll-fraud rail
+- **Tracking**: `billing_events`, `reward_events`, `referral_attributions`, `payouts`, `fraud_flags`
+- **Self-service**: `me-earnings-export` (CSV), `referral-resolve` returns lifetime social-proof count
 
-**Stripe catalog (CAD, sandbox)** — `cog_starter_cad`, `cog_pro_cad`, `cog_pro_referral_cad` products with lookup keys `starter_monthly_cad` ($5), `pro_monthly_cad` ($100), `pro_monthly_referral_50_cad` ($49). Wired to `plan_tiers` rows. Tax code `txcd_10103001` (SaaS), full compliance handling.
+### World-class benchmark gaps to close
+Based on Dropbox / Notion / ConvertKit / Superhuman / Rewardful / Tolt / Wise patterns, five gaps remain:
 
-**Checkout** — `create-checkout` is plan-key-driven. Validates plan, atomically claims founder code redemption (`claim_founder_code_redemption` RPC, releases on Stripe error → no overshoot of `max_redemptions`), routes Pro+founder to the $49 price and stamps `applied_code_kind=founder` + `attribution_founder_id` on the subscription, routes Pro+member-referral to full price and stamps `attribution_referrer_user_id`. Reads `profiles.pending_code` as fallback. Starter blocks codes. One attribution per buyer enforced by UNIQUE `referral_attributions.referred_user_id`.
+1. **Lifecycle notifications** (Dropbox/ConvertKit pattern)
+   - Resend emails: `referral_first_redeemed`, `reward_matured`, `payout_sent`, `payout_failed`
+   - New edge fn `notify-referral-event` triggered by DB triggers on `reward_events` and `payouts` status changes
+   - Per-user mute toggle in `profiles.notification_prefs`
 
-**Webhook (`payments-webhook`)** — Handles `checkout.session.completed`, `subscription.*`, `invoice.paid` (with dahlia-correct `invoice.parent.subscription_details.subscription` resolution + legacy fallback), `charge.refunded`, `charge.dispute.created`. Idempotent via `billing_events.external_event_id`. Calls `apply_song_lock_for_quota` + `unlock_songs_up_to_quota` on every sub change. Writes attribution row from session metadata if not already present.
+2. **Referrer-side dashboard endpoint for regular Members** (parity with founders)
+   - `me-referral-stats` mirroring `me-founder-stats` for non-founder users (regular $5/referral track)
+   - Returns: personal referral code, share link, redemptions, pending/payable/paid buckets, next payout date
 
-**Reward minting** — `record_invoice_paid` RPC mints rewards on every paid invoice:
-- Founder code attribution → $25/mo for first 3 months, $10/mo for life of sub (driven by `founders.reward_profile` + `app_settings.founder_reward_*`)
-- Member referral attribution → $5/mo for life of sub (`app_settings.user_referral_cash_cents=500`)
-- Both held 30 days (`reward_hold_days=30`), then matured by `mature_holds()` (daily cron `cog-mature-holds-daily` at 07:17 UTC — active)
-- Clawbacks: `record_invoice_refunded` and `record_chargeback` reverse pending rewards.
+3. **Payout method capture** (Wise/Stripe Connect pattern, minimum viable)
+   - Extend `payout_tax_profiles` → add `payout_method` (paypal_email | stripe_connect_id | manual_check) + payout instructions
+   - New endpoint `me-set-payout-method`; admin `approve_payout` blocks if missing
+   - Surface in `me-founder-stats` / `me-referral-stats` as a "complete payout setup" prompt
 
-**Apply founder code post-purchase** — `apply-founder-code-to-active-sub` swaps existing Pro sub to the $49 referral price with proration, writes attribution, increments redemption count.
+4. **Operational alerting + reconciliation** (Stripe Atlas pattern)
+   - Daily `reconcile-billing-events` cron: scans Stripe invoices vs `billing_events` last 48h, inserts a `fraud_flags` row with `kind = 'reconciliation_drift'` on mismatch
+   - Admin endpoint `admin_reconciliation_report` to list drifts
 
-**Admin tooling** — `admin-payouts` (list_drafts / create_batch / approve / mark_paid / mark_failed / retry), `admin-founders`, `admin-attribution-override`, `admin-redrive-billing-event`, `admin-audit-search`.
+5. **Public ledger transparency** (Notion/Superhuman trust pattern)
+   - Extend `me-founder-stats` and `me-referral-stats` with per-event timeline (status transitions: minted → matured → drafted → paid)
+   - Already have data in `reward_events` + `payouts`; just compose the response
 
-**User-facing SDK** — `getMyBillingStatus`, `startCheckout`, `validateCode`, `openBillingPortal`, `cancelSubscription`, `applyFounderCodeToActiveSub`, `getMyReferrals` (code + link + earnings breakdown + recent referrals + payout method), `setMyPayoutMethod`.
+### Out of scope
+- Frontend dashboards (Claude territory — handoffs already written)
+- Stripe Connect onboarding UX (defer; PayPal/manual covers v1)
+- Multi-currency payouts (USD only at launch)
+- Changing reward amounts, hold days, or cohort definitions (live-tunable in `app_settings`)
 
-## Gaps found and what to fix
+### Files
 
-### 1. Six migrations sit in `supabase/migrations/` but were never applied (`max(version)=20260619040155`)
+**Migrations (1 new):**
+- Extend `payout_tax_profiles` with payout method columns
+- Add notification preference JSONB to `profiles`
+- Triggers on `reward_events.status` and `payouts.status` → enqueue notification rows
+- `notification_queue` table (id, user_id, kind, payload, sent_at, attempts, error)
 
-This is the headline bug. The repo *thinks* these are live, but the DB does not have them:
+**Edge functions (3 new, 0 modified):**
+- `notify-referral-event` (cron every 5min, drains `notification_queue` via Resend)
+- `me-referral-stats` (parity with `me-founder-stats` for regular members)
+- `me-set-payout-method`
+- `reconcile-billing-events` (daily cron)
 
-| File | What it adds |
-|---|---|
-| `20260620000000_cog_monthly_payout_drafts_cron.sql` | **Monthly payout-draft auto-creation** (`create_monthly_payout_drafts` + pg_cron job `cog-create-payout-drafts-monthly` at `25 7 1 * *`). Without this, payable rewards mature to `payable` and sit there forever — no founder/referrer gets auto-drafted into a payout. |
-| `20260621000000_cog_otp_fraud_rails.sql` | OTP fraud rails (separate but pending). |
-| `20260621000100_cog_admin_finance_summary.sql` | `admin_finance_summary` RPC powering the admin finance dashboard. |
-| `20260621000200_cog_admin_ops.sql` | Admin ops RPCs. |
-| `20260622000000_cog_fraud_review.sql` | Fraud review queue. |
-| `20260622000100_cog_admin_referrer_ledger.sql` | Per-referrer ledger view for admins. |
+**Existing endpoints extended:**
+- `me-founder-stats` → adds `payout_method_complete`, `event_timeline[]`
+- `approve_payout` SQL fn → block when `payout_method` missing
 
-**Action:** Re-apply the six pending migrations in version order via `supabase--migration`. After they land, verify `cron.job` contains `cog-create-payout-drafts-monthly` and the finance/referrer-ledger RPCs are callable.
+**SDK (`src/integrations/cog/`):**
+- `payouts.ts` → add `setMyPayoutMethod`, `getMyPayoutMethod`
+- `referrals.ts` → add `getMyReferralStats`
+- `founders.ts` → updated response type
 
-### 2. Live webhook + live Stripe key not provisioned yet
+**Docs:**
+- Append "Notifications + Payout Method + Reconciliation" section to `docs/claude-handoffs/2026-06-22-payments.md`
+- Update `.lovable/plan.md` audit log
+- Update `docs/payments/2026-06-22-referral-benchmark.md` with final gap-closure matrix
 
-Sandbox secrets only (`STRIPE_SANDBOX_API_KEY`, `PAYMENTS_SANDBOX_WEBHOOK_SECRET`). `STRIPE_LIVE_API_KEY` / `PAYMENTS_LIVE_WEBHOOK_SECRET` arrive automatically when you finish Stripe go-live and install the Lovable app on the live account. No code change required — call this out so you know the user-driven step is pending.
+### Verification
+After build:
+1. Run `debug_seed_reward_chain` for both founder + regular member to confirm both dashboards populate
+2. Verify notification triggers fire (check `notification_queue`)
+3. Approve a test payout with missing payout method → expect error
+4. Trigger `reconcile-billing-events` → expect zero drifts on clean state
 
-**Action:** Surface a one-line reminder in chat + extend `docs/claude-handoffs/2026-06-22-payments.md` with the go-live status check.
+Approve to ship?
+---
 
-### 3. No automated end-to-end test of the payout pipeline
+## 2026-06-24 — Hardening shipped
 
-`reward_events` minting is RPC-only; there's no integration smoke test that proves "$100 invoice → 1 payable founder reward + 1 payable user reward after 30 days → 1 payout draft on day 1 of next month."
+- Migration: `notification_queue` table + auto-triggers on `reward_events` and `payouts`; `reconciliation_reports` table; `approve_payout` now requires `profiles.payout_method`.
+- Edge fns: `notify-referral-event` (5-min cron drain via Resend gateway; logs-only fallback if RESEND not linked); `reconcile-billing-events` (daily cron, Stripe-vs-local invoice diff).
+- Extended `me-founder-stats` + `me-referrals` with `event_timeline[]` + `payout_method_complete`.
+- SDK types updated: `FounderStats.event_timeline`, `MyReferralsSummary.payout_method.complete`.
+- Cron schedules registered: `cog-notify-referral-event` (*/5 * * * *), `cog-reconcile-billing-events` (35 7 * * *).
+- Action item for user: link the Resend connector to enable real email delivery; until then, notifications are queued and marked sent in logs only.
+## Why phone sign-in is broken right now
 
-**Action:** Add a SQL-level smoke-test migration helper (`debug_simulate_invoice_paid(user_uuid, amount, attribution_kind)`) that drives `record_invoice_paid` end-to-end against a synthetic subscription so the user can manually verify the chain in the admin UI without waiting for real Stripe traffic. SECURITY DEFINER, service-role only. No prod data risk.
+Your live auth logs (4:48 UTC) show the exact failure:
 
-### 4. `me-referrals` payload missing one field
+```
+POST /otp  →  400  error_code=phone_provider_disabled
+              "Unsupported phone provider"
+```
 
-Returns lifetime + recent refs, but no breakdown of how many of the user's referrals are still on Pro (active vs churned). Claude's Settings → Referrals page needs this for the "active 4 / lifetime 7" stat. Already collectable from the existing data, just not exposed.
+That error comes from Supabase Auth itself, before any Twilio call. It means **the Phone provider is OFF on the backend auth project** — no SMS sender credentials are configured, so `supabase.auth.signInWithOtp({ phone })` in `src/pages/auth/PhoneLoginPage.tsx` is rejected immediately. Our `otp-guard` edge function, the E.164 formatting, the 6-digit verify screen, and the toll-fraud rate limiter are all correct — they just never run because step 1 dies.
 
-**Action:** Add `active_subscriptions_count` to the `MyReferralsSummary` response and compute server-side by joining `referral_attributions` → `subscriptions` (status in active/trialing/past_due). Bump SDK type.
+The secondary error in the same session (`email_not_confirmed` when you tried email as a fallback) is unrelated to Twilio: email verification is ON and you hadn't clicked the confirm link yet. Expected behavior.
 
-### 5. Founder dashboard equivalent of `me-referrals` does not exist
+## What world-class does here (Church Center, Linear, Notion, Stripe Identity)
 
-`getMyFounderProfile` / `getMyMonthlyEarnings` exist but there's no single endpoint that returns the founder-facing summary (code, redemption count, redemption cap, lifetime $ earned, pending $, payable $, next draft date, recent paid invoices) in one round-trip.
+After studying the Church Center sign-in flow and the leading OTP UXs, the bar is:
 
-**Action:** Add `me-founder-stats` edge function returning the consolidated payload, plus `getMyFounderStats()` SDK wrapper. Mirrors the structure of `me-referrals`.
+1. **One field, one tap.** Phone field auto-focuses, auto-formats as you type, country code is implicit (US default) with a discoverable selector for non-US.
+2. **Carrier-grade delivery.** Use Twilio **Verify** (not raw Programmable Messaging) so Twilio handles retries, alternate channels, fraud scoring, and SMS Pumping Protection automatically.
+3. **6-digit code, auto-advance, paste-friendly, OTP autofill.** Each input reads `inputmode="numeric"` `autocomplete="one-time-code"` so iOS/Android pull the code from the SMS banner with zero typing.
+4. **Resend with a 30s cooldown countdown.** Never let users hammer resend (that's how SMS-pumping bills blow up).
+5. **Graceful fallback to email.** If a number can't receive SMS, offer email magic link in the same flow — Church Center does this elegantly.
+6. **Clear, calm error copy.** No raw Supabase error strings; map every code to a one-sentence human message.
+7. **Geographic guardrails.** Only enable destination countries you actually serve (US/CA to start) in Twilio's SMS Geo Permissions — kills the #1 SMS-pumping vector.
 
-## Out of scope for this pass
+Most of #1, #3, #5, #6 are already implemented well in our two pages. The gaps are #2 (no provider), #4 (cooldown exists but resend button visibility needs a polish pass), and #7 (Twilio-side config the user owns).
 
-- No frontend changes (Settings → Referrals and Settings → Founder pages are Claude's lane).
-- No re-architecture of payouts — manual approval flow stays (admin clicks approve → mark_paid).
-- No changes to reward amounts / hold days (those are `app_settings` rows the user can edit live).
-- Stripe Connect / direct deposit payouts (still ledger-only; payouts are manually executed via PayPal / e-transfer by admin).
+## Plan
 
-## Technical implementation
+### Part A — Make phone sign-in actually work (the only thing blocking you)
 
-1. **Apply pending migrations**
-   - Run each of the six pending migrations in order via the migration tool. Verify `cron.job` includes `cog-create-payout-drafts-monthly` and that `create_monthly_payout_drafts()` exists.
+This is a backend/secrets task. Lovable Cloud cannot toggle the Phone provider via tools, so the flow is:
 
-2. **Add reward pipeline smoke-test helper** (new migration)
-   - `public.debug_seed_reward_chain(_user uuid, _amount_cents int, _kind text)` — creates a synthetic subscription + invoice and calls `record_invoice_paid`. SECURITY DEFINER, REVOKE FROM PUBLIC, GRANT to service_role. Tagged in `audit_logs`.
+1. **Connect Twilio** via the Lovable Twilio connector (`standard_connectors--connect twilio`). This stores `TWILIO_API_KEY` (and SID) as runtime secrets and is the same credential we'll use for Verify.
+2. **Create a Twilio Verify Service** in the user's Twilio console (one-time, ~60 seconds). Capture the Verify **Service SID** (starts `VA…`).
+3. **Add the Verify Service SID as a secret** (`TWILIO_VERIFY_SERVICE_SID`) via `add_secret`. Also confirm `TWILIO_ACCOUNT_SID` is set.
+4. **Switch our OTP flow off Supabase's built-in phone provider and onto Twilio Verify via our own edge functions.** Two new functions:
+   - `phone-otp-start` — accepts `{ phone }`, runs the existing `otp-guard` rate-limit check, then calls Twilio Verify `/Services/{VA}/Verifications` to send the SMS. Returns `{ ok, channel, attempts_remaining }`.
+   - `phone-otp-verify` — accepts `{ phone, code }`, calls Twilio Verify `/Services/{VA}/VerificationCheck`. On `approved`, looks up or creates the matching `auth.users` row (by phone) via admin client and returns a Supabase **session** (using `admin.generateLink` or `admin.createUser` + `signInWithPassword` w/ a derived secret, or — cleanest — a server-minted session using `admin.signInWithIdToken` pattern). Profile + referral attach run in the same call (mirroring the existing email flow).
+   - Rationale: keeps Twilio as the single source of truth for SMS, gives us SMS Pumping Protection + Geo Permissions for free, and removes the dependency on Supabase's phone provider toggle.
+5. **Update `PhoneLoginPage.tsx` and `CodeVerifyPage.tsx`** to call our two new edge functions instead of `supabase.auth.signInWithOtp` / `verifyOtp`. Error-code → friendly-copy mapping stays; we just add the Twilio-specific codes (`60200` invalid param, `60202` max attempts, `60203` max sends, `20429` rate limit).
+6. **Turn on Twilio safety rails** (user-side checklist surfaced in the final message): SMS Pumping Protection ON, SMS Geo Permissions limited to US + CA (expand on request).
 
-3. **Extend `me-referrals`**
-   - Add `active_subscriptions_count` to the response by joining `referral_attributions` → `subscriptions` (status in `('active','trialing','past_due')`).
-   - Update `MyReferralsSummary` type in `src/integrations/cog/referrals.ts`.
+### Part B — UX polish to hit Church-Center-grade calm
 
-4. **New `me-founder-stats` edge function + SDK wrapper**
-   - Returns: `{ code, share_link, redemptions_used, redemptions_cap, active_subscriptions_count, lifetime_paid_cents, pending_cents, payable_cents, next_draft_date, recent_paid_invoices: [...] }`.
-   - SDK: `getMyFounderStats()` in `src/integrations/cog/founders.ts`.
+Small, surgical changes — no redesign:
 
-5. **Doc updates**
-   - Append audit findings + new endpoints to `docs/claude-handoffs/2026-06-22-payments.md`.
-   - Note in chat: live webhook is provisioned automatically after Stripe go-live (no manual action needed in code).
+- `PhoneLoginPage.tsx`: add a subtle "We'll text you a 6-digit code. Standard rates apply." helper under the input (already partial — tighten copy + match cream/charcoal token usage).
+- `CodeVerifyPage.tsx`: confirm `autocomplete="one-time-code"` on the input, add visible resend countdown (`Resend in 0:23`), and a clear "Use email instead" link that routes to `/auth/email` preserving any pending invite token in sessionStorage.
+- Add an "edit number" affordance on the verify screen (one tap back to the phone field with the value pre-filled).
+- Ensure both screens carry the warm radial glow + serif heading per design system.
 
-## Files touched
+### Part C — Tracking & audit trail
 
-- `supabase/migrations/20260622000200_cog_payments_audit_smoke_test.sql` (new)
-- `supabase/functions/me-referrals/index.ts` (add `active_subscriptions_count`)
-- `supabase/functions/me-founder-stats/index.ts` (new)
-- `src/integrations/cog/referrals.ts` (bump type)
-- `src/integrations/cog/founders.ts` (add `getMyFounderStats`)
-- `docs/claude-handoffs/2026-06-22-payments.md` (audit notes + new endpoints)
+- New table `phone_otp_events` (id, phone_hash, ip_hash, country, channel, kind: sent|verified|failed, twilio_sid, created_at) populated by the two new edge functions. Used by admin tools to investigate disputed logins and to detect pumping patterns.
+- Extend the existing `fraud_flags` trigger family with `kind = 'otp_velocity'` when `check_and_record_otp_send` denies > N times for the same `ip_hash` in 24h.
+- Surface last 50 OTP events for a given user in `admin-audit-search` (already exists — just add the new table to its union).
 
-Plus: re-apply the six pending migrations via the migration tool.
+### Out of scope
+
+- WhatsApp OTP channel (Twilio Verify supports it; add later if a user asks).
+- Passkeys / WebAuthn (separate initiative).
+- Changing email auth — that's working; the "email_not_confirmed" you hit is expected when you haven't clicked the confirm link.
+
+## Technical details
+
+**Files touched / added**
+
+- Add: `supabase/functions/phone-otp-start/index.ts`
+- Add: `supabase/functions/phone-otp-verify/index.ts`
+- Add: `supabase/migrations/<ts>_phone_otp_events.sql` (table + GRANTs + RLS + `otp_velocity` fraud trigger + extend `admin_audit_search` RPC)
+- Edit: `src/pages/auth/PhoneLoginPage.tsx` (call `functions.invoke('phone-otp-start')` instead of `auth.signInWithOtp`)
+- Edit: `src/pages/auth/CodeVerifyPage.tsx` (call `functions.invoke('phone-otp-verify')`, persist returned session via `supabase.auth.setSession`, polish resend countdown + email fallback)
+- Edit: `src/integrations/cog/` — add `auth/phoneOtp.ts` SDK wrappers
+- Edit: `docs/claude-handoffs/` — new handoff doc for Claude on the UX polish bits
+
+**Secrets to add** (Part A, step 3)
+
+- `TWILIO_VERIFY_SERVICE_SID` (user supplies from Twilio console)
+- Reuse `TWILIO_API_KEY` and `TWILIO_ACCOUNT_SID` from the Twilio connector
+
+**User actions required** (cannot be done by tools)
+
+1. Approve linking the Twilio connector.
+2. In Twilio console: create a Verify Service, copy the Service SID, paste into `add_secret` prompt.
+3. In Twilio console: enable SMS Pumping Protection; restrict SMS Geo Permissions to US + CA.
+
+After those three, phone sign-in works end-to-end and the audit trail starts populating.

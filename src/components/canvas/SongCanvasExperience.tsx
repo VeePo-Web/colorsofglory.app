@@ -25,12 +25,15 @@ import {
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
+import CreativeActionDock from "@/components/cog/CreativeActionDock";
+import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport from "@/components/canvas/CanvasViewport";
+import CanvasViewport, { useCanvasViewport } from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
 import SongRootCard from "@/components/canvas/SongRootCard";
+import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
@@ -40,6 +43,13 @@ import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
 import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import StackSheet from "@/components/voice/StackSheet";
+import type { StackMemoView } from "@/components/voice/MemoStack";
+import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
+import { useCurrentAccount } from "@/integrations/cog/auth";
+import { subscribeSongRoom } from "@/integrations/cog/realtime";
+import { toast } from "sonner";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -63,9 +73,23 @@ export interface CanvasCard {
   accent: string;
   x: number;
   y: number;
+  /** Set when this voice memo is a layer recorded over a base ("Record over this"). */
+  parentMemoId?: string;
+  /** Recording length for stack playback/labels; voice cards only. */
+  durationMs?: number;
   isDimmedReference?: boolean;
   isProcessing?: boolean;
 }
+
+/** Canvas card → the shape the stack engine + sheet consume. */
+const toStackView = (c: CanvasCard): StackMemoView => ({
+  id: c.id,
+  parentMemoId: c.parentMemoId,
+  title: c.title,
+  contributor: c.contributor,
+  durationMs: c.durationMs ?? 0,
+  section: c.section,
+});
 
 type RecordingFlow = "idle" | "recording" | "reviewing";
 
@@ -101,7 +125,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Verse 1",
     contributor: "Parker",
     status: "raw",
-    accent: "#D4AE5C",
+    accent: getCreatorColor("Parker").base,
     x: 80,
     y: 200,
   },
@@ -115,7 +139,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Verse 1",
     contributor: "Sarah",
     status: "shortlisted",
-    accent: "#53AB8B",
+    accent: getCreatorColor("Sarah").base,
     x: 320,
     y: 200,
   },
@@ -129,7 +153,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Meaning",
     contributor: "Parker",
     status: "meaning",
-    accent: "#8070C4",
+    accent: getCreatorColor("Parker").base,
     x: 80,
     y: 440,
   },
@@ -143,7 +167,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Chorus",
     contributor: "Parker",
     status: "approved",
-    accent: "#D4AE5C",
+    accent: getCreatorColor("Parker").base,
     x: DIVIDER_X + 80,
     y: 200,
   },
@@ -157,7 +181,7 @@ const INITIAL_CARDS: CanvasCard[] = [
     section: "Arrangement",
     contributor: "Caleb",
     status: "approved",
-    accent: "#8070C4",
+    accent: getCreatorColor("Caleb").base,
     x: DIVIDER_X + 80,
     y: 420,
   },
@@ -165,6 +189,7 @@ const INITIAL_CARDS: CanvasCard[] = [
 
 const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
+const SHOW_LEGACY_CANVAS_FABS = false;
 
 const getStoredCards = (songId: string): CanvasCard[] => {
   try {
@@ -211,7 +236,10 @@ interface CanvasCardProps {
   onSelect: () => void;
   onMoveToFinal: () => void;
   onMoveToIdeas: () => void;
-  onDragStart: (e: React.PointerEvent, cardId: string) => void;
+  /** Called continuously during drag with the new canvas-space position */
+  onMove: (id: string, x: number, y: number) => void;
+  layerCount?: number;
+  onOpenStack?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -220,9 +248,55 @@ const CanvasCardEl = ({
   onSelect,
   onMoveToFinal,
   onMoveToIdeas,
-  onDragStart,
+  onMove,
+  layerCount = 0,
+  onOpenStack,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
+  const isVoice = card.type === "voice" || card.type === "hum";
+
+  // Pointer-capture drag: card receives all pointer events even when the cursor
+  // leaves its bounds. screenToCanvas from the viewport context converts the
+  // pointer position to canvas coords so the card follows correctly even at
+  // non-1x zoom. This is intentionally separate from the canvas pan gesture.
+  const { screenToCanvas } = useCanvasViewport();
+  const dragState = useRef<{
+    pointerId: number;
+    startScreen: { x: number; y: number };
+    startCard: { x: number; y: number };
+  } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only primary button (left-click / single touch)
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation(); // prevent canvas pan from starting
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = {
+      pointerId: e.pointerId,
+      startScreen: { x: e.clientX, y: e.clientY },
+      startCard: { x: card.x, y: card.y },
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    // Convert both the start and current screen positions to canvas coords so
+    // the delta is expressed in canvas space (respects zoom level).
+    const startCanvas = screenToCanvas(
+      dragState.current.startScreen.x,
+      dragState.current.startScreen.y,
+    );
+    const currCanvas = screenToCanvas(e.clientX, e.clientY);
+    const newX = dragState.current.startCard.x + (currCanvas.x - startCanvas.x);
+    const newY = dragState.current.startCard.y + (currCanvas.y - startCanvas.y);
+    onMove(card.id, newX, newY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    e.currentTarget.releasePointerCapture(dragState.current.pointerId);
+    dragState.current = null;
+  };
 
   return (
     <div
@@ -233,7 +307,7 @@ const CanvasCardEl = ({
         width: 200,
         minHeight: 130,
         borderRadius: 16,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: "var(--cog-cream-light)",
         border: selected
           ? `2px solid ${card.accent}`
           : card.isDimmedReference
@@ -243,7 +317,7 @@ const CanvasCardEl = ({
           ? `0 8px 28px ${card.accent}30`
           : "0 4px 14px rgba(0,0,0,0.09)",
         opacity: card.isDimmedReference ? 0.42 : 1,
-        cursor: "pointer",
+        cursor: dragState.current ? "grabbing" : "grab",
         userSelect: "none",
         zIndex: selected ? 20 : 10,
         transform: selected ? "scale(1.03)" : "scale(1)",
@@ -252,10 +326,10 @@ const CanvasCardEl = ({
         boxSizing: "border-box",
       }}
       onClick={onSelect}
-      onPointerDown={(e) => {
-        e.stopPropagation(); // prevent canvas pan when interacting with a card
-        onDragStart(e, card.id);
-      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       role="button"
       aria-pressed={selected}
       aria-label={`${card.type} card: ${card.title}`}
@@ -305,12 +379,28 @@ const CanvasCardEl = ({
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: "0.12em",
-            color: "#999",
+            color: "var(--cog-muted)",
             fontFamily: "var(--font-body)",
           }}
         >
           {card.section}
         </span>
+        {isVoice && layerCount > 0 && (
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 9,
+              fontWeight: 700,
+              color: card.accent,
+              backgroundColor: `${card.accent}1A`,
+              borderRadius: 9999,
+              padding: "2px 7px",
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            {layerCount} layer{layerCount > 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       {/* Title */}
@@ -318,7 +408,7 @@ const CanvasCardEl = ({
         style={{
           fontSize: 13,
           fontWeight: 700,
-          color: "#1A1A1A",
+          color: "var(--cog-charcoal)",
           fontFamily: "var(--font-display)",
           marginBottom: 6,
           lineHeight: 1.3,
@@ -331,7 +421,7 @@ const CanvasCardEl = ({
       <p
         style={{
           fontSize: 12,
-          color: "#666",
+          color: "var(--cog-warm-gray)",
           lineHeight: 1.5,
           fontFamily: "var(--font-body)",
           overflow: "hidden",
@@ -362,6 +452,26 @@ const CanvasCardEl = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {isVoice && onOpenStack && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: `${card.accent}16`,
+                color: card.accent,
+                fontSize: 11,
+                fontWeight: 700,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
+            >
+              {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
+            </button>
+          )}
           {card.tree === "ideas" && !card.isDimmedReference && (
             <button
               onClick={onMoveToFinal}
@@ -369,7 +479,7 @@ const CanvasCardEl = ({
                 flex: 1,
                 height: 30,
                 borderRadius: 8,
-                backgroundColor: "#B5935A",
+                backgroundColor: "var(--cog-gold)",
                 color: "#FFF",
                 fontSize: 11,
                 fontWeight: 600,
@@ -389,7 +499,7 @@ const CanvasCardEl = ({
                 height: 30,
                 borderRadius: 8,
                 backgroundColor: "rgba(0,0,0,0.06)",
-                color: "#666",
+                color: "var(--cog-warm-gray)",
                 fontSize: 11,
                 fontWeight: 600,
                 border: "none",
@@ -421,6 +531,16 @@ const SongCanvasExperience = () => {
   const [searchParams] = useSearchParams();
   const isViewer = searchParams.get("role") === "viewer";
 
+  // Real signed-in identity so contributions + presence carry the actual person,
+  // not a hardcoded "You". Falls back gracefully before the profile resolves.
+  const { profile } = useCurrentAccount();
+  const currentUserName = useMemo(() => {
+    const display = profile?.display_name?.trim();
+    if (display) return display;
+    const full = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim();
+    return full || "You";
+  }, [profile]);
+
   const [cards, setCards] = useState<CanvasCard[]>(() => getStoredCards(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
@@ -433,6 +553,7 @@ const SongCanvasExperience = () => {
     return isLayerId(layer) ? layer : "room";
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
+  const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -450,6 +571,15 @@ const SongCanvasExperience = () => {
     }
   }, [isPracticeLaunching, songId, songTitle, navigate]);
 
+  const showSavedMoment = useCallback((title: string, destination: string, detail?: string) => {
+    setSaveMoment({
+      id: `save-${Date.now()}`,
+      title,
+      destination,
+      detail,
+    });
+  }, []);
+
   // ── Voice recording state ────────────────────────────────────────────────────
   const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>("idle");
@@ -457,11 +587,12 @@ const SongCanvasExperience = () => {
   const [recordingNote, setRecordingNote] = useState("");
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
   const voiceMemoCountRef = useRef(0);
+  // When set, the next saved take is a layer recorded over this base memo.
+  const recordingParentIdRef = useRef<string | null>(null);
+  // The base memo whose stack sheet is currently open (null = closed).
+  const [stackBaseId, setStackBaseId] = useState<string | null>(null);
 
-  // Drag tracking for card repositioning
-  const draggingCardId = useRef<string | null>(null);
-  const dragStartCanvas = useRef({ x: 0, y: 0 });
-  const dragStartCard = useRef({ x: 0, y: 0 });
+  // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
   useEffect(() => {
     const layer = searchParams.get("layer");
@@ -475,49 +606,57 @@ const SongCanvasExperience = () => {
     localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
   }, [cards, songId]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Pull any voice memos for this song from the backend and merge in the ones
+  // we don't already have. Reused on mount AND on every realtime event, so a
+  // collaborator's new memo/layer appears in the room without a reload.
+  const hydrateVoiceMemos = useCallback(async () => {
+    try {
+      const db = await loadVoiceMemosForCanvas(songId);
+      const dbCards: CanvasCard[] = db.nodes
+        .filter((node) => node.objectType === "idea_card")
+        .map((node): CanvasCard | null => {
+          const card = db.cards[node.objectId];
+          if (!card) return null;
+          return {
+            id: card.id,
+            tree: "ideas" as const,
+            type: "voice" as const,
+            title: card.title,
+            body: card.body || card.preview || "",
+            meta: card.preview || "Voice memo",
+            section: "Raw idea",
+            contributor: card.contributorName,
+            status: "raw" as const,
+            accent: card.contributorColor,
+            x: node.x,
+            y: node.y,
+          };
+        })
+        .filter((card): card is CanvasCard => Boolean(card));
 
-    loadVoiceMemosForCanvas(songId)
-      .then((db) => {
-        if (cancelled) return;
-        const dbCards: CanvasCard[] = db.nodes
-          .filter((node) => node.objectType === "idea_card")
-          .map((node): CanvasCard | null => {
-            const card = db.cards[node.objectId];
-            if (!card) return null;
-            return {
-              id: card.id,
-              tree: "ideas" as const,
-              type: "voice" as const,
-              title: card.title,
-              body: card.body || card.preview || "",
-              meta: card.preview || "Voice memo",
-              section: "Raw idea",
-              contributor: card.contributorName,
-              status: "raw" as const,
-              accent: card.contributorColor,
-              x: node.x,
-              y: node.y,
-            };
-          })
-          .filter((card): card is CanvasCard => Boolean(card));
-
-        if (dbCards.length === 0) return;
-        setCards((prev) => {
-          const existing = new Set(prev.map((card) => card.id));
-          const fresh = dbCards.filter((card) => !existing.has(card.id));
-          return fresh.length > 0 ? [...prev, ...fresh] : prev;
-        });
-      })
-      .catch(() => {
-        // The local canvas remains usable when backend hydration is unavailable.
+      if (dbCards.length === 0) return;
+      setCards((prev) => {
+        const existing = new Set(prev.map((card) => card.id));
+        const fresh = dbCards.filter((card) => !existing.has(card.id));
+        return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
-
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      // The local canvas remains usable when backend hydration is unavailable.
+    }
   }, [songId]);
+
+  // Mount hydration + live room channel. Any change in the song's room nudges a
+  // re-hydrate; the merge dedupes by id so nothing flickers or duplicates.
+  useEffect(() => {
+    void hydrateVoiceMemos();
+    const unsubscribe = subscribeSongRoom(songId, {
+      onActivity: () => void hydrateVoiceMemos(),
+      onCardChange: () => void hydrateVoiceMemos(),
+      onTakeChange: () => void hydrateVoiceMemos(),
+      onCaptureChange: () => void hydrateVoiceMemos(),
+    });
+    return unsubscribe;
+  }, [songId, hydrateVoiceMemos]);
 
   const dismissFirstAction = useCallback(() => {
     localStorage.setItem(FIRST_VISIT_KEY(songId), "1");
@@ -526,15 +665,10 @@ const SongCanvasExperience = () => {
 
   // ── Card manipulation ──────────────────────────────────────────────────────
 
-  const handleCardDragStart = useCallback((e: React.PointerEvent, cardId: string) => {
-    draggingCardId.current = cardId;
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
-    dragStartCanvas.current = { x: e.clientX, y: e.clientY };
-    dragStartCard.current = { x: card.x, y: card.y };
-    setIsDragOver(true);
-    setSelectedId(cardId);
-  }, [cards]);
+  /** Called by CanvasCardEl's pointer-capture drag with the new canvas-space position. */
+  const handleCardMove = useCallback((id: string, x: number, y: number) => {
+    setCards((prev) => prev.map((c) => c.id === id ? { ...c, x, y } : c));
+  }, []);
 
   const handleMoveToFinal = useCallback((cardId: string) => {
     if (isViewer) return;
@@ -559,7 +693,21 @@ const SongCanvasExperience = () => {
     setSelectedId(null);
     setIsDragOver(false);
     setCanvasStatus("Moved. Undo?");
-  }, [isViewer]);
+    showSavedMoment("Approved idea", "Final tree", "Arrangement");
+    toast("Idea moved to Final", {
+      duration: 7000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setCards((prev) =>
+            prev
+              .filter((c) => c.id !== `${cardId}-final`)
+              .map((c) => c.id === cardId ? { ...c, isDimmedReference: false } : c)
+          );
+        },
+      },
+    });
+  }, [isViewer, showSavedMoment]);
 
   const handleMoveToIdeas = useCallback((cardId: string) => {
     if (isViewer) return;
@@ -574,7 +722,8 @@ const SongCanvasExperience = () => {
     );
     setSelectedId(null);
     setCanvasStatus("Moved. Undo?");
-  }, [isViewer]);
+    showSavedMoment("Returned idea", "Ideas tree", "Arrangement");
+  }, [isViewer, showSavedMoment]);
 
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
@@ -597,21 +746,23 @@ const SongCanvasExperience = () => {
       body: "",
       meta: "",
       section: "Raw idea",
-      contributor: "You",
+      contributor: currentUserName,
       status: "raw",
-      accent: "#D4AE5C",
+      accent: getCreatorColor(currentUserName).base,
       x: 80 + (ideaIndex % 3) * 240,
       y: 700 + Math.floor(ideaIndex / 3) * 180,
     };
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
-  }, [cards, dismissFirstAction, isViewer]);
+    showSavedMoment(newCard.title, "Ideas tree", "Note");
+  }, [cards, dismissFirstAction, isViewer, showSavedMoment, currentUserName]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
-  const handleStartRecording = useCallback(async () => {
+  const handleStartRecording = useCallback(async (parentId?: string) => {
     if (isViewer) return;
-    setRecordingSection("Raw idea");
+    recordingParentIdRef.current = parentId ?? null;
+    setRecordingSection(parentId ? "Layer" : "Raw idea");
     setRecordingNote("");
     setRecordingFlow("recording");
     await startRecording();
@@ -632,6 +783,10 @@ const SongCanvasExperience = () => {
 
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
+    // Capture + clear the "record over" target before any async work so the
+    // next normal record can't inherit a stale parent.
+    const parentMemoId = recordingParentIdRef.current ?? undefined;
+    recordingParentIdRef.current = null;
     voiceMemoCountRef.current++;
     setCanvasStatus("Saving...");
     const tempId = `voice-${Date.now()}`;
@@ -640,24 +795,32 @@ const SongCanvasExperience = () => {
       const newCard: CanvasCard = {
         id: tempId, tree: "ideas", type: "voice",
         title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-        section, contributor: "You", status: "raw", accent: "#D4AE5C",
+        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
         x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        parentMemoId, durationMs: pendingRecording.durationMs,
         isProcessing: true,
       };
       return [newCard, ...prev];
     });
+    showSavedMoment(
+      name || "Voice memo",
+      parentMemoId ? "Layer added to stack" : (section || "Raw idea"),
+      "Voice memo",
+    );
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
+    // Reopen the base's stack so the songwriter sees their layer land.
+    if (parentMemoId) setStackBaseId(parentMemoId);
     try {
-      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe });
+      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe, parentMemoId, idempotencyKey: tempId });
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
       setCanvasStatus("Saved to this song.");
     } catch {
       setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
       setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
     }
-  }, [pendingRecording, songId]);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
@@ -666,6 +829,11 @@ const SongCanvasExperience = () => {
     else alert("Click the 🔒 lock icon in your address bar → Site Settings → Microphone → Allow");
   }, []);
 
+  const handleRecordOver = useCallback((baseId: string) => {
+    setStackBaseId(null);
+    void handleStartRecording(baseId);
+  }, [handleStartRecording]);
+
   const chooseLayer = (layer: LayerId) => {
     setActiveLayer(layer);
     const show = layer !== "room" && layer !== "ideas";
@@ -673,25 +841,81 @@ const SongCanvasExperience = () => {
     navigate(`/songs/${songId}/canvas?layer=${layer}`, { replace: false });
   };
 
-  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas"), [cards]);
-  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final"), [cards]);
+  // Layers live inside their base's stack, not loose on the board.
+  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
+  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
+  const layerCountByBase = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of cards) {
+      if (c.parentMemoId) counts[c.parentMemoId] = (counts[c.parentMemoId] ?? 0) + 1;
+    }
+    return counts;
+  }, [cards]);
+
+  // Everyone whose hand is on this song — derived from who contributed cards.
+  // Stable color/initials per person so the room reads as collaborative at a glance.
+  const roomCollaborators = useMemo(() => {
+    const seen = new Map<string, { userId: string; firstName: string; lastName: string; avatarColor: string; avatarInitials: string }>();
+    for (const c of cards) {
+      if (!c.contributor || seen.has(c.contributor)) continue;
+      seen.set(c.contributor, {
+        userId: c.contributor,
+        firstName: c.contributor,
+        lastName: "",
+        avatarColor: getCreatorColor(c.contributor).base,
+        avatarInitials: getCreatorInitials(c.contributor),
+      });
+    }
+    return Array.from(seen.values());
+  }, [cards]);
+  const dockActions = useMemo(
+    () => [
+      {
+        id: "practice",
+        label: isPracticeLaunching ? "Loading" : "Practice",
+        icon: BookOpen,
+        onClick: () => { void handleLaunchPractice(); },
+        loading: isPracticeLaunching,
+        haptic: [4],
+      },
+      {
+        id: "record",
+        label: recordingFlow === "recording" ? "Recording" : "Record memo",
+        icon: Mic,
+        onClick: () => { void handleStartRecording(); },
+        primary: true,
+        disabled: isViewer || recordingFlow !== "idle",
+        haptic: [10],
+        ariaLabel: recordingFlow === "recording" ? "Recording voice memo" : "Record memo",
+      },
+      {
+        id: "idea",
+        label: "Add idea",
+        icon: Plus,
+        onClick: () => addCard("note"),
+        disabled: isViewer,
+        haptic: [5],
+      },
+    ],
+    [addCard, handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
+  );
 
   return (
     <div
       className="relative flex flex-col"
-      style={{ height: "100dvh", backgroundColor: "#FAFAF6", overflow: "hidden" }}
+      style={{ height: "100dvh", backgroundColor: "var(--cog-cream)", overflow: "hidden" }}
     >
       <SongCanvasSemanticSummary />
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <header
         className="relative z-30 flex items-center justify-between gap-3 px-5 pb-3 flex-shrink-0"
-        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: 48 }}
+        style={{ maxWidth: 1180, margin: "0 auto", width: "100%", paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
         <button
           type="button"
           onClick={() => navigate("/")}
           className="flex min-h-11 items-center gap-1.5 rounded-full px-1 text-sm transition-opacity hover:opacity-70 active:scale-[0.97]"
-          style={{ color: "#666", flexShrink: 0 }}
+          style={{ color: "var(--cog-warm-gray)", flexShrink: 0 }}
           aria-label="Back to songs"
         >
           <ArrowLeft size={16} strokeWidth={2} />
@@ -703,7 +927,7 @@ const SongCanvasExperience = () => {
           <CogBrand variant="stacked" size="sm" />
           <h1
             className="text-center font-bold leading-tight truncate"
-            style={{ fontSize: 15, color: "#1A1A1A", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
+            style={{ fontSize: 15, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
           >
             {songTitle}
           </h1>
@@ -727,7 +951,7 @@ const SongCanvasExperience = () => {
                 style={{
                   backgroundColor: active ? "#FFFFFF" : "transparent",
                   border: active ? "1px solid rgba(181,147,90,0.30)" : "1px solid transparent",
-                  color: active ? "#B5935A" : "#999",
+                  color: active ? "var(--cog-gold)" : "var(--cog-muted)",
                   boxShadow: active ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
                 }}
               >
@@ -743,15 +967,25 @@ const SongCanvasExperience = () => {
         <p
           aria-live="polite"
           className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
-          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "#B5935A" }}
+          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}
         >
           {canvasStatus}
         </p>
-        {isViewer && (
+        {isViewer ? (
           <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
             You can view this canvas. Ask the owner if you need to contribute.
           </p>
-        )}
+        ) : roomCollaborators.length > 0 ? (
+          <div className="flex items-center gap-2" aria-label={`In this room: ${roomCollaborators.length} ${roomCollaborators.length === 1 ? "person" : "people"}`}>
+            <span
+              className="hidden sm:inline"
+              style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
+            >
+              In this room
+            </span>
+            <CollaboratorAvatarStack collaborators={roomCollaborators} size={28} maxVisible={4} />
+          </div>
+        ) : null}
       </div>
 
       {/* ── Canvas viewport ──────────────────────────────────────────────── */}
@@ -767,6 +1001,9 @@ const SongCanvasExperience = () => {
                   onChords={() => { addCard("chord"); dismissFirstAction(); }}
                 />
               )}
+              <CreativeActionDock actions={dockActions} />
+              {SHOW_LEGACY_CANVAS_FABS && (
+                <>
               {/* Practice FAB */}
               <button
                 type="button"
@@ -834,10 +1071,13 @@ const SongCanvasExperience = () => {
                 <Plus size={22} strokeWidth={2.5} />
                 <span>Add idea</span>
               </button>
+                </>
+              )}
             </>
           }
         >
           {/* Canvas content — all positioned absolutely */}
+          <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
           <SongRootCard title={songTitle} />
           <ZoneLabels />
           <CanvasDivider isDropActive={isDragOver} />
@@ -851,7 +1091,13 @@ const SongCanvasExperience = () => {
               onSelect={() => setSelectedId(selectedId === card.id ? null : card.id)}
               onMoveToFinal={() => handleMoveToFinal(card.id)}
               onMoveToIdeas={() => handleMoveToIdeas(card.id)}
-              onDragStart={handleCardDragStart}
+              onMove={handleCardMove}
+              layerCount={layerCountByBase[card.id] ?? 0}
+              onOpenStack={
+                card.type === "voice" || card.type === "hum"
+                  ? () => setStackBaseId(card.id)
+                  : undefined
+              }
             />
           ))}
         </CanvasViewport>
@@ -880,7 +1126,7 @@ const SongCanvasExperience = () => {
               {activeLayer === "voice" ? (
                 <VoiceLayerPanel
                   songId={songId}
-                  currentUserName="You"
+                  currentUserName={currentUserName}
                   onRecord={() => { setShowWorkPanel(false); setActiveLayer("room"); void handleStartRecording(); }}
                 />
               ) : (
@@ -899,6 +1145,10 @@ const SongCanvasExperience = () => {
       </div>
 
       <SongTabBar activeTab="canvas" />
+      <SongRoomSaveToast
+        moment={saveMoment}
+        onDone={() => setSaveMoment(null)}
+      />
 
       {/* Recording sheet */}
       {(recordingFlow === "recording" || recorderState.phase === "permission-denied") && (
@@ -927,6 +1177,22 @@ const SongCanvasExperience = () => {
           onDiscard={handleCancelRecording}
         />
       )}
+
+      {/* Voice memo stack — base + the layers recorded over it */}
+      {stackBaseId && (() => {
+        const base = cards.find((c) => c.id === stackBaseId);
+        if (!base) return null;
+        const stackLayers = cards.filter((c) => c.parentMemoId === stackBaseId);
+        return (
+          <StackSheet
+            base={toStackView(base)}
+            layers={stackLayers.map(toStackView)}
+            canRecordOver={!isViewer}
+            onRecordOver={handleRecordOver}
+            onClose={() => setStackBaseId(null)}
+          />
+        );
+      })()}
 
       <style>{`
         @keyframes mic-pulse {
