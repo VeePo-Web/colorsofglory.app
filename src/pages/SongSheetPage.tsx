@@ -21,6 +21,7 @@ import PerformanceView from "@/components/songsheet/PerformanceView";
 import ChordPlaceSheet from "@/components/songsheet/ChordPlaceSheet";
 import ChordDiagramSheet from "@/components/songsheet/ChordDiagramSheet";
 import { looksLikeChordsOverLyrics, chordsOverLyricsToChordPro } from "@/lib/chords/importChart";
+import { suggestCapos } from "@/lib/chords/capoSuggest";
 
 /**
  * The Song Sheet — the structured, performable lyric & chord view, and a real
@@ -105,6 +106,12 @@ const SongSheetPage = () => {
   // With a capo, you PLAY the shapes of a lower key while it SOUNDS in displayKey.
   // Everything visual (chords, diagrams, performance) renders in the play key.
   const playKey = capo > 0 ? transposeKeyLetter(displayKey, "major", -capo) : displayKey;
+
+  // Capo "easy keys" hints — only meaningful when the sounding key isn't already easy.
+  const capoHints = useMemo(() => {
+    const s = suggestCapos(displayKey, "major");
+    return s.length && s[0].capo === 0 ? [] : s;
+  }, [displayKey]);
 
   // Unique chords used in the song (as played, capo-aware) for the diagram strip.
   const uniqueChords = useMemo(() => {
@@ -259,6 +266,32 @@ const SongSheetPage = () => {
                     ))}
                   </div>
                 </div>
+
+                {capoHints.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[0.6875rem] uppercase tracking-wide shrink-0" style={{ color: "var(--cog-warm-gray)", letterSpacing: "0.08em" }}>
+                      Easy keys
+                    </span>
+                    {capoHints.map((h) => (
+                      <button
+                        key={h.capo}
+                        type="button"
+                        onClick={() => setCapo(h.capo)}
+                        aria-label={`Capo ${h.capo}, play in ${h.playKey}`}
+                        className="inline-flex items-center gap-1 rounded-full text-xs font-medium transition-transform active:scale-95"
+                        style={{
+                          minHeight: 34,
+                          padding: "0 10px",
+                          backgroundColor: capo === h.capo ? "var(--cog-gold)" : "rgba(184,149,58,0.10)",
+                          color: capo === h.capo ? "#fff" : "var(--cog-charcoal)",
+                          border: "1px solid var(--cog-border-gold, rgba(184,149,58,0.4))",
+                        }}
+                      >
+                        Capo {h.capo} · {h.playKey}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex gap-2.5">
                   <button
