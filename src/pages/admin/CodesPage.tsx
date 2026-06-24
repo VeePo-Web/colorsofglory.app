@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
+import { TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -151,7 +152,7 @@ export default function CodesPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={7} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+            {isLoading && <TableSkeleton cols={7} />}
             {!isLoading && filtered.length === 0 && (
               <tr><td colSpan={7} className="px-4 py-6 text-center text-[var(--cog-muted)]">No codes match.</td></tr>
             )}

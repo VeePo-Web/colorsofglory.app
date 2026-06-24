@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
+import { TableSkeleton } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import { adminBillingEvents, redriveBillingEvent, type BillingEventRow } from "@/integrations/cog/admin";
 
@@ -56,7 +57,7 @@ export default function WebhookOpsPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+            {isLoading && <TableSkeleton cols={6} />}
             {!isLoading && rows.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">
                 {onlyFailed ? "No stuck events — all clear." : "No events yet."}

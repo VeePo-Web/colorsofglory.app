@@ -10,10 +10,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 export const money = (c: number) =>
   `$${((c ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Skeleton rows for a table body while loading (skeletons over spinners). */
+/** Skeleton rows (a fragment of <tr>) to slot inside an existing <tbody> while loading. */
 export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <tbody>
+    <>
       {Array.from({ length: rows }).map((_, r) => (
         <tr key={r} className="border-t border-[var(--cog-border)]">
           {Array.from({ length: cols }).map((_, c) => (
@@ -23,7 +23,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
           ))}
         </tr>
       ))}
-    </tbody>
+    </>
   );
 }
 

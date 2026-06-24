@@ -2,10 +2,9 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
+import { money, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { adminReferrerLedger, type ReferrerLedgerRow } from "@/integrations/cog/admin";
-
-const money = (c: number) => `$${((c ?? 0) / 100).toFixed(2)}`;
 
 export default function ReferralsPage() {
   const [q, setQ] = useState("");
@@ -63,7 +62,7 @@ export default function ReferralsPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={8} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+            {isLoading && <TableSkeleton cols={8} />}
             {!isLoading && filtered.length === 0 && (
               <tr><td colSpan={8} className="px-4 py-6 text-center text-[var(--cog-muted)]">No referrers yet.</td></tr>
             )}

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
-import { PromptDialog } from "@/components/admin/AdminUI";
+import { PromptDialog, TableSkeleton } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import {
   adminListPayouts,
@@ -84,7 +84,7 @@ export default function PayoutBatchesPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+            {isLoading && <TableSkeleton cols={6} />}
             {!isLoading && rows.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">No payout batches yet.</td></tr>
             )}

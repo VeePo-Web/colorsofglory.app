@@ -5,13 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
 import FounderActions from "@/components/admin/FounderActions";
+import { money } from "@/components/admin/AdminUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { adminFounderDetail } from "@/integrations/cog/admin";
 
 const FounderByCodePanel = lazy(() => import("@/components/admin/FounderByCodePanel"));
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 type Detail = {
   founder: {

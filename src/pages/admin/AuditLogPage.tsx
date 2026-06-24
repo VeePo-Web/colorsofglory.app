@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
+import { TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { searchAuditLogs, type AuditSearchFilters, type AuditLogRow } from "@/integrations/cog/admin";
@@ -61,7 +62,7 @@ export default function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+              {isLoading && <TableSkeleton cols={6} />}
               {!isLoading && rows.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">No matching events.</td></tr>
               )}

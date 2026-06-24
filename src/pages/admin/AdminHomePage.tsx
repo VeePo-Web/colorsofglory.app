@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
+import { money } from "@/components/admin/AdminUI";
 import { adminFounderSummary, adminReferralsRecent, adminAttentionSummary, type AttentionSummary } from "@/integrations/cog/admin";
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export default function AdminHomePage() {
   const { data: founders = [] } = useQuery({ queryKey: ["admin", "founder-summary"], queryFn: adminFounderSummary, staleTime: 30_000 });
