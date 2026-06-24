@@ -70,10 +70,10 @@ Deno.serve(async (req) => {
 
   if (drift.length > 0) {
     await supabase.from("fraud_flags").insert({
-      kind: "reconciliation_drift",
+      subject_type: "reconciliation",
+      subject_id: report?.id ?? null,
+      reason: `reconciliation_drift:${drift.length} invoices missing in env=${env}`,
       severity: "high",
-      summary: `Stripe invoices missing from billing_events (${drift.length})`,
-      payload: { drift, report_id: report?.id, env },
     });
   }
 
