@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { getChordShapeForLetters, type Voicing } from "@/lib/chords/chordShapes";
+import { useDialogDismiss } from "./useDialogDismiss";
 
 /**
  * Chord diagram bottom sheet (Ultimate Guitar's signature) — tap a chord, see
@@ -11,16 +12,16 @@ const FRET_ROWS = 4;
 
 export default function ChordDiagramSheet({ label, onClose }: { label: string; onClose: () => void }) {
   const voicing = getChordShapeForLetters(label);
+  const closeRef = useDialogDismiss(onClose);
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end" role="dialog" aria-label={`${label} chord diagram`}>
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label={`${label} chord diagram`}>
       <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ backgroundColor: "rgba(28,26,23,0.32)" }} />
       <div
-        className="relative rounded-t-3xl px-5 pt-3"
+        className="cog-sheet-up relative rounded-t-3xl px-5 pt-3"
         style={{
           backgroundColor: "var(--cog-cream-light)",
           paddingBottom: "max(env(safe-area-inset-bottom), 18px)",
           boxShadow: "0 -8px 32px rgba(0,0,0,0.18)",
-          animation: "cog-sheet-up 280ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1))",
         }}
       >
         <div className="mx-auto mb-3 rounded-full" style={{ width: 36, height: 5, backgroundColor: "var(--cog-border)" }} />
@@ -28,7 +29,7 @@ export default function ChordDiagramSheet({ label, onClose }: { label: string; o
           <span className="text-2xl font-semibold" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}>
             {label}
           </span>
-          <button onClick={onClose} aria-label="Close" className="flex items-center justify-center rounded-full active:scale-90" style={{ width: 36, height: 36, color: "var(--cog-warm-gray)" }}>
+          <button ref={closeRef} onClick={onClose} aria-label="Close" className="flex items-center justify-center rounded-full active:scale-90" style={{ width: 44, height: 44, color: "var(--cog-warm-gray)" }}>
             <X size={18} strokeWidth={2} />
           </button>
         </div>
@@ -43,7 +44,11 @@ export default function ChordDiagramSheet({ label, onClose }: { label: string; o
           )}
         </div>
       </div>
-      <style>{`@keyframes cog-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      <style>{`
+        .cog-sheet-up { animation: cog-sheet-up 280ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)); }
+        @keyframes cog-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) { .cog-sheet-up { animation: none; } }
+      `}</style>
     </div>
   );
 }

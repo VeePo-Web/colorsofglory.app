@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Trash2, ChevronDown } from "lucide-react";
 import { diatonic, borrowedChords, chordToLetters, chordToNumbers, type NumberChord } from "@/lib/chords/nashville";
 import type { Mode } from "@/lib/chords/keys";
+import { useDialogDismiss } from "./useDialogDismiss";
 
 /**
  * Chord placement bottom sheet — tap a word, pick a chord. Mobile-first, thumb
@@ -28,18 +29,18 @@ export default function ChordPlaceSheet({
   const [more, setMore] = useState(false);
   const palette = diatonic(mode);
   const extra = borrowedChords(mode);
+  const closeRef = useDialogDismiss(onClose);
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end" role="dialog" aria-label="Choose a chord">
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Choose a chord">
       <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ backgroundColor: "rgba(28,26,23,0.32)" }} />
 
       <div
-        className="relative rounded-t-3xl px-5 pt-3"
+        className="cog-sheet-up relative rounded-t-3xl px-5 pt-3"
         style={{
           backgroundColor: "var(--cog-cream-light)",
           paddingBottom: "max(env(safe-area-inset-bottom), 18px)",
           boxShadow: "0 -8px 32px rgba(0,0,0,0.18)",
-          animation: "cog-sheet-up 280ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1))",
         }}
       >
         <div className="mx-auto mb-3 rounded-full" style={{ width: 36, height: 5, backgroundColor: "var(--cog-border)" }} />
@@ -48,7 +49,7 @@ export default function ChordPlaceSheet({
           <p className="text-sm" style={{ color: "var(--cog-warm-gray)" }}>
             Chord over <span style={{ color: "var(--cog-charcoal)", fontWeight: 600 }}>{word}</span>
           </p>
-          <button onClick={onClose} aria-label="Close" className="flex items-center justify-center rounded-full active:scale-90" style={{ width: 36, height: 36, color: "var(--cog-warm-gray)" }}>
+          <button ref={closeRef} onClick={onClose} aria-label="Close" className="flex items-center justify-center rounded-full active:scale-90" style={{ width: 44, height: 44, color: "var(--cog-warm-gray)" }}>
             <X size={18} strokeWidth={2} />
           </button>
         </div>
@@ -89,7 +90,11 @@ export default function ChordPlaceSheet({
         )}
       </div>
 
-      <style>{`@keyframes cog-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      <style>{`
+        .cog-sheet-up { animation: cog-sheet-up 280ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)); }
+        @keyframes cog-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) { .cog-sheet-up { animation: none; } }
+      `}</style>
     </div>
   );
 }
