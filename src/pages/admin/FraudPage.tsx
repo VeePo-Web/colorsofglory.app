@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
+import { PromptDialog } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,9 +40,10 @@ export default function FraudPage() {
     onError: (e: unknown) => toast.error((e as Error).message ?? "Could not create flag"),
   });
 
+  const [resolveId, setResolveId] = useState<string | null>(null);
   const resolve = useMutation({
-    mutationFn: (id: string) => adminResolveFraudFlag(id, window.prompt("Resolution note (optional):") ?? undefined),
-    onSuccess: () => { toast.success("Flag resolved"); invalidate(); },
+    mutationFn: ({ id, note }: { id: string; note?: string }) => adminResolveFraudFlag(id, note),
+    onSuccess: () => { toast.success("Flag resolved"); setResolveId(null); invalidate(); },
     onError: (e: unknown) => toast.error((e as Error).message ?? "Could not resolve"),
   });
 
@@ -113,7 +115,7 @@ export default function FraudPage() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     {open && (
-                      <Button size="sm" variant="outline" disabled={resolve.isPending} onClick={() => resolve.mutate(f.id)}>Resolve</Button>
+                      <Button size="sm" variant="outline" disabled={resolve.isPending} onClick={() => setResolveId(f.id)}>Resolve</Button>
                     )}
                   </td>
                 </tr>
@@ -126,6 +128,18 @@ export default function FraudPage() {
         An open flag on a user or founder blocks all referral reward minting for that subject until resolved. Self-referrals
         are already blocked at the database level; use this for shared-card / velocity / collusion cases.
       </p>
+
+      <PromptDialog
+        open={!!resolveId}
+        title="Resolve fraud flag"
+        description="Resolving re-enables reward minting for this subject (if no other open flag remains)."
+        label="Resolution note (optional)"
+        placeholder="e.g. verified legitimate"
+        confirmLabel="Resolve"
+        busy={resolve.isPending}
+        onConfirm={(note) => resolveId && resolve.mutate({ id: resolveId, note: note || undefined })}
+        onOpenChange={(o) => { if (!o) setResolveId(null); }}
+      />
     </AdminShell>
   );
 }

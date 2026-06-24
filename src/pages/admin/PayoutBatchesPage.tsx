@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
+import { PromptDialog } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import {
   adminListPayouts,
@@ -39,9 +41,22 @@ export default function PayoutBatchesPage() {
     staleTime: 15_000,
   });
 
+  const [dlg, setDlg] = useState<{ kind: "paid" | "failed"; id: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "payout-batches"] });
   const run = (fn: () => Promise<unknown>, okMsg: string) =>
     fn().then(() => { toast.success(okMsg); invalidate(); }).catch((e) => toast.error(friendlyError(e)));
+
+  const confirmDialog = (value: string) => {
+    if (!dlg) return;
+    const { kind, id } = dlg;
+    setBusy(true);
+    const op = kind === "paid" ? markPayoutPaid(id, value) : markPayoutFailed(id, value);
+    op.then(() => { toast.success(kind === "paid" ? "Marked paid" : "Marked failed"); invalidate(); })
+      .catch((e) => toast.error(friendlyError(e)))
+      .finally(() => { setBusy(false); setDlg(null); });
+  };
 
   const approve = useMutation({
     mutationFn: (id: string) => approvePayout(id),
@@ -93,16 +108,8 @@ export default function PayoutBatchesPage() {
                     )}
                     {r.status === "approved" && (
                       <>
-                        <Button size="sm" onClick={() => {
-                          const pid = window.prompt("Provider payout/transfer id (for reconciliation):")?.trim();
-                          if (!pid) return;
-                          run(() => markPayoutPaid(r.id, pid), "Marked paid");
-                        }}>Mark paid</Button>
-                        <Button size="sm" variant="outline" onClick={() => {
-                          const reason = window.prompt("Failure reason:")?.trim();
-                          if (!reason) return;
-                          run(() => markPayoutFailed(r.id, reason), "Marked failed");
-                        }}>Mark failed</Button>
+                        <Button size="sm" onClick={() => setDlg({ kind: "paid", id: r.id })}>Mark paid</Button>
+                        <Button size="sm" variant="outline" onClick={() => setDlg({ kind: "failed", id: r.id })}>Mark failed</Button>
                       </>
                     )}
                     {r.status === "failed" && (
@@ -115,6 +122,19 @@ export default function PayoutBatchesPage() {
           </tbody>
         </table>
       </div>
+
+      <PromptDialog
+        open={!!dlg}
+        title={dlg?.kind === "paid" ? "Mark payout paid" : "Mark payout failed"}
+        label={dlg?.kind === "paid" ? "Provider payout / transfer id" : "Failure reason"}
+        placeholder={dlg?.kind === "paid" ? "e.g. tr_… or PayPal batch id" : "e.g. invalid account"}
+        required
+        confirmLabel={dlg?.kind === "paid" ? "Mark paid" : "Mark failed"}
+        tone={dlg?.kind === "failed" ? "danger" : "default"}
+        busy={busy}
+        onConfirm={confirmDialog}
+        onOpenChange={(o) => { if (!o) setDlg(null); }}
+      />
     </AdminShell>
   );
 }
