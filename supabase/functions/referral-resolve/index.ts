@@ -32,9 +32,14 @@ Deno.serve(async (req) => {
         .eq('owner_founder_id', f.id)
         .eq('status', 'active')
         .maybeSingle()
+      const { count: lifetimeCount } = await supabase
+        .from('referral_attributions')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_founder_id', f.id)
       return new Response(JSON.stringify({
         ok: true, kind: 'founder', owner_display_name: f.display_name,
         code: c?.value ?? null, discount_cents: c?.discount_cents ?? 0,
+        owner_lifetime_referred_count: lifetimeCount ?? 0,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -49,16 +54,28 @@ Deno.serve(async (req) => {
     })
 
     let display_name: string | null = null
+    let lifetimeCount = 0
     if (c.owner_founder_id) {
       const { data: f } = await supabase.from('founders').select('display_name').eq('id', c.owner_founder_id).maybeSingle()
       display_name = f?.display_name ?? null
+      const { count } = await supabase
+        .from('referral_attributions')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_founder_id', c.owner_founder_id)
+      lifetimeCount = count ?? 0
     } else if (c.owner_user_id) {
       const { data: p } = await supabase.from('profiles').select('display_name').eq('user_id', c.owner_user_id).maybeSingle()
       display_name = p?.display_name ?? null
+      const { count } = await supabase
+        .from('referral_attributions')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_user_id', c.owner_user_id)
+      lifetimeCount = count ?? 0
     }
     return new Response(JSON.stringify({
       ok: true, kind: c.kind, owner_display_name: display_name,
       code: c.value, discount_cents: c.discount_cents ?? 0,
+      owner_lifetime_referred_count: lifetimeCount,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {

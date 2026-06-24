@@ -82,6 +82,8 @@ export type ResolvedCode = {
   owner_display_name?: string | null;
   code?: string | null;
   discount_cents?: number;
+  /** Lifetime count of buyers attributed to this code's owner — for social proof on the landing page. */
+  owner_lifetime_referred_count?: number;
 };
 
 export async function resolveCode(input: { code?: string; slug?: string }): Promise<ResolvedCode> {
