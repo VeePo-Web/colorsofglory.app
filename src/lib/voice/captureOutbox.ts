@@ -27,6 +27,9 @@ const INDEX_KEY = "cog-capture-outbox";
 const MAX_ATTEMPTS_BEFORE_PARKED = 6; // keep retrying, but stop the tight loop
 const HEARTBEAT_MS = 20_000;
 
+/** Serializable, pipeline-specific extras (e.g. a section id, waveform peaks). */
+export type OutboxExtra = Record<string, string | number | boolean | null | number[] | undefined>;
+
 export interface OutboxJob {
   /** Outbox id — also the audioCache key holding the blob. */
   id: string;
@@ -38,12 +41,54 @@ export interface OutboxJob {
   transcribe?: boolean;
   parentMemoId?: string;
   fileName?: string;
+  /**
+   * Which registered uploader pipeline sends this take. Serializable so a job
+   * can be retried after a full reload. Defaults to the voiceApi pipeline.
+   */
+  uploaderKey?: string;
+  /** Pipeline-specific data the uploader needs (kept JSON-serializable). */
+  extra?: OutboxExtra;
   /** Stable across retries so the backend dedupes a re-sent take. */
   idempotencyKey: string;
   status: "queued" | "uploading" | "failed";
   attempts: number;
   createdAt: string;
   lastError?: string;
+}
+
+/**
+ * An uploader sends a queued take through a specific backend pipeline and
+ * returns the created memo id. Registered by key so jobs stay serializable and
+ * any capture surface (in-song, brainstorm, …) can plug in its own pipeline
+ * without the outbox knowing the details.
+ */
+export type OutboxUploader = (job: OutboxJob, blob: Blob) => Promise<string>;
+
+const DEFAULT_UPLOADER_KEY = "voiceApi";
+const uploaders: Record<string, OutboxUploader> = {
+  // The default in-song pipeline (recorded takes + file imports on the Voice tab).
+  [DEFAULT_UPLOADER_KEY]: (job, blob) =>
+    uploadVoiceMemo({
+      songId: job.songId,
+      blob,
+      mimeType: job.mimeType || blob.type || "audio/webm",
+      durationMs: job.durationMs,
+      title: job.title,
+      sectionLabel: job.sectionLabel,
+      transcribe: job.transcribe,
+      parentMemoId: job.parentMemoId,
+      fileName: job.fileName,
+      idempotencyKey: job.idempotencyKey,
+    }),
+};
+
+/**
+ * Register an uploader pipeline so the outbox can sync (and retry) takes through
+ * it. Idempotent — calling again with the same key replaces the uploader. Call
+ * once where a surface with its own pipeline mounts (e.g. brainstorm).
+ */
+export function registerOutboxUploader(key: string, uploader: OutboxUploader): void {
+  uploaders[key] = uploader;
 }
 
 export type OutboxEvent =
@@ -162,6 +207,10 @@ export async function enqueueCaptureUpload(params: {
   transcribe?: boolean;
   parentMemoId?: string;
   fileName?: string;
+  /** Which registered pipeline syncs this take (defaults to the in-song voiceApi). */
+  uploaderKey?: string;
+  /** Pipeline-specific data the chosen uploader needs (JSON-serializable). */
+  extra?: OutboxExtra;
 }): Promise<{ outboxId: string }> {
   const id = generateId("outbox");
 
@@ -178,6 +227,8 @@ export async function enqueueCaptureUpload(params: {
     transcribe: params.transcribe,
     parentMemoId: params.parentMemoId,
     fileName: params.fileName,
+    uploaderKey: params.uploaderKey,
+    extra: params.extra,
     idempotencyKey: generateId("idem"),
     status: "queued",
     attempts: 0,
@@ -217,21 +268,19 @@ async function processJob(id: string): Promise<void> {
     return;
   }
 
+  const upload = uploaders[job.uploaderKey ?? DEFAULT_UPLOADER_KEY];
+  if (!upload) {
+    // The pipeline for this take hasn't registered yet (e.g. its surface isn't
+    // mounted this session). The take stays safe in the cache; it will sync once
+    // the uploader registers and the next retry fires. Don't hot-loop on it.
+    patchJob(id, { status: "queued" });
+    return;
+  }
+
   inFlight.add(id);
   patchJob(id, { status: "uploading" });
   try {
-    const memoId = await uploadVoiceMemo({
-      songId: job.songId,
-      blob,
-      mimeType: job.mimeType || blob.type || "audio/webm",
-      durationMs: job.durationMs,
-      title: job.title,
-      sectionLabel: job.sectionLabel,
-      transcribe: job.transcribe,
-      parentMemoId: job.parentMemoId,
-      fileName: job.fileName,
-      idempotencyKey: job.idempotencyKey,
-    });
+    const memoId = await upload(job, blob);
 
     // Success: hand the cached blob to its real id for instant first playback,
     // then release the outbox copy + job.

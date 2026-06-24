@@ -8,8 +8,29 @@ import {
   type BrainstormMemo,
 } from "@/integrations/cog/brainstorm";
 import { getSong, type SongDetail } from "@/integrations/cog/songs";
+import {
+  enqueueCaptureUpload,
+  registerOutboxUploader,
+  subscribeOutbox,
+} from "@/lib/voice/captureOutbox";
+import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
 
 const BrainstormMemosPanel = lazy(() => import("@/components/brainstorm/BrainstormMemosPanel"));
+
+// Teach the Capture Outbox how to sync a brainstorm take through this page's own
+// pipeline (integrations/cog/memos). Registered at module load so a queued take
+// can retry as soon as this chunk is present — the recorded idea is never lost
+// to a dropped upload.
+registerOutboxUploader("memos", (job, blob) =>
+  uploadVoiceMemo({
+    songId: job.songId,
+    blob,
+    mimeType: job.mimeType,
+    durationMs: job.durationMs,
+    title: job.title,
+    waveformPeaks: (job.extra?.waveformPeaks as number[] | undefined) ?? undefined,
+  }),
+);
 
 async function computePeaks(blob: Blob, bins = 48): Promise<number[] | undefined> {
   try {
@@ -102,6 +123,17 @@ const BrainstormPage = () => {
     };
   }, [songId, refresh]);
 
+  // When a queued brainstorm take finishes syncing, pull the real record in so it
+  // appears in the list. The take is safe in the outbox throughout.
+  useEffect(() => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.type === "change") return;
+      if (event.songId !== songId) return;
+      if (event.type === "success") void refresh();
+    });
+    return unsubscribe;
+  }, [songId, refresh]);
+
   useEffect(() => {
     return () => {
       if (tickRef.current) cancelAnimationFrame(tickRef.current);
@@ -141,17 +173,25 @@ const BrainstormPage = () => {
         setSaving(true);
         try {
           const peaks = await computePeaks(blob);
-          await uploadVoiceMemo({
-            songId,
+          // Cache-first + auto-retry: the take is durable before any network
+          // call, so a dropped/offline upload can no longer lose a brainstorm
+          // idea. It syncs through this page's pipeline and surfaces via the
+          // outbox success subscription + realtime refresh.
+          await enqueueCaptureUpload({
             blob,
+            songId,
+            title: "Brainstorm idea",
             mimeType: mime,
             durationMs: duration,
-            waveformPeaks: peaks,
+            sectionLabel: "Raw idea",
+            uploaderKey: "memos",
+            extra: { waveformPeaks: peaks ?? undefined },
           });
-          await refresh();
         } catch (err) {
+          // enqueue only fails on a local-cache error; the recorder still holds
+          // the chunks, so this is rare and non-fatal.
           console.error(err);
-          toast.error(err instanceof Error ? err.message : "Couldn't save that one");
+          toast("Hmm — try that one more time");
         } finally {
           setSaving(false);
         }
@@ -218,6 +258,11 @@ const BrainstormPage = () => {
           </div>
           <div className="w-10" />
         </header>
+
+        {/* Calm reassurance that a just-captured take is safe and syncing */}
+        <div className="flex justify-center pt-3">
+          <OutboxSyncPill />
+        </div>
 
         <div className="flex flex-col items-center pb-10 pt-6">
           <button

@@ -25,6 +25,7 @@ import {
   enqueueCaptureUpload,
   pendingCount,
   processOutbox,
+  registerOutboxUploader,
   retryOutbox,
   subscribeOutbox,
   type OutboxEvent,
@@ -239,6 +240,47 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
       // The pill must keep showing the unsynced take — it is safe but not yet sent.
       expect(pendingCount()).toBe(1);
       expect(lastPending).toBe(1);
+    });
+  });
+
+  describe("pluggable uploader registry — every pipeline gets the same safety", () => {
+    it("routes a take to a registered custom uploader by key, passing its extras", async () => {
+      const memosUploader = vi.fn(async () => "memo-from-brainstorm");
+      registerOutboxUploader("memos", memosUploader);
+
+      const blob = makeBlob("brainstorm idea");
+      mockAudioCache.get.mockResolvedValue(blob);
+
+      const { outboxId } = await enqueueCaptureUpload({
+        ...baseParams({ blob }),
+        uploaderKey: "memos",
+        extra: { waveformPeaks: [0.1, 0.9, 0.4] },
+      });
+      await processOutbox();
+
+      // The custom pipeline — not the default voiceApi one — sent the take, with
+      // its pipeline-specific extras intact and the real blob.
+      expect(memosUploader).toHaveBeenCalledTimes(1);
+      const [job, sentBlob] = memosUploader.mock.calls[0];
+      expect(job.extra?.waveformPeaks).toEqual([0.1, 0.9, 0.4]);
+      expect(sentBlob).toBe(blob);
+      expect(mockUpload).not.toHaveBeenCalled(); // default uploader untouched
+      expect(readRawIndex().some((j) => j.id === outboxId)).toBe(false); // synced + cleared
+    });
+
+    it("keeps a take safe (never loops, never lost) when its uploader isn't registered yet", async () => {
+      const { outboxId } = await enqueueCaptureUpload({
+        ...baseParams(),
+        uploaderKey: "not-registered-this-session",
+      });
+      await processOutbox();
+
+      // No crash, no upload, but the take is RETAINED in the queue + cache so it
+      // can sync once its pipeline registers (e.g. that surface mounts).
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(pendingCount()).toBe(1);
+      expect(readRawIndex().find((j) => j.id === outboxId)!.status).toBe("queued");
+      expect(mockAudioCache.delete).not.toHaveBeenCalledWith(outboxId);
     });
   });
 });
