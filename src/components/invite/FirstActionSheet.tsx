@@ -48,6 +48,15 @@ const FirstActionSheet = ({ delay = 1500, onDismiss }: FirstActionSheetProps) =>
     setTimeout(() => { setMounted(false); onDismiss?.(); }, 350);
   };
 
+  // Esc closes the modal — expected dialog behavior (HIG / WCAG) that was missing.
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismiss(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
+
   const handleChip = (route: string) => {
     dismiss();
     navigate(`/songs/${songId ?? '1'}/${route}`);
@@ -116,9 +125,9 @@ const FirstActionSheet = ({ delay = 1500, onDismiss }: FirstActionSheetProps) =>
               >
                 <div
                   className="flex items-center justify-center rounded-xl flex-shrink-0"
-                  style={{ width: 36, height: 36, backgroundColor: 'rgba(181,147,90,0.10)' }}
+                  style={{ width: 36, height: 36, backgroundColor: 'rgba(184,149,58,0.10)' }}
                 >
-                  <Icon size={17} strokeWidth={1.6} style={{ color: '#B5935A' }} />
+                  <Icon size={17} strokeWidth={1.6} style={{ color: 'var(--cog-gold)' }} />
                 </div>
                 <span className="text-[0.9375rem] font-medium" style={{ color: '#1A1A1A', fontFamily: 'var(--font-body)' }}>
                   {chip.label}
