@@ -8,6 +8,7 @@ import InviteErrorCard from "@/components/invite/InviteErrorCard";
 import { previewInvite, checkPhoneRegistered, type InvitePreview } from "@/lib/invite/inviteApi";
 import { saveInviteContext } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
+import { requestNewInvite } from "@/integrations/cog/songs";
 
 // ─── Phone formatting ─────────────────────────────────────────────────────────
 
@@ -142,9 +143,18 @@ const InviteJoinPage = () => {
   };
 
   const handleRequestNew = async () => {
+    // Actually record the request (invite_requests) so the owner can re-send —
+    // previously this faked "Request sent" and did nothing. Best-effort: the
+    // owner notification is non-critical, so we acknowledge regardless.
+    try {
+      await requestNewInvite({
+        original_token: token,
+        phone: digits.length === DIGITS_MAX ? toE164(digits) : null,
+      });
+    } catch {
+      /* swallow — acknowledged below either way */
+    }
     setRequestSent(true);
-    // Fire and forget — requestNewInvite(token) wired when Lovable delivers
-    setTimeout(() => {}, 0);
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────
