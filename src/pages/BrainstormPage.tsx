@@ -4,33 +4,16 @@ import { ArrowLeft, Mic, Square } from "lucide-react";
 import { toast } from "sonner";
 import {
   listBrainstormMemos,
-  uploadVoiceMemo,
   type BrainstormMemo,
 } from "@/integrations/cog/brainstorm";
 import { getSong, type SongDetail } from "@/integrations/cog/songs";
-import {
-  enqueueCaptureUpload,
-  registerOutboxUploader,
-  subscribeOutbox,
-} from "@/lib/voice/captureOutbox";
-import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
+import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
 
 const BrainstormMemosPanel = lazy(() => import("@/components/brainstorm/BrainstormMemosPanel"));
 
-// Teach the Capture Outbox how to sync a brainstorm take through this page's own
-// pipeline (integrations/cog/memos). Registered at module load so a queued take
-// can retry as soon as this chunk is present — the recorded idea is never lost
-// to a dropped upload.
-registerOutboxUploader("memos", (job, blob) =>
-  uploadVoiceMemo({
-    songId: job.songId,
-    blob,
-    mimeType: job.mimeType,
-    durationMs: job.durationMs,
-    title: job.title,
-    waveformPeaks: (job.extra?.waveformPeaks as number[] | undefined) ?? undefined,
-  }),
-);
+// The "memos" outbox uploader is registered once at app startup
+// (src/lib/voice/captureUploaders.ts), so a queued brainstorm take resumes
+// syncing on reconnect even before this page mounts.
 
 async function computePeaks(blob: Blob, bins = 48): Promise<number[] | undefined> {
   try {
@@ -258,11 +241,6 @@ const BrainstormPage = () => {
           </div>
           <div className="w-10" />
         </header>
-
-        {/* Calm reassurance that a just-captured take is safe and syncing */}
-        <div className="flex justify-center pt-3">
-          <OutboxSyncPill />
-        </div>
 
         <div className="flex flex-col items-center pb-10 pt-6">
           <button

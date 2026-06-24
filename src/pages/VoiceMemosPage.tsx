@@ -23,7 +23,6 @@ import {
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
 import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
-import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -606,14 +605,12 @@ const VoiceMemosPage = () => {
         >
           Voice memos
         </h1>
-        <p className="text-sm mb-3" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+        <p className="text-sm mb-6" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
           {songTitle}
         </p>
 
-        {/* Calm reassurance that any take still uploading is already safe locally */}
-        <div className="mb-6">
-          <OutboxSyncPill />
-        </div>
+        {/* The "Syncing N ideas…" reassurance is now mounted app-globally in
+            GlobalCaptureFlow, so it rides on top of every screen. */}
 
         {/* Upload zone */}
         {showUpload && (
