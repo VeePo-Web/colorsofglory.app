@@ -4,6 +4,7 @@ import { useGlobalCapture } from "@/hooks/useGlobalCapture";
 import GlobalCaptureFab from "./GlobalCaptureFab";
 import CaptureShell from "./CaptureShell";
 import SeedReviewSheet from "./SeedReviewSheet";
+import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
 import type { SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
 
 const HIDDEN_ROUTE_PREFIXES = [
@@ -68,9 +69,10 @@ const GlobalCaptureFlow = () => {
     path.includes("/canvas") ||
     path.endsWith("/voice") ||
     path.endsWith("/capture");
-  if (ownsItsOwnCapture || shouldHideGlobalCapture(path)) return null;
+  const showFabAndSheets = !(ownsItsOwnCapture || shouldHideGlobalCapture(path));
 
   const showCaptureShell =
+    showFabAndSheets &&
     !pendingRecording &&
     (phase === "recording" ||
       phase === "requesting-permission" ||
@@ -79,7 +81,27 @@ const GlobalCaptureFlow = () => {
 
   return (
     <>
-      <GlobalCaptureFab phase={phase} onToggle={toggle} />
+      {/* App-wide reassurance that no captured take is stranded. Fixed, calm, and
+          non-interactive — it never blocks a tap and self-hides when nothing is
+          syncing, so it can safely ride on top of every screen (the FAB/sheets
+          below stay route-gated). */}
+      <div
+        aria-live="polite"
+        style={{
+          position: "fixed",
+          top: "calc(env(safe-area-inset-top, 0px) + 10px)",
+          left: 0,
+          right: 0,
+          zIndex: 60,
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <OutboxSyncPill />
+      </div>
+
+      {showFabAndSheets && <GlobalCaptureFab phase={phase} onToggle={toggle} />}
 
       {showCaptureShell && (
         <CaptureShell
@@ -93,7 +115,7 @@ const GlobalCaptureFlow = () => {
         />
       )}
 
-      {pendingRecording && (
+      {showFabAndSheets && pendingRecording && (
         <SeedReviewSheet
           recording={pendingRecording}
           defaultName={defaultIdeaName()}

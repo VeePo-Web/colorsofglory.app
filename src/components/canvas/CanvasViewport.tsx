@@ -1,6 +1,7 @@
 import {
   createContext,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -21,7 +22,7 @@ const INITIAL_ZOOM = 1.0;
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
-interface ViewportCtx {
+export interface ViewportCtx {
   /** Convert canvas coordinates → screen coordinates */
   canvasToScreen: (cx: number, cy: number) => { x: number; y: number };
   /** Convert screen coordinates → canvas coordinates */
@@ -176,6 +177,21 @@ const CanvasViewport = ({
         aria-label="Song canvas — drag to pan, pinch to zoom"
         role="application"
       >
+        {/* Warm song-room glow — fixed behind the transforming layer, always
+            centered in the viewport. This is the brand "spiritual warmth"
+            signature; it replaces the old dot grid so the canvas reads as a
+            private song room, not a Miro/diagram board. */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(ellipse 80% 55% at 50% 40%, rgba(184,149,58,0.12) 0%, rgba(184,149,58,0) 70%)",
+          }}
+        />
+
         {/* The transforming layer — GPU-composited */}
         <div
           ref={canvasLayerRef}
@@ -186,10 +202,6 @@ const CanvasViewport = ({
             width: CANVAS_WIDTH,
             height: CANVAS_HEIGHT,
             transformOrigin: "0 0",
-            // Dot grid background
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, rgba(181,147,90,0.09) 1.5px, transparent 0)",
-            backgroundSize: "32px 32px",
           }}
         >
           {children}
@@ -201,5 +213,16 @@ const CanvasViewport = ({
     </CanvasViewportContext.Provider>
   );
 };
+
+/**
+ * Hook for child components that need to convert between screen and canvas
+ * coordinates (e.g., CanvasCardEl for pointer-capture drag).
+ * Must be used inside a <CanvasViewport> ancestor.
+ */
+export function useCanvasViewport(): ViewportCtx {
+  const ctx = useContext(CanvasViewportContext);
+  if (!ctx) throw new Error("useCanvasViewport must be used inside <CanvasViewport>");
+  return ctx;
+}
 
 export default CanvasViewport;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPhoneOtp, verifyPhoneOtp } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OTPInput from "@/components/cog/OTPInput";
@@ -31,6 +31,7 @@ const InviteVerifyPage = () => {
   const e164 = sessionStorage.getItem('cog:phone-e164') ?? '';
   const displayPhone = sessionStorage.getItem('cog:phone-display') ?? 'your number';
   const songTitle = ctx?.songTitle ?? 'the song';
+  const backToJoin = ctx?.token ? `/join/${ctx.token}` : '/join';
 
   const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const [isVerifying, setIsVerifying] = useState(false);
@@ -39,8 +40,8 @@ const InviteVerifyPage = () => {
   const [countdown, setCountdown] = useState(RESEND_SECONDS);
 
   useEffect(() => {
-    if (!e164) navigate('/invite/demo', { replace: true });
-  }, [e164, navigate]);
+    if (!e164) navigate(backToJoin, { replace: true });
+  }, [e164, navigate, backToJoin]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -53,10 +54,7 @@ const InviteVerifyPage = () => {
     setIsVerifying(true);
     setError(null);
     try {
-      const { error: otpError } = await supabase.auth.verifyOtp({
-        phone: e164, token: code, type: 'sms',
-      });
-      if (otpError) throw otpError;
+      await verifyPhoneOtp(e164, code);
 
       // Accept invite immediately after auth
       await acceptInvite(ctx.token);
@@ -76,7 +74,7 @@ const InviteVerifyPage = () => {
     setError(null);
     setDigits(Array(CODE_LENGTH).fill(''));
     setCountdown(RESEND_SECONDS);
-    try { await supabase.auth.signInWithOtp({ phone: e164 }); }
+    try { await sendPhoneOtp(e164); }
     catch { setError("Couldn't resend. Please try again."); }
     finally { setIsResending(false); }
   };
@@ -143,7 +141,7 @@ const InviteVerifyPage = () => {
           {countdown > 0 ? `Resend code (${countdown}s)` : 'Resend code'}
         </button>
         <button
-          onClick={() => navigate('/invite/demo')}
+          onClick={() => navigate(backToJoin)}
           className="transition-opacity hover:opacity-70"
           style={{ color: '#999', fontFamily: 'var(--font-body)' }}
         >

@@ -297,6 +297,67 @@ export async function generateInviteToken(
   };
 }
 
+// ─── sendInvite ───────────────────────────────────────────────────────────────
+
+export type InviteChannel = 'sms' | 'email';
+
+export interface SendInviteResult {
+  tokenId: string;
+  token: string;
+  inviteUrl: string;
+  channel: InviteChannel;
+  /** false → backend delivery unavailable; caller should fall back to copy/share. */
+  delivered: boolean;
+}
+
+/** Loose contact classifier: anything with "@" is an email, else treated as a phone. */
+export function classifyContact(contact: string): InviteChannel {
+  return contact.includes('@') ? 'email' : 'sms';
+}
+
+/**
+ * Send an invite directly to a person (the growth loop).
+ *
+ * Creates a single-use invite row, then asks the backend to deliver it. Delivery
+ * itself (Twilio SMS / transactional email) is a Lovable edge function — this is
+ * the frontend half of the contract. If the function isn't deployed yet, we
+ * degrade gracefully: the invite row still exists, `delivered: false` is returned,
+ * and the caller shows the copy/share link instead. No idea (or invite) is lost.
+ *
+ * Backend contract — edge function `send-invite`:
+ *   body: { token, invite_url, channel: 'sms'|'email', to, song_id }
+ *   returns: { delivered: boolean }   (sends via Twilio for sms / email provider)
+ */
+export async function sendInvite(
+  songId: string,
+  uiRole: string,
+  contact: string,
+): Promise<SendInviteResult> {
+  const channel = classifyContact(contact);
+  const to = channel === 'email' ? contact.trim().toLowerCase() : contact.replace(/\D/g, '');
+
+  // Directed invites are single-use.
+  const invite = await generateInviteToken(songId, uiRole, 1);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-invite', {
+      body: {
+        token: invite.token,
+        invite_url: invite.inviteUrl,
+        channel,
+        to,
+        song_id: songId,
+      },
+    });
+    if (error) throw error;
+    const delivered = (data as { delivered?: boolean } | null)?.delivered ?? true;
+    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered };
+  } catch {
+    // Backend send not available yet — caller falls back to copy/share link.
+    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered: false };
+  }
+}
+
 // ─── revokeInviteToken ────────────────────────────────────────────────────────
 
 export async function revokeInviteToken(tokenId: string): Promise<void> {
@@ -324,12 +385,47 @@ export async function requestNewInvite(token: string, phone?: string): Promise<v
 // ─── Onboarding step updater ──────────────────────────────────────────────────
 
 /**
- * Update the user's onboarding step — non-blocking, fire-and-forget.
+ * Canonical onboarding step order. Mirrors the DB `onboarding_step` enum and
+ * lets us advance monotonically without an extra RPC round-trip.
+ * `dismissed` is treated as terminal (never auto-advanced past).
+ */
+const ONBOARDING_STEP_ORDER = [
+  'not_started',
+  'intent_selected',
+  'referral_program_seen',
+  'founder_code_seen',
+  'first_song_created',
+  'first_idea_captured',
+  'first_voice_memo_added',
+  'first_lyrics_added',
+  'first_collaborator_invited',
+  'completed',
+] as const;
+
+function stepRank(step: string | null | undefined): number {
+  if (step === 'dismissed') return Number.MAX_SAFE_INTEGER;
+  const i = ONBOARDING_STEP_ORDER.indexOf(step as (typeof ONBOARDING_STEP_ORDER)[number]);
+  return i === -1 ? 0 : i;
+}
+
+/**
+ * Advance the user's onboarding step — non-blocking, fire-and-forget, and
+ * **monotonic**: it never regresses a returning user to an earlier step, so the
+ * post-auth resume router always reflects the furthest point they reached.
  * Steps: not_started → intent_selected → ... → completed
  */
 export async function updateOnboardingStep(step: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
+
+  // Read current step and only move forward.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('onboarding_step')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (stepRank(step) <= stepRank(profile?.onboarding_step)) return;
 
   await supabase
     .from('profiles')

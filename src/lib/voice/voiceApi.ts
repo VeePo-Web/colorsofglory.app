@@ -19,7 +19,12 @@ export interface VoiceMemoRecord {
   created_at: string;
   created_by: string;
   is_processing: boolean;
-  status?: VoiceMemoRow["status"];
+  /**
+   * `"queued"` is a client-only optimistic status used while a freshly captured
+   * take is held in the Capture Outbox (cached locally, waiting to sync). It is
+   * never written to the DB — the server uses the narrower `VoiceMemoRow` union.
+   */
+  status?: VoiceMemoRow["status"] | "queued";
 }
 
 const PROCESSING_STATUSES = new Set<VoiceMemoRow["status"]>([
@@ -49,6 +54,15 @@ export async function getUploadUrl(params: {
   byteSize: number;
   durationMs: number;
   fileName?: string;
+  /**
+   * When set, this memo is a layer recorded over the given base memo
+   * ("Record over this"). The edge function persists it as a child once the
+   * `voice_memos.parent_memo_id` column exists; until then it is ignored
+   * server-side and the relationship is held on the client.
+   */
+  parentMemoId?: string;
+  /** Dedupes a double-tapped "Save layer" so it never creates two memos. */
+  idempotencyKey?: string;
 }): Promise<UploadUrlResult> {
   const { data, error } = await supabase.functions.invoke("voice-memo-upload-url", {
     body: {
@@ -57,6 +71,8 @@ export async function getUploadUrl(params: {
       byte_size: params.byteSize,
       duration_ms: params.durationMs,
       file_name: params.fileName,
+      parent_memo_id: params.parentMemoId,
+      idempotency_key: params.idempotencyKey,
     },
   });
   if (error) throw new Error(error.message);
@@ -139,6 +155,10 @@ export async function uploadVoiceMemo(params: {
   sectionLabel: string;
   transcribe?: boolean;
   fileName?: string;
+  /** Base memo this take layers over ("Record over this"). */
+  parentMemoId?: string;
+  /** Stable key per save attempt; prevents duplicate layers on double-tap. */
+  idempotencyKey?: string;
 }): Promise<string> {
   const byteSize = params.blob.size;
 
@@ -148,6 +168,8 @@ export async function uploadVoiceMemo(params: {
     byteSize,
     durationMs: params.durationMs,
     fileName: params.fileName,
+    parentMemoId: params.parentMemoId,
+    idempotencyKey: params.idempotencyKey,
   });
 
   await uploadBlob(uploadUrl, params.blob, params.mimeType);
