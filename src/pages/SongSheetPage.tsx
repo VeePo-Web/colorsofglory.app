@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal } from "lucide-react";
+import { Minus, Plus, Hash, Type, Ruler, Pencil, Check, Copy, Play, Guitar, Wand2, SlidersHorizontal, Music } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import SongTabBar from "@/components/cog/SongTabBar";
@@ -67,7 +67,7 @@ const SongSheetPage = () => {
   const songTitle = useSongTitle(id);
 
   const draft = useMemo(() => readDraft(id), [id]);
-  const [source, setSource] = useState(draft?.source ?? SAMPLE);
+  const [source, setSource] = useState(draft?.source ?? "");
   const [sourceKey, setSourceKey] = useState(draft?.sourceKey ?? "C");
   const [displayKey, setDisplayKey] = useState(draft?.sourceKey ?? "C");
   const [display, setDisplay] = useState<"letters" | "numbers">("letters");
@@ -106,6 +106,7 @@ const SongSheetPage = () => {
   // With a capo, you PLAY the shapes of a lower key while it SOUNDS in displayKey.
   // Everything visual (chords, diagrams, performance) renders in the play key.
   const playKey = capo > 0 ? transposeKeyLetter(displayKey, "major", -capo) : displayKey;
+  const isEmpty = source.trim() === "";
 
   // Capo "easy keys" hints — only meaningful when the sounding key isn't already easy.
   const capoHints = useMemo(() => {
@@ -164,7 +165,9 @@ const SongSheetPage = () => {
         <p className="text-xs text-center mb-5" style={{ color: "var(--cog-muted)" }}>
           {editing
             ? "Edit chart · ChordPro"
-            : `Song sheet · ${display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}${capo > 0 && display !== "numbers" ? ` · Capo ${capo} (play ${playKey})` : ""}`}
+            : isEmpty
+              ? "A new song sheet"
+              : `Song sheet · ${display === "numbers" ? "Nashville numbers" : `Key of ${displayKey}`}${capo > 0 && display !== "numbers" ? ` · Capo ${capo} (play ${playKey})` : ""}`}
         </p>
 
         {editing ? (
@@ -175,6 +178,8 @@ const SongSheetPage = () => {
             onSourceKey={setSourceKey}
             onDone={() => setEditing(false)}
           />
+        ) : isEmpty ? (
+          <SheetEmptyState onWrite={() => setEditing(true)} onExample={() => setSource(SAMPLE)} />
         ) : (
           <>
             {/* Primary bar — the only chrome that's always up: transpose · Perform · Tools */}
@@ -531,6 +536,35 @@ function EditableLine({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── empty / first-run state ─────────────────────────────────────────────────
+
+function SheetEmptyState({ onWrite, onExample }: { onWrite: () => void; onExample: () => void }) {
+  return (
+    <div className="flex flex-col items-center text-center px-2 pt-8 pb-12">
+      <div className="flex items-center justify-center rounded-full mb-5" style={{ width: 72, height: 72, backgroundColor: "var(--cog-gold-pale)" }}>
+        <Music size={30} strokeWidth={1.6} style={{ color: "var(--cog-gold-alt, var(--cog-gold))" }} />
+      </div>
+      <h2 className="mb-1.5" style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", fontSize: "1.375rem" }}>
+        Start this song's sheet
+      </h2>
+      <p className="text-sm mb-7" style={{ color: "var(--cog-warm-gray)", maxWidth: "17rem" }}>
+        Paste a chart you already have, or write the chords and lyrics line by line.
+      </p>
+      <button
+        type="button"
+        onClick={onWrite}
+        className="inline-flex items-center justify-center gap-2 rounded-full text-sm font-semibold mb-3 transition-transform active:scale-[0.98]"
+        style={{ width: "100%", maxWidth: 320, minHeight: 52, backgroundColor: "var(--cog-gold)", color: "#fff", boxShadow: "0 4px 16px rgba(184,149,58,0.35)" }}
+      >
+        <Wand2 size={16} strokeWidth={2} /> Paste or write a chart
+      </button>
+      <button type="button" onClick={onExample} className="text-sm font-medium active:scale-95" style={{ color: "var(--cog-warm-gray)", minHeight: 44 }}>
+        See an example
+      </button>
     </div>
   );
 }
