@@ -39,6 +39,7 @@ const PracticePlayerPage = lazy(() => import("./pages/PracticePlayerPage"));
 const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
+const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
 const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
@@ -62,6 +63,8 @@ const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPag
 const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
 const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
 const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
+// Admin (internal-only) — all admin routing lives in src/routes/AdminRoutes.tsx
+import { adminRoutes } from "@/routes/AdminRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -164,6 +167,7 @@ const App = () => {
             <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
             <Route path="/songs/:id/chords" element={<CanvasLayerRedirect layer="chords" />} />
             <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
+            <Route path="/songs/:id/sheet" element={<SongSheetPage />} />
             <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
             <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
             <Route path="/songs/:id/notes" element={<CanvasLayerRedirect layer="notes" />} />
@@ -193,6 +197,8 @@ const App = () => {
             <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
             <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
             <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
+            {/* Admin (internal) — routes defined in src/routes/AdminRoutes.tsx */}
+            {adminRoutes}
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />

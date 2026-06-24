@@ -8,6 +8,10 @@ export function buildReferralShareUrl(code: string): string {
 export type MyReferralsSummary = {
   code: string | null;
   link: string | null;
+  /** Prefilled, on-brand message for one-tap sharing (null until a code exists). */
+  share_message: string | null;
+  /** What the referred friend gets — surface this in the share UI. */
+  referee_benefit: string;
   attributed_count: number;
   paying_count: number;
   per_referral_cents: number;
@@ -29,13 +33,31 @@ export type MyReferralsSummary = {
     kind: "manual" | "paypal" | "stripe_connect" | null;
     email: string | null;
     country: string | null;
+    complete: boolean;
   };
+  event_timeline?: Array<{
+    status: string;
+    amount_cents: number;
+    invoice_external_id: string | null;
+    created_at: string;
+  }>;
 };
 
 export async function getMyReferrals(): Promise<MyReferralsSummary> {
   const { data, error } = await supabase.functions.invoke("me-referrals");
   if (error) throw error;
   return data as MyReferralsSummary;
+}
+
+/**
+ * Claim a memorable/vanity referral code (3–20 chars, A–Z/0–9). Returns the
+ * normalized code. Throws 'code_taken' / 'invalid_code' on conflict. The DB
+ * trigger keeps the /r/:code resolver in sync automatically.
+ */
+export async function claimReferralCode(code: string): Promise<string> {
+  const { data, error } = await supabase.rpc("claim_referral_code" as never, { _code: code } as never);
+  if (error) throw error;
+  return data as unknown as string;
 }
 
 export type PayoutMethodInput = {

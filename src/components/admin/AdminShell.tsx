@@ -4,8 +4,14 @@ const links = [
   { to: "/admin", label: "Home", end: true },
   { to: "/admin/founders", label: "Founders" },
   { to: "/admin/codes", label: "Codes" },
+  { to: "/admin/referrals", label: "Referrals" },
   { to: "/admin/payouts", label: "Payouts" },
   { to: "/admin/finance", label: "Finance" },
+  { to: "/admin/webhooks", label: "Webhooks" },
+  { to: "/admin/fraud", label: "Fraud" },
+  { to: "/admin/attribution", label: "Attribution" },
+  { to: "/admin/auth-security", label: "Auth" },
+  { to: "/admin/audit", label: "Audit" },
 ];
 
 export default function AdminShell({ children, title }: { children: React.ReactNode; title?: string }) {
