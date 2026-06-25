@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Mic, Pause, Play, Upload } from "lucide-react";
+import { ArrowLeft, Mic, Pause, Play, RefreshCw, Upload } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
@@ -23,6 +23,12 @@ import {
   getFileExtension,
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
+import {
+  enqueuePendingUpload,
+  flushPendingUpload,
+  listPendingUploads,
+  discardPendingUpload,
+} from "@/lib/voice/pendingUploads";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -31,6 +37,10 @@ import { supabase } from "@/integrations/supabase/client";
 interface MemoCardProps {
   memo: VoiceMemoRecord;
   onDelete: (id: string) => void;
+  /** Re-attempt a take whose upload failed (the blob is safe in the cache). */
+  onRetry?: (id: string) => void;
+  /** Permanently discard a failed take. */
+  onDiscardFailed?: (id: string) => void;
 }
 
 const WAVEFORM_BARS = 28;
@@ -55,7 +65,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
-const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
+const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -67,6 +77,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
   const statusMeta = STATUS_LABELS[memo.status ?? "ready"] ?? STATUS_LABELS.ready;
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
+  const isFailed = memo.status === "failed" && !!onRetry;
 
   const togglePlay = useCallback(async () => {
     if (!isReady) return;
@@ -157,55 +168,82 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
             {formatDuration(memo.duration_ms)} · {memo.section_label || "Raw idea"} · {timeAgo(memo.created_at)}
           </p>
 
-          {/* Status chip */}
-          {(isProcessing || memo.status === "failed") && (
+          {/* Status chip — failed takes read as reassurance ("safe, just retry"),
+              never an alarm. The blob is on the device the whole time. */}
+          {(isProcessing || isFailed) && (
             <span
               style={{
                 display: "inline-block",
                 marginTop: 5,
                 padding: "2px 8px",
                 borderRadius: 9999,
-                backgroundColor: `${statusMeta.color}15`,
-                color: statusMeta.color,
+                backgroundColor: isFailed
+                  ? "rgba(184,149,58,0.12)"
+                  : `${statusMeta.color}15`,
+                color: isFailed ? "var(--cog-gold)" : statusMeta.color,
                 fontSize: 10,
                 fontWeight: 700,
                 fontFamily: "var(--font-body)",
                 letterSpacing: "0.04em",
               }}
             >
-              {statusMeta.label}
+              {isFailed ? "Saved on device · tap retry" : statusMeta.label}
             </span>
           )}
         </div>
 
-        {/* Play / loading button */}
-        <button
-          type="button"
-          onClick={togglePlay}
-          disabled={!isReady || isLoading}
-          style={{
-            width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-            backgroundColor: isReady ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
-            color: "#FFF",
-            border: "none",
-            cursor: isReady ? "pointer" : "not-allowed",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: isReady ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
-            transition: "transform 120ms ease",
-            opacity: isLoading ? 0.7 : 1,
-          }}
-          onMouseDown={(e) => isReady && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
-          onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
-          aria-label={isPlaying ? `Pause ${memo.title}` : `Play ${memo.title}`}
-        >
-          {isLoading ? (
-            <span style={{ fontSize: 12 }}>…</span>
-          ) : isPlaying ? (
-            <Pause size={16} fill="currentColor" />
-          ) : (
-            <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />
-          )}
-        </button>
+        {/* Retry (failed) or Play / loading button */}
+        {isFailed ? (
+          <button
+            type="button"
+            onClick={() => onRetry?.(memo.id)}
+            style={{
+              height: 44, padding: "0 16px", borderRadius: 9999, flexShrink: 0,
+              backgroundColor: "var(--cog-gold)",
+              color: "#FFF",
+              border: "none",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              boxShadow: "0 4px 16px rgba(184,149,58,0.30)",
+              fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700,
+              transition: "transform 120ms ease",
+            }}
+            onMouseDown={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
+            onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
+            aria-label={`Retry saving ${memo.title}`}
+          >
+            <RefreshCw size={15} strokeWidth={2} />
+            Retry
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={togglePlay}
+            disabled={!isReady || isLoading}
+            style={{
+              width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+              backgroundColor: isReady ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
+              color: "#FFF",
+              border: "none",
+              cursor: isReady ? "pointer" : "not-allowed",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: isReady ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
+              transition: "transform 120ms ease",
+              opacity: isLoading ? 0.7 : 1,
+            }}
+            onMouseDown={(e) => isReady && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
+            onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
+            aria-label={isPlaying ? `Pause ${memo.title}` : `Play ${memo.title}`}
+          >
+            {isLoading ? (
+              <span style={{ fontSize: 12 }}>…</span>
+            ) : isPlaying ? (
+              <Pause size={16} fill="currentColor" />
+            ) : (
+              <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />
+            )}
+          </button>
+        )}
 
         {/* More menu */}
         <div style={{ position: "relative" }}>
@@ -233,7 +271,11 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
               >
                 <button
                   type="button"
-                  onClick={() => { onDelete(memo.id); setShowMenu(false); }}
+                  onClick={() => {
+                    if (isFailed && onDiscardFailed) onDiscardFailed(memo.id);
+                    else onDelete(memo.id);
+                    setShowMenu(false);
+                  }}
                   style={{
                     display: "block", width: "100%", padding: "9px 14px",
                     textAlign: "left", fontFamily: "var(--font-body)",
@@ -241,7 +283,7 @@ const MemoCard = ({ memo, onDelete }: MemoCardProps) => {
                     backgroundColor: "transparent", border: "none", cursor: "pointer",
                   }}
                 >
-                  Delete
+                  {isFailed ? "Discard" : "Delete"}
                 </button>
               </div>
             </>
@@ -374,6 +416,43 @@ const VoiceMemosPage = () => {
     loadMemos();
   }, [loadMemos]);
 
+  // Recovery sweep: a take whose upload was interrupted last session (tab closed,
+  // app killed, network died) is still safe in the cache. Surface each as a
+  // retriable card, then quietly attempt one auto-retry — a reconnected device
+  // heals itself without the songwriter lifting a finger.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const orphans = await listPendingUploads(songId);
+      if (cancelled || orphans.length === 0) return;
+      setMemos((prev) => {
+        const known = new Set(prev.map((m) => m.id));
+        const cards: VoiceMemoRecord[] = orphans
+          .filter((o) => !known.has(o.id))
+          .map((o) => ({
+            id: o.id,
+            song_id: o.songId,
+            title: o.title,
+            duration_ms: o.durationMs,
+            section_label: o.sectionLabel,
+            storage_path: "",
+            created_at: o.createdAt,
+            created_by: "You",
+            is_processing: true,
+            status: "uploading",
+          }));
+        return cards.length ? [...cards, ...prev] : prev;
+      });
+      for (const orphan of orphans) {
+        if (cancelled) return;
+        await flushAndReconcile(orphan.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [songId, flushAndReconcile]);
+
   // Wire current user name to memos
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   useEffect(() => {
@@ -408,6 +487,51 @@ const VoiceMemosPage = () => {
     setPendingRecording(null);
   }, [cancelRecording]);
 
+  // Flush a queued take and reconcile the UI. On success the optimistic/failed
+  // card is replaced by the real DB record; on failure the card stays put as a
+  // calm "Save failed — Retry", because the take itself is safe in the cache.
+  const flushAndReconcile = useCallback(
+    async (pendingId: string) => {
+      try {
+        await flushPendingUpload(pendingId);
+        setMemos((prev) => prev.filter((m) => m.id !== pendingId));
+        const real = await listVoiceMemos(songId);
+        setMemos(real);
+        setUploadError(null);
+      } catch {
+        // The blob is still safe on the device — surface a retriable card, not a
+        // dead end. The creed holds: a captured idea is never lost. Re-derive the
+        // card from the durable store so a concurrent server reload that replaced
+        // the memo list can never make the failed take invisible.
+        const rows = await listPendingUploads(songId);
+        const row = rows.find((r) => r.id === pendingId);
+        setMemos((prev) => {
+          if (prev.some((m) => m.id === pendingId)) {
+            return prev.map((m) =>
+              m.id === pendingId ? { ...m, is_processing: false, status: "failed" } : m,
+            );
+          }
+          if (!row) return prev;
+          const card: VoiceMemoRecord = {
+            id: row.id,
+            song_id: row.songId,
+            title: row.title,
+            duration_ms: row.durationMs,
+            section_label: row.sectionLabel,
+            storage_path: "",
+            created_at: row.createdAt,
+            created_by: "You",
+            is_processing: false,
+            status: "failed",
+          };
+          return [card, ...prev];
+        });
+        setUploadError("Your recording is safe. Tap Retry on the memo to finish saving.");
+      }
+    },
+    [songId],
+  );
+
   const handleSaveMemo = useCallback(async ({
     name,
     section,
@@ -418,9 +542,21 @@ const VoiceMemosPage = () => {
     memoCountRef.current++;
     const title = name.trim() || `Voice Memo ${memoCountRef.current}`;
 
-    // Optimistic — add processing card immediately
+    // Local-first: write the blob to the device BEFORE any network call. From
+    // here on the take cannot be lost — not by a dropped upload, not by the tab
+    // closing a second later. The optimistic card is keyed to the durable id.
+    const pending = await enqueuePendingUpload({
+      blob: pendingRecording.blob,
+      songId,
+      mimeType: pendingRecording.mimeType,
+      durationMs: pendingRecording.durationMs,
+      title,
+      sectionLabel: section,
+      transcribe,
+    });
+
     const optimisticMemo: VoiceMemoRecord = {
-      id: `opt-${Date.now()}`,
+      id: pending.id,
       song_id: songId,
       title,
       duration_ms: pendingRecording.durationMs,
@@ -436,29 +572,30 @@ const VoiceMemosPage = () => {
     setRecordingNote("");
     setPendingRecording(null);
 
-    try {
-      const memoId = await uploadVoiceMemo({
-        songId,
-        blob: pendingRecording.blob,
-        mimeType: pendingRecording.mimeType,
-        durationMs: pendingRecording.durationMs,
-        title,
-        sectionLabel: section,
-        transcribe,
-      });
-      // Replace optimistic with real record
-      setMemos((prev) => prev.filter((m) => m.id !== optimisticMemo.id));
-      // Re-fetch to get the real DB record
-      const real = await listVoiceMemos(songId);
-      setMemos(real);
-      // Cache audio blob for instant first play
-      audioCache.set(memoId, pendingRecording.blob);
-    } catch {
-      // Remove optimistic and show error
-      setMemos((prev) => prev.filter((m) => m.id !== optimisticMemo.id));
-      setUploadError("Upload failed — please try again.");
-    }
-  }, [pendingRecording, songId, currentUserId]);
+    await flushAndReconcile(pending.id);
+  }, [pendingRecording, songId, currentUserId, flushAndReconcile]);
+
+  // Retry a take whose upload failed — the blob has been waiting safely in the
+  // cache the whole time.
+  const handleRetryMemo = useCallback(
+    async (pendingId: string) => {
+      setUploadError(null);
+      setMemos((prev) =>
+        prev.map((m) =>
+          m.id === pendingId ? { ...m, is_processing: true, status: "uploading" } : m,
+        ),
+      );
+      await flushAndReconcile(pendingId);
+    },
+    [flushAndReconcile],
+  );
+
+  // Discard a failed take for good — removes the cached blob and the card.
+  const handleDiscardFailed = useCallback(async (pendingId: string) => {
+    await discardPendingUpload(pendingId);
+    setMemos((prev) => prev.filter((m) => m.id !== pendingId));
+    setUploadError(null);
+  }, []);
 
   // ── File upload handler ─────────────────────────────────────────────────────
 
@@ -587,9 +724,22 @@ const VoiceMemosPage = () => {
           </div>
         )}
 
-        {/* Error */}
+        {/* Notice — calm and reassuring (the take is safe on the device), never an
+            alarm. Styled in the warm gold family, not red. */}
         {uploadError && (
-          <p role="alert" style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#E05440", marginBottom: 12 }}>
+          <p
+            role="status"
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: 13,
+              color: "var(--cog-charcoal)",
+              backgroundColor: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.22)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              marginBottom: 12,
+            }}
+          >
             {uploadError}
           </p>
         )}
@@ -633,7 +783,13 @@ const VoiceMemosPage = () => {
                 {grouped.length > 1 && <SectionHeader label={label} />}
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {items.map((memo) => (
-                    <MemoCard key={memo.id} memo={memo} onDelete={handleDelete} />
+                    <MemoCard
+                      key={memo.id}
+                      memo={memo}
+                      onDelete={handleDelete}
+                      onRetry={handleRetryMemo}
+                      onDiscardFailed={handleDiscardFailed}
+                    />
                   ))}
                 </div>
               </div>
