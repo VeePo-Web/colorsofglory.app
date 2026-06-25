@@ -1,4 +1,4 @@
-import { useRef, useEffect, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useRef, useEffect } from "react";
 
 interface OTPInputProps {
   length?: number;
@@ -10,17 +10,13 @@ interface OTPInputProps {
 }
 
 /**
- * 6-box OTP input with:
- * - Auto-advance on digit entry
- * - Backspace moves to previous box
- * - Full-code paste + iOS QuickType autofill spread (whole code fills every box)
- * - Auto-submit callback when all digits filled
- * - Gold border on focused/filled state
- *
- * WebOTP auto-read (Android Chrome) is owned by the shared `useWebOtpAutofill`
- * hook at the verify-screen level, NOT here — a single listener avoids competing
- * `navigator.credentials.get({ otp })` requests. iOS keyboard autofill still works
- * via `autoComplete="one-time-code"` on the first box below.
+ * Single transparent <input autocomplete="one-time-code"> sitting over styled gold
+ * cells (the web.dev SMS-OTP pattern). One real field means iOS Security-Code
+ * AutoFill, Android autofill, the QuickType suggestion, and full-code paste ALL land
+ * the whole code cleanly — the multi-box approach silently truncated iOS autofill to
+ * a single digit. Auto-submits via onComplete when the field is full. Keeps the same
+ * props + gold look so callers (CodeVerifyPage) don't change. WebOTP one-tap (Android)
+ * is owned by the verify screen's useWebOtpAutofill hook.
  */
 const OTPInput = ({
   length = 6,
@@ -30,108 +26,75 @@ const OTPInput = ({
   disabled = false,
   error = false,
 }: OTPInputProps) => {
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const code = value.join("").replace(/\D/g, "").slice(0, length);
 
   useEffect(() => {
-    refs.current[0]?.focus();
+    inputRef.current?.focus();
   }, []);
 
-  // After a wrong/expired code the caller clears the boxes — snap focus back to
-  // the first one so retry is instant and the user never hunts for the cursor.
+  // After a wrong/expired code the caller clears the field — pull focus back so
+  // retry is instant and the keyboard stays up.
   useEffect(() => {
-    if (error) refs.current[0]?.focus();
+    if (error) inputRef.current?.focus();
   }, [error]);
 
-  const handleChange = (idx: number, raw: string) => {
-    const cleaned = raw.replace(/\D/g, "");
-
-    // iOS QuickType security-code autofill drops the FULL code into the first box
-    // (it bypasses maxLength), and maxLength blocks manual multi-char entry — so any
-    // multi-digit input here is autofill/typed-fast. Spread it across the boxes and
-    // submit. The old slice(-1) silently dropped 5 of the 6 autofilled digits.
-    if (cleaned.length > 1) {
-      const chars = cleaned.slice(0, length - idx).split("");
-      const next = [...value];
-      let lastPos = idx;
-      chars.forEach((c, i) => { next[idx + i] = c; lastPos = idx + i; });
-      onChange(next);
-      refs.current[Math.min(lastPos + 1, length - 1)]?.focus();
-      if (next.every((d) => d !== "")) onComplete?.(next.join(""));
-      return;
-    }
-
-    const char = cleaned.slice(-1);
-    const next = [...value];
-    next[idx] = char;
-    onChange(next);
-
-    if (char && idx < length - 1) {
-      refs.current[idx + 1]?.focus();
-    }
-    if (char && idx === length - 1) {
-      const code = next.join("");
-      if (code.length === length) onComplete?.(code);
-    }
+  const setCode = (raw: string) => {
+    const clean = raw.replace(/\D/g, "").slice(0, length);
+    onChange(Array.from({ length }, (_, i) => clean[i] ?? ""));
+    if (clean.length === length) onComplete?.(clean);
   };
 
-  const handleKeyDown = (idx: number, e: KeyboardEvent) => {
-    if (e.key === "Backspace" && !value[idx] && idx > 0) {
-      refs.current[idx - 1]?.focus();
-    }
-    if (e.key === "ArrowLeft" && idx > 0) refs.current[idx - 1]?.focus();
-    if (e.key === "ArrowRight" && idx < length - 1) refs.current[idx + 1]?.focus();
-  };
-
-  const handlePaste = (e: ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, length);
-    if (!pasted) return;
-    const next = Array(length).fill("");
-    pasted.split("").forEach((c, i) => { next[i] = c; });
-    onChange(next);
-    const focusIdx = Math.min(pasted.length, length - 1);
-    refs.current[focusIdx]?.focus();
-    if (pasted.length === length) onComplete?.(pasted);
-  };
+  const focusedIndex = Math.min(code.length, length - 1);
 
   return (
-    <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-      {Array.from({ length }).map((_, idx) => {
-        const filled = !!value[idx];
-        return (
-          <input
-            key={idx}
-            ref={(el) => { refs.current[idx] = el; }}
-            type="text"
-            inputMode="numeric"
-            autoComplete={idx === 0 ? "one-time-code" : "off"}
-            name={idx === 0 ? "one-time-code" : undefined}
-            pattern="[0-9]*"
-            maxLength={1}
-            value={value[idx] ?? ""}
-            onChange={(e) => handleChange(idx, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(idx, e)}
-            disabled={disabled}
-            aria-label={`Code digit ${idx + 1} of ${length}`}
-            className="text-center text-2xl font-bold rounded-2xl outline-none transition-all duration-150 disabled:opacity-40"
-            style={{
-              width: 48,
-              height: 64,
-              backgroundColor: "#FFFFFF",
-              border: error
-                ? "1.5px solid #E05440"
-                : filled
-                ? "1.5px solid #B5935A"
-                : "1.5px solid rgba(0,0,0,0.12)",
-              color: "#1A1A1A",
-              fontFamily: "var(--font-body)",
-              boxShadow: filled && !error
-                ? "0 0 0 3px rgba(181,147,90,0.15)"
-                : "none",
-            }}
-          />
-        );
-      })}
+    <div
+      className="relative"
+      onClick={() => inputRef.current?.focus()}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        name="one-time-code"
+        pattern="[0-9]*"
+        maxLength={length}
+        value={code}
+        disabled={disabled}
+        aria-label={`Enter the ${length}-digit code`}
+        onChange={(e) => setCode(e.target.value)}
+        className="absolute inset-0 z-10 h-full w-full opacity-0 disabled:cursor-not-allowed"
+        style={{ caretColor: "transparent" }}
+      />
+      <div className="flex gap-2 justify-center pointer-events-none">
+        {Array.from({ length }).map((_, idx) => {
+          const char = code[idx] ?? "";
+          const highlight = (char !== "" || (idx === focusedIndex && !disabled)) && !error;
+          return (
+            <div
+              key={idx}
+              className="flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-150"
+              style={{
+                width: 48,
+                height: 64,
+                backgroundColor: "#FFFFFF",
+                border: error
+                  ? "1.5px solid #E05440"
+                  : highlight
+                  ? "1.5px solid var(--cog-gold)"
+                  : "1.5px solid rgba(0,0,0,0.12)",
+                color: "#1A1A1A",
+                fontFamily: "var(--font-body)",
+                boxShadow: highlight ? "0 0 0 3px var(--cog-gold-glow)" : "none",
+                opacity: disabled ? 0.4 : 1,
+              }}
+            >
+              {char}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
