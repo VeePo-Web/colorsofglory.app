@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Search, X, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Search, X, RotateCcw } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import { loadMemory } from "@/integrations/cog/memory";
 import { searchMemory } from "@/lib/memory/searchMemory";
 import { applyHidden, toggleHidden, loadHiddenIds, saveHiddenIds } from "@/lib/memory/hidden";
+import { freshSongs, loadLastSeen, saveLastSeen } from "@/lib/memory/recency";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import MemoryClusterCard from "@/components/memory/MemoryClusterCard";
 import MemorySearchResults from "@/components/memory/MemorySearchResults";
@@ -49,6 +50,18 @@ const MemoryPage = () => {
 
   const { data, isLoading, isError } = useQuery({ queryKey: ["memory"], queryFn: loadMemory });
   const graph = data?.graph ?? null;
+
+  // "New since you last opened" — capture the prior visit, then stamp this one.
+  const userId = graph?.userId ?? null;
+  const [seenAt, setSeenAt] = useState<string | null>(null);
+  const seenCaptured = useRef(false);
+  useEffect(() => {
+    if (!userId || seenCaptured.current) return;
+    seenCaptured.current = true;
+    setSeenAt(loadLastSeen(userId));
+    saveLastSeen(userId, new Date().toISOString());
+  }, [userId]);
+  const fresh = useMemo(() => (graph ? freshSongs(graph.songs, seenAt) : []), [graph, seenAt]);
 
   const recurring = useMemo(() => applyHidden(graph?.clusters.filter((c) => c.recurring) ?? [], hidden), [graph, hidden]);
   const single = useMemo(() => applyHidden(graph?.clusters.filter((c) => !c.recurring) ?? [], hidden), [graph, hidden]);
@@ -185,6 +198,30 @@ const MemoryPage = () => {
                   <MemorySearchResults results={results} onOpenCluster={setActive} onOpenSong={openSong} />
                 ) : (
                   <>
+                    {fresh.length > 0 && (
+                      <div className="mb-7">
+                        <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--cog-warm-gray)" }}>
+                          New since you last opened
+                        </h2>
+                        <div className="flex flex-col gap-2.5">
+                          {fresh.slice(0, 5).map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => openSong(s.id)}
+                              className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-150 active:scale-[0.98]"
+                              style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border-gold)" }}
+                            >
+                              <span className="flex-shrink-0 rounded-full" style={{ width: 10, height: 10, backgroundColor: s.coverColor || "var(--cog-gold)" }} />
+                              <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                {s.title}
+                              </span>
+                              <ArrowRight size={15} style={{ color: "var(--cog-muted)" }} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div
                       className="flex rounded-2xl py-4 mb-7"
                       style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
