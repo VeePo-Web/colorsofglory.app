@@ -20,7 +20,7 @@ export function normaliseKey(value: string): string {
 }
 
 /** Title-case a theme word for display ("grace" -> "Grace"). */
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value
     .split(" ")
     .filter(Boolean)

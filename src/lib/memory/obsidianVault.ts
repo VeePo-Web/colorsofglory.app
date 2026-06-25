@@ -1,12 +1,21 @@
-// Pure: MemoryGraph + raw bundle -> a real Obsidian-compatible vault.
+// Pure: MemoryGraph + raw bundle -> a real Obsidian-compatible Zettelkasten.
 //
 // A vault is just a folder of .md files. Obsidian's graph derives entirely
 // from [[wikilinks]] and #tags, and it creates its own .obsidian/ config on
 // open — so we ship NONE of that. We never depend on Obsidian at runtime
 // (F33 hard rule); this is a portability/backup superpower, generated on
 // demand in the browser at ~0 cost.
+//
+// Zettelkasten shape (what makes the graph a *constellation*, not a list):
+//   - Every captured idea is its own ATOMIC note in Ideas/, linked out to its
+//     song, its themes, and its scripture. The atomic idea is the Zettel.
+//   - Song notes become hubs that link to their idea notes (not inline text).
+//   - Maps of Content (All Themes / All Scripture / Collaborators / All Ideas)
+//     give thumb-friendly navigation without any Dataview dependency.
+//   - A "Start Here" note onboards a first-time vault opener in seconds.
 
-import type { MemoryCluster, MemoryGraph, MemoryRawBundle, MemorySong } from "./memoryTypes";
+import { normaliseKey, titleCase } from "./buildGraph";
+import type { MemoryCluster, MemoryGraph, MemoryIdea, MemoryRawBundle, MemorySong } from "./memoryTypes";
 
 export interface VaultFile {
   path: string;
@@ -14,6 +23,11 @@ export interface VaultFile {
 }
 
 const INDEX_NOTE = "Your Memory";
+const START_NOTE = "Start Here";
+const MOC_THEMES = "All Themes";
+const MOC_SCRIPTURE = "All Scripture";
+const MOC_PEOPLE = "Collaborators";
+const MOC_IDEAS = "All Ideas";
 
 /** Strip filesystem/Obsidian-illegal chars; keep human-readable spaces. */
 export function sanitizeFileName(name: string): string {
@@ -51,12 +65,81 @@ function isoDate(value: string | null): string | null {
   return value.slice(0, 10);
 }
 
+/** Single line, trimmed, collapsed — safe for a list item or H1. */
+function oneLine(value: string, max = 80): string {
+  const flat = value.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+}
+
+/** A captured idea's human display name (title > snippet > fallback). */
+function ideaDisplayName(idea: MemoryIdea): string {
+  return oneLine(idea.title?.trim() || idea.lyricSnippet?.trim() || "Idea", 64);
+}
+
+/**
+ * Assign a unique, deterministic note filename to every idea. Idea titles can
+ * be null or collide; we disambiguate with a stable " (n)" suffix in bundle
+ * order so the same vault always generates identically.
+ */
+function assignIdeaNames(ideas: MemoryIdea[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  const result = new Map<string, string>();
+  for (const idea of ideas) {
+    const base = sanitizeFileName(ideaDisplayName(idea));
+    const n = (counts.get(base) ?? 0) + 1;
+    counts.set(base, n);
+    result.set(idea.id, n === 1 ? base : `${base} (${n})`);
+  }
+  return result;
+}
+
+/** Theme cluster display labels that an idea's tags map to (exact graph labels). */
+function ideaThemeLabels(idea: MemoryIdea): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const raw of idea.tags ?? []) {
+    const key = normaliseKey(raw);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    labels.push(titleCase(key));
+  }
+  return labels;
+}
+
+function buildIdeaNote(idea: MemoryIdea, song: MemorySong | undefined, name: string): VaultFile {
+  const scripture = idea.scriptureRef?.trim() || null;
+  const themeLabels = ideaThemeLabels(idea);
+
+  const fm: string[] = ["---", "type: idea"];
+  const tags = ["idea", ...(idea.tags ?? []).map(tagToken)].filter(Boolean);
+  fm.push(`tags: [${[...new Set(tags)].join(", ")}]`);
+  if (song) fm.push(`song: ${yamlString(wikilink(song.title))}`);
+  if (scripture) fm.push(`scripture: ${yamlString(wikilink(scripture))}`);
+  fm.push("---", "");
+
+  const body: string[] = [fm.join("\n")];
+  body.push(`# ${name}`, "");
+
+  const snippet = idea.lyricSnippet?.trim();
+  if (snippet && oneLine(snippet, 64) !== name) {
+    for (const line of snippet.split(/\n+/)) body.push(`> ${line.trim()}`);
+    body.push("");
+  }
+
+  if (song) body.push(`**From song:** ${wikilink(song.title)}`);
+  if (scripture) body.push(`**Scripture:** ${wikilink(scripture)}`);
+  if (themeLabels.length) body.push(`**Themes:** ${themeLabels.map(wikilink).join(", ")}`);
+  body.push("");
+
+  return { path: `Ideas/${name}.md`, content: body.join("\n").trimEnd() + "\n" };
+}
+
 function songFrontmatter(
   song: MemorySong,
   scriptures: string[],
   collaborators: string[],
 ): string {
-  const lines: string[] = ["---"];
+  const lines: string[] = ["---", "type: song"];
   lines.push(`title: ${yamlString(song.title)}`);
   lines.push(`aliases: ${yamlList([song.title])}`);
   const tags = ["song", ...song.tags.map(tagToken)].filter(Boolean);
@@ -76,6 +159,7 @@ function buildSongNote(
   graph: MemoryGraph,
   bundle: MemoryRawBundle,
   song: MemorySong,
+  ideaNames: Map<string, string>,
 ): VaultFile {
   const sections = bundle.sections
     .filter((s) => s.songId === song.id)
@@ -102,10 +186,23 @@ function buildSongNote(
   if (themeLabels.length) {
     body.push("**Themes:** " + themeLabels.map(wikilink).join(", "), "");
   }
+  if (peopleLabels.length) {
+    body.push("**Written with:** " + peopleLabels.map(wikilink).join(", "), "");
+  }
 
   if (sections.length) {
     body.push("## Sections");
     for (const s of sections) body.push(`- ${s.label?.trim() || s.kind}`);
+    body.push("");
+  }
+
+  // Ideas link OUT to their own atomic notes — this is the Zettelkasten move.
+  if (ideas.length) {
+    body.push("## Ideas");
+    for (const idea of ideas) {
+      const name = ideaNames.get(idea.id);
+      if (name) body.push(`- ${wikilink(name)}`);
+    }
     body.push("");
   }
 
@@ -114,22 +211,6 @@ function buildSongNote(
     for (const n of notes) {
       const text = n.body.trim();
       if (text) body.push(`- ${text.replace(/\n+/g, " ")}`);
-    }
-    body.push("");
-  }
-
-  if (ideas.length) {
-    body.push("## Ideas");
-    for (const idea of ideas) {
-      const title = idea.title?.trim();
-      const snippet = idea.lyricSnippet?.trim();
-      const head = title || snippet || "Idea";
-      let line = `- ${head}`;
-      if (title && snippet) line += ` — ${snippet}`;
-      if (idea.scriptureRef?.trim()) line += ` (${wikilink(idea.scriptureRef.trim())})`;
-      const tagStr = (idea.tags ?? []).map(tagToken).filter(Boolean).map((t) => `#${t}`).join(" ");
-      if (tagStr) line += ` ${tagStr}`;
-      body.push(line);
     }
     body.push("");
   }
@@ -143,20 +224,113 @@ function buildSongNote(
   return { path: `Songs/${sanitizeFileName(song.title)}.md`, content: body.join("\n").trimEnd() + "\n" };
 }
 
-function buildClusterNote(cluster: MemoryCluster, graph: MemoryGraph, folder: string, blurb: string): VaultFile {
+function buildClusterNote(
+  cluster: MemoryCluster,
+  graph: MemoryGraph,
+  bundle: MemoryRawBundle,
+  ideaNames: Map<string, string>,
+  folder: string,
+  blurb: string,
+): VaultFile {
   const lines: string[] = ["---"];
   lines.push(`aliases: ${yamlList([cluster.rawLabel])}`);
   lines.push(`tags: [${cluster.type}]`);
   lines.push("---", "");
   lines.push(`# ${cluster.label}`, "");
   lines.push(blurb, "");
+
   lines.push("## Songs");
   for (const songId of cluster.songIds) {
     const song = graph.songs.find((s) => s.id === songId);
     if (song) lines.push(`- ${wikilink(song.title)}`);
   }
   lines.push("");
+
+  // Themes & scripture also gather the atomic ideas that carry them.
+  if (cluster.type !== "person") {
+    const key = cluster.id.slice(cluster.id.indexOf(":") + 1);
+    const matching = bundle.ideas.filter((idea) => {
+      if (cluster.type === "theme") {
+        return (idea.tags ?? []).some((t) => normaliseKey(t) === key);
+      }
+      return idea.scriptureRef ? normaliseKey(idea.scriptureRef) === key : false;
+    });
+    if (matching.length) {
+      lines.push("## Ideas");
+      for (const idea of matching) {
+        const name = ideaNames.get(idea.id);
+        if (name) lines.push(`- ${wikilink(name)}`);
+      }
+      lines.push("");
+    }
+  }
+
   return { path: `${folder}/${sanitizeFileName(cluster.label)}.md`, content: lines.join("\n").trimEnd() + "\n" };
+}
+
+function buildMocNote(
+  title: string,
+  tag: string,
+  blurb: string,
+  clusters: MemoryCluster[],
+): VaultFile {
+  const lines: string[] = ["---", `tags: [moc, ${tag}]`, "---", ""];
+  lines.push(`# ${title}`, "", blurb, "");
+  if (!clusters.length) {
+    lines.push("_Nothing here yet — it fills in as you write._", "");
+  } else {
+    for (const c of clusters) {
+      const suffix = c.recurring ? ` — ${c.count} songs` : "";
+      lines.push(`- ${wikilink(c.label)}${suffix}`);
+    }
+    lines.push("");
+  }
+  return { path: `${title}.md`, content: lines.join("\n").trimEnd() + "\n" };
+}
+
+function buildIdeasMoc(graph: MemoryGraph, bundle: MemoryRawBundle, ideaNames: Map<string, string>): VaultFile {
+  const lines: string[] = ["---", "tags: [moc, ideas]", "---", ""];
+  lines.push(`# ${MOC_IDEAS}`, "", "Every captured idea, grouped by the song it lives in.", "");
+  for (const song of graph.songs) {
+    const ideas = bundle.ideas.filter((i) => i.songId === song.id);
+    if (!ideas.length) continue;
+    lines.push(`## ${wikilink(song.title)}`);
+    for (const idea of ideas) {
+      const name = ideaNames.get(idea.id);
+      if (name) lines.push(`- ${wikilink(name)}`);
+    }
+    lines.push("");
+  }
+  if (lines.length <= 6) lines.push("_No ideas captured yet._", "");
+  return { path: `${MOC_IDEAS}.md`, content: lines.join("\n").trimEnd() + "\n" };
+}
+
+function buildStartHereNote(graph: MemoryGraph): VaultFile {
+  const lines: string[] = ["---", "tags: [colors-of-glory, guide]", "---", ""];
+  lines.push(`# ${START_NOTE}`, "");
+  lines.push(
+    "Welcome to your Colors of Glory memory vault — every song, idea, theme, and",
+    "scripture you've written, as a connected map you fully own.",
+    "",
+  );
+  lines.push("## Explore");
+  lines.push("- Open the **graph view** to see your songs and ideas as a constellation.");
+  lines.push(`- Start at [[${INDEX_NOTE}]] — your home index.`);
+  lines.push("- Every idea is its own note, linked to its song, themes, and scripture.");
+  lines.push("");
+  lines.push("## Maps");
+  lines.push(`- [[${INDEX_NOTE}]] — home`);
+  lines.push(`- [[${MOC_IDEAS}]] — ${graph.stats.ideaCount} captured ideas`);
+  lines.push(`- [[${MOC_THEMES}]] — ${graph.stats.themeCount} themes`);
+  lines.push(`- [[${MOC_SCRIPTURE}]] — ${graph.stats.scriptureCount} scriptures`);
+  lines.push(`- [[${MOC_PEOPLE}]] — ${graph.stats.personCount} collaborators`);
+  lines.push("");
+  lines.push(
+    "This vault is plain Markdown. Nothing here depends on Colors of Glory —",
+    "it's yours, forever.",
+    "",
+  );
+  return { path: `${START_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
 function buildIndexNote(graph: MemoryGraph): VaultFile {
@@ -166,8 +340,18 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
   lines.push("---", "");
   lines.push(`# ${INDEX_NOTE}`, "");
   lines.push("A private map of your songs, ideas, themes, and scripture. It grows as you write.", "");
+  lines.push(`> New here? Open [[${START_NOTE}]].`, "");
+
+  lines.push("## Maps");
+  lines.push(`- [[${MOC_IDEAS}]]`);
+  lines.push(`- [[${MOC_THEMES}]]`);
+  lines.push(`- [[${MOC_SCRIPTURE}]]`);
+  lines.push(`- [[${MOC_PEOPLE}]]`);
+  lines.push("");
+
   lines.push(
     `- Songs: ${graph.stats.songCount}`,
+    `- Ideas: ${graph.stats.ideaCount}`,
     `- Themes: ${graph.stats.themeCount}`,
     `- Scriptures: ${graph.stats.scriptureCount}`,
     `- Collaborators: ${graph.stats.personCount}`,
@@ -189,12 +373,31 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
 
 /** Build the full vault file set. Deterministic — safe to unit test. */
 export function buildVault(graph: MemoryGraph, bundle: MemoryRawBundle): VaultFile[] {
-  const files: VaultFile[] = [buildIndexNote(graph)];
-  for (const song of graph.songs) files.push(buildSongNote(graph, bundle, song));
-  for (const c of graph.themes) files.push(buildClusterNote(c, graph, "Themes", "A theme across your songs."));
+  const ideaNames = assignIdeaNames(bundle.ideas);
+  const songById = new Map(graph.songs.map((s) => [s.id, s]));
+
+  const files: VaultFile[] = [
+    buildStartHereNote(graph),
+    buildIndexNote(graph),
+    buildMocNote(MOC_THEMES, "themes", "Threads that keep coming back across your songs.", graph.themes),
+    buildMocNote(MOC_SCRIPTURE, "scripture", "Scripture you have returned to.", graph.scriptures),
+    buildMocNote(MOC_PEOPLE, "people", "Everyone you have written with.", graph.people),
+    buildIdeasMoc(graph, bundle, ideaNames),
+  ];
+
+  for (const song of graph.songs) files.push(buildSongNote(graph, bundle, song, ideaNames));
+
+  for (const idea of bundle.ideas) {
+    const name = ideaNames.get(idea.id);
+    if (name) files.push(buildIdeaNote(idea, songById.get(idea.songId), name));
+  }
+
+  for (const c of graph.themes)
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, "Themes", "A theme across your songs."));
   for (const c of graph.scriptures)
-    files.push(buildClusterNote(c, graph, "Scriptures", "Scripture you have returned to."));
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, "Scriptures", "Scripture you have returned to."));
   for (const c of graph.people)
-    files.push(buildClusterNote(c, graph, "People", "Someone you have written with."));
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, "People", "Someone you have written with."));
+
   return files;
 }

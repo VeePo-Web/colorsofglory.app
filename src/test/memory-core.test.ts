@@ -116,6 +116,71 @@ describe("obsidian vault", () => {
     expect(theme.content).toContain("[[Grace in the Waiting]]");
     expect(theme.content).toContain("[[Steadfast]]");
   });
+
+  it("promotes each idea to an atomic, interlinked Zettel", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("Ideas/Hum.md");
+    expect(paths).toContain("Ideas/steady.md");
+
+    const hum = files.find((f) => f.path === "Ideas/Hum.md")!;
+    expect(hum.content).toContain("type: idea");
+    expect(hum.content).toContain("# Hum");
+    expect(hum.content).toContain("> He leads me"); // creative content as a blockquote
+    expect(hum.content).toContain("**From song:** [[Grace in the Waiting]]");
+    expect(hum.content).toContain("**Scripture:** [[Psalm 23]]");
+    expect(hum.content).toContain("**Themes:** [[Grace]]");
+  });
+
+  it("links song notes OUT to their atomic idea notes (not inline text)", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const song = files.find((f) => f.path === "Songs/Grace in the Waiting.md")!;
+    expect(song.content).toContain("## Ideas");
+    expect(song.content).toContain("- [[Hum]]");
+  });
+
+  it("gathers atomic ideas under their theme and scripture cluster notes", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const grace = files.find((f) => f.path === "Themes/Grace.md")!;
+    expect(grace.content).toContain("- [[Hum]]");
+    const psalm = files.find((f) => f.path === "Scriptures/Psalm 23.md")!;
+    expect(psalm.content).toContain("- [[Hum]]");
+    expect(psalm.content).toContain("- [[steady]]");
+  });
+
+  it("ships Maps of Content and a Start Here guide", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("Start Here.md");
+    expect(paths).toContain("All Themes.md");
+    expect(paths).toContain("All Scripture.md");
+    expect(paths).toContain("Collaborators.md");
+    expect(paths).toContain("All Ideas.md");
+
+    const ideasMoc = files.find((f) => f.path === "All Ideas.md")!;
+    expect(ideasMoc.content).toContain("## [[Grace in the Waiting]]");
+    expect(ideasMoc.content).toContain("- [[Hum]]");
+
+    const home = files.find((f) => f.path === "Your Memory.md")!;
+    expect(home.content).toContain("[[Start Here]]");
+    expect(home.content).toContain("[[All Ideas]]");
+  });
+
+  it("deterministically disambiguates colliding idea names", () => {
+    const b = bundle();
+    b.ideas = [
+      { id: "a", songId: "s1", title: "Bridge", lyricSnippet: null, scriptureRef: null, tags: [] },
+      { id: "b", songId: "s1", title: "Bridge", lyricSnippet: null, scriptureRef: null, tags: [] },
+    ];
+    const files = buildVault(buildMemoryGraph(b), b);
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("Ideas/Bridge.md");
+    expect(paths).toContain("Ideas/Bridge (2).md");
+  });
 });
 
 describe("createZip", () => {

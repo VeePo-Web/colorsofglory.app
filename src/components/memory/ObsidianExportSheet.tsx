@@ -15,7 +15,7 @@ interface Props {
 const STEPS = [
   { icon: Download, text: "Download the vault — a folder of notes, zipped." },
   { icon: FolderOpen, text: "Unzip it, then in Obsidian choose “Open folder as vault.”" },
-  { icon: Link2, text: "Your songs, themes, and scripture link themselves." },
+  { icon: Link2, text: "Every idea, song, theme, and scripture links itself into one graph." },
 ];
 
 /**
