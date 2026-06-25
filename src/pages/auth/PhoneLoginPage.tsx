@@ -41,8 +41,11 @@ const PhoneLoginPage = () => {
   const isValid = digits.length === DIGITS_MAX;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "").slice(0, DIGITS_MAX);
-    setDigits(raw);
+    let d = e.target.value.replace(/\D/g, "");
+    // Forgive a pasted/autofilled US country code: "+1 (555) 555-1234" → 11 digits
+    // starting with 1. Without this we'd keep the leading 1 and drop the last digit.
+    if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
+    setDigits(d.slice(0, DIGITS_MAX));
     if (error) setError(null);
   };
 
