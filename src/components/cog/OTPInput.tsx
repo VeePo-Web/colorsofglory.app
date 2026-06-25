@@ -13,7 +13,7 @@ interface OTPInputProps {
  * 6-box OTP input with:
  * - Auto-advance on digit entry
  * - Backspace moves to previous box
- * - Full-code paste support
+ * - Full-code paste + iOS QuickType autofill spread (whole code fills every box)
  * - Auto-submit callback when all digits filled
  * - Gold border on focused/filled state
  *
@@ -43,7 +43,24 @@ const OTPInput = ({
   }, [error]);
 
   const handleChange = (idx: number, raw: string) => {
-    const char = raw.replace(/\D/g, "").slice(-1);
+    const cleaned = raw.replace(/\D/g, "");
+
+    // iOS QuickType security-code autofill drops the FULL code into the first box
+    // (it bypasses maxLength), and maxLength blocks manual multi-char entry — so any
+    // multi-digit input here is autofill/typed-fast. Spread it across the boxes and
+    // submit. The old slice(-1) silently dropped 5 of the 6 autofilled digits.
+    if (cleaned.length > 1) {
+      const chars = cleaned.slice(0, length - idx).split("");
+      const next = [...value];
+      let lastPos = idx;
+      chars.forEach((c, i) => { next[idx + i] = c; lastPos = idx + i; });
+      onChange(next);
+      refs.current[Math.min(lastPos + 1, length - 1)]?.focus();
+      if (next.every((d) => d !== "")) onComplete?.(next.join(""));
+      return;
+    }
+
+    const char = cleaned.slice(-1);
     const next = [...value];
     next[idx] = char;
     onChange(next);
