@@ -815,10 +815,10 @@ const VoiceMemosPage = () => {
           disabled={flow !== "idle"}
           className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-all duration-150 active:scale-[0.97]"
           style={{
-            backgroundColor: flow === "recording" ? "#E05440" : "var(--cog-gold)",
+            backgroundColor: flow === "recording" ? "var(--cog-charcoal)" : "var(--cog-gold)",
             fontFamily: "var(--font-body)",
             boxShadow: flow === "recording"
-              ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 20px rgba(224,84,64,0.40)"
+              ? "0 0 0 6px var(--cog-gold-glow), 0 4px 20px rgba(28,26,23,0.30)"
               : "0 4px 20px rgba(184,149,58,0.40)",
             animation: flow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
           }}
@@ -866,8 +866,8 @@ const VoiceMemosPage = () => {
           50% { opacity: 0.5; }
         }
         @keyframes mic-pulse {
-          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
-          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+          0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.35); }
+          50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.35); }
         }
       `}</style>
     </div>

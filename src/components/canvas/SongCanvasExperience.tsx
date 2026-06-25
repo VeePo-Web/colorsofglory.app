@@ -40,7 +40,11 @@ import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
 import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
-import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
+import {
+  enqueuePendingUpload,
+  flushPendingUpload,
+  listPendingUploads,
+} from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
@@ -845,27 +849,34 @@ const SongCanvasExperience = () => {
     setPendingRecording(null);
   }, [cancelRecording]);
 
+  // Flush a queued canvas take (base OR layer) and reconcile its card. On success
+  // the temp card id becomes the real memo id; on failure the card stays put with
+  // its blob safe in the cache, to be retried by the recovery sweep on next load /
+  // reconnect. The creed holds on the canvas exactly as it does in the song room.
+  const flushCanvasUpload = useCallback(async (pendingId: string) => {
+    try {
+      const memoId = await flushPendingUpload(pendingId);
+      setCards((prev) => prev.map((c) =>
+        c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
+      ));
+      setCanvasStatus("Saved to this song.");
+    } catch {
+      setCards((prev) => prev.map((c) =>
+        c.id === pendingId ? { ...c, isProcessing: false } : c,
+      ));
+      setCanvasStatus("You can keep adding ideas. We'll finish saving when you're back online.");
+    }
+  }, []);
+
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
+    const rec = pendingRecording;
     // Capture + clear the "record over" target before any async work so the
     // next normal record can't inherit a stale parent.
     const parentMemoId = recordingParentIdRef.current ?? undefined;
     recordingParentIdRef.current = null;
     voiceMemoCountRef.current++;
     setCanvasStatus("Saving...");
-    const tempId = `voice-${Date.now()}`;
-    setCards((prev) => {
-      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
-      const newCard: CanvasCard = {
-        id: tempId, tree: "ideas", type: "voice",
-        title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
-        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
-        parentMemoId, durationMs: pendingRecording.durationMs,
-        isProcessing: true,
-      };
-      return [newCard, ...prev];
-    });
     showSavedMoment(
       name || "Voice memo",
       parentMemoId ? "Layer added to stack" : (section || "Raw idea"),
@@ -876,15 +887,51 @@ const SongCanvasExperience = () => {
     setPendingRecording(null);
     // Reopen the base's stack so the songwriter sees their layer land.
     if (parentMemoId) setStackBaseId(parentMemoId);
-    try {
-      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe, parentMemoId, idempotencyKey: tempId });
-      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
-      setCanvasStatus("Saved to this song.");
-    } catch {
-      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
-      setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
-    }
-  }, [pendingRecording, showSavedMoment, songId, currentUserName]);
+
+    // Local-first: the blob is cached to the device BEFORE any network call, so a
+    // base take or a layered "record over this" can never be lost on a dropped
+    // upload. The pending row's id keys both the card and the upload idempotency.
+    const pending = await enqueuePendingUpload({
+      blob: rec.blob,
+      songId,
+      mimeType: rec.mimeType,
+      durationMs: rec.durationMs,
+      title: name,
+      sectionLabel: section,
+      transcribe,
+      parentMemoId,
+    });
+
+    setCards((prev) => {
+      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
+      const newCard: CanvasCard = {
+        id: pending.id, tree: "ideas", type: "voice",
+        title: name, body: "", meta: formatDuration(rec.durationMs),
+        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
+        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        parentMemoId, durationMs: rec.durationMs,
+        isProcessing: true,
+      };
+      return [newCard, ...prev];
+    });
+
+    await flushCanvasUpload(pending.id);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName, flushCanvasUpload]);
+
+  // Recovery sweep: a canvas take whose upload was interrupted last session is
+  // still safe in the cache. Replay each on load — a reconnected device heals
+  // itself, the take reaches the song, and its card swaps to the real memo id.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const orphans = await listPendingUploads(songId);
+      for (const orphan of orphans) {
+        if (cancelled) return;
+        await flushCanvasUpload(orphan.id);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [songId, flushCanvasUpload]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
@@ -1098,11 +1145,11 @@ const SongCanvasExperience = () => {
                 className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
                 style={{
                   right: 168, bottom: 80, width: 140, height: 52, zIndex: 40,
-                  backgroundColor: recordingFlow === "recording" ? "#E05440" : "#FFFFFF",
+                  backgroundColor: recordingFlow === "recording" ? "var(--cog-charcoal)" : "#FFFFFF",
                   border: recordingFlow === "recording" ? "none" : "1px solid rgba(181,147,90,0.28)",
-                  color: recordingFlow === "recording" ? "#FFFFFF" : "#1A1A1A",
+                  color: recordingFlow === "recording" ? "#FFFFFF" : "var(--cog-charcoal)",
                   boxShadow: recordingFlow === "recording"
-                    ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45)"
+                    ? "0 0 0 6px var(--cog-gold-glow), 0 4px 16px rgba(28,26,23,0.30)"
                     : "0 8px 24px rgba(28,26,23,0.12)",
                   animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
                   fontFamily: "var(--font-body)",
@@ -1290,8 +1337,8 @@ const SongCanvasExperience = () => {
 
       <style>{`
         @keyframes mic-pulse {
-          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
-          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+          0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.35); }
+          50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.35); }
         }
       `}</style>
     </div>
