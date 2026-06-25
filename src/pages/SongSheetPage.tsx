@@ -15,7 +15,7 @@ import {
   type SheetLine,
   type SheetSection,
 } from "@/lib/chords/sheet";
-import { chordToLetters, type NumberChord } from "@/lib/chords/nashville";
+import { chordToLetters, chordToNumbers, type NumberChord } from "@/lib/chords/nashville";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { rhymeScheme } from "@/lib/lyrics/rhyme";
 import { MAJOR_KEYS } from "@/lib/chords/keys";
@@ -618,15 +618,56 @@ function ReadLine({
   display: "letters" | "numbers";
   showSyllables: boolean;
 }) {
-  const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
+  // Word-column render: a chord sits in a reserved slot above its word and the
+  // line WRAPS on a narrow phone (vs. a monospace row that horizontally scrolls).
+  // Every anchor is kept — a word claims the chords from its start up to the
+  // next word's start, so leading/trailing/gap chords are never dropped.
+  const glyph = (a: SheetLine["anchors"][number]) =>
+    display === "numbers" ? chordToNumbers(a.chord, "major") : chordToLetters(a.chord, displayKey, "major");
+
+  const words = [...line.text.matchAll(/\S+/g)];
+
+  if (words.length === 0) {
+    const only = line.anchors.map(glyph).join(" ");
+    return only ? (
+      <div style={{ minHeight: 8 }}>
+        <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700, fontSize: "0.8125rem" }}>{only}</span>
+      </div>
+    ) : (
+      <div style={{ height: 6 }} />
+    );
+  }
+
+  const starts = words.map((w) => w.index ?? 0);
   return (
     <div className="flex items-end gap-3">
-      <pre className="flex-1 m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: "0.875rem", lineHeight: 1.5 }}>
-        <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700 }}>{chords || " "}</span>
-        {"\n"}
-        <span style={{ color: "var(--cog-charcoal)" }}>{lyrics || " "}</span>
-      </pre>
-      {showSyllables && lyrics.trim() && (
+      <div className="flex flex-wrap items-end gap-x-1.5 gap-y-1 flex-1">
+        {words.map((m, i) => {
+          const lo = i === 0 ? -Infinity : starts[i];
+          const hi = i === words.length - 1 ? Infinity : starts[i + 1];
+          const labels = line.anchors.filter((a) => a.at >= lo && a.at < hi).map(glyph);
+          return (
+            <span key={i} className="flex flex-col items-start">
+              <span
+                className="leading-none"
+                style={{
+                  height: 18,
+                  marginBottom: 1,
+                  fontSize: "0.8125rem",
+                  fontWeight: 700,
+                  color: labels.length ? "var(--cog-gold-alt, var(--cog-gold))" : "transparent",
+                }}
+              >
+                {labels.length ? labels.join(" ") : " "}
+              </span>
+              <span className="leading-snug" style={{ fontSize: "0.9375rem", color: "var(--cog-charcoal)" }}>
+                {m[0]}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+      {showSyllables && line.text.trim() && (
         <span
           className="text-[0.6875rem] font-medium tabular-nums mb-0.5 flex-shrink-0"
           style={{ color: "var(--cog-muted)" }}
