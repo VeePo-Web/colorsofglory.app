@@ -233,6 +233,49 @@ const ReferralPage = () => {
           </span>
         </button>
 
+        {/* Recent activity — anonymized momentum feed so shares feel like they land */}
+        {!isLoading && stats && stats.recentReferrals.length > 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6"
+            style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
+          >
+            <h2
+              className="text-sm font-semibold mb-4"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+            >
+              Recent activity
+            </h2>
+            <ul className="flex flex-col gap-3">
+              {stats.recentReferrals.slice(0, 6).map((r, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span
+                    className="flex-shrink-0 w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: r.isPaying ? "var(--cog-gold)" : "var(--cog-muted)" }}
+                  />
+                  <p className="flex-1 text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                    A songwriter joined
+                  </p>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={
+                      r.isPaying
+                        ? { backgroundColor: "rgba(184,149,58,0.12)", color: "var(--cog-gold)" }
+                        : { color: "var(--cog-warm-gray)" }
+                    }
+                  >
+                    {r.isPaying ? "Active Pro" : "Joined"}
+                  </span>
+                  {r.referredAt && (
+                    <span className="text-xs flex-shrink-0" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
+                      {new Date(r.referredAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Rules */}
         <div
           className="rounded-2xl p-5"
