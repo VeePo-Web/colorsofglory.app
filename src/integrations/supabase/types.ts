@@ -853,6 +853,45 @@ export type Database = {
           },
         ]
       }
+      phone_otp_verifications: {
+        Row: {
+          country: string | null
+          created_at: string
+          created_user: boolean
+          error_code: string | null
+          id: string
+          ip_hash: string | null
+          phone_e164: string
+          status: string
+          twilio_sid: string | null
+          user_id: string | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          created_user?: boolean
+          error_code?: string | null
+          id?: string
+          ip_hash?: string | null
+          phone_e164: string
+          status: string
+          twilio_sid?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          created_user?: boolean
+          error_code?: string | null
+          id?: string
+          ip_hash?: string | null
+          phone_e164?: string
+          status?: string
+          twilio_sid?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       plan_tiers: {
         Row: {
           allows_founder_code: boolean
