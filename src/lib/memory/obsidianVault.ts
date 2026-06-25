@@ -368,6 +368,89 @@ function buildTimelineMoc(graph: MemoryGraph): VaultFile {
   return { path: `${MOC_TIMELINE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
+// --- JSON Canvas (jsoncanvas.org) — Obsidian opens this natively as a board.
+interface CanvasNode {
+  id: string;
+  type: "file";
+  file: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+}
+interface CanvasEdge {
+  id: string;
+  fromNode: string;
+  toNode: string;
+  fromSide: "left" | "right";
+  toSide: "left" | "right";
+}
+
+function clusterFolder(type: MemoryCluster["type"]): string {
+  return type === "theme" ? "Themes" : type === "scripture" ? "Scriptures" : "People";
+}
+
+function clusterColor(c: MemoryCluster): string {
+  // COG palette: gold for themes, warm-gray for scripture, the person's own hue.
+  if (c.type === "theme") return "#B8953A";
+  if (c.type === "scripture") return "#6B6459";
+  return c.color || "#53AB8B";
+}
+
+/**
+ * A ready-made Obsidian Canvas: songs on the left, the threads that connect
+ * them (themes, scripture, collaborators) on the right, with an edge for every
+ * real link. Opens with zero setup — the whole memory as one visual board.
+ * Deterministic layout so the same vault always renders identically.
+ */
+function buildCanvas(graph: MemoryGraph): VaultFile {
+  const W = 300;
+  const H = 110;
+  const GAP = 150;
+  const nodes: CanvasNode[] = [];
+  const edges: CanvasEdge[] = [];
+
+  graph.songs.forEach((song, i) => {
+    nodes.push({
+      id: `song:${song.id}`,
+      type: "file",
+      file: `Songs/${sanitizeFileName(song.title)}.md`,
+      x: -540,
+      y: i * GAP,
+      width: W,
+      height: H,
+    });
+  });
+
+  const clusters = [...graph.themes, ...graph.scriptures, ...graph.people];
+  clusters.forEach((c, j) => {
+    nodes.push({
+      id: c.id,
+      type: "file",
+      file: `${clusterFolder(c.type)}/${sanitizeFileName(c.label)}.md`,
+      x: 540,
+      y: j * GAP,
+      width: W,
+      height: H,
+      color: clusterColor(c),
+    });
+    for (const songId of c.songIds) {
+      if (graph.songs.some((s) => s.id === songId)) {
+        edges.push({
+          id: `e:${c.id}->${songId}`,
+          fromNode: `song:${songId}`,
+          toNode: c.id,
+          fromSide: "right",
+          toSide: "left",
+        });
+      }
+    }
+  });
+
+  return { path: "Memory Map.canvas", content: JSON.stringify({ nodes, edges }, null, 2) + "\n" };
+}
+
 function buildStartHereNote(graph: MemoryGraph): VaultFile {
   const lines: string[] = ["---", "tags: [colors-of-glory, guide]", "---", ""];
   lines.push(`# ${START_NOTE}`, "");
@@ -378,6 +461,7 @@ function buildStartHereNote(graph: MemoryGraph): VaultFile {
   );
   lines.push("## Explore");
   lines.push("- Open the **graph view** to see your songs and ideas as a constellation.");
+  lines.push("- Open **Memory Map.canvas** for a visual board of every song and its threads.");
   lines.push(`- Start at [[${INDEX_NOTE}]] — your home index.`);
   lines.push("- Every idea is its own note, linked to its song, themes, and scripture.");
   lines.push("");
@@ -449,6 +533,7 @@ export function buildVault(graph: MemoryGraph, bundle: MemoryRawBundle): VaultFi
     buildMocNote(MOC_PEOPLE, "people", "Everyone you have written with.", graph.people),
     buildIdeasMoc(graph, bundle, ideaNames),
     buildTimelineMoc(graph),
+    buildCanvas(graph),
   ];
 
   files.push(...buildJournalNotes(graph));

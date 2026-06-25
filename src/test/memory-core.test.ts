@@ -191,6 +191,23 @@ describe("obsidian vault", () => {
     expect(home.content).toContain("[[Timeline]]");
   });
 
+  it("emits a valid JSON Canvas board linking songs to their threads", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const canvas = files.find((f) => f.path === "Memory Map.canvas")!;
+    expect(canvas).toBeTruthy();
+    const data = JSON.parse(canvas.content) as {
+      nodes: Array<{ id: string; type: string; file: string }>;
+      edges: Array<{ fromNode: string; toNode: string }>;
+    };
+    // A song node and a theme node, both pointing at real vault files.
+    expect(data.nodes.find((n) => n.id === "song:s1")?.file).toBe("Songs/Grace in the Waiting.md");
+    const graceTheme = data.nodes.find((n) => n.file === "Themes/Grace.md");
+    expect(graceTheme).toBeTruthy();
+    // Grace connects s1 -> Grace theme node.
+    expect(data.edges.some((e) => e.fromNode === "song:s1" && e.toNode === graceTheme!.id)).toBe(true);
+  });
+
   it("deterministically disambiguates colliding idea names", () => {
     const b = bundle();
     b.ideas = [
