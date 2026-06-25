@@ -31,6 +31,26 @@ const ReferralPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Warm, faith-toned invite that leads with what the friend gets (first song
+  // free) — the message travels with the link through the native share sheet.
+  const inviteMessage =
+    "I'm writing songs on Colors of Glory — lyrics, voice memos, and the people I write with all in one place for each song. Your first song is free:";
+
+  const handleShare = async () => {
+    const url = stats?.link ? fullLink : "https://colorsofglory.app";
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "Colors of Glory", text: inviteMessage, url });
+        return;
+      } catch (err) {
+        // User dismissed the sheet → stop. Any real failure falls through to
+        // copying the link so the invite is never lost.
+        if ((err as Error)?.name === "AbortError") return;
+      }
+    }
+    handleCopy();
+  };
+
   return (
     <div
       className="relative min-h-screen flex flex-col"
@@ -176,6 +196,8 @@ const ReferralPage = () => {
         </button>
 
         <button
+          type="button"
+          onClick={handleShare}
           className="text-sm text-center w-full py-3 transition-opacity hover:opacity-70 mb-10"
           style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
         >
