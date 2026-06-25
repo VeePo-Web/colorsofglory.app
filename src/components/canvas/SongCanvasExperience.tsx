@@ -323,6 +323,8 @@ const CanvasCardEl = ({
           : `2px solid ${card.accent}40`,
         boxShadow: selected
           ? `0 8px 28px ${card.accent}30`
+          : isVoice && layerCount > 0
+          ? `0 4px 14px rgba(0,0,0,0.09), 5px 5px 0 0 ${card.accent}25, 10px 10px 0 0 ${card.accent}12`
           : "0 4px 14px rgba(0,0,0,0.09)",
         opacity: card.isDimmedReference ? 0.42 : 1,
         cursor: dragState.current ? "grabbing" : "grab",
@@ -393,8 +395,9 @@ const CanvasCardEl = ({
         >
           {card.section}
         </span>
-        {isVoice && layerCount > 0 && (
-          <span
+        {isVoice && layerCount > 0 && onOpenStack && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
             style={{
               marginLeft: "auto",
               fontSize: 9,
@@ -402,12 +405,19 @@ const CanvasCardEl = ({
               color: card.accent,
               backgroundColor: `${card.accent}1A`,
               borderRadius: 9999,
-              padding: "2px 7px",
+              padding: "6px 10px",
+              minHeight: 44,
               fontFamily: "var(--font-body)",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              lineHeight: 1,
             }}
+            aria-label={`${layerCount} layer${layerCount > 1 ? "s" : ""} — tap to open stack`}
           >
             {layerCount} layer{layerCount > 1 ? "s" : ""}
-          </span>
+          </button>
         )}
       </div>
 
@@ -1255,7 +1265,7 @@ const SongCanvasExperience = () => {
 
       {/* What Changed recap sheet */}
       {showRecap && (
-        <WhatChangedRecapSheet onDismiss={() => setShowRecap(false)} />
+        <WhatChangedRecapSheet songId={songId} onDismiss={() => setShowRecap(false)} />
       )}
 
       {/* Line-level suggestion sheet (F19) */}
