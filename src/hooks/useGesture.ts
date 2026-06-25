@@ -60,6 +60,13 @@ export function useGesture(
   const prevPinchDist = useRef<number | null>(null);
   const prevPinchMid = useRef<{ x: number; y: number } | null>(null);
 
+  // The container's screen offset, captured once per gesture (on pointerdown).
+  // `pan` lives in CONTAINER-relative space (the transformed layer sits at the
+  // container's 0,0), so any absolute screen point — the pinch focal midpoint, a
+  // broadcast cursor — MUST be made container-relative before it touches pan math.
+  // Cached here so the 60fps move path never forces a layout read.
+  const containerOffset = useRef<{ left: number; top: number }>({ left: 0, top: 0 });
+
   // Cursor broadcast throttle
   const lastCursorBroadcast = useRef(0);
 
@@ -106,8 +113,15 @@ export function useGesture(
     // Only respond to touch or left-button drag
     if (e.pointerType === "mouse" && e.button !== 0) return;
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Refresh the container offset at the start of each gesture — it can change
+    // between gestures (scroll, rotate, keyboard) but is stable during one.
+    const el = containerRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      containerOffset.current = { left: r.left, top: r.top };
+    }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  }, []);
+  }, [containerRef]);
 
   const onPointerMove = useCallback((e: PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
@@ -140,10 +154,18 @@ export function useGesture(
         pan.current.x += newMid.x - prevPinchMid.current.x;
         pan.current.y += newMid.y - prevPinchMid.current.y;
 
-        // Zoom centered on midpoint
+        // Zoom centered on the pinch midpoint. The midpoint is in viewport
+        // (clientX/Y) space — convert to container-relative so the canvas point
+        // under the fingers stays locked as it scales (matching the wheel path).
+        // Without this the focal point drifts by the container's screen offset
+        // (e.g. the header height), making pinch-zoom "swim" on mobile.
         if (prevPinchDist.current > 0) {
           const scaleDelta = newDist / prevPinchDist.current;
-          applyZoomAt(scaleDelta, newMid.x, newMid.y);
+          applyZoomAt(
+            scaleDelta,
+            newMid.x - containerOffset.current.left,
+            newMid.y - containerOffset.current.top,
+          );
         }
 
         const clamped = clampPan(pan.current.x, pan.current.y, zoom.current, viewW, viewH);
@@ -161,8 +183,11 @@ export function useGesture(
       const now = Date.now();
       if (now - lastCursorBroadcast.current > CURSOR_BROADCAST_INTERVAL) {
         lastCursorBroadcast.current = now;
-        const canvasX = (e.clientX - pan.current.x) / zoom.current;
-        const canvasY = (e.clientY - pan.current.y) / zoom.current;
+        // Make the pointer container-relative before converting to canvas space,
+        // or every collaborator sees this cursor offset by the container's screen
+        // position.
+        const canvasX = (e.clientX - containerOffset.current.left - pan.current.x) / zoom.current;
+        const canvasY = (e.clientY - containerOffset.current.top - pan.current.y) / zoom.current;
         onCursorMove(canvasX, canvasY);
       }
     }
