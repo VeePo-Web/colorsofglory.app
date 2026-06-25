@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { setSong } from "@/lib/songContext";
 import { supabase } from "@/integrations/supabase/client";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
@@ -110,9 +111,12 @@ const StartFirstSongPage = () => {
       </div>
 
       {/* Logo */}
-      <div className="pb-8 flex justify-center">
+      <div className="pb-5 flex justify-center">
         <CogBrand variant="stacked" size="md" />
       </div>
+
+      {/* Momentum cue */}
+      <OnboardingProgress step={2} total={2} className="mb-7" />
 
       {/* Headline — matches reference image exactly */}
       <h1
@@ -139,7 +143,10 @@ const StartFirstSongPage = () => {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isSubmitting) handleCreate("create"); }}
           placeholder="Name your song..."
+          autoFocus
+          enterKeyHint="go"
           className="w-full rounded-2xl px-4 text-[1.1875rem] font-semibold"
           style={{
             ...fieldStyle(!!title),

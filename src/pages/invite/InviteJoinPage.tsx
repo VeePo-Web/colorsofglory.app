@@ -351,11 +351,14 @@ const InviteJoinPage = () => {
             type="tel"
             inputMode="numeric"
             autoComplete="tel-national"
+            autoFocus
+            enterKeyHint="go"
             value={formatDisplay(digits)}
             onChange={(e) => {
               setDigits(e.target.value.replace(/\D/g, '').slice(0, DIGITS_MAX));
               setPhoneError(null);
             }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && isValid && !isSubmitting) handleContinue(); }}
             placeholder="(555) 555-5555"
             aria-label="Phone number"
             className="flex-1 bg-transparent outline-none text-base"

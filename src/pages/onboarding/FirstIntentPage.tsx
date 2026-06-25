@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 interface IntentCardProps {
@@ -58,9 +59,12 @@ const FirstIntentPage = () => {
   return (
     <OnboardingShell>
       {/* Logo */}
-      <div className="pt-16 pb-10 flex justify-center">
+      <div className="pt-16 pb-6 flex justify-center">
         <CogBrand variant="stacked" size="md" />
       </div>
+
+      {/* Momentum cue */}
+      <OnboardingProgress step={1} total={2} className="mb-9" />
 
       {/* Headline */}
       <h1

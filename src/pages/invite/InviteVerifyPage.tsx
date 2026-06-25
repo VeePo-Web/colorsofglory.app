@@ -94,7 +94,7 @@ const InviteVerifyPage = () => {
       </h1>
       <p className="text-[1rem] text-center mb-2" style={{ color: '#666' }}>
         We sent a 6-digit code to{' '}
-        <span style={{ color: '#1A1A1A', fontWeight: 500 }}>+1 ({displayPhone})</span>
+        <span style={{ color: '#1A1A1A', fontWeight: 500 }}>+1 {displayPhone}</span>
       </p>
       <p className="text-[0.875rem] text-center mb-8" style={{ color: '#B5935A' }}>
         to join {songTitle}
