@@ -95,6 +95,32 @@ const ReferralPage = () => {
           You earn $10/month while each direct referral stays on Pro.
         </p>
 
+        {/* Recurring earnings — the motivating hero metric, only once it's real */}
+        {!isLoading && stats && stats.monthlyRecurringCents > 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6 text-center"
+            style={{
+              backgroundColor: "var(--cog-cream-light)",
+              border: "1.5px solid var(--cog-border-gold)",
+              boxShadow: "0 4px 20px rgba(184,149,58,0.12)",
+            }}
+          >
+            <p
+              className="text-xs font-medium uppercase tracking-wider mb-1"
+              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+            >
+              You're earning
+            </p>
+            <p style={{ fontSize: 44, lineHeight: 1, color: "var(--cog-gold)", fontFamily: "var(--font-display)", fontWeight: 600 }}>
+              {centsToDisplay(stats.monthlyRecurringCents)}
+              <span style={{ fontSize: 18, color: "var(--cog-warm-gray)" }}>/mo</span>
+            </p>
+            <p className="text-sm mt-1.5" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+              from {stats.payingCount} active Pro {stats.payingCount === 1 ? "referral" : "referrals"} · recurring every month
+            </p>
+          </div>
+        )}
+
         {/* Referral link card */}
         <div
           className="rounded-2xl p-5 mb-6"
