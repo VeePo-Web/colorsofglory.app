@@ -40,13 +40,28 @@ function classify(err: unknown): AuthError {
   if (msg.includes("weak") || msg.includes("pwned") || msg.includes("compromised")) {
     return new AuthError("WEAK_PASSWORD", "That password is too weak or has appeared in a breach. Pick a stronger one.");
   }
-  if (code === "over_sms_send_rate_limit" || msg.includes("rate")) {
+  if (code === "over_sms_send_rate_limit" || code === "over_request_rate_limit" || msg.includes("rate limit") || msg.includes("too many")) {
     return new AuthError("RATE_LIMITED", "Too many attempts. Please wait a minute and try again.");
   }
-  if (code === "phone_provider_disabled" || msg.includes("unsupported phone provider") || msg.includes("provider")) {
-    return new AuthError("PHONE_PROVIDER_DISABLED", "SMS sign-in isn't available yet.");
+  // Narrow, specific match only — a bare "provider" substring used to dead-end
+  // unrelated errors on the "not available" message. Require the real signal.
+  if (
+    code === "phone_provider_disabled" ||
+    msg.includes("unsupported phone provider") ||
+    msg.includes("phone provider") ||
+    msg.includes("provider is not enabled") ||
+    msg.includes("sms provider")
+  ) {
+    return new AuthError("PHONE_PROVIDER_DISABLED", "Text sign-in is just being switched on. Use email below to continue now.");
   }
-  if (msg.includes("otp") || msg.includes("token")) {
+  // Phone OTP signups turned off in the dashboard surfaces as this distinct error.
+  if (code === "otp_disabled" || msg.includes("signups not allowed for otp") || msg.includes("signup is disabled")) {
+    return new AuthError("PHONE_PROVIDER_DISABLED", "Text sign-in is just being switched on. Use email below to continue now.");
+  }
+  if (code === "otp_expired" || msg.includes("expired")) {
+    return new AuthError("INVALID_OTP", "That code expired. Tap resend to get a new one.");
+  }
+  if (msg.includes("invalid") || msg.includes("otp") || msg.includes("token")) {
     return new AuthError("INVALID_OTP", "That code didn't work. Try requesting a new one.");
   }
   if (msg.includes("network") || msg.includes("fetch")) {

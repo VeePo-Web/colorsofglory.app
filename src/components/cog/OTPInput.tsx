@@ -16,6 +16,11 @@ interface OTPInputProps {
  * - Full-code paste support
  * - Auto-submit callback when all digits filled
  * - Gold border on focused/filled state
+ *
+ * WebOTP auto-read (Android Chrome) is owned by the shared `useWebOtpAutofill`
+ * hook at the verify-screen level, NOT here — a single listener avoids competing
+ * `navigator.credentials.get({ otp })` requests. iOS keyboard autofill still works
+ * via `autoComplete="one-time-code"` on the first box below.
  */
 const OTPInput = ({
   length = 6,
@@ -30,6 +35,12 @@ const OTPInput = ({
   useEffect(() => {
     refs.current[0]?.focus();
   }, []);
+
+  // After a wrong/expired code the caller clears the boxes — snap focus back to
+  // the first one so retry is instant and the user never hunts for the cursor.
+  useEffect(() => {
+    if (error) refs.current[0]?.focus();
+  }, [error]);
 
   const handleChange = (idx: number, raw: string) => {
     const char = raw.replace(/\D/g, "").slice(-1);
