@@ -5,6 +5,36 @@ the worst remaining reliability/latency/UX gap, ships green, and names the next 
 
 ---
 
+## Pass 2 — Tokenize + de-duplicate the capture sheets (commit d3c80d4)
+
+**Nailed:** the three capture sheets (`RecordingSheet`, `CaptureShell`,
+`VoiceReviewSheet`) re-declared ~150 lines of identical inline-styled chrome in
+raw hex — a standing brand-token violation. Now they compose three shared,
+fully tokenized pieces and the off-system coral is gone.
+
+**New shared pieces (all on `var(--cog-*)`):**
+- `CaptureSheetShell.tsx` — scrim + sheet + handle + slide-up motion + safe-area.
+- `MicPermissionPanel.tsx` — the "microphone access needed" state, calm gold,
+  diagnostics in muted warm-gray (not red).
+- `CaptureStopButton.tsx` — stop is charcoal + a filled square glyph, **de-coraled**
+  to match the gold live waveform (red is not in the COG palette).
+
+`VoiceReviewSheet` wrapped in the shell; every inner hex → token; discard button
+de-coraled to a neutral ghost. Net **−120 lines**. Behavior-preserving:
+tsc 0, 27 tests pass, build green.
+
+**Remaining off-brand coral:** the page-level "Record new memo" sticky button +
+`@keyframes mic-pulse` in `VoiceMemosPage` still use coral rgba while recording —
+a deliberate next micro-pass (it's the page, not the sheets).
+
+### Next slices (in order)
+1. **Extend retain+retry to the layer ("record over this") + file-upload paths**
+   (adopt `pendingUploads`; file-upload is lower risk — source file still on device).
+2. De-coral the page record button + mic-pulse keyframe to gold/charcoal.
+3. Latency instrumentation marks (gesture→record · stop→card · tap→playback).
+
+---
+
 ## Pass 1 — In-song retain+retry (commit 073e683)
 
 **Nailed:** an in-song voice memo now survives a dropped network. The take is cached
