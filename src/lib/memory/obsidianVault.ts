@@ -28,6 +28,25 @@ const MOC_THEMES = "All Themes";
 const MOC_SCRIPTURE = "All Scripture";
 const MOC_PEOPLE = "Collaborators";
 const MOC_IDEAS = "All Ideas";
+const MOC_TIMELINE = "Timeline";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** "2026-06-01T..." -> "2026-06" (or null if not a real date). */
+function monthKey(value: string | null): string | null {
+  if (!value) return null;
+  const k = value.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(k) ? k : null;
+}
+
+/** "2026-06" -> "June 2026". */
+function monthLabel(key: string): string {
+  const [year, month] = key.split("-");
+  return `${MONTH_NAMES[Number(month) - 1] ?? month} ${year}`;
+}
 
 /** Strip filesystem/Obsidian-illegal chars; keep human-readable spaces. */
 export function sanitizeFileName(name: string): string {
@@ -305,6 +324,50 @@ function buildIdeasMoc(graph: MemoryGraph, bundle: MemoryRawBundle, ideaNames: M
   return { path: `${MOC_IDEAS}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
+/** Group songs by the month they began into dated journal notes (the time axis). */
+function buildJournalNotes(graph: MemoryGraph): VaultFile[] {
+  const byMonth = new Map<string, MemorySong[]>();
+  for (const song of graph.songs) {
+    const key = monthKey(song.createdAt);
+    if (!key) continue;
+    const list = byMonth.get(key) ?? [];
+    list.push(song);
+    byMonth.set(key, list);
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, songs]) => {
+      const lines: string[] = ["---", `aliases: ${yamlList([monthLabel(key)])}`, "tags: [journal]", "---", ""];
+      lines.push(`# ${monthLabel(key)}`, "");
+      lines.push(`> Part of [[${MOC_TIMELINE}]].`, "");
+      lines.push("## Songs started");
+      for (const s of songs) lines.push(`- ${wikilink(s.title)}`);
+      lines.push("");
+      return { path: `Journal/${key}.md`, content: lines.join("\n").trimEnd() + "\n" };
+    });
+}
+
+/** Timeline MOC — every active month, newest first, linking its journal note. */
+function buildTimelineMoc(graph: MemoryGraph): VaultFile {
+  const months = new Map<string, number>();
+  for (const song of graph.songs) {
+    const key = monthKey(song.createdAt);
+    if (key) months.set(key, (months.get(key) ?? 0) + 1);
+  }
+  const ordered = [...months.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  const lines: string[] = ["---", "tags: [moc, timeline]", "---", ""];
+  lines.push(`# ${MOC_TIMELINE}`, "", "Your songs in the order they began.", "");
+  if (!ordered.length) {
+    lines.push("_No songs yet — your timeline begins with your first._", "");
+  } else {
+    for (const [key, count] of ordered) {
+      lines.push(`- [[${key}|${monthLabel(key)}]] — ${count} ${count === 1 ? "song" : "songs"}`);
+    }
+    lines.push("");
+  }
+  return { path: `${MOC_TIMELINE}.md`, content: lines.join("\n").trimEnd() + "\n" };
+}
+
 function buildStartHereNote(graph: MemoryGraph): VaultFile {
   const lines: string[] = ["---", "tags: [colors-of-glory, guide]", "---", ""];
   lines.push(`# ${START_NOTE}`, "");
@@ -324,6 +387,7 @@ function buildStartHereNote(graph: MemoryGraph): VaultFile {
   lines.push(`- [[${MOC_THEMES}]] — ${graph.stats.themeCount} themes`);
   lines.push(`- [[${MOC_SCRIPTURE}]] — ${graph.stats.scriptureCount} scriptures`);
   lines.push(`- [[${MOC_PEOPLE}]] — ${graph.stats.personCount} collaborators`);
+  lines.push(`- [[${MOC_TIMELINE}]] — your songs over time`);
   lines.push("");
   lines.push(
     "This vault is plain Markdown. Nothing here depends on Colors of Glory —",
@@ -347,6 +411,7 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
   lines.push(`- [[${MOC_THEMES}]]`);
   lines.push(`- [[${MOC_SCRIPTURE}]]`);
   lines.push(`- [[${MOC_PEOPLE}]]`);
+  lines.push(`- [[${MOC_TIMELINE}]]`);
   lines.push("");
 
   lines.push(
@@ -383,7 +448,10 @@ export function buildVault(graph: MemoryGraph, bundle: MemoryRawBundle): VaultFi
     buildMocNote(MOC_SCRIPTURE, "scripture", "Scripture you have returned to.", graph.scriptures),
     buildMocNote(MOC_PEOPLE, "people", "Everyone you have written with.", graph.people),
     buildIdeasMoc(graph, bundle, ideaNames),
+    buildTimelineMoc(graph),
   ];
+
+  files.push(...buildJournalNotes(graph));
 
   for (const song of graph.songs) files.push(buildSongNote(graph, bundle, song, ideaNames));
 

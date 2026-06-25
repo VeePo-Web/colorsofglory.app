@@ -170,6 +170,27 @@ describe("obsidian vault", () => {
     expect(home.content).toContain("[[All Ideas]]");
   });
 
+  it("builds a Timeline MOC and dated journal notes from song start dates", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("Timeline.md");
+    expect(paths).toContain("Journal/2026-06.md");
+    expect(paths).toContain("Journal/2026-05.md");
+    expect(paths).toContain("Journal/2026-04.md");
+
+    const timeline = files.find((f) => f.path === "Timeline.md")!;
+    expect(timeline.content).toContain("[[2026-06|June 2026]]"); // newest first, aliased link
+    expect(timeline.content.indexOf("2026-06")).toBeLessThan(timeline.content.indexOf("2026-04"));
+
+    const june = files.find((f) => f.path === "Journal/2026-06.md")!;
+    expect(june.content).toContain("# June 2026");
+    expect(june.content).toContain("- [[Grace in the Waiting]]");
+
+    const home = files.find((f) => f.path === "Your Memory.md")!;
+    expect(home.content).toContain("[[Timeline]]");
+  });
+
   it("deterministically disambiguates colliding idea names", () => {
     const b = bundle();
     b.ideas = [
