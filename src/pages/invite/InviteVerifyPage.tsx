@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendPhoneOtp, verifyPhoneOtp } from "@/integrations/cog/auth";
+import { useWebOtpAutofill } from "@/lib/auth/useWebOtpAutofill";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OTPInput from "@/components/cog/OTPInput";
@@ -23,6 +24,10 @@ function toFriendlyError(err: unknown): string {
  * Screen B — invite OTP verification.
  * Thin wrapper: same 6-box OTP UI, but on success accepts the invite
  * and routes to /invite/name (not /onboarding/intent).
+ *
+ * Parity with the main CodeVerify screen: WebOTP zero-tap auto-read (Android
+ * Chrome) + a calm "new code sent" resend confirmation, so the invite path is
+ * just as frictionless as the direct sign-in path.
  */
 const InviteVerifyPage = () => {
   const navigate = useNavigate();
@@ -37,6 +42,7 @@ const InviteVerifyPage = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_SECONDS);
 
   useEffect(() => {
@@ -68,15 +74,31 @@ const InviteVerifyPage = () => {
     }
   }, [e164, isVerifying, ctx, navigate]);
 
+  // Lowest-friction path: auto-read the SMS code (Android Chrome), fill, submit.
+  // Progressive — no-ops where unsupported; manual entry always still works.
+  const handleAutoCode = useCallback((code: string) => {
+    const next = code.slice(0, CODE_LENGTH).split('');
+    setDigits([...next, ...Array(Math.max(0, CODE_LENGTH - next.length)).fill('')]);
+    if (next.length >= CODE_LENGTH) void handleVerify(code.slice(0, CODE_LENGTH));
+  }, [handleVerify]);
+
+  useWebOtpAutofill(!isVerifying, handleAutoCode);
+
   const handleResend = async () => {
     if (isResending || countdown > 0) return;
     setIsResending(true);
     setError(null);
+    setResent(false);
     setDigits(Array(CODE_LENGTH).fill(''));
     setCountdown(RESEND_SECONDS);
-    try { await sendPhoneOtp(e164); }
-    catch { setError("Couldn't resend. Please try again."); }
-    finally { setIsResending(false); }
+    try {
+      await sendPhoneOtp(e164);
+      setResent(true);
+    } catch {
+      setError("Couldn't resend. Please try again.");
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
@@ -112,8 +134,12 @@ const InviteVerifyPage = () => {
         />
       </div>
 
-      <p className="text-[0.8125rem] text-center mb-6" style={{ color: '#999' }}>
-        Codes usually arrive within a few seconds.
+      <p
+        className="text-[0.8125rem] text-center mb-6 transition-colors"
+        style={{ color: resent ? '#7A8B5A' : '#999' }}
+        aria-live="polite"
+      >
+        {resent ? 'New code sent — check your messages.' : 'Codes usually arrive within a few seconds.'}
       </p>
 
       {error && (
