@@ -5,6 +5,38 @@ the worst remaining reliability/latency/UX gap, ships green, and names the next 
 
 ---
 
+## Pass 3 — Canvas layer retain+retry + de-coral active recording (commit 0ad3e69)
+
+**Nailed:** the canvas save (base voice memos AND "record over this" **layers**)
+uploaded the blob straight from state with no local cache — a dropped upload lost
+the take, the same gap pass 1 closed for the song room, and a layered take is the
+most irreplaceable capture of all.
+
+- `SongCanvasExperience.handleSaveMemo` now routes through `enqueuePendingUpload`
+  (cache-first, `parentMemoId`-aware) → `flushPendingUpload`; a failed upload keeps
+  the card with its blob safe; a **recovery sweep** on load auto-retries every
+  orphaned take. The pending row id keys both the card and the upload idempotency.
+- De-coraled the **last** off-palette coral in the capture lane: the
+  active-recording state of both record buttons + the `mic-pulse` keyframe now use
+  charcoal + a gold glow (matching the gold waveform + charcoal stop). Destructive
+  Delete / error "Failed" reds intentionally kept (semantic, not "recording live").
+
+tsc 0, 36 tests pass, build green.
+
+**Reliability ledger:** dropped-upload now CLOSED on **all three** recorded-take
+paths (song-room base, canvas base, canvas layer) + recovery sweeps on both
+surfaces. Only `handleFileUpload` (VoiceMemosPage) still lacks retain+retry — and
+it's the lowest risk, because the source file still exists on the device.
+
+### Next slices (in order)
+1. **`handleFileUpload` retain+retry** (lowest-risk path; finishes the ledger).
+2. Latency instrumentation marks (gesture→record · stop→card · tap→playback) to
+   prove the three budgets on a real device.
+3. A shared `useMemoSave` hook to collapse the now-three near-identical save+retry
+   handlers (VoiceMemosPage + canvas) into one source of truth.
+
+---
+
 ## Pass 2 — Tokenize + de-duplicate the capture sheets (commit d3c80d4)
 
 **Nailed:** the three capture sheets (`RecordingSheet`, `CaptureShell`,
