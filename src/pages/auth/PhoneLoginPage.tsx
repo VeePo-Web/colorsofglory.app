@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { sendPhoneOtp } from "@/integrations/cog/auth";
+import { sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
@@ -20,15 +20,11 @@ function toE164(digits: string): string {
 }
 
 function toFriendlyError(err: unknown): string {
+  // sendPhoneOtp already throws AuthError with calm, honest, self-serve copy.
+  // (It no longer dead-ends unrelated errors on a "contact support" message.)
+  if (err instanceof AuthError) return err.message;
   const raw = err instanceof Error ? err.message : String(err);
-  const code = (err as { code?: string } | null)?.code ?? "";
   const msg = raw.toLowerCase();
-  if (code === "phone_provider_disabled" || msg.includes("unsupported phone provider") || msg.includes("provider")) {
-    return "SMS sign-in isn't available yet. Please contact support or try again shortly.";
-  }
-  if (code === "over_sms_send_rate_limit" || msg.includes("rate")) {
-    return "Too many attempts. Please wait a minute and try again.";
-  }
   if (msg.includes("invalid phone")) return "Enter a valid US phone number.";
   if (msg.includes("network") || msg.includes("fetch")) return "We could not send the code. Check your connection and try again.";
   return "We could not send the code. Please try again.";
@@ -38,21 +34,14 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
-  // Returning from verify (e.g. "Change number" / back) keeps the number — zero retype.
-  const [digits, setDigits] = useState(() => {
-    const m = (sessionStorage.getItem("cog:phone-e164") ?? "").match(/^\+1(\d{10})$/);
-    return m ? m[1] : "";
-  });
+  const [digits, setDigits] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isValid = digits.length === DIGITS_MAX;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value.replace(/\D/g, "");
-    // Tolerate a pasted/autofilled US country code: "1XXXXXXXXXX" → "XXXXXXXXXX".
-    if (raw.length === 11 && raw.startsWith("1")) raw = raw.slice(1);
-    raw = raw.slice(0, DIGITS_MAX);
+    const raw = e.target.value.replace(/\D/g, "").slice(0, DIGITS_MAX);
     setDigits(raw);
     if (error) setError(null);
   };
@@ -139,8 +128,8 @@ const PhoneLoginPage = () => {
             type="tel"
             inputMode="numeric"
             autoComplete="tel-national"
-            enterKeyHint="send"
             autoFocus
+            enterKeyHint="go"
             value={formatDisplay(digits)}
             onChange={handleChange}
             placeholder="(555) 555-5555"
