@@ -7,6 +7,7 @@ import { PromptDialog, TableSkeleton } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import {
   adminListPayouts,
+  adminReferrerLedger,
   approvePayout,
   markPayoutPaid,
   markPayoutFailed,
@@ -40,6 +41,17 @@ export default function PayoutBatchesPage() {
     queryFn: () => adminListPayouts(150),
     staleTime: 15_000,
   });
+
+  // Resolve recipient name + payout method so the operator sees who they're
+  // paying (and how) rather than a bare uuid. Reuses the referrer ledger RPC.
+  const { data: ledger = [] } = useQuery({
+    queryKey: ["admin", "referrer-ledger"],
+    queryFn: adminReferrerLedger,
+    staleTime: 30_000,
+  });
+  const payeeByKey = new Map(
+    ledger.map((l) => [`${l.referrer_type}:${l.referrer_id}`, l] as const),
+  );
 
   const [dlg, setDlg] = useState<{ kind: "paid" | "failed"; id: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -89,11 +101,21 @@ export default function PayoutBatchesPage() {
               <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--cog-muted)]">No payout batches yet.</td></tr>
             )}
             {rows.map((r) => {
-              const recipient = r.founder_id ? `founder ${r.founder_id.slice(0, 8)}…` : r.user_id ? `user ${r.user_id.slice(0, 8)}…` : "—";
+              const kind = r.founder_id ? "founder" : "user";
+              const payee = payeeByKey.get(`${kind}:${r.founder_id ?? r.user_id ?? ""}`);
+              const fallbackId = (r.founder_id ?? r.user_id ?? "").slice(0, 8);
+              const recipientName = payee?.name ?? (fallbackId ? `${kind} ${fallbackId}…` : "—");
+              const method = payee?.payout_method ?? null;
               return (
                 <tr key={r.id} className="border-t border-[var(--cog-border)]">
                   <td className="px-4 py-2 font-mono text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{recipient}</td>
+                  <td className="px-4 py-2">
+                    <div className="font-medium">{recipientName}</div>
+                    <div className="text-xs text-[var(--cog-muted)]">
+                      <span className="uppercase tracking-wider">{kind}</span>
+                      {method ? <span> · {method}</span> : <span className="text-[#b3261e]"> · no payout method</span>}
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-right font-mono">{money(r.amount_cents, r.currency)}</td>
                   <td className="px-4 py-2">
                     <span className={`font-medium ${STATUS_TONE[r.status] ?? ""}`}>{r.status}</span>
