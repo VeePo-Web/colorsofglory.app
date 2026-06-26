@@ -184,7 +184,7 @@ export function buildVaultZip(graph: MemoryGraph, bundle: MemoryRawBundle): Uint
 /** Trigger a browser download of the user's Obsidian vault. */
 export function downloadVault(graph: MemoryGraph, bundle: MemoryRawBundle): void {
   const bytes = buildVaultZip(graph, bundle);
-  const blob = new Blob([bytes], { type: "application/zip" });
+  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
