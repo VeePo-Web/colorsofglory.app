@@ -4,14 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateFounderDialog from "@/components/admin/CreateFounderDialog";
+import { money, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminFounderSummary, adminReferralsRecent } from "@/integrations/cog/admin";
 import { supabase } from "@/integrations/supabase/client";
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 type SortKey = "name" | "referrals" | "payable" | "codes";
 
@@ -153,7 +152,7 @@ export default function FoundersPage() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>
+              <TableSkeleton cols={7} />
             )}
             {!isLoading && filtered.length === 0 && (
               <tr><td colSpan={7} className="px-4 py-6 text-center text-[var(--cog-muted)]">No founders match.</td></tr>

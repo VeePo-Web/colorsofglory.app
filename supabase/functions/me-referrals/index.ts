@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // Reward totals for this referrer
     const { data: rewards } = await supabase
       .from("reward_events")
-      .select("amount_cents, status, reward_kind, referred_user_id")
+      .select("amount_cents, status, reward_kind, referred_user_id, created_at, invoice_external_id")
       .eq("referrer_type", "user")
       .eq("referrer_user_id", user.id)
       .eq("reward_kind", "cash");
@@ -113,9 +113,29 @@ Deno.serve(async (req) => {
     const perReferralCents = Number(settingRow?.value ?? 500) || 500;
     const monthly_recurring_cents = payingCount * perReferralCents;
 
+    const event_timeline = (rewards ?? [])
+      .slice()
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 50)
+      .map((r: any) => ({
+        status: r.status,
+        amount_cents: r.amount_cents,
+        invoice_external_id: r.invoice_external_id,
+        created_at: r.created_at,
+      }));
+
+    // Referee-side benefit + a prefilled, on-brand share message so every
+    // surface can ship identical one-tap sharing (referral-UX audit P0 #1/#2).
+    const referee_benefit = "Your first song is free";
+    const share_message = link
+      ? `Come write with me on Colors of Glory — every lyric, voice memo, and chord for a song stays in one place. ${referee_benefit} when you start here: ${link}`
+      : null;
+
     return json({
       code,
       link,
+      share_message,
+      referee_benefit,
       attributed_count: referredIds.length,
       paying_count: payingCount,
       per_referral_cents: perReferralCents,
@@ -127,7 +147,9 @@ Deno.serve(async (req) => {
         kind: profile?.payout_method ?? null,
         email: profile?.payout_email ?? null,
         country: profile?.payout_country ?? null,
+        complete: !!profile?.payout_method,
       },
+      event_timeline,
     });
   } catch (e) {
     console.error("me-referrals error", e);

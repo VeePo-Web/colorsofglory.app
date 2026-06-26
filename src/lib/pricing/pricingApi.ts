@@ -103,6 +103,18 @@ export interface ReferralStats {
     lifetimeCents: number;
   };
   nextPayoutEstimateCents: number;
+  /** Anonymized recent referrals (newest first) for the momentum feed. */
+  recentReferrals: Array<{
+    referredAt: string;
+    isPaying: boolean;
+    hasPaidBefore: boolean;
+    totalEarnedCents: number;
+  }>;
+  /** Where earnings get sent. kind is null until the referrer sets it. */
+  payoutMethod: {
+    kind: "manual" | "paypal" | "stripe_connect" | null;
+    email: string | null;
+  };
 }
 
 const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
@@ -214,6 +226,23 @@ export async function fetchReferralStats(): Promise<ReferralStats> {
       lifetimeCents: data.earnings?.lifetime_cents ?? 0,
     },
     nextPayoutEstimateCents: data.next_payout_estimate_cents ?? 0,
+    recentReferrals: (Array.isArray(data.recent_referrals) ? data.recent_referrals : []).map(
+      (r: {
+        referred_at?: string;
+        is_paying?: boolean;
+        has_paid_before?: boolean;
+        total_earned_cents?: number;
+      }) => ({
+        referredAt: r.referred_at ?? "",
+        isPaying: Boolean(r.is_paying),
+        hasPaidBefore: Boolean(r.has_paid_before),
+        totalEarnedCents: r.total_earned_cents ?? 0,
+      }),
+    ),
+    payoutMethod: {
+      kind: data.payout_method?.kind ?? null,
+      email: data.payout_method?.email ?? null,
+    },
   };
 }
 

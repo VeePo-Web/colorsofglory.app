@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
+import { money, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { adminMonthlyPayouts } from "@/integrations/cog/admin";
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 function monthInputToISO(m: string) {
   // m = "2026-06" -> "2026-06-01"
@@ -52,6 +52,7 @@ export default function PayoutsPage() {
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by founder name…" className="flex-1 min-w-[220px]" />
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[var(--cog-muted)]">Payable {money(totalPayable)} · Pending {money(totalPending)}</span>
+          <Link to="/admin/payouts/batches"><Button variant="outline">Batches →</Button></Link>
           <Button variant="outline" onClick={exportCSV}>Export CSV</Button>
         </div>
       </div>
@@ -67,7 +68,7 @@ export default function PayoutsPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={4} className="px-4 py-6 text-center text-[var(--cog-muted)]">Loading…</td></tr>}
+            {isLoading && <TableSkeleton cols={4} />}
             {!isLoading && filtered.length === 0 && (
               <tr><td colSpan={4} className="px-4 py-6 text-center text-[var(--cog-muted)]">No founders for this month.</td></tr>
             )}

@@ -67,10 +67,14 @@ const SongTabBar = ({ activeTab }: SongTabBarProps) => {
           <button
             key={tab.id}
             onClick={() => {
+              // Lyrics + Chords open the structured Lyric & Chord Sheet;
+              // the remaining sections live as canvas layers.
               const destination =
-                tab.id === "canvas"
-                  ? `/songs/${songId}/canvas`
-                  : `/songs/${songId}/canvas?layer=${tab.segment}`;
+                tab.id === "lyrics" || tab.id === "chords"
+                  ? `/songs/${songId}/sheet`
+                  : tab.id === "canvas"
+                    ? `/songs/${songId}/canvas`
+                    : `/songs/${songId}/canvas?layer=${tab.segment}`;
               navigate(destination);
             }}
             aria-label={tab.label}

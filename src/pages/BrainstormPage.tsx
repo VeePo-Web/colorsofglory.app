@@ -4,12 +4,16 @@ import { ArrowLeft, Mic, Square } from "lucide-react";
 import { toast } from "sonner";
 import {
   listBrainstormMemos,
-  uploadVoiceMemo,
   type BrainstormMemo,
 } from "@/integrations/cog/brainstorm";
 import { getSong, type SongDetail } from "@/integrations/cog/songs";
+import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
 
 const BrainstormMemosPanel = lazy(() => import("@/components/brainstorm/BrainstormMemosPanel"));
+
+// The "memos" outbox uploader is registered once at app startup
+// (src/lib/voice/captureUploaders.ts), so a queued brainstorm take resumes
+// syncing on reconnect even before this page mounts.
 
 async function computePeaks(blob: Blob, bins = 48): Promise<number[] | undefined> {
   try {
@@ -102,6 +106,17 @@ const BrainstormPage = () => {
     };
   }, [songId, refresh]);
 
+  // When a queued brainstorm take finishes syncing, pull the real record in so it
+  // appears in the list. The take is safe in the outbox throughout.
+  useEffect(() => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.type === "change") return;
+      if (event.songId !== songId) return;
+      if (event.type === "success") void refresh();
+    });
+    return unsubscribe;
+  }, [songId, refresh]);
+
   useEffect(() => {
     return () => {
       if (tickRef.current) cancelAnimationFrame(tickRef.current);
@@ -141,17 +156,25 @@ const BrainstormPage = () => {
         setSaving(true);
         try {
           const peaks = await computePeaks(blob);
-          await uploadVoiceMemo({
-            songId,
+          // Cache-first + auto-retry: the take is durable before any network
+          // call, so a dropped/offline upload can no longer lose a brainstorm
+          // idea. It syncs through this page's pipeline and surfaces via the
+          // outbox success subscription + realtime refresh.
+          await enqueueCaptureUpload({
             blob,
+            songId,
+            title: "Brainstorm idea",
             mimeType: mime,
             durationMs: duration,
-            waveformPeaks: peaks,
+            sectionLabel: "Raw idea",
+            uploaderKey: "memos",
+            extra: { waveformPeaks: peaks ?? undefined },
           });
-          await refresh();
         } catch (err) {
+          // enqueue only fails on a local-cache error; the recorder still holds
+          // the chunks, so this is rare and non-fatal.
           console.error(err);
-          toast.error(err instanceof Error ? err.message : "Couldn't save that one");
+          toast("Hmm — try that one more time");
         } finally {
           setSaving(false);
         }

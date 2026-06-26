@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ const ResetPasswordPage = () => {
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pwRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -53,6 +54,12 @@ const ResetPasswordPage = () => {
       if (timer) window.clearTimeout(timer);
     };
   }, []);
+
+  // Focus the new-password field the moment the recovery session is confirmed —
+  // the input is disabled until then, so autoFocus alone would never land.
+  useEffect(() => {
+    if (ready) pwRef.current?.focus();
+  }, [ready]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -120,8 +127,10 @@ const ResetPasswordPage = () => {
             >
               <Lock size={18} style={{ color: "#A09689" }} />
               <input
+                ref={pwRef}
                 type="password"
                 autoComplete="new-password"
+                enterKeyHint="next"
                 placeholder="New password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -138,6 +147,7 @@ const ResetPasswordPage = () => {
               <input
                 type="password"
                 autoComplete="new-password"
+                enterKeyHint="go"
                 placeholder="Confirm new password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}

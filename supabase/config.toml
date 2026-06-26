@@ -8,3 +8,15 @@ verify_jwt = false
 
 [functions.otp-guard]
 verify_jwt = false
+
+[functions.email-otp-start]
+verify_jwt = false
+
+[functions.email-otp-verify]
+verify_jwt = false
+
+[functions.phone-otp-start]
+verify_jwt = false
+
+[functions.phone-otp-verify]
+verify_jwt = false

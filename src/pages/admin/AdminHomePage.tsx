@@ -1,12 +1,13 @@
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
-import { adminFounderSummary, adminReferralsRecent } from "@/integrations/cog/admin";
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+import { money } from "@/components/admin/AdminUI";
+import { adminFounderSummary, adminReferralsRecent, adminAttentionSummary, type AttentionSummary } from "@/integrations/cog/admin";
 
 export default function AdminHomePage() {
   const { data: founders = [] } = useQuery({ queryKey: ["admin", "founder-summary"], queryFn: adminFounderSummary, staleTime: 30_000 });
   const { data: recent = [] } = useQuery({ queryKey: ["admin", "recent", 25], queryFn: () => adminReferralsRecent(25), staleTime: 30_000 });
+  const { data: attn } = useQuery<AttentionSummary>({ queryKey: ["admin", "attention"], queryFn: adminAttentionSummary, staleTime: 20_000 });
 
   const active = founders.filter((f) => f.status === "active").length;
   const referrals = founders.reduce((s, f) => s + (f.attributed_users ?? 0), 0);
@@ -15,6 +16,18 @@ export default function AdminHomePage() {
 
   return (
     <AdminShell title="Dashboard">
+      {attn && (
+        <>
+          <h2 className="text-sm uppercase tracking-wider text-[var(--cog-warm-gray)] mb-3">Needs attention</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <AlertCard to="/admin/fraud" label="Open fraud flags" count={attn.open_fraud_flags} />
+            <AlertCard to="/admin/referrals" label="Blocked payouts" count={attn.blocked_payout_count} sub={money(attn.blocked_payout_cents)} />
+            <AlertCard to="/admin/webhooks" label="Stuck webhooks" count={attn.stuck_webhooks} />
+            <AlertCard to="/admin/payouts/batches" label="Draft payouts" count={attn.draft_payouts_count} sub={money(attn.draft_payouts_cents)} tone="neutral" />
+          </div>
+        </>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <Stat label="Active founders" value={String(active)} />
         <Stat label="Total referrals" value={String(referrals)} />
@@ -50,6 +63,18 @@ export default function AdminHomePage() {
         )}
       </div>
     </AdminShell>
+  );
+}
+
+function AlertCard({ to, label, count, sub, tone = "alert" }: { to: string; label: string; count: number; sub?: string; tone?: "alert" | "neutral" }) {
+  const active = count > 0;
+  const accent = active && tone === "alert" ? "border-[#e7b4b0] bg-[#fbeeec]" : active ? "border-[var(--cog-border-gold)] bg-[var(--cog-cream-light)]" : "border-[var(--cog-border)] bg-[var(--cog-cream-light)]";
+  const num = active && tone === "alert" ? "text-[#b3261e]" : active ? "text-[var(--cog-gold)]" : "text-[var(--cog-muted)]";
+  return (
+    <Link to={to} className={`block rounded-lg border p-4 transition-colors hover:border-[var(--cog-gold)] ${accent}`}>
+      <div className="text-xs uppercase tracking-wider text-[var(--cog-warm-gray)]">{label}</div>
+      <div className={`text-2xl font-semibold font-mono mt-1 ${num}`}>{count}{sub ? <span className="ml-2 text-sm font-normal text-[var(--cog-warm-gray)]">{sub}</span> : null}</div>
+    </Link>
   );
 }
 

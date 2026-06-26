@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Settings, Mic } from "lucide-react";
+import { Plus, Settings, Mic, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
@@ -117,14 +117,24 @@ const SongCatalogPage = () => {
           {/* Crown + wordmark + settings icon */}
           <div className="flex items-center justify-between mb-4">
             <CogBrand variant="horizontal" size="sm" theme="dark" />
-            <button
-              onClick={() => navigate("/settings")}
-              className="flex items-center justify-center transition-all duration-150 active:scale-90"
-              style={{ width: 44, height: 44, color: "rgba(255,255,255,0.50)" }}
-              aria-label="Settings"
-            >
-              <Settings size={19} strokeWidth={1.5} />
-            </button>
+            <div className="flex items-center">
+              <button
+                onClick={() => navigate("/memory")}
+                className="flex items-center justify-center transition-all duration-150 active:scale-90"
+                style={{ width: 44, height: 44, color: "rgba(255,255,255,0.50)" }}
+                aria-label="Your memory"
+              >
+                <Sparkles size={19} strokeWidth={1.5} />
+              </button>
+              <button
+                onClick={() => navigate("/settings")}
+                className="flex items-center justify-center transition-all duration-150 active:scale-90"
+                style={{ width: 44, height: 44, color: "rgba(255,255,255,0.50)" }}
+                aria-label="Settings"
+              >
+                <Settings size={19} strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
 
           {/* "Your songs" heading */}

@@ -123,7 +123,13 @@ const SongWorkspacePage = () => {
             <ModuleCard
               key={module.id}
               module={module}
-              onClick={() => navigate(`/songs/${sid}/canvas?layer=${module.route}`)}
+              onClick={() =>
+                navigate(
+                  module.id === "lyrics" || module.id === "chords"
+                    ? `/songs/${sid}/sheet`
+                    : `/songs/${sid}/canvas?layer=${module.route}`,
+                )
+              }
             />
           ))}
         </div>
@@ -139,7 +145,7 @@ const SongWorkspacePage = () => {
           <QuickAction
             label="Write lyric"
             icon={PenLine}
-            onClick={() => navigate(`/songs/${sid}/canvas?layer=lyrics`)}
+            onClick={() => navigate(`/songs/${sid}/sheet`)}
           />
           <QuickAction
             label="Record memo"

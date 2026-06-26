@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { fetchReferralStats, centsToDisplay, type ReferralStats } from "@/lib/pricing/pricingApi";
+import { setMyPayoutMethod } from "@/integrations/cog/referrals";
 
 const ReferralPage = () => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [payoutEmail, setPayoutEmail] = useState("");
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [savingPayout, setSavingPayout] = useState(false);
 
   useEffect(() => {
     fetchReferralStats()
@@ -17,6 +22,23 @@ const ReferralPage = () => {
       .catch(() => {/* keep null - use placeholder UI */})
       .finally(() => setIsLoading(false));
   }, []);
+
+  const handleSavePayout = async () => {
+    const email = payoutEmail.trim();
+    if (email.length < 3) return;
+    setSavingPayout(true);
+    try {
+      await setMyPayoutMethod({ method: "paypal", email });
+      const fresh = await fetchReferralStats();
+      setStats(fresh);
+      setEditingPayout(false);
+      toast.success("Payout details saved");
+    } catch (err) {
+      toast.error((err as Error)?.message ?? "Couldn't save payout details. Please try again.");
+    } finally {
+      setSavingPayout(false);
+    }
+  };
 
   const referralLink = stats?.link ?? "colorsofglory.app/r/...";
   const fullLink = stats?.link ?? `https://colorsofglory.app/r/...`;
@@ -29,6 +51,26 @@ const ReferralPage = () => {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Warm, faith-toned invite that leads with what the friend gets (first song
+  // free) — the message travels with the link through the native share sheet.
+  const inviteMessage =
+    "I'm writing songs on Colors of Glory — lyrics, voice memos, and the people I write with all in one place for each song. Your first song is free:";
+
+  const handleShare = async () => {
+    const url = stats?.link ? fullLink : "https://colorsofglory.app";
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "Colors of Glory", text: inviteMessage, url });
+        return;
+      } catch (err) {
+        // User dismissed the sheet → stop. Any real failure falls through to
+        // copying the link so the invite is never lost.
+        if ((err as Error)?.name === "AbortError") return;
+      }
+    }
+    handleCopy();
   };
 
   return (
@@ -74,6 +116,32 @@ const ReferralPage = () => {
         <p className="text-base mb-8" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
           You earn $10/month while each direct referral stays on Pro.
         </p>
+
+        {/* Recurring earnings — the motivating hero metric, only once it's real */}
+        {!isLoading && stats && stats.monthlyRecurringCents > 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6 text-center"
+            style={{
+              backgroundColor: "var(--cog-cream-light)",
+              border: "1.5px solid var(--cog-border-gold)",
+              boxShadow: "0 4px 20px rgba(184,149,58,0.12)",
+            }}
+          >
+            <p
+              className="text-xs font-medium uppercase tracking-wider mb-1"
+              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+            >
+              You're earning
+            </p>
+            <p style={{ fontSize: 44, lineHeight: 1, color: "var(--cog-gold)", fontFamily: "var(--font-display)", fontWeight: 600 }}>
+              {centsToDisplay(stats.monthlyRecurringCents)}
+              <span style={{ fontSize: 18, color: "var(--cog-warm-gray)" }}>/mo</span>
+            </p>
+            <p className="text-sm mt-1.5" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+              from {stats.payingCount} active Pro {stats.payingCount === 1 ? "referral" : "referrals"} · recurring every month
+            </p>
+          </div>
+        )}
 
         {/* Referral link card */}
         <div
@@ -162,6 +230,96 @@ const ReferralPage = () => {
           ))}
         </div>
 
+        {/* Payout method — where earnings get sent. Completes the earn→collect loop. */}
+        {!isLoading && stats && (() => {
+          const method = stats.payoutMethod.kind;
+          const hasEarnings =
+            stats.earnings.payableCents + stats.earnings.pendingCents + stats.monthlyRecurringCents > 0;
+          // Stay quiet until there's a reason: money in motion, or the referrer chose to edit.
+          if (!method && !hasEarnings && !editingPayout) return null;
+          const showForm = editingPayout || !method;
+          return (
+            <div
+              className="rounded-2xl p-5 mb-6"
+              style={{
+                backgroundColor: "var(--cog-cream-light)",
+                border: method ? "1.5px solid var(--cog-border)" : "1.5px solid var(--cog-border-gold)",
+              }}
+            >
+              <p
+                className="text-xs font-medium uppercase tracking-wider mb-2"
+                style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+              >
+                Where we send your earnings
+              </p>
+              {method && !editingPayout ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm truncate" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                    {stats.payoutMethod.email ?? "Saved"}
+                    <span style={{ color: "var(--cog-warm-gray)" }}> · {method === "paypal" ? "PayPal" : method}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setPayoutEmail(stats.payoutMethod.email ?? ""); setEditingPayout(true); }}
+                    className="text-sm flex-shrink-0 transition-opacity hover:opacity-70"
+                    style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)" }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : showForm ? (
+                <>
+                  {!method && (
+                    <p className="text-sm mb-3" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+                      Add your PayPal email so we can send what you earn.
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      value={payoutEmail}
+                      onChange={(e) => setPayoutEmail(e.target.value)}
+                      placeholder="you@email.com"
+                      className="flex-1 rounded-xl px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--cog-cream)",
+                        border: "1px solid var(--cog-border)",
+                        color: "var(--cog-charcoal)",
+                        fontFamily: "var(--font-body)",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSavePayout}
+                      disabled={savingPayout || payoutEmail.trim().length < 3}
+                      className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white flex-shrink-0 transition-all duration-150 active:scale-95"
+                      style={{
+                        backgroundColor: "var(--cog-gold)",
+                        fontFamily: "var(--font-body)",
+                        opacity: savingPayout || payoutEmail.trim().length < 3 ? 0.6 : 1,
+                      }}
+                    >
+                      {savingPayout ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  {method && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPayout(false)}
+                      className="text-xs mt-2 transition-opacity hover:opacity-70"
+                      style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </>
+              ) : null}
+            </div>
+          );
+        })()}
+
         {/* CTA */}
         <button
           onClick={handleCopy}
@@ -176,6 +334,8 @@ const ReferralPage = () => {
         </button>
 
         <button
+          type="button"
+          onClick={handleShare}
           className="text-sm text-center w-full py-3 transition-opacity hover:opacity-70 mb-10"
           style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
         >
@@ -184,6 +344,49 @@ const ReferralPage = () => {
             Share invite
           </span>
         </button>
+
+        {/* Recent activity — anonymized momentum feed so shares feel like they land */}
+        {!isLoading && stats && stats.recentReferrals.length > 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6"
+            style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
+          >
+            <h2
+              className="text-sm font-semibold mb-4"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+            >
+              Recent activity
+            </h2>
+            <ul className="flex flex-col gap-3">
+              {stats.recentReferrals.slice(0, 6).map((r, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span
+                    className="flex-shrink-0 w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: r.isPaying ? "var(--cog-gold)" : "var(--cog-muted)" }}
+                  />
+                  <p className="flex-1 text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                    A songwriter joined
+                  </p>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={
+                      r.isPaying
+                        ? { backgroundColor: "rgba(184,149,58,0.12)", color: "var(--cog-gold)" }
+                        : { color: "var(--cog-warm-gray)" }
+                    }
+                  >
+                    {r.isPaying ? "Active Pro" : "Joined"}
+                  </span>
+                  {r.referredAt && (
+                    <span className="text-xs flex-shrink-0" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
+                      {new Date(r.referredAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Rules */}
         <div

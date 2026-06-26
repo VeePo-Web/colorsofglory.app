@@ -87,6 +87,10 @@ const InviteNamePage = () => {
           type="text"
           autoComplete="given-name"
           autoFocus
+          autoCapitalize="words"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="next"
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           onFocus={() => setFocusedField('first')}
@@ -112,6 +116,10 @@ const InviteNamePage = () => {
           ref={lastRef}
           type="text"
           autoComplete="family-name"
+          autoCapitalize="words"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="go"
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           onFocus={() => setFocusedField('last')}

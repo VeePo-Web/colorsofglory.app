@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { money } from "@/components/admin/AdminUI";
 
 type Code = {
   id: string;
@@ -31,7 +32,6 @@ interface FounderByCodePanelProps {
   onSelect: (id: string) => void;
 }
 
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 const copyUserId = (text: string) => {
   navigator.clipboard.writeText(text).then(() => toast.success("Copied"));

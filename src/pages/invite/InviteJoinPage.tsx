@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPhoneOtp, AuthError, useCurrentAccount } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
 import InviteErrorCard from "@/components/invite/InviteErrorCard";
-import { previewInvite, checkPhoneRegistered, type InvitePreview } from "@/lib/invite/inviteApi";
+import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview } from "@/lib/invite/inviteApi";
 import { saveInviteContext } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
+import { requestNewInvite } from "@/integrations/cog/songs";
 
 // ─── Phone formatting ─────────────────────────────────────────────────────────
 
@@ -21,6 +22,24 @@ function formatDisplay(d: string): string {
 
 function toE164(digits: string): string {
   return `+1${digits}`;
+}
+
+function toFriendlyError(err: unknown): string {
+  if (err instanceof AuthError) {
+    switch (err.code) {
+      case "GEO_BLOCKED":
+        return "SMS sign-in isn't available in your region yet.";
+      case "RATE_LIMITED":
+        return "Too many attempts. Please wait a minute and try again.";
+      case "PHONE_PROVIDER_DISABLED":
+        return "SMS sign-in isn't available right now. Please try again shortly.";
+      case "NETWORK":
+        return "We couldn't send the code. Check your connection and try again.";
+      default:
+        return err.message || "We couldn't send the code. Please try again.";
+    }
+  }
+  return "We couldn't send the code. Please try again.";
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -56,6 +75,13 @@ const InviteJoinPage = () => {
   const [existingName, setExistingName] = useState<string | null>(null);
   const [requestSent, setRequestSent] = useState(false);
   const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Already-signed-in fast path (Church Center one-tap): if a session exists we
+  // skip phone entry entirely and let them accept in a single tap.
+  const { loading: accountLoading, user: accountUser, profile: accountProfile } = useCurrentAccount();
+  const [useDifferentNumber, setUseDifferentNumber] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const signedInFirstName = accountProfile?.display_name?.trim().split(/\s+/)[0] || "you";
 
   const isValid = digits.length === DIGITS_MAX;
 
@@ -121,18 +147,16 @@ const InviteJoinPage = () => {
     setPhoneError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: e164 });
-      if (error) throw error;
+      // Route through the auth SDK so the invite OTP path gets the same
+      // toll-fraud / SMS-pumping rails (geo allowlist + per-phone/IP velocity
+      // caps + global daily ceiling) as the main phone login — never a raw,
+      // unguarded send. The resend on /invite/verify already uses sendPhoneOtp.
+      await sendPhoneOtp(e164);
       sessionStorage.setItem('cog:phone-e164', e164);
       sessionStorage.setItem('cog:phone-display', formatDisplay(digits));
       navigate('/invite/verify');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setPhoneError(
-        msg.includes('rate') ? 'Too many attempts. Please wait a moment.' :
-        msg.includes('invalid') ? 'Enter a valid US phone number.' :
-        'We could not send the code. Check your connection.'
-      );
+      setPhoneError(toFriendlyError(err));
       setState((prev) =>
         prev.type === 'submitting' || prev.type === 'input'
           ? { type: 'input', preview: prev.preview }
@@ -141,14 +165,39 @@ const InviteJoinPage = () => {
     }
   };
 
+  // Already signed in → one-tap accept, no phone re-entry.
+  const handleOneTapJoin = async () => {
+    if (state.type !== 'input' || joining) return;
+    setJoining(true);
+    setPhoneError(null);
+    try {
+      await acceptInvite(token);
+      saveInviteContext({ isExistingUser: true, existingFirstName: signedInFirstName });
+      navigate('/invite/team');
+    } catch {
+      // One-tap accept failed — fall back to the phone path.
+      setJoining(false);
+      setUseDifferentNumber(true);
+    }
+  };
+
   const handleRequestNew = async () => {
+    // Actually record the request (invite_requests) so the owner can re-send —
+    // previously this faked "Request sent" and did nothing. Best-effort: the
+    // owner notification is non-critical, so we acknowledge regardless.
+    try {
+      await requestNewInvite({
+        original_token: token,
+        phone: digits.length === DIGITS_MAX ? toE164(digits) : null,
+      });
+    } catch {
+      /* swallow — acknowledged below either way */
+    }
     setRequestSent(true);
-    // Fire and forget — requestNewInvite(token) wired when Lovable delivers
-    setTimeout(() => {}, 0);
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────
-  if (state.type === 'loading') {
+  if (state.type === 'loading' || accountLoading) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6' }}>
         <div className="flex flex-col flex-1 px-6 pt-20 mx-auto w-full" style={{ maxWidth: 430 }}>
@@ -253,6 +302,25 @@ const InviteJoinPage = () => {
           )}
         </div>
 
+        {/* Already signed in → one tap to join, no phone needed (Church Center). */}
+        {accountUser && !useDifferentNumber ? (
+          <>
+            <GoldButton loading={joining} loadingText="Joining..." onClick={handleOneTapJoin}>
+              Join as {signedInFirstName} →
+            </GoldButton>
+            <button
+              onClick={() => setUseDifferentNumber(true)}
+              className="text-[0.8125rem] text-center w-full py-4 transition-opacity hover:opacity-70 underline"
+              style={{ color: '#999', fontFamily: 'var(--font-body)' }}
+            >
+              Use a different number
+            </button>
+            <p className="text-[0.75rem] text-center" style={{ color: '#999' }}>
+              Invited songs don't use your free song.
+            </p>
+          </>
+        ) : (
+        <>
         {/* Divider */}
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.08)' }} />
@@ -283,11 +351,14 @@ const InviteJoinPage = () => {
             type="tel"
             inputMode="numeric"
             autoComplete="tel-national"
+            autoFocus
+            enterKeyHint="go"
             value={formatDisplay(digits)}
             onChange={(e) => {
               setDigits(e.target.value.replace(/\D/g, '').slice(0, DIGITS_MAX));
               setPhoneError(null);
             }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && isValid && !isSubmitting) handleContinue(); }}
             placeholder="(555) 555-5555"
             aria-label="Phone number"
             className="flex-1 bg-transparent outline-none text-base"
@@ -321,6 +392,8 @@ const InviteJoinPage = () => {
         <p className="text-[0.75rem] text-center mt-3" style={{ color: '#999' }}>
           Invited songs don't use your free song.
         </p>
+        </>
+        )}
 
         {/* T&C */}
         <p className="text-[0.6875rem] text-center mt-auto pt-8" style={{ color: '#CCC' }}>

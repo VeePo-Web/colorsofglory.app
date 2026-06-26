@@ -4,13 +4,14 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
+import FounderActions from "@/components/admin/FounderActions";
+import { money } from "@/components/admin/AdminUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { adminFounderDetail } from "@/integrations/cog/admin";
 
 const FounderByCodePanel = lazy(() => import("@/components/admin/FounderByCodePanel"));
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 type Detail = {
   founder: {
@@ -61,7 +62,7 @@ const EMPTY_REWARDS: Detail["reward_events"] = [];
 
 export default function FounderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin", "founder", id],
     queryFn: () => adminFounderDetail(id!) as Promise<Detail>,
     enabled: !!id,
@@ -140,12 +141,20 @@ export default function FounderDetailPage() {
         </Link>
       </div>
 
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{founder.display_name}</h1>
           <p className="font-mono text-sm text-[var(--cog-muted)]">{founder.slug}</p>
         </div>
-        <Badge>{founder.status}</Badge>
+        <div className="flex items-center gap-3">
+          <Badge>{founder.status}</Badge>
+          <FounderActions
+            founderId={founder.id}
+            status={founder.status}
+            rewardProfile={founder.reward_profile}
+            onChanged={() => refetch()}
+          />
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-3 gap-4">
@@ -170,20 +179,25 @@ export default function FounderDetailPage() {
             />
           </div>
           <SimpleTable
-            head={["Code", "Status", "Used", "Expires", "Created", ""]}
-            rows={codes.map((code) => [
-              <span className="font-mono font-semibold">{code.value}</span>,
-              <Badge variant={code.status === "active" ? "default" : "outline"}>{code.status}</Badge>,
-              <span className="font-mono">
-                {code.redemption_count}
-                {code.max_redemptions ? ` / ${code.max_redemptions}` : ""}
-              </span>,
-              code.expires_at ? new Date(code.expires_at).toLocaleDateString() : "-",
-              new Date(code.created_at).toLocaleDateString(),
-              <button className="text-xs text-[var(--cog-gold)] hover:underline" onClick={() => openCodeDrilldown(code.id)}>
-                View referrals
-              </button>,
-            ])}
+            head={["Code", "Status", "Used", "Referred", "Payable", "Expires", "Created", ""]}
+            rows={codes.map((code) => {
+              const referred = usersByCode.get(code.id)?.length ?? 0;
+              return [
+                <span className="font-mono font-semibold">{code.value}</span>,
+                <Badge variant={code.status === "active" ? "default" : "outline"}>{code.status}</Badge>,
+                <span className="font-mono">
+                  {code.redemption_count}
+                  {code.max_redemptions ? ` / ${code.max_redemptions}` : ""}
+                </span>,
+                <span className="font-mono">{referred}</span>,
+                <span className="font-mono text-[var(--cog-gold)]">{money(payableByCode.get(code.id) ?? 0)}</span>,
+                code.expires_at ? new Date(code.expires_at).toLocaleDateString() : "-",
+                new Date(code.created_at).toLocaleDateString(),
+                <button className="text-xs text-[var(--cog-gold)] hover:underline" onClick={() => openCodeDrilldown(code.id)}>
+                  View referrals
+                </button>,
+              ];
+            })}
           />
         </TabsContent>
 

@@ -176,6 +176,20 @@ const CodeVerifyPage = () => {
           Change number
         </button>
       </div>
+
+      {/* Escape hatch — never trap a user whose SMS doesn't arrive. Surfaces once
+          the first resend window has passed so it doesn't distract early. */}
+      {countdown <= 0 && (
+        <button
+          type="button"
+          onClick={() => navigate("/auth/email")}
+          className="mt-6 text-[13px] text-center w-full py-2 transition-opacity hover:opacity-70"
+          style={{ color: "#999", fontFamily: "var(--font-body)" }}
+        >
+          Didn't get a code?{" "}
+          <span style={{ color: "#B5935A", textDecoration: "underline" }}>Use email instead</span>
+        </button>
+      )}
     </OnboardingShell>
   );
 };

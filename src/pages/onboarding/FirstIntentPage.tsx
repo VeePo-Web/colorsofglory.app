@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { PenLine, Users } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
+import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 
 interface IntentCardProps {
@@ -58,9 +59,12 @@ const FirstIntentPage = () => {
   return (
     <OnboardingShell>
       {/* Logo */}
-      <div className="pt-16 pb-10 flex justify-center">
+      <div className="pt-16 pb-6 flex justify-center">
         <CogBrand variant="stacked" size="md" />
       </div>
+
+      {/* Momentum cue */}
+      <OnboardingProgress step={1} total={2} className="mb-9" />
 
       {/* Headline */}
       <h1
@@ -97,6 +101,17 @@ const FirstIntentPage = () => {
       <p className="text-[13px] text-center" style={{ color: "#999" }}>
         You can always do both later.
       </p>
+
+      {/* Quiet founder/beta code path — a post-verification route by intent for
+          users who hold a founder, beta, friend, or lifetime code. Kept quiet so
+          it reads as private access, not a public coupon. */}
+      <button
+        onClick={() => navigate("/onboarding/founder-code")}
+        className="mt-6 text-[13px] text-center w-full py-2 transition-opacity hover:opacity-70 underline"
+        style={{ color: "#999", fontFamily: "var(--font-body)" }}
+      >
+        Have a founder or beta code?
+      </button>
     </OnboardingShell>
   );
 };
