@@ -34,7 +34,11 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
-  const [digits, setDigits] = useState("");
+  // Pre-fill the last number entered this session so "Change number" lands on a
+  // ready-to-edit field — no retyping a 10-digit number to fix one digit.
+  const [digits, setDigits] = useState(
+    () => (sessionStorage.getItem("cog:phone-digits") ?? "").replace(/\D/g, "").slice(0, DIGITS_MAX),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,9 +65,10 @@ const PhoneLoginPage = () => {
     try {
       await sendPhoneOtp(e164);
 
-      // Store for display in verify screen
+      // Store for display in verify screen + to pre-fill on "Change number"
       sessionStorage.setItem("cog:phone-e164", e164);
       sessionStorage.setItem("cog:phone-display", formatDisplay(digits));
+      sessionStorage.setItem("cog:phone-digits", digits);
 
       navigate("/auth/phone/verify");
     } catch (err) {
