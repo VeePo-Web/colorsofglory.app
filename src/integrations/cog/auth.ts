@@ -87,19 +87,79 @@ export async function signUpWithPassword(input: {
   firstName?: string;
   lastName?: string;
 }): Promise<{ user: User | null; needsConfirmation: boolean }> {
-  const { data, error } = await supabase.auth.signUp({
-    email: input.email.trim().toLowerCase(),
-    password: input.password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/`,
-      data: {
-        first_name: input.firstName ?? null,
-        last_name: input.lastName ?? null,
-      },
+  // Legacy entry point — preserved so existing callers don't break, but the
+  // canonical signup path is now: startEmailOtp({purpose:'signup'}) →
+  // verifyEmailOtp({purpose:'signup'}) → signInWithPassword. All branded code
+  // emails go through Resend from `<sender>@colorsofglory.app`, never through
+  // the default Supabase/Lovable templates.
+  await startEmailOtp({ email: input.email, purpose: "signup" });
+  return { user: null, needsConfirmation: true };
+}
+
+// ─── Email OTP (signup / login / reset) ─────────────────────────────────
+
+export type EmailOtpPurpose = "signup" | "login" | "reset";
+
+export async function startEmailOtp(input: { email: string; purpose: EmailOtpPurpose }): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("email-otp-start", {
+    body: { email: input.email.trim().toLowerCase(), purpose: input.purpose },
+  });
+  if (error) throw classify(error);
+  if (data && (data as { error?: string }).error) {
+    const e = (data as { error: string }).error;
+    if (e === "rate_limited") throw new AuthError("RATE_LIMITED", "Too many code requests. Wait a minute and try again.");
+    if (e === "email_in_use") throw new AuthError("UNKNOWN", "That email already has an account. Try signing in instead.");
+    if (e === "send_failed") throw new AuthError("NETWORK", "We couldn't send the code. Please try again.");
+    throw new AuthError("UNKNOWN", "Couldn't start verification. Please try again.");
+  }
+}
+
+export async function verifyEmailOtp(input: {
+  email: string;
+  code: string;
+  purpose: EmailOtpPurpose;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+}): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("email-otp-verify", {
+    body: {
+      email: input.email.trim().toLowerCase(),
+      code: input.code.trim(),
+      purpose: input.purpose,
+      password: input.password,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
     },
   });
   if (error) throw classify(error);
-  return { user: data.user, needsConfirmation: !data.session };
+  const err = (data as { error?: string; remaining?: number } | null)?.error;
+  if (err === "invalid_code") throw new AuthError("INVALID_OTP", "That code didn't match. Try again.");
+  if (err === "invalid_or_expired") throw new AuthError("INVALID_OTP", "That code expired. Tap resend.");
+  if (err === "too_many_attempts") throw new AuthError("RATE_LIMITED", "Too many wrong codes. Request a new one.");
+  if (err === "weak_password") throw new AuthError("WEAK_PASSWORD", "Pick a password with at least 8 characters.");
+  if (err === "email_in_use") throw new AuthError("UNKNOWN", "That email already has an account.");
+  if (err === "not_found") throw new AuthError("UNKNOWN", "No account found for that email.");
+  if (err) throw new AuthError("UNKNOWN", "Couldn't verify the code. Please try again.");
+}
+
+/** Convenience: full signup → verify → session in one call. */
+export async function completeEmailSignup(input: {
+  email: string;
+  password: string;
+  code: string;
+  firstName?: string;
+  lastName?: string;
+}): Promise<Session> {
+  await verifyEmailOtp({
+    email: input.email,
+    code: input.code,
+    purpose: "signup",
+    password: input.password,
+    firstName: input.firstName,
+    lastName: input.lastName,
+  });
+  return signInWithPassword({ email: input.email, password: input.password });
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

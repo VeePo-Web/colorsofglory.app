@@ -415,6 +415,42 @@ export type Database = {
           },
         ]
       }
+      email_otp_verifications: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          email_hash: string
+          expires_at: string
+          id: string
+          ip_hash: string | null
+          purpose: string
+          used_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          email_hash: string
+          expires_at: string
+          id?: string
+          ip_hash?: string | null
+          purpose: string
+          used_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          email_hash?: string
+          expires_at?: string
+          id?: string
+          ip_hash?: string | null
+          purpose?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       founder_codes: {
         Row: {
           active: boolean
