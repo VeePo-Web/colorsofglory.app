@@ -34,10 +34,17 @@ async function resolveOrCreateCustomer(
     }
   }
 
-  const created = await stripe.customers.create({
-    ...(options.email && { email: options.email }),
-    metadata: { userId: options.userId },
-  });
+  // Idempotency-keyed on the user: if two checkout starts race past the
+  // search-first guard above, Stripe replays the first customer instead of
+  // creating a second one for the same user (which would split their
+  // subscriptions + referral rewards across two customers).
+  const created = await stripe.customers.create(
+    {
+      ...(options.email && { email: options.email }),
+      metadata: { userId: options.userId },
+    },
+    { idempotencyKey: `cog-customer-${options.userId}` },
+  );
   return created.id;
 }
 
