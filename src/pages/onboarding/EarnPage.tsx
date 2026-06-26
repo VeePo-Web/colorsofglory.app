@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Check, TrendingUp, Users, DollarSign } from "lucide-react";
+import { Copy, Check, TrendingUp, Users, DollarSign, Share2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
@@ -102,6 +102,24 @@ const EarnPage = () => {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // One-tap native share — the most frictionless way to invite on mobile. Leads
+  // with what the friend gets (first song free); falls back to copy when the
+  // share sheet is unavailable (desktop) or dismissed, so an invite is never lost.
+  const handleShare = async () => {
+    if (!fullLink) return;
+    const text =
+      "I'm writing songs on Colors of Glory — lyrics, voice memos, and the people I write with all in one place for each song. Your first song is free:";
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "Colors of Glory", text, url: fullLink });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
+      }
+    }
+    handleCopy();
   };
 
   const handleContinue = () => {
@@ -234,6 +252,22 @@ const EarnPage = () => {
           </button>
         </div>
       </div>
+
+      {/* Share — one-tap native invite (the most frictionless path on mobile) */}
+      <button
+        onClick={handleShare}
+        disabled={!fullLink}
+        className="w-full mb-4 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[0.9375rem] font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+        style={{
+          backgroundColor: "rgba(181,147,90,0.12)",
+          color: "#B5935A",
+          border: "1px solid rgba(181,147,90,0.30)",
+        }}
+        aria-label="Share my referral link"
+      >
+        <Share2 size={16} strokeWidth={1.8} />
+        Share my link
+      </button>
 
       {/* Rules summary */}
       <p className="text-[0.75rem] text-center mb-6" style={{ color: "#999" }}>
