@@ -262,11 +262,27 @@ async function handleInvoiceRefunded(charge: any) {
   });
 }
 
-async function handleChargeback(charge: any) {
+// charge.dispute.created delivers a Dispute, which has no `.invoice`. Rewards
+// are reversed by invoice id (in_), so without resolving it the reversal
+// matched nothing and the chargeback also raised no fraud flag (record_chargeback
+// only flags when _event.user_id is present). Resolve the underlying charge to
+// recover both the invoice id and the customer's userId.
+async function handleChargeback(dispute: any, stripe: ReturnType<typeof createStripeClient>) {
+  let invoiceId: string | null = dispute.invoice ?? null;
+  let userId: string | null = null;
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+  if (chargeId) {
+    const ch: any = await stripe.charges
+      .retrieve(chargeId, { expand: ["customer"] })
+      .catch(() => null);
+    invoiceId = invoiceId ?? (ch?.invoice as string) ?? null;
+    userId = ch?.customer?.metadata?.userId ?? null;
+  }
   await db().rpc("record_chargeback", {
     _event: {
-      invoice_external_id: charge.invoice ?? charge.payment_intent ?? charge.id,
-      amount_cents: charge.amount ?? 0,
+      invoice_external_id: invoiceId ?? dispute.payment_intent ?? dispute.id,
+      amount_cents: dispute.amount ?? 0,
+      user_id: userId,
     },
   });
 }
@@ -360,7 +376,7 @@ Deno.serve(async (req) => {
         break;
       }
       case "charge.dispute.created": {
-        await handleChargeback(obj);
+        await handleChargeback(obj, stripe);
         break;
       }
       default:
