@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
+import { useTurnstile } from "@/lib/auth/useTurnstile";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
@@ -34,6 +35,8 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
+  // Invisible CAPTCHA token (no-op until VITE_TURNSTILE_SITE_KEY is set).
+  const { containerRef: turnstileRef, getToken } = useTurnstile();
   // Pre-fill the last number entered this session so "Change number" lands on a
   // ready-to-edit field — no retyping a 10-digit number to fix one digit.
   const [digits, setDigits] = useState(
@@ -63,7 +66,8 @@ const PhoneLoginPage = () => {
     const e164 = toE164(digits);
 
     try {
-      await sendPhoneOtp(e164);
+      const captchaToken = await getToken();
+      await sendPhoneOtp(e164, captchaToken);
 
       // Store for display in verify screen + to pre-fill on "Change number"
       sessionStorage.setItem("cog:phone-e164", e164);
@@ -184,6 +188,9 @@ const PhoneLoginPage = () => {
           Continue
         </GoldButton>
       </form>
+
+      {/* Invisible Turnstile CAPTCHA widget mount (renders nothing without a key). */}
+      <div ref={turnstileRef} />
 
       {/* Email fallback */}
       <button

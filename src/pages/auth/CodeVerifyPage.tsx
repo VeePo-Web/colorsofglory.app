@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { sendPhoneOtp, verifyPhoneOtp, AuthError } from "@/integrations/cog/auth";
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
 import { useWebOtpAutofill } from "@/lib/auth/useWebOtpAutofill";
+import { useTurnstile } from "@/lib/auth/useTurnstile";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OTPInput from "@/components/cog/OTPInput";
@@ -28,6 +29,8 @@ function toFriendlyError(err: unknown): string {
 
 const CodeVerifyPage = () => {
   const navigate = useNavigate();
+  // Invisible CAPTCHA so resend also satisfies the floor (no-op without a key).
+  const { containerRef: turnstileRef, getToken } = useTurnstile();
 
   const e164 = sessionStorage.getItem("cog:phone-e164") ?? "";
   const displayPhone = sessionStorage.getItem("cog:phone-display") ?? "your number";
@@ -83,7 +86,8 @@ const CodeVerifyPage = () => {
     setDigits(Array(CODE_LENGTH).fill(""));
     setCountdown(RESEND_SECONDS);
     try {
-      await sendPhoneOtp(e164);
+      const captchaToken = await getToken();
+      await sendPhoneOtp(e164, captchaToken);
       setResent(true);
     } catch (err) {
       setError(toFriendlyError(err));
@@ -190,6 +194,9 @@ const CodeVerifyPage = () => {
           <span style={{ color: "#B5935A", textDecoration: "underline" }}>Use email instead</span>
         </button>
       )}
+
+      {/* Invisible Turnstile CAPTCHA mount for resend (renders nothing without a key). */}
+      <div ref={turnstileRef} />
     </OnboardingShell>
   );
 };
