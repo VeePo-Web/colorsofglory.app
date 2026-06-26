@@ -44,12 +44,18 @@ const RecordingSheet = ({
 
   const isDenied = phase === "permission-denied";
   const isStopping = phase === "stopping";
+  const liveStatus = isDenied
+    ? "Microphone access needed"
+    : isStopping
+      ? "Saving your recording"
+      : "Recording in progress";
 
   return (
     <CaptureSheetShell
       ariaLabel={isDenied ? "Microphone permission required" : "Recording in progress"}
       onBackdropClick={onCancel}
       minHeight={340}
+      liveStatus={liveStatus}
     >
       {isDenied ? (
         <MicPermissionPanel

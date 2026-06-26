@@ -1,11 +1,29 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 interface CaptureSheetShellProps {
   ariaLabel: string;
   onBackdropClick?: () => void;
   minHeight?: number;
+  /**
+   * A short human status ("Recording", "Saving your idea") announced politely to
+   * screen readers whenever it changes. The visual UI already shows this; the
+   * live region makes the capture lifecycle perceivable without sight.
+   */
+  liveStatus?: string;
   children: ReactNode;
 }
+
+const SR_ONLY: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
 
 /**
  * CaptureSheetShell — the shared bottom-sheet chrome for every capture surface
@@ -15,7 +33,7 @@ interface CaptureSheetShellProps {
  * each re-declaring ~40 lines of identical inline styling, so they stay visually
  * identical by construction and recolor with the design system, not by hand.
  */
-const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, children }: CaptureSheetShellProps) => {
+const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, children }: CaptureSheetShellProps) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -73,6 +91,11 @@ const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, children }: 
           }}
           aria-hidden="true"
         />
+        {/* Polite SR announcement of the capture lifecycle (recording → saving →
+            saved). Visually hidden; the sighted UI already conveys this. */}
+        <div role="status" aria-live="polite" style={SR_ONLY}>
+          {liveStatus ?? ""}
+        </div>
         {children}
       </div>
     </>

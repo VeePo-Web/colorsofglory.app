@@ -93,7 +93,10 @@ const VoiceReviewSheet = ({
   };
 
   return (
-    <CaptureSheetShell ariaLabel="Review your recording">
+    <CaptureSheetShell
+      ariaLabel="Review your recording"
+      liveStatus={isSaving ? "Saving your memo" : "Review your recording"}
+    >
       <div style={{ padding: "20px 24px 0" }}>
         {/* Waveform preview row */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>

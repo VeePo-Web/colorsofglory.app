@@ -33,12 +33,18 @@ const CaptureShell = ({
 }: CaptureShellProps) => {
   const isDenied = phase === "permission-denied";
   const isStopping = phase === "stopping";
+  const liveStatus = isDenied
+    ? "Microphone access needed"
+    : isStopping
+      ? "Saving your idea"
+      : "Capturing your idea";
 
   return (
     <CaptureSheetShell
       ariaLabel={isDenied ? "Microphone permission required" : "Capturing idea"}
       onBackdropClick={onCancel}
       minHeight={300}
+      liveStatus={liveStatus}
     >
       {isDenied ? (
         <MicPermissionPanel
