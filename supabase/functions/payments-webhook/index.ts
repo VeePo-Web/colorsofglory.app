@@ -248,11 +248,16 @@ async function ensureAttributionFromMetadata(session: any, sub: any) {
   }
 }
 
-async function handleInvoiceRefunded(invoice: any) {
+// charge.refunded delivers a Charge object. Rewards were minted under the
+// INVOICE id (in_…) by record_invoice_paid, and record_invoice_refunded
+// reverses them by invoice_external_id. Passing charge.id (ch_…) here matched
+// zero reward_events, so refunds silently failed to claw back the referrer's
+// reward. Use the charge's invoice id (mirroring handleChargeback).
+async function handleInvoiceRefunded(charge: any) {
   await db().rpc("record_invoice_refunded", {
     _event: {
-      invoice_external_id: invoice.id,
-      amount_cents: invoice.amount_refunded ?? invoice.amount ?? 0,
+      invoice_external_id: charge.invoice ?? charge.id,
+      amount_cents: charge.amount_refunded ?? charge.amount ?? 0,
     },
   });
 }
