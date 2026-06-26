@@ -68,7 +68,17 @@ export default function WebhookOpsPage() {
               return (
                 <tr key={r.id} className="border-t border-[var(--cog-border)] align-top">
                   <td className="px-4 py-2 font-mono text-xs">{new Date(r.created_at).toLocaleString()}</td>
-                  <td className="px-4 py-2 font-mono">{r.kind}</td>
+                  <td className="px-4 py-2">
+                    <div className="font-mono">{r.kind}</div>
+                    {r.external_event_id && (
+                      <div
+                        className="font-mono text-xs text-[var(--cog-muted)] break-all"
+                        title="Stripe event id — search this in the Stripe dashboard"
+                      >
+                        {r.external_event_id}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono">{money(r.amount_cents, r.currency)}</td>
                   <td className="px-4 py-2">
                     <span className={stuck ? "text-[#b3261e]" : "text-[var(--cog-warm-gray)]"}>
