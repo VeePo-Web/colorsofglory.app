@@ -190,50 +190,53 @@ export async function signInWithGoogle(redirectTo?: string): Promise<void> {
 // ─── Phone OTP ───────────────────────────────────────────────────────────
 
 export async function sendPhoneOtp(e164: string, captchaToken?: string): Promise<void> {
-  // Toll-fraud / SMS-pumping gate (server-enforced via the otp-guard edge fn:
-  // geo allowlist + per-phone/per-IP velocity caps + a global daily ceiling).
-  // FAILS OPEN: a guard error/outage never blocks login — the Supabase dashboard
-  // CAPTCHA + Allowed Countries + provider SMS rate limit remain the bypass-proof
-  // floor. See docs/admin/ADMIN-BACKEND-PLAN.md (OTP fraud-rails runbook).
-  try {
-    const { data, error } = await supabase.functions.invoke("otp-guard", { body: { phone: e164 } });
-    if (!error && data && (data as { ok?: boolean }).ok === false) {
-      const code = (data as { code?: string }).code;
-      if (code === "GEO_BLOCKED") {
-        throw new AuthError("GEO_BLOCKED", "SMS sign-in isn't available in your region yet. Try email instead.");
-      }
-      if (code === "RATE_LIMITED" || code === "CEILING") {
-        throw new AuthError("RATE_LIMITED", "Too many code requests. Please wait a minute and try again.");
-      }
-      if (code === "INVALID_PHONE") {
-        throw new AuthError("UNKNOWN", "That phone number doesn't look right. Check it and try again.");
-      }
-      // GUARD_ERROR / unknown → fall through and let the send proceed (fail open).
-    }
-  } catch (e) {
-    if (e instanceof AuthError) throw e; // a real block decision — surface it
-    // network/guard failure → fail open, proceed to send below.
+  // Custom Twilio Verify path. The native Supabase phone provider is OFF on
+  // Lovable Cloud (returns phone_provider_disabled), so we run our own:
+  //   phone-otp-start  → otp-guard rails + Twilio Verify send
+  //   phone-otp-verify → Twilio Verify check + Admin API user upsert
+  void captchaToken; // reserved for future CAPTCHA forwarding
+  const { data, error } = await supabase.functions.invoke("phone-otp-start", { body: { phone: e164 } });
+  if (error) throw new AuthError("UNKNOWN", "We couldn't send the code. Please try again.");
+  const resp = (data ?? {}) as { ok?: boolean; code?: string };
+  if (resp.ok) return;
+  switch (resp.code) {
+    case "GEO_BLOCKED":
+      throw new AuthError("GEO_BLOCKED", "SMS sign-in isn't available in your region yet. Try email instead.");
+    case "RATE_LIMITED":
+    case "CEILING":
+      throw new AuthError("RATE_LIMITED", "Too many code requests. Please wait a minute and try again.");
+    case "INVALID_PHONE":
+      throw new AuthError("UNKNOWN", "That phone number doesn't look right. Check it and try again.");
+    default:
+      throw new AuthError("UNKNOWN", "We couldn't send the code. Please try again.");
   }
-
-  // captchaToken is forwarded when present so enabling CAPTCHA in the Supabase
-  // dashboard (part of the bypass-proof floor) does NOT break sends — the screen
-  // that owns the invisible Turnstile/hCaptcha widget just passes its token here.
-  // Undefined today = no-op, so current behavior is unchanged.
-  const { error } = await supabase.auth.signInWithOtp({
-    phone: e164,
-    options: captchaToken ? { captchaToken } : undefined,
-  });
-  if (error) throw classify(error);
 }
 
 export async function verifyPhoneOtp(e164: string, code: string): Promise<Session> {
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone: e164,
-    token: code,
-    type: "sms",
+  const { data, error } = await supabase.functions.invoke("phone-otp-verify", {
+    body: { phone: e164, code },
   });
-  if (error || !data.session) throw classify(error ?? new Error("no_session"));
-  return data.session;
+  if (error) throw new AuthError("UNKNOWN", "We couldn't verify that code. Please try again.");
+  const resp = (data ?? {}) as { ok?: boolean; code?: string; password?: string };
+  if (!resp.ok || !resp.password) {
+    switch (resp.code) {
+      case "INVALID_OTP":
+        throw new AuthError("INVALID_OTP", "That code isn't right. Double-check and try again.");
+      case "EXPIRED":
+        throw new AuthError("INVALID_OTP", "That code expired. Send a new one.");
+      case "MAX_ATTEMPTS":
+        throw new AuthError("RATE_LIMITED", "Too many attempts. Send a new code and try again.");
+      default:
+        throw new AuthError("UNKNOWN", "We couldn't verify that code. Please try again.");
+    }
+  }
+  // Exchange the one-shot password for a real session.
+  const { data: signIn, error: signInErr } = await supabase.auth.signInWithPassword({
+    phone: e164,
+    password: resp.password,
+  });
+  if (signInErr || !signIn.session) throw classify(signInErr ?? new Error("no_session"));
+  return signIn.session;
 }
 
 // ─── Session / sign out ──────────────────────────────────────────────────
