@@ -1,4 +1,4 @@
-import { Music, Lightbulb, ArrowRight } from "lucide-react";
+import { Music, Lightbulb, Quote, ArrowRight } from "lucide-react";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import type { MemorySearchHit, MemorySearchResults as Results } from "@/lib/memory/searchMemory";
 import { ClusterIcon } from "./clusterIcon";
@@ -12,6 +12,7 @@ interface Props {
 function HitIcon({ hit }: { hit: MemorySearchHit }) {
   if (hit.kind === "song") return <Music size={16} strokeWidth={1.8} />;
   if (hit.kind === "idea") return <Lightbulb size={16} strokeWidth={1.8} />;
+  if (hit.kind === "lyric") return <Quote size={16} strokeWidth={1.8} />;
   return <ClusterIcon type={hit.kind} />;
 }
 
@@ -76,6 +77,7 @@ const MemorySearchResults = ({ results, onOpenCluster, onOpenSong }: Props) => {
   return (
     <div>
       <Group title="Songs" hits={results.songs} onOpenCluster={onOpenCluster} onOpenSong={onOpenSong} />
+      <Group title="Lyrics" hits={results.lyrics} onOpenCluster={onOpenCluster} onOpenSong={onOpenSong} />
       <Group title="Ideas" hits={results.ideas} onOpenCluster={onOpenCluster} onOpenSong={onOpenSong} />
       <Group title="Themes" hits={results.themes} onOpenCluster={onOpenCluster} onOpenSong={onOpenSong} />
       <Group title="Scripture" hits={results.scriptures} onOpenCluster={onOpenCluster} onOpenSong={onOpenSong} />

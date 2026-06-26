@@ -8,7 +8,7 @@
 
 import type { MemoryCluster, MemoryGraph, MemoryRawBundle } from "./memoryTypes";
 
-export type MemoryHitKind = "song" | "theme" | "scripture" | "person" | "idea";
+export type MemoryHitKind = "song" | "theme" | "scripture" | "person" | "idea" | "lyric";
 
 export interface MemorySearchHit {
   kind: MemoryHitKind;
@@ -27,6 +27,7 @@ export interface MemorySearchHit {
 export interface MemorySearchResults {
   query: string;
   songs: MemorySearchHit[];
+  lyrics: MemorySearchHit[];
   themes: MemorySearchHit[];
   scriptures: MemorySearchHit[];
   people: MemorySearchHit[];
@@ -44,12 +45,19 @@ function truncate(value: string, max = 64): string {
 const empty = (query: string): MemorySearchResults => ({
   query,
   songs: [],
+  lyrics: [],
   themes: [],
   scriptures: [],
   people: [],
   ideas: [],
   total: 0,
 });
+
+/** The lyric line containing the needle, trimmed to a readable snippet. */
+function lyricSnippet(text: string, needle: string): string {
+  const line = text.split(/\r?\n/).find((l) => l.toLowerCase().includes(needle)) ?? text;
+  return truncate(line, 72);
+}
 
 function clusterHits(clusters: MemoryCluster[], needle: string): MemorySearchHit[] {
   return clusters
@@ -102,6 +110,19 @@ export function searchMemory(
       cluster: null,
     }));
 
+  // Lyric-line recall — "where did I write that line?" across every song.
+  const lyrics: MemorySearchHit[] = (bundle.lyrics ?? [])
+    .filter((l) => l.text.toLowerCase().includes(needle))
+    .slice(0, PER_GROUP)
+    .map((l) => ({
+      kind: "lyric" as const,
+      id: l.sectionId,
+      label: lyricSnippet(l.text, needle),
+      sublabel: songTitle.get(l.songId) ?? null,
+      songId: l.songId,
+      cluster: null,
+    }));
+
   const themes = clusterHits(graph.themes, needle);
   const scriptures = clusterHits(graph.scriptures, needle);
   const people = clusterHits(graph.people, needle);
@@ -109,10 +130,12 @@ export function searchMemory(
   return {
     query: rawQuery,
     songs,
+    lyrics,
     themes,
     scriptures,
     people,
     ideas,
-    total: songs.length + themes.length + scriptures.length + people.length + ideas.length,
+    total:
+      songs.length + lyrics.length + themes.length + scriptures.length + people.length + ideas.length,
   };
 }

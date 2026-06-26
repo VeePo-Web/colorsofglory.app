@@ -21,6 +21,9 @@ function bundle(): MemoryRawBundle {
       { songId: "s2", userId: "u2", role: "collaborator", name: "Sarah", initials: "SA", color: "#53AB8B" },
     ],
     voiceMemos: [],
+    lyrics: [
+      { songId: "s1", sectionId: "sec1", text: "Amazing grace how sweet the sound\nthat saved a wretch like me" },
+    ],
   };
 }
 
@@ -61,6 +64,15 @@ describe("searchMemory", () => {
     expect(r.ideas).toHaveLength(1);
     expect(r.ideas[0].songId).toBe("s1");
     expect(r.ideas[0].sublabel).toBe("Grace in the Waiting");
+  });
+
+  it("matches lyric lines and returns the matching line + parent song", () => {
+    const r = searchMemory(graph, b, "wretch");
+    expect(r.lyrics).toHaveLength(1);
+    expect(r.lyrics[0].songId).toBe("s1");
+    expect(r.lyrics[0].sublabel).toBe("Grace in the Waiting");
+    expect(r.lyrics[0].label).toContain("wretch"); // the matching line, not the whole body
+    expect(r.lyrics[0].label).not.toContain("Amazing grace how sweet"); // other line excluded
   });
 
   it("is case-insensitive", () => {
