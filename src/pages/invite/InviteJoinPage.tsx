@@ -4,9 +4,10 @@ import { sendPhoneOtp, AuthError, useCurrentAccount } from "@/integrations/cog/a
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
+import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import InviteErrorCard from "@/components/invite/InviteErrorCard";
 import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview } from "@/lib/invite/inviteApi";
-import { saveInviteContext } from "@/lib/invite/inviteContext";
+import { saveInviteContext, formatCollaboratorNames } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
 import { requestNewInvite } from "@/integrations/cog/songs";
 
@@ -290,6 +291,22 @@ const InviteJoinPage = () => {
           <p className="text-[0.875rem] mb-4" style={{ color: '#666' }}>
             {preview.inviterFirstName} invited you to collaborate
           </p>
+
+          {/* Social proof — who's already here, at the decision moment (not just
+              after joining). Specific names + faces lift join intent. */}
+          {preview.collaborators && preview.collaborators.length > 0 && (
+            <div className="flex items-center gap-2.5 mb-4">
+              <CollaboratorAvatarStack
+                collaborators={preview.collaborators.slice(0, 4)}
+                size={30}
+                maxVisible={4}
+              />
+              <p className="text-[0.8125rem] leading-snug" style={{ color: '#666' }}>
+                {formatCollaboratorNames(preview.collaborators.map((c) => c.firstName))}{' '}
+                {preview.collaborators.length === 1 ? 'is' : 'are'} already writing this song.
+              </p>
+            </div>
+          )}
 
           {/* Blurred lyrics preview */}
           {preview.lyricsSnippet && (
