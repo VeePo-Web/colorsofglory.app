@@ -44,26 +44,6 @@ const OTPInput = ({
     inputRef.current?.focus();
   }, []);
 
-  // After a wrong/expired code the caller clears the boxes — snap focus back to
-  // the first one so retry is instant and the user never hunts for the cursor.
-  useEffect(() => {
-    if (error) refs.current[0]?.focus();
-  }, [error]);
-
-  const handleChange = (idx: number, raw: string) => {
-    const char = raw.replace(/\D/g, "").slice(-1);
-    const next = [...value];
-    next[idx] = char;
-    onChange(next);
-
-    if (char && idx < length - 1) {
-      refs.current[idx + 1]?.focus();
-    }
-    if (char && idx === length - 1) {
-      const code = next.join("");
-      if (code.length === length) onComplete?.(code);
-    }
-  };
   // After a wrong/expired code the caller clears the field — pull focus back so
   // retry is instant and the keyboard stays up.
   useEffect(() => {
