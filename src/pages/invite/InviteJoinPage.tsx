@@ -292,6 +292,15 @@ const InviteJoinPage = () => {
             {preview.inviterFirstName} invited you to collaborate
           </p>
 
+          {/* Genuine scarcity — shown ONLY when the invite is actually limited
+              (real maxUses data, never a fake countdown). Reads as "exclusive",
+              calm not pushy — faith-sanctuary tone. */}
+          {preview.maxUses !== null && preview.maxUses - preview.currentUses > 0 && (
+            <p className="text-[0.8125rem] font-medium mb-4" style={{ color: '#B5935A' }}>
+              {preview.maxUses - preview.currentUses} of {preview.maxUses} spots left
+            </p>
+          )}
+
           {/* Social proof — who's already here, at the decision moment (not just
               after joining). Specific names + faces lift join intent. */}
           {preview.collaborators && preview.collaborators.length > 0 && (
