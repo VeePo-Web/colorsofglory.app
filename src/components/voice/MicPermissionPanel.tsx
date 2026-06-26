@@ -71,7 +71,14 @@ const MicPermissionPanel = ({ message, error, onOpenSettings, onCancel }: MicPer
       type="button"
       onClick={onCancel}
       style={{
+        // Stays visually light, but the tap target meets the 44px minimum so it's
+        // easy to hit with a thumb — not a 13px-tall sliver of text.
         marginTop: 4,
+        minHeight: 44,
+        padding: "0 20px",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
         fontFamily: "var(--font-body)",
         fontSize: 13,
         color: "var(--cog-muted)",

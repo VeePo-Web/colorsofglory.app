@@ -213,6 +213,12 @@ const LineSuggestionSheet = ({
                   }}
                   placeholder="Write an alternative lyric line…"
                   rows={2}
+                  // A lyric is not prose — turn off autocorrect/spellcheck so the
+                  // songwriter's exact words (and deliberate non-words) survive.
+                  autoCapitalize="sentences"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
                   style={{
                     width: "100%",
                     border: isOverLimit ? "1.5px solid rgba(224,84,64,0.6)" : "1.5px solid var(--cog-border-gold)",

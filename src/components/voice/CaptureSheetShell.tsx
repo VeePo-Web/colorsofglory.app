@@ -25,6 +25,20 @@ const SR_ONLY: CSSProperties = {
   border: 0,
 };
 
+/** Live subscription to the user's reduced-motion preference. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  return reduced;
+}
+
 /**
  * CaptureSheetShell — the shared bottom-sheet chrome for every capture surface
  * (record · global capture · review). Owns the frosted charcoal scrim, the
@@ -35,11 +49,21 @@ const SR_ONLY: CSSProperties = {
  */
 const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, children }: CaptureSheetShellProps) => {
   const [visible, setVisible] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
   }, []);
+
+  // Reduced motion: cross-fade the sheet in place instead of sliding it up from
+  // the bottom — the design-bible-sanctioned alternative for vestibular safety.
+  const sheetMotion: CSSProperties = reducedMotion
+    ? { opacity: visible ? 1 : 0, transition: "opacity 200ms ease" }
+    : {
+        transform: visible ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+      };
 
   return (
     <>
@@ -75,8 +99,7 @@ const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, 
           borderTop: "1px solid var(--cog-border)",
           boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-          transform: visible ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+          ...sheetMotion,
           ...(minHeight ? { minHeight } : {}),
         }}
       >

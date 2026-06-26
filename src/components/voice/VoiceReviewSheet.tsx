@@ -105,7 +105,7 @@ const VoiceReviewSheet = ({
             type="button"
             onClick={togglePlay}
             style={{
-              width: 40, height: 40, borderRadius: "50%",
+              width: 44, height: 44, borderRadius: "50%",
               backgroundColor: "var(--cog-gold)",
               color: "#FFF",
               border: "none", cursor: "pointer",
@@ -195,6 +195,14 @@ const VoiceReviewSheet = ({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={defaultName}
+            // Songwriter-friendly mobile keyboard: title-case start, no autocorrect
+            // mangling a memo name like "Pre-chorus v2 / oooh".
+            autoCapitalize="sentences"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            enterKeyHint="done"
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             style={{
               width: "100%",
               boxSizing: "border-box",
@@ -202,7 +210,8 @@ const VoiceReviewSheet = ({
               borderRadius: 10,
               border: "1.5px solid var(--cog-border)",
               fontFamily: "var(--font-body)",
-              fontSize: 14,
+              // 16px floor → iOS Safari won't auto-zoom the sheet on focus.
+              fontSize: 16,
               color: "var(--cog-charcoal)",
               backgroundColor: "#FFFFFF",
               outline: "none",

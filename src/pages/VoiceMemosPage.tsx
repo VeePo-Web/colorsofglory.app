@@ -12,7 +12,6 @@ import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import {
   listVoiceMemos,
   getSignedUrl,
-  uploadVoiceMemo,
   deleteMemo,
   type VoiceMemoRecord,
 } from "@/lib/voice/voiceApi";
@@ -20,7 +19,6 @@ import {
   formatDuration,
   getAudioFileDuration,
   getBestMimeType,
-  getFileExtension,
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
 import {
@@ -606,28 +604,45 @@ const VoiceMemosPage = () => {
     try {
       const durationMs = await getAudioFileDuration(file);
       const mimeType = file.type || getBestMimeType();
-      const ext = getFileExtension(mimeType);
       const count = memos.length + 1;
       const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${count}`;
-      const fileName = `${title.replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
 
-      await uploadVoiceMemo({
-        songId,
+      // Local-first, just like a recorded take: the imported file is cached to the
+      // device before any upload and retried on failure, so no save path is left
+      // unprotected. An optimistic card appears immediately, keyed to the durable
+      // pending id, and a failed upload becomes a calm retry instead of a dead end.
+      const pending = await enqueuePendingUpload({
         blob: file,
+        songId,
         mimeType,
         durationMs,
         title,
         sectionLabel: "Raw idea",
-        fileName,
       });
 
-      await loadMemos();
+      const optimisticMemo: VoiceMemoRecord = {
+        id: pending.id,
+        song_id: songId,
+        title,
+        duration_ms: durationMs,
+        section_label: "Raw idea",
+        storage_path: "",
+        created_at: new Date().toISOString(),
+        created_by: currentUserId ?? "You",
+        is_processing: true,
+        status: "uploading",
+      };
+      setMemos((prev) => [optimisticMemo, ...prev]);
+
+      await flushAndReconcile(pending.id);
     } catch {
-      setUploadError("Upload failed — please try again.");
+      // Reading the file itself failed (corrupt / unsupported) — nothing was
+      // captured, so there's nothing to retain. Guide the user, calmly.
+      setUploadError("Couldn't read that file. Please try another.");
     } finally {
       setIsUploading(false);
     }
-  }, [songId, memos.length, loadMemos]);
+  }, [songId, memos.length, currentUserId, flushAndReconcile]);
 
   const handleDelete = useCallback(async (memoId: string) => {
     setMemos((prev) => prev.filter((m) => m.id !== memoId));
