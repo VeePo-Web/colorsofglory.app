@@ -31,6 +31,8 @@ function friendlyError(e: unknown): string {
   if (m.includes("payout_not_draft")) return "That payout is no longer a draft.";
   if (m.includes("payout_not_approved")) return "That payout isn't approved yet.";
   if (m.includes("payout_not_failed")) return "Only failed payouts can be retried.";
+  if (m.includes("provider_id_required")) return "Enter the provider payout / transfer id so this payment can be reconciled.";
+  if (m.includes("reason_required")) return "Add a reason so the failed payout is auditable.";
   return m;
 }
 

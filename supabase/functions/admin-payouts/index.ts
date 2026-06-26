@@ -45,15 +45,22 @@ Deno.serve(async (req) => {
       return j({ ok: true, payout: data })
     }
     if (action === 'mark_paid') {
+      // A paid payout must carry a provider reference, or it can't be
+      // reconciled against PayPal/Stripe later. Enforce at the boundary.
+      const provider_id = String(body.provider_id ?? '').trim()
+      if (!provider_id) return j({ error: 'provider_id_required' }, 400)
       const { data, error } = await userClient.rpc('mark_payout_paid', {
-        _payout: body.payout_id, _provider_id: body.provider_id ?? '',
+        _payout: body.payout_id, _provider_id: provider_id,
       })
       if (error) return j({ error: error.message }, 400)
       return j({ ok: true, payout: data })
     }
     if (action === 'mark_failed') {
+      // Every failed payout must record why, so the audit trail is complete.
+      const reason = String(body.reason ?? '').trim()
+      if (!reason) return j({ error: 'reason_required' }, 400)
       const { data, error } = await userClient.rpc('mark_payout_failed', {
-        _payout: body.payout_id, _reason: body.reason ?? '',
+        _payout: body.payout_id, _reason: reason,
       })
       if (error) return j({ error: error.message }, 400)
       return j({ ok: true, payout: data })
