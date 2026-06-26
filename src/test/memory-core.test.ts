@@ -141,6 +141,17 @@ describe("obsidian vault", () => {
     expect(song.content).toContain("- [[Hum]]");
   });
 
+  it("adds a Related songs section linking songs that share a thread", () => {
+    const b = bundle();
+    const files = buildVault(buildMemoryGraph(b), b);
+    const s1 = files.find((f) => f.path === "Songs/Grace in the Waiting.md")!;
+    expect(s1.content).toContain("## Related songs");
+    expect(s1.content).toMatch(/- \[\[Steadfast\]\] — .*Grace/); // reason text present
+    // An unconnected song has no related section.
+    const s3 = files.find((f) => f.path === "Songs/Alone Song.md")!;
+    expect(s3.content).not.toContain("## Related songs");
+  });
+
   it("gathers atomic ideas under their theme and scripture cluster notes", () => {
     const b = bundle();
     const files = buildVault(buildMemoryGraph(b), b);

@@ -14,7 +14,7 @@
 //     give thumb-friendly navigation without any Dataview dependency.
 //   - A "Start Here" note onboards a first-time vault opener in seconds.
 
-import { normaliseKey, titleCase } from "./buildGraph";
+import { buildSongMemory, normaliseKey, titleCase } from "./buildGraph";
 import type { MemoryCluster, MemoryGraph, MemoryIdea, MemoryRawBundle, MemorySong } from "./memoryTypes";
 
 export interface VaultFile {
@@ -237,6 +237,17 @@ function buildSongNote(
   if (memos.length) {
     body.push("## Voice memos");
     for (const m of memos) body.push(`- ${m.title?.trim() || "Untitled memo"}`);
+    body.push("");
+  }
+
+  // Related songs — song-to-song links (the edges that make the graph dense).
+  const related = buildSongMemory(graph, song.id)?.related ?? [];
+  if (related.length) {
+    body.push("## Related songs");
+    for (const r of related.slice(0, 8)) {
+      const reasons = r.reasons.length ? ` — ${r.reasons.join(", ")}` : "";
+      body.push(`- ${wikilink(r.title)}${reasons}`);
+    }
     body.push("");
   }
 
