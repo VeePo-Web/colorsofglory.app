@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Play, Pause, Minus, Plus } from "lucide-react";
-import { renderChordsOverLyrics, type SheetSection } from "@/lib/chords/sheet";
+import { type SheetSection } from "@/lib/chords/sheet";
+import ChordLine from "@/components/songsheet/ChordLine";
 
 /**
  * Performance / Stage view — the teleprompter. The most-requested chord-app
@@ -9,7 +10,6 @@ import { renderChordsOverLyrics, type SheetSection } from "@/lib/chords/sheet";
  * scroll), reduced-motion aware, safe-area aware. Frontend-only, COG tokens.
  */
 
-const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const MIN_SPEED = 8;
 const MAX_SPEED = 80;
 const DEFAULT_SPEED = 26; // px / second
@@ -62,6 +62,7 @@ export default function PerformanceView({
   capo = 0,
   songTitle,
   onClose,
+  onStepKey,
 }: {
   sections: SheetSection[];
   displayKey: string;
@@ -69,6 +70,8 @@ export default function PerformanceView({
   capo?: number;
   songTitle: string;
   onClose: () => void;
+  /** Transpose without leaving the stage view (OnSong-style). Letters only. */
+  onStepKey?: (semitones: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>();
@@ -172,6 +175,36 @@ export default function PerformanceView({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* Transpose on stage — no need to leave the chart (OnSong-style). */}
+          {onStepKey && display === "letters" && (
+            <div className="flex items-center rounded-full" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
+              <button
+                type="button"
+                onClick={() => onStepKey(-1)}
+                aria-label="Lower the key"
+                className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+                style={{ width: 40, height: 40, color: "var(--cog-charcoal)" }}
+              >
+                <Minus size={16} strokeWidth={2.2} />
+              </button>
+              <span
+                className="text-sm font-bold tabular-nums text-center"
+                style={{ color: "var(--cog-charcoal)", minWidth: 24 }}
+                aria-label={`Key of ${displayKey}`}
+              >
+                {displayKey}
+              </span>
+              <button
+                type="button"
+                onClick={() => onStepKey(1)}
+                aria-label="Raise the key"
+                className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+                style={{ width: 40, height: 40, color: "var(--cog-charcoal)" }}
+              >
+                <Plus size={16} strokeWidth={2.2} />
+              </button>
+            </div>
+          )}
           <div className="flex items-center rounded-full" style={{ backgroundColor: "var(--cog-cream-light)", border: "1px solid var(--cog-border)" }}>
             <button
               type="button"
@@ -222,16 +255,16 @@ export default function PerformanceView({
                 </h2>
               )}
               <div className="flex flex-col gap-3.5">
-                {section.lines.map((line, li) => {
-                  const { chords, lyrics } = renderChordsOverLyrics(line, displayKey, "major", display);
-                  return (
-                    <pre key={li} className="m-0 overflow-x-auto" style={{ fontFamily: MONO, fontSize: `${1.0625 * fontScale}rem`, lineHeight: 1.5 }}>
-                      <span style={{ color: "var(--cog-gold-alt, var(--cog-gold))", fontWeight: 700 }}>{chords || " "}</span>
-                      {"\n"}
-                      <span style={{ color: "var(--cog-charcoal)" }}>{lyrics || " "}</span>
-                    </pre>
-                  );
-                })}
+                {section.lines.map((line, li) => (
+                  <ChordLine
+                    key={li}
+                    line={line}
+                    displayKey={displayKey}
+                    display={display}
+                    lyricRem={1.0625 * fontScale}
+                    chordRem={0.9 * fontScale}
+                  />
+                ))}
               </div>
             </section>
           ))}
