@@ -166,11 +166,34 @@ const CaptureFirstIdeaPage = () => {
         Record a melody, lyric thought, chord idea, or prayer moment.
       </p>
 
-      {/* Large gold mic button — centered, prominent, matches reference */}
+      {/* Large gold mic button — centered, prominent, matches reference.
+          A slow, low-opacity gold halo breathes behind it to gently invite the
+          first tap (calm, reverent — not a flashy blink). Disabled for
+          prefers-reduced-motion. transform/opacity only; never blocks the tap. */}
+      <style>{`
+        @keyframes cogMicBreathe {
+          0%, 100% { transform: scale(1); opacity: 0.26; }
+          50% { transform: scale(1.16); opacity: 0; }
+        }
+        .cog-mic-pulse { animation: cogMicBreathe 2.6s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .cog-mic-pulse { animation: none; opacity: 0; } }
+      `}</style>
       <div className="flex justify-center mb-6">
+        <div className="relative" style={{ width: 120, height: 120 }}>
+          <span
+            aria-hidden="true"
+            className="cog-mic-pulse"
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "9999px",
+              backgroundColor: "#B5935A",
+              pointerEvents: "none",
+            }}
+          />
         <button
           onClick={handleRecord}
-          className="flex items-center justify-center rounded-full transition-all duration-150 active:scale-95"
+          className="relative flex items-center justify-center rounded-full transition-all duration-150 active:scale-95"
           aria-label="Tap to record a voice memo"
           style={{
             width: 120,
@@ -205,6 +228,7 @@ const CaptureFirstIdeaPage = () => {
             <line x1="9" y1="22" x2="15" y2="22" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
+        </div>
       </div>
 
       {/* "Record voice memo" — gold text link, matches reference */}
