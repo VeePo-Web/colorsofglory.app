@@ -8,7 +8,7 @@
 
 import type { MemoryCluster, MemoryGraph, MemoryRawBundle } from "./memoryTypes";
 
-export type MemoryHitKind = "song" | "theme" | "scripture" | "person" | "idea" | "lyric";
+export type MemoryHitKind = "song" | "theme" | "scripture" | "person" | "idea" | "lyric" | "note";
 
 export interface MemorySearchHit {
   kind: MemoryHitKind;
@@ -28,6 +28,7 @@ export interface MemorySearchResults {
   query: string;
   songs: MemorySearchHit[];
   lyrics: MemorySearchHit[];
+  notes: MemorySearchHit[];
   themes: MemorySearchHit[];
   scriptures: MemorySearchHit[];
   people: MemorySearchHit[];
@@ -46,6 +47,7 @@ const empty = (query: string): MemorySearchResults => ({
   query,
   songs: [],
   lyrics: [],
+  notes: [],
   themes: [],
   scriptures: [],
   people: [],
@@ -123,6 +125,19 @@ export function searchMemory(
       cluster: null,
     }));
 
+  // Free-form note recall — the songwriter's own jottings on a song.
+  const notes: MemorySearchHit[] = bundle.notes
+    .filter((n) => n.body.toLowerCase().includes(needle))
+    .slice(0, PER_GROUP)
+    .map((n) => ({
+      kind: "note" as const,
+      id: n.id,
+      label: truncate(n.body, 72),
+      sublabel: songTitle.get(n.songId) ?? null,
+      songId: n.songId,
+      cluster: null,
+    }));
+
   const themes = clusterHits(graph.themes, needle);
   const scriptures = clusterHits(graph.scriptures, needle);
   const people = clusterHits(graph.people, needle);
@@ -131,11 +146,18 @@ export function searchMemory(
     query: rawQuery,
     songs,
     lyrics,
+    notes,
     themes,
     scriptures,
     people,
     ideas,
     total:
-      songs.length + lyrics.length + themes.length + scriptures.length + people.length + ideas.length,
+      songs.length +
+      lyrics.length +
+      notes.length +
+      themes.length +
+      scriptures.length +
+      people.length +
+      ideas.length,
   };
 }

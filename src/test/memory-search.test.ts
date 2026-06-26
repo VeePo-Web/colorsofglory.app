@@ -11,7 +11,7 @@ function bundle(): MemoryRawBundle {
       { id: "s2", title: "Steadfast", coverColor: null, status: "draft", keySignature: "D", tempoBpm: null, tags: ["grace"], createdAt: "2026-05-01T00:00:00Z", lastActivityAt: null },
     ],
     sections: [],
-    notes: [],
+    notes: [{ id: "n1", songId: "s1", body: "remember to soften the bridge melody", sectionId: null }],
     ideas: [
       { id: "i1", songId: "s1", title: "Bridge hum", lyricSnippet: "He leads me beside still waters", scriptureRef: "Psalm 23", tags: ["grace"] },
       { id: "i2", songId: "s2", title: null, lyricSnippet: "steady through the night", scriptureRef: null, tags: [] },
@@ -73,6 +73,14 @@ describe("searchMemory", () => {
     expect(r.lyrics[0].sublabel).toBe("Grace in the Waiting");
     expect(r.lyrics[0].label).toContain("wretch"); // the matching line, not the whole body
     expect(r.lyrics[0].label).not.toContain("Amazing grace how sweet"); // other line excluded
+  });
+
+  it("matches free-form notes and links to the parent song", () => {
+    const r = searchMemory(graph, b, "soften the bridge");
+    expect(r.notes).toHaveLength(1);
+    expect(r.notes[0].songId).toBe("s1");
+    expect(r.notes[0].sublabel).toBe("Grace in the Waiting");
+    expect(r.notes[0].label).toContain("soften the bridge");
   });
 
   it("is case-insensitive", () => {
