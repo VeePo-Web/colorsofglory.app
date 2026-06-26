@@ -1,85 +1,81 @@
-# ✅ Turn On SMS Sign-In — 15-Minute Owner Action Sheet
+# ✅ Turn On SMS Sign-In — Owner Action Sheet (CURRENT architecture)
 
-**Who does this:** whoever holds the **Supabase** and **Twilio** logins. No coding.
-**Why:** the app already has the full, frictionless phone sign-in built. It says
-*"SMS sign-in isn't available yet"* for ONE reason — Supabase is returning
-`phone_provider_disabled`, i.e. **the Phone provider is switched OFF in the Supabase
-dashboard.** "Twilio is hooked in" means a Twilio *account* exists; it is **not yet
-connected to Supabase Auth.** Flip the switch below and sign-in works instantly —
-nothing else to change in the code.
+**Who does this:** whoever holds the **Lovable / Supabase** project + the **Twilio**
+account. No app-code changes — the frontend and edge functions are already built.
 
----
-
-## Part A — Twilio (get 3 values + 1 safety setting) ~6 min
-
-1. Sign in at **console.twilio.com**.
-2. **Upgrade the account if it still says "Trial."**
-   Top of the console → **Upgrade**. ⚠️ A trial account can only text phone numbers
-   you've manually verified — real users get **silent failures**. This step is not optional.
-3. On the **console home page**, copy two values from the "Account Info" panel:
-   - **Account SID** (starts with `AC…`)
-   - **Auth Token** (click to reveal, starts with a long random string)
-4. Create a **Verify Service**:
-   - Left menu → **Explore Products → Verify → Services** (or go to
-     **verify.twilio.com → Services**).
-   - **Create new** → Friendly name: `Colors of Glory Auth` → **Create**.
-   - On the service page, copy the **Service SID** (starts with `VA…`).
-5. (Recommended) On that Verify service, turn on **Fraud Guard**, and set a Twilio
-   **billing alert** around **500/day** so a spike can't surprise-bill you.
-
-> You now have: **Account SID (AC…)**, **Auth Token**, **Verify Service SID (VA…)**.
+> ⚠️ **This supersedes the old "enable the native Supabase Phone provider" version.**
+> The app does **NOT** use Supabase's built-in phone provider (it's off on Lovable
+> Cloud). It uses a **custom Twilio Verify path** through two edge functions. Enabling
+> the native provider does nothing here — follow the steps below instead.
 
 ---
 
-## Part B — Supabase (connect Twilio + turn Phone on) ~5 min
+## How sign-in actually works now (so you know what to turn on)
 
-1. Sign in at **supabase.com/dashboard** → open the **Colors of Glory** project
-   (project id `vsiecltcxsuuulbczexl`).
-2. Left menu → **Authentication → Providers** (also called "Sign In / Providers").
-3. Click **Phone** → toggle **Enable Phone provider = ON**.
-4. **SMS provider** dropdown → choose **Twilio Verify** (NOT plain "Twilio").
-5. Paste the three values from Part A:
-   - **Account SID** → `AC…`
-   - **Auth Token** → (the revealed token)
-   - **Verify Service SID** → `VA…`
-6. Set **OTP length = 6** and **OTP expiry = 600** (seconds). *(60s is the default and
-   is too short — it causes "code expired" errors on slow carriers.)*
-7. Click **Save**.
+```
+PhoneLoginPage → sendPhoneOtp()
+   → edge fn  phone-otp-start   → toll-fraud guard → Twilio Verify "send code"
+CodeVerifyPage → verifyPhoneOtp()
+   → edge fn  phone-otp-verify  → Twilio Verify "check code" → creates session
+```
+
+Twilio is reached through the **Lovable connector gateway**, authenticated with
+`LOVABLE_API_KEY` + the Twilio connection key. So three things must be true:
 
 ---
 
-## Part C — Anti-abuse floor (so attackers can't run up your bill) ~3 min
+## Part A — Twilio Verify (≈5 min)
+1. **console.twilio.com** → confirm the account is **Upgraded** (trial only texts
+   pre-verified numbers — real users fail silently).
+2. **Verify → Services → Create** → name `Colors of Glory Auth` → copy the
+   **Service SID** (`VA…`). This is `TWILIO_VERIFY_SERVICE_SID`.
+3. Make sure the Twilio connection used by Lovable has a valid **API key/secret**
+   (this is what `TWILIO_API_KEY` references in the connector).
+4. (Recommended) enable **Fraud Guard** on the Verify service + a Twilio **billing
+   alert** (~500/day, matching our daily ceiling).
 
-Still in **Authentication**, open **Rate Limits / Attack Protection**:
+## Part B — Lovable / Supabase secrets + deploy (≈5 min)
+Set these as **Edge Function secrets** on the project (Supabase → Edge Functions →
+Secrets, or via the Lovable connector UI):
+- **`LOVABLE_API_KEY`** — the Lovable connector gateway key.
+- **`TWILIO_API_KEY`** — the Twilio connection key for the gateway.
+- **`TWILIO_VERIFY_SERVICE_SID`** — the `VA…` from Part A.
+- **`OTP_IP_SALT`** — any random hex (`openssl rand -hex 16`) for the fraud-guard IP hashing.
 
-1. **Allowed Countries / SMS region**: restrict to **United States (+1)** for now.
-2. **Provider SMS rate limit**: start conservative (e.g. **≤ 30 / hour**).
-3. **CAPTCHA**: safe to enable — the app is already wired to send a CAPTCHA token.
-   *(If you turn it on, tell the app team so they switch on the invisible widget; the
-   plumbing already exists in `sendPhoneOtp`.)*
+Then **deploy the two functions** (already in the repo + `config.toml`):
+```bash
+supabase functions deploy phone-otp-start
+supabase functions deploy phone-otp-verify
+```
+*(Lovable may deploy these automatically on connect — confirm they show as deployed.)*
+
+## Part C — Confirm the DEPLOY BRANCH (important)
+The frictionless frontend (single-field autofill, honest errors, etc.) lives on
+**`main`**. If your preview/production deploys from a different branch, you'll be
+running older code. **Confirm the deploy is built from `main`** (Lovable/Vercel
+dashboard → Git branch).
 
 ---
 
-## Part D — Confirm it works ~1 min
-
-1. Open the app → **phone login** → enter a **real US mobile number** → **Continue**.
-2. A 6-digit code should arrive in **under ~5 seconds**.
-3. On the phone it **auto-fills** (iOS QuickType / Android) and signs you in.
-4. Request a code **4× fast** → you should see a kind *"Too many attempts"* message,
-   not a raw error. ✅ Done.
-
-**If a code still doesn't arrive**, check, in order: Twilio account is **upgraded**
-(Part A.2) · the test number's **country is allowed** (Part C.1) · Twilio **Verify logs**
-(verify.twilio.com → your service → Logs) show the attempt.
+## Part D — Verify it works (≈2 min)
+1. App → phone login → real US mobile → **Continue**.
+2. Code arrives in a few seconds; on the phone it **auto-fills** and signs you in.
+3. If it fails:
+   - *"We couldn't send the code"* → a secret is missing or `phone-otp-start` isn't
+     deployed (the function returns `PROVIDER_ERROR` when `LOVABLE_API_KEY` /
+     `TWILIO_API_KEY` / `TWILIO_VERIFY_SERVICE_SID` are unset). Re-check Part B.
+   - *"…not available in your region"* → the number's country isn't in the geo
+     allowlist (`check_and_record_otp_send`). Widen it for the countries you serve.
+   - Check **Twilio → Verify → Logs** and the **edge function logs** for the attempt.
 
 ---
 
 ## What's already done (no action needed)
-The entire frontend is built and verified: honest errors with an email fallback,
-single-field code entry with iOS/Android autofill + WebOTP one-tap + auto-submit,
-resend confirmation, instant retry, forgiving phone entry, CAPTCHA-readiness, and
-number pre-fill. The toll-fraud guard edge function is live. **This sheet is the only
-remaining step.**
+Frontend: honest errors + email fallback, single-field OTP with iOS/Android autofill
++ WebOTP + auto-submit + desktop paste, resend confirmation, instant retry, forgiving
+phone entry, number pre-fill, full screen-reader a11y (verified by
+`src/test/cog-phone-otp-input.test.tsx`, 5/5 green). Edge functions
+`phone-otp-start` / `phone-otp-verify` are written and registered in `config.toml`.
+**The only remaining steps are Parts A–C above — all dashboard/secrets, no code.**
 
-*Deeper background: `docs/auth/PHONE-OTP-FRICTIONLESS.md` and
-`docs/claude-handoffs/2026-06-23-twilio-sms-signin-enable-and-ux.md`.*
+*Background: `docs/auth/PHONE-OTP-FRICTIONLESS.md`.*
