@@ -7,7 +7,7 @@
  *
  * Priority order:
  *   1. Pending checkout  → /upgrade   (resume Stripe Embedded Checkout)
- *   2. Pending invite    → /invite/:token
+ *   2. Pending invite    → /join/:token
  *   3. Onboarding step   → resume the right onboarding screen / song
  *   4. Fallback          → songs exist ? /home : /onboarding/intent
  *
@@ -26,10 +26,11 @@ export async function routeAfterAuth(navigate: NavigateFunction): Promise<void> 
     return;
   }
 
-  // 2. Pending invite — finish joining the song they were invited to.
+  // 2. Pending invite — finish joining the song they were invited to, via the
+  //    real frictionless join flow (not the legacy mock preview page).
   const inviteToken = sessionStorage.getItem("cog:invite-token");
   if (inviteToken) {
-    navigate(`/invite/${inviteToken}`, REPLACE);
+    navigate(`/join/${inviteToken}`, REPLACE);
     return;
   }
 

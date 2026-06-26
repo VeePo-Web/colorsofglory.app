@@ -23,7 +23,13 @@ const FounderCodePage = lazy(() => import("./pages/onboarding/FounderCodePage"))
 const EarnPage = lazy(() => import("./pages/onboarding/EarnPage"));
 const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstIdeaPage"));
 const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
-const InvitePreviewPage = lazy(() => import("./pages/InvitePreviewPage"));
+// Legacy /invite/:token links (and the post-auth pending-invite resume) funnel
+// into the one real, frictionless join flow at /join/:token. The old preview page
+// was a mock that dumped users onto the wrong song with no auth — never route to it.
+const InviteTokenRedirect = () => {
+  const { token } = useParams<{ token: string }>();
+  return <Navigate to={`/join/${token ?? ""}`} replace />;
+};
 
 // Invite flow - new frictionless join screens
 const JoinEntryPage      = lazy(() => import("./pages/invite/JoinEntryPage"));
@@ -140,8 +146,8 @@ const App = () => {
             <Route path="/onboarding/founder-code" element={<FounderCodePage />} />
             <Route path="/onboarding/earn" element={<EarnPage />} />
 
-            {/* Legacy invite preview */}
-            <Route path="/invite/:token" element={<InvitePreviewPage />} />
+            {/* Legacy invite link → redirect into the real frictionless join flow */}
+            <Route path="/invite/:token" element={<InviteTokenRedirect />} />
 
             {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
             <Route path="/join"           element={<JoinEntryPage />} />
