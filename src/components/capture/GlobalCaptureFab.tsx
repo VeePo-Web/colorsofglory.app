@@ -6,8 +6,10 @@ interface GlobalCaptureFabProps {
   onToggle: () => void;
 }
 
-const IDLE_BG = "#B8953A";
-const RECORDING_BG = "#E05440";
+const IDLE_BG = "var(--cog-gold)";
+// Recording is charcoal, never alarm-red — reverent, matching every other record
+// control and the gold live waveform.
+const RECORDING_BG = "var(--cog-charcoal)";
 
 /**
  * Persistent global capture entry point — visible from the Song Catalog and
@@ -36,7 +38,7 @@ const GlobalCaptureFab = ({ phase, onToggle }: GlobalCaptureFabProps) => {
           border: "none",
           color: "#FFFFFF",
           boxShadow: isRecording
-            ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45)"
+            ? "0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.30)"
             : "0 8px 24px rgba(184,149,58,0.38)",
           animation: isRecording ? "global-capture-pulse 1.4s ease-in-out infinite" : "none",
         }}
@@ -48,8 +50,8 @@ const GlobalCaptureFab = ({ phase, onToggle }: GlobalCaptureFabProps) => {
 
       <style>{`
         @keyframes global-capture-pulse {
-          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
-          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+          0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.30); }
+          50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.30); }
         }
       `}</style>
     </>
