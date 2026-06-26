@@ -56,6 +56,7 @@ import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
+import ListenPathBar from "@/components/canvas/ListenPathBar";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -249,6 +250,8 @@ interface CanvasCardProps {
   canCompare?: boolean;
   onCompare?: () => void;
   onSuggestLine?: () => void;
+  onAddToListenPath?: () => void;
+  listenIndex?: number;
 }
 
 const CanvasCardEl = ({
@@ -263,6 +266,8 @@ const CanvasCardEl = ({
   canCompare = false,
   onCompare,
   onSuggestLine,
+  onAddToListenPath,
+  listenIndex,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -591,6 +596,38 @@ const CanvasCardEl = ({
               Suggest line ▸
             </button>
           )}
+          {onAddToListenPath && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAddToListenPath(); }}
+              style={{
+                height: 30, padding: "0 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                backgroundColor: listenIndex != null ? "var(--cog-gold, #B8953A)" : "rgba(28,26,23,0.06)",
+                color: listenIndex != null ? "#FFF" : "var(--cog-warm-gray, #6B6459)",
+                fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
+                boxShadow: listenIndex != null ? "0 2px 8px rgba(184,149,58,0.30)" : "none",
+              }}
+              aria-label={listenIndex != null ? `Remove from listen path (position ${listenIndex + 1})` : "Add to listen path"}
+            >
+              {listenIndex != null ? `Path ${listenIndex + 1} ✕` : "Path ▸"}
+            </button>
+          )}
+        </div>
+      )}
+      {listenIndex != null && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute", bottom: 8, left: 8,
+            width: 22, height: 22, borderRadius: "50%",
+            backgroundColor: "var(--cog-gold, #B8953A)", color: "#FFF",
+            fontSize: 10, fontWeight: 800,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(184,149,58,0.40)",
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          {listenIndex + 1}
         </div>
       )}
     </div>
@@ -678,6 +715,17 @@ const SongCanvasExperience = () => {
   const recordingParentIdRef = useRef<string | null>(null);
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
+
+  // ── F20 Listen Path ──────────────────────────────────────────────────────────
+  const [listenQueue, setListenQueue] = useState<string[]>([]);
+  const addToListenQueue = useCallback((id: string) => {
+    setListenQueue((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+  const saveListenArrangement = useCallback(() => {
+    toast("Listen path saved", { description: `${listenQueue.length} cards in order` });
+  }, [listenQueue]);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -1233,6 +1281,8 @@ const SongCanvasExperience = () => {
                   ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
                   : undefined
               }
+              onAddToListenPath={() => addToListenQueue(card.id)}
+              listenIndex={listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined}
             />
           ))}
         </CanvasViewport>
@@ -1279,6 +1329,13 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
+      <ListenPathBar
+        queue={listenQueue}
+        cards={[...ideasCards, ...finalCards]}
+        onRemove={(id) => setListenQueue((prev) => prev.filter((x) => x !== id))}
+        onClear={() => setListenQueue([])}
+        onSave={saveListenArrangement}
+      />
       <SongTabBar activeTab="canvas" />
       <SongRoomSaveToast
         moment={saveMoment}
