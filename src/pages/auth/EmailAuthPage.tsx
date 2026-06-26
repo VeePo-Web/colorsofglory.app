@@ -190,6 +190,11 @@ const EmailAuthPage = () => {
                 type="email"
                 autoComplete="email"
                 inputMode="email"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -210,6 +215,7 @@ const EmailAuthPage = () => {
               <input
                 type="password"
                 autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                enterKeyHint={mode === "signup" ? "next" : "go"}
                 placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
