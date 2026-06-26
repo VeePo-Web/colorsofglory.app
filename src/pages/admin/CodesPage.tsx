@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import { Search, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminDeactivateCode, adminFounderSummary } from "@/integrations/cog/admin";
+import { buildReferralShareUrl } from "@/integrations/cog/referrals";
 import { supabase } from "@/integrations/supabase/client";
 
 type CodeRow = {
@@ -98,6 +99,17 @@ export default function CodesPage() {
 
   const clear = () => { setQ(""); setStatus("all"); };
 
+  // A founder code exists to be shared — let the operator copy the ready
+  // share link in one tap to hand off to the founder.
+  const copyLink = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(buildReferralShareUrl(code));
+      toast.success("Share link copied");
+    } catch {
+      toast.error("Couldn't copy — copy it manually.");
+    }
+  };
+
   return (
     <AdminShell title="Codes">
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -160,7 +172,20 @@ export default function CodesPage() {
               const expired = c.expires_at && new Date(c.expires_at).getTime() < now;
               return (
                 <tr key={c.id} className="border-t border-[var(--cog-border)] hover:bg-[rgba(184,149,58,0.04)]">
-                  <td className="px-4 py-2 font-mono font-semibold">{c.value}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold">{c.value}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyLink(c.value)}
+                        title="Copy share link"
+                        aria-label={`Copy share link for ${c.value}`}
+                        className="text-[var(--cog-muted)] transition-colors hover:text-[var(--cog-gold)]"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-2">{(c.owner_founder_id && founderNameById.get(c.owner_founder_id)) || "—"}</td>
                   <td className="px-4 py-2">
                     <Badge variant={c.status === "active" && !expired ? "default" : "outline"}>
