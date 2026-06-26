@@ -57,6 +57,7 @@ import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
+import MergeActionBar from "@/components/canvas/MergeActionBar";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -252,6 +253,8 @@ interface CanvasCardProps {
   onSuggestLine?: () => void;
   onAddToListenPath?: () => void;
   listenIndex?: number;
+  onMergeSelect?: () => void;
+  mergeSelected?: boolean;
 }
 
 const CanvasCardEl = ({
@@ -268,6 +271,8 @@ const CanvasCardEl = ({
   onSuggestLine,
   onAddToListenPath,
   listenIndex,
+  onMergeSelect,
+  mergeSelected,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -344,12 +349,16 @@ const CanvasCardEl = ({
         minHeight: 130,
         borderRadius: 16,
         backgroundColor: "var(--cog-cream-light)",
-        border: selected
+        border: mergeSelected
+          ? "2px solid var(--cog-gold, #B8953A)"
+          : selected
           ? `2px solid ${card.accent}`
           : card.isDimmedReference
           ? `1.5px dashed ${card.accent}60`
           : `2px solid ${card.accent}40`,
-        boxShadow: selected
+        boxShadow: mergeSelected
+          ? "0 0 0 3px rgba(184,149,58,0.25), 0 4px 14px rgba(0,0,0,0.09)"
+          : selected
           ? `0 8px 28px ${card.accent}30`
           : isVoice && layerCount > 0
           ? `0 4px 14px rgba(0,0,0,0.09), 5px 5px 0 0 ${card.accent}25, 10px 10px 0 0 ${card.accent}12`
@@ -612,6 +621,23 @@ const CanvasCardEl = ({
               {listenIndex != null ? `Path ${listenIndex + 1} ✕` : "Path ▸"}
             </button>
           )}
+          {card.tree === "ideas" && !card.isDimmedReference && onMergeSelect && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMergeSelect(); }}
+              style={{
+                height: 30, padding: "0 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                backgroundColor: mergeSelected ? "rgba(184,149,58,0.18)" : "rgba(28,26,23,0.06)",
+                color: mergeSelected ? "var(--cog-gold, #B8953A)" : "var(--cog-warm-gray, #6B6459)",
+                fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 600,
+                outline: mergeSelected ? "1.5px solid var(--cog-gold, #B8953A)" : "none",
+              }}
+              aria-pressed={mergeSelected}
+              aria-label={mergeSelected ? "Deselect from merge" : "Select to merge"}
+            >
+              Merge ▸
+            </button>
+          )}
         </div>
       )}
       {listenIndex != null && (
@@ -726,6 +752,70 @@ const SongCanvasExperience = () => {
   const saveListenArrangement = useCallback(() => {
     toast("Listen path saved", { description: `${listenQueue.length} cards in order` });
   }, [listenQueue]);
+
+  // ── F22 Merge/Splice ─────────────────────────────────────────────────────
+  const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const toggleMergeSelect = useCallback((id: string) => {
+    setMergeSelection((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return prev;
+      return [...prev, id];
+    });
+  }, []);
+  const executeMerge = useCallback(() => {
+    if (isViewer || mergeSelection.length !== 2) return;
+    const [idA, idB] = mergeSelection;
+    setCards((prev) => {
+      const cardA = prev.find((c) => c.id === idA);
+      const cardB = prev.find((c) => c.id === idB);
+      if (!cardA || !cardB) return prev;
+      const mergedId = `merged-${idA}-${idB}-${Date.now()}`;
+      const contributors =
+        cardA.contributor === cardB.contributor
+          ? cardA.contributor
+          : `${cardA.contributor} & ${cardB.contributor}`;
+      const mergedCard: CanvasCard = {
+        id: mergedId,
+        tree: "ideas",
+        type: "section",
+        title: `${cardA.title} + ${cardB.title}`,
+        body: [cardA.body, cardB.body].filter(Boolean).join("\n\n"),
+        meta: `Merged from ${cardA.title} and ${cardB.title}`,
+        section: cardA.section || cardB.section || "Merged section",
+        contributor: contributors,
+        status: "raw",
+        accent: cardA.accent,
+        x: Math.round((cardA.x + cardB.x) / 2),
+        y: Math.round((cardA.y + cardB.y) / 2) + 60,
+      };
+      return prev
+        .map((c) =>
+          c.id === idA || c.id === idB ? { ...c, isDimmedReference: true } : c
+        )
+        .concat(mergedCard);
+    });
+    setMergeSelection([]);
+    setSelectedId(null);
+    showSavedMoment("Ideas merged", "Ideas tree", "New section created");
+    toast("Ideas merged into a new section", {
+      duration: 7000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setCards((prev) => {
+            const filtered = prev.filter(
+              (c) => !c.id.startsWith(`merged-${idA}-${idB}`)
+            );
+            return filtered.map((c) =>
+              c.id === idA || c.id === idB
+                ? { ...c, isDimmedReference: false }
+                : c
+            );
+          });
+        },
+      },
+    });
+  }, [isViewer, mergeSelection, showSavedMoment]);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -1283,6 +1373,8 @@ const SongCanvasExperience = () => {
               }
               onAddToListenPath={() => addToListenQueue(card.id)}
               listenIndex={listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined}
+              onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => toggleMergeSelect(card.id) : undefined}
+              mergeSelected={mergeSelection.includes(card.id)}
             />
           ))}
         </CanvasViewport>
@@ -1329,6 +1421,13 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
+      <MergeActionBar
+        selection={mergeSelection}
+        cards={[...ideasCards, ...finalCards]}
+        onRemove={(id) => setMergeSelection((prev) => prev.filter((x) => x !== id))}
+        onMerge={executeMerge}
+        onClear={() => setMergeSelection([])}
+      />
       <ListenPathBar
         queue={listenQueue}
         cards={[...ideasCards, ...finalCards]}
