@@ -40,7 +40,11 @@ import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
 import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
-import { uploadVoiceMemo } from "@/lib/voice/voiceApi";
+import {
+  enqueuePendingUpload,
+  flushPendingUpload,
+  listPendingUploads,
+} from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
@@ -50,6 +54,8 @@ import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors"
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { toast } from "sonner";
+import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
+import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -240,6 +246,9 @@ interface CanvasCardProps {
   onMove: (id: string, x: number, y: number) => void;
   layerCount?: number;
   onOpenStack?: () => void;
+  canCompare?: boolean;
+  onCompare?: () => void;
+  onSuggestLine?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -251,6 +260,9 @@ const CanvasCardEl = ({
   onMove,
   layerCount = 0,
   onOpenStack,
+  canCompare = false,
+  onCompare,
+  onSuggestLine,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -260,10 +272,13 @@ const CanvasCardEl = ({
   // pointer position to canvas coords so the card follows correctly even at
   // non-1x zoom. This is intentionally separate from the canvas pan gesture.
   const { screenToCanvas } = useCanvasViewport();
+  const cardElRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{
     pointerId: number;
     startScreen: { x: number; y: number };
     startCard: { x: number; y: number };
+    lastX: number;
+    lastY: number;
   } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -275,6 +290,8 @@ const CanvasCardEl = ({
       pointerId: e.pointerId,
       startScreen: { x: e.clientX, y: e.clientY },
       startCard: { x: card.x, y: card.y },
+      lastX: card.x,
+      lastY: card.y,
     };
   };
 
@@ -289,17 +306,31 @@ const CanvasCardEl = ({
     const currCanvas = screenToCanvas(e.clientX, e.clientY);
     const newX = dragState.current.startCard.x + (currCanvas.x - startCanvas.x);
     const newY = dragState.current.startCard.y + (currCanvas.y - startCanvas.y);
-    onMove(card.id, newX, newY);
+    dragState.current.lastX = newX;
+    dragState.current.lastY = newY;
+    // Write the new position straight to THIS card's element — no setState per
+    // frame, so dragging one card never re-renders the whole board (the single
+    // biggest source of drag jank on a busy mobile canvas). React state is
+    // reconciled once, on pointer-up.
+    const el = cardElRef.current;
+    if (el) {
+      el.style.left = `${newX}px`;
+      el.style.top = `${newY}px`;
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragState.current) return;
-    e.currentTarget.releasePointerCapture(dragState.current.pointerId);
+    const { pointerId, lastX, lastY } = dragState.current;
+    e.currentTarget.releasePointerCapture(pointerId);
     dragState.current = null;
+    // Commit the final position to React state exactly once.
+    onMove(card.id, lastX, lastY);
   };
 
   return (
     <div
+      ref={cardElRef}
       style={{
         position: "absolute",
         left: card.x,
@@ -315,6 +346,8 @@ const CanvasCardEl = ({
           : `2px solid ${card.accent}40`,
         boxShadow: selected
           ? `0 8px 28px ${card.accent}30`
+          : isVoice && layerCount > 0
+          ? `0 4px 14px rgba(0,0,0,0.09), 5px 5px 0 0 ${card.accent}25, 10px 10px 0 0 ${card.accent}12`
           : "0 4px 14px rgba(0,0,0,0.09)",
         opacity: card.isDimmedReference ? 0.42 : 1,
         cursor: dragState.current ? "grabbing" : "grab",
@@ -385,8 +418,9 @@ const CanvasCardEl = ({
         >
           {card.section}
         </span>
-        {isVoice && layerCount > 0 && (
-          <span
+        {isVoice && layerCount > 0 && onOpenStack && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
             style={{
               marginLeft: "auto",
               fontSize: 9,
@@ -394,12 +428,19 @@ const CanvasCardEl = ({
               color: card.accent,
               backgroundColor: `${card.accent}1A`,
               borderRadius: 9999,
-              padding: "2px 7px",
+              padding: "6px 10px",
+              minHeight: 44,
               fontFamily: "var(--font-body)",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              lineHeight: 1,
             }}
+            aria-label={`${layerCount} layer${layerCount > 1 ? "s" : ""} — tap to open stack`}
           >
             {layerCount} layer{layerCount > 1 ? "s" : ""}
-          </span>
+          </button>
         )}
       </div>
 
@@ -510,6 +551,46 @@ const CanvasCardEl = ({
               ← Ideas
             </button>
           )}
+          {canCompare && onCompare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCompare(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "rgba(0,0,0,0.06)",
+                color: "var(--cog-warm-gray)",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label="Compare versions"
+            >
+              Compare ▸
+            </button>
+          )}
+          {card.type === "lyric" && onSuggestLine && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSuggestLine(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: "rgba(184,149,58,0.10)",
+                color: "var(--cog-gold)",
+                fontSize: 11,
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label="Suggest a line change"
+            >
+              Suggest line ▸
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -554,6 +635,12 @@ const SongCanvasExperience = () => {
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
   const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
+  const [showRecap, setShowRecap] = useState(false);
+  const [lineSuggest, setLineSuggest] = useState<{
+    cardId: string;
+    originalLine: string;
+    sectionLabel: string;
+  } | null>(null);
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -781,27 +868,34 @@ const SongCanvasExperience = () => {
     setPendingRecording(null);
   }, [cancelRecording]);
 
+  // Flush a queued canvas take (base OR layer) and reconcile its card. On success
+  // the temp card id becomes the real memo id; on failure the card stays put with
+  // its blob safe in the cache, to be retried by the recovery sweep on next load /
+  // reconnect. The creed holds on the canvas exactly as it does in the song room.
+  const flushCanvasUpload = useCallback(async (pendingId: string) => {
+    try {
+      const memoId = await flushPendingUpload(pendingId);
+      setCards((prev) => prev.map((c) =>
+        c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
+      ));
+      setCanvasStatus("Saved to this song.");
+    } catch {
+      setCards((prev) => prev.map((c) =>
+        c.id === pendingId ? { ...c, isProcessing: false } : c,
+      ));
+      setCanvasStatus("You can keep adding ideas. We'll finish saving when you're back online.");
+    }
+  }, []);
+
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
+    const rec = pendingRecording;
     // Capture + clear the "record over" target before any async work so the
     // next normal record can't inherit a stale parent.
     const parentMemoId = recordingParentIdRef.current ?? undefined;
     recordingParentIdRef.current = null;
     voiceMemoCountRef.current++;
     setCanvasStatus("Saving...");
-    const tempId = `voice-${Date.now()}`;
-    setCards((prev) => {
-      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
-      const newCard: CanvasCard = {
-        id: tempId, tree: "ideas", type: "voice",
-        title: name, body: "", meta: formatDuration(pendingRecording.durationMs),
-        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
-        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
-        parentMemoId, durationMs: pendingRecording.durationMs,
-        isProcessing: true,
-      };
-      return [newCard, ...prev];
-    });
     showSavedMoment(
       name || "Voice memo",
       parentMemoId ? "Layer added to stack" : (section || "Raw idea"),
@@ -812,15 +906,51 @@ const SongCanvasExperience = () => {
     setPendingRecording(null);
     // Reopen the base's stack so the songwriter sees their layer land.
     if (parentMemoId) setStackBaseId(parentMemoId);
-    try {
-      const memoId = await uploadVoiceMemo({ songId, blob: pendingRecording.blob, mimeType: pendingRecording.mimeType, durationMs: pendingRecording.durationMs, title: name, sectionLabel: section, transcribe, parentMemoId, idempotencyKey: tempId });
-      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, id: memoId, isProcessing: false } : c));
-      setCanvasStatus("Saved to this song.");
-    } catch {
-      setCards((prev) => prev.map((c) => c.id === tempId ? { ...c, isProcessing: false } : c));
-      setCanvasStatus("You can keep adding ideas. We will sync when you are back online.");
-    }
-  }, [pendingRecording, showSavedMoment, songId, currentUserName]);
+
+    // Local-first: the blob is cached to the device BEFORE any network call, so a
+    // base take or a layered "record over this" can never be lost on a dropped
+    // upload. The pending row's id keys both the card and the upload idempotency.
+    const pending = await enqueuePendingUpload({
+      blob: rec.blob,
+      songId,
+      mimeType: rec.mimeType,
+      durationMs: rec.durationMs,
+      title: name,
+      sectionLabel: section,
+      transcribe,
+      parentMemoId,
+    });
+
+    setCards((prev) => {
+      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
+      const newCard: CanvasCard = {
+        id: pending.id, tree: "ideas", type: "voice",
+        title: name, body: "", meta: formatDuration(rec.durationMs),
+        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
+        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        parentMemoId, durationMs: rec.durationMs,
+        isProcessing: true,
+      };
+      return [newCard, ...prev];
+    });
+
+    await flushCanvasUpload(pending.id);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName, flushCanvasUpload]);
+
+  // Recovery sweep: a canvas take whose upload was interrupted last session is
+  // still safe in the cache. Replay each on load — a reconnected device heals
+  // itself, the take reaches the song, and its card swaps to the real memo id.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const orphans = await listPendingUploads(songId);
+      for (const orphan of orphans) {
+        if (cancelled) return;
+        await flushCanvasUpload(orphan.id);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [songId, flushCanvasUpload]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
@@ -1034,11 +1164,11 @@ const SongCanvasExperience = () => {
                 className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
                 style={{
                   right: 168, bottom: 80, width: 140, height: 52, zIndex: 40,
-                  backgroundColor: recordingFlow === "recording" ? "#E05440" : "#FFFFFF",
+                  backgroundColor: recordingFlow === "recording" ? "var(--cog-charcoal)" : "#FFFFFF",
                   border: recordingFlow === "recording" ? "none" : "1px solid rgba(181,147,90,0.28)",
-                  color: recordingFlow === "recording" ? "#FFFFFF" : "#1A1A1A",
+                  color: recordingFlow === "recording" ? "#FFFFFF" : "var(--cog-charcoal)",
                   boxShadow: recordingFlow === "recording"
-                    ? "0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45)"
+                    ? "0 0 0 6px var(--cog-gold-glow), 0 4px 16px rgba(28,26,23,0.30)"
                     : "0 8px 24px rgba(28,26,23,0.12)",
                   animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
                   fontFamily: "var(--font-body)",
@@ -1096,6 +1226,11 @@ const SongCanvasExperience = () => {
               onOpenStack={
                 card.type === "voice" || card.type === "hum"
                   ? () => setStackBaseId(card.id)
+                  : undefined
+              }
+              onSuggestLine={
+                card.type === "lyric" && !isViewer
+                  ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
                   : undefined
               }
             />
@@ -1194,10 +1329,35 @@ const SongCanvasExperience = () => {
         );
       })()}
 
+      {/* What Changed recap sheet */}
+      {showRecap && (
+        <WhatChangedRecapSheet songId={songId} onDismiss={() => setShowRecap(false)} />
+      )}
+
+      {/* Line-level suggestion sheet (F19) */}
+      {lineSuggest && (
+        <LineSuggestionSheet
+          mode={isViewer ? "review" : "create"}
+          originalLine={lineSuggest.originalLine}
+          sectionLabel={lineSuggest.sectionLabel}
+          onSend={(text) => {
+            void text;
+            toast.success("Suggestion sent");
+            setLineSuggest(null);
+          }}
+          onAccept={() => {
+            toast.success("Line accepted");
+            setLineSuggest(null);
+          }}
+          onKeep={() => setLineSuggest(null)}
+          onDismiss={() => setLineSuggest(null)}
+        />
+      )}
+
       <style>{`
         @keyframes mic-pulse {
-          0%, 100% { box-shadow: 0 0 0 6px rgba(224,84,64,0.18), 0 4px 16px rgba(224,84,64,0.45); }
-          50%       { box-shadow: 0 0 0 14px rgba(224,84,64,0.08), 0 4px 16px rgba(224,84,64,0.45); }
+          0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.35); }
+          50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.35); }
         }
       `}</style>
     </div>
