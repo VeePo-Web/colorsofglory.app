@@ -164,7 +164,10 @@ const FounderCodePage = () => {
             setCode(normalizeCode(e.target.value));
             if (error) setError(null);
           }}
+          onKeyDown={(e) => { if (e.key === "Enter" && code.trim() && !isSubmitting) handleUnlock(); }}
           placeholder="FOUNDER-X7K92Q"
+          autoFocus
+          enterKeyHint="go"
           autoCapitalize="characters"
           autoCorrect="off"
           spellCheck={false}
