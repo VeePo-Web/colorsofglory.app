@@ -7,6 +7,8 @@ interface OTPInputProps {
   onComplete?: (code: string) => void;
   disabled?: boolean;
   error?: boolean;
+  /** Brief gold "correct!" flash on the cells once the code verifies. */
+  success?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ const OTPInput = ({
   onComplete,
   disabled = false,
   error = false,
+  success = false,
 }: OTPInputProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const code = value.join("").replace(/\D/g, "").slice(0, length);
@@ -85,20 +88,23 @@ const OTPInput = ({
           return (
             <div
               key={idx}
-              className="flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-150"
+              className="flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-200"
               style={{
                 width: 48,
                 height: 64,
-                backgroundColor: "#FFFFFF",
-                border: error
+                backgroundColor: success ? "var(--cog-gold-glow)" : "#FFFFFF",
+                border: success
+                  ? "1.5px solid var(--cog-gold)"
+                  : error
                   ? "1.5px solid #E05440"
                   : highlight
                   ? "1.5px solid var(--cog-gold)"
                   : "1.5px solid rgba(0,0,0,0.12)",
-                color: "#1A1A1A",
+                color: success ? "var(--cog-gold)" : "#1A1A1A",
                 fontFamily: "var(--font-body)",
-                boxShadow: highlight ? "0 0 0 3px var(--cog-gold-glow)" : "none",
-                opacity: disabled ? 0.4 : 1,
+                boxShadow: success || highlight ? "0 0 0 3px var(--cog-gold-glow)" : "none",
+                transform: success ? "scale(1.03)" : "scale(1)",
+                opacity: disabled && !success ? 0.4 : 1,
               }}
             >
               {char}

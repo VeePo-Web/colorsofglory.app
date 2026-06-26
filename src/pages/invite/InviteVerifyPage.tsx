@@ -43,6 +43,7 @@ const InviteVerifyPage = () => {
   const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_SECONDS);
 
   useEffect(() => {
@@ -65,11 +66,16 @@ const InviteVerifyPage = () => {
       // Accept invite immediately after auth
       await acceptInvite(ctx.token);
       saveInviteContext({ isExistingUser: false });
+      // Subtle "you're in" beat — flash the cells gold, then continue. Reduced-
+      // motion users skip the pause; the form stays locked through it.
+      setSuccess(true);
+      const reduce = typeof window !== 'undefined' && !!window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
       navigate('/invite/name');
     } catch (err) {
       setError(toFriendlyError(err));
       setDigits(Array(CODE_LENGTH).fill(''));
-    } finally {
       setIsVerifying(false);
     }
   }, [e164, isVerifying, ctx, navigate]);
@@ -131,6 +137,7 @@ const InviteVerifyPage = () => {
           onComplete={handleVerify}
           disabled={isVerifying}
           error={!!error}
+          success={success}
         />
       </div>
 

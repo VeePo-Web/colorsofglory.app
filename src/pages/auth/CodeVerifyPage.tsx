@@ -40,6 +40,7 @@ const CodeVerifyPage = () => {
   const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_SECONDS);
 
   useEffect(() => {
@@ -58,12 +59,17 @@ const CodeVerifyPage = () => {
     setError(null);
     try {
       await verifyPhoneOtp(e164, code);
+      // Subtle "you're in" beat — flash the cells gold for a moment, then route.
+      // Reduced-motion users skip the pause. Keep the form locked through it.
+      setSuccess(true);
+      const reduce = typeof window !== "undefined" && !!window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
       // The centralized router decides where they land (invite / onboarding / home).
       await routeAfterAuth(navigate);
     } catch (err) {
       setError(toFriendlyError(err));
       setDigits(Array(CODE_LENGTH).fill(""));
-    } finally {
       setIsVerifying(false);
     }
   }, [e164, isVerifying, navigate]);
@@ -144,6 +150,7 @@ const CodeVerifyPage = () => {
           onComplete={handleVerify}
           disabled={isVerifying}
           error={!!error}
+          success={success}
         />
       </div>
 
