@@ -26,6 +26,9 @@ vi.mock("@/integrations/cog/auth", () => ({
       this.code = code;
     }
   },
+  // InviteJoinPage reads this for the signed-in one-tap fast path; here we force
+  // the unauthenticated state so the test exercises the phone-entry OTP-guard path.
+  useCurrentAccount: () => ({ loading: false, user: null, profile: null }),
 }));
 
 vi.mock("@/lib/invite/inviteApi", () => ({
