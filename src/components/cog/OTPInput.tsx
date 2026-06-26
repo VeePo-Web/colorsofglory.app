@@ -77,11 +77,14 @@ const OTPInput = ({
         value={code}
         disabled={disabled}
         aria-label={`Enter the ${length}-digit code`}
+        aria-invalid={error}
         onChange={(e) => setCode(e.target.value)}
         className="absolute inset-0 z-10 h-full w-full opacity-0 disabled:cursor-not-allowed"
         style={{ caretColor: "transparent" }}
       />
-      <div className="flex gap-2 justify-center pointer-events-none">
+      {/* Cells are purely visual — the labeled input above carries all semantics.
+          Hidden from assistive tech so a screen reader reads one field, not six boxes. */}
+      <div className="flex gap-2 justify-center pointer-events-none" aria-hidden="true">
         {Array.from({ length }).map((_, idx) => {
           const char = code[idx] ?? "";
           const highlight = (char !== "" || (idx === focusedIndex && !disabled)) && !error;
