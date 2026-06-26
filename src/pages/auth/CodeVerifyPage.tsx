@@ -98,6 +98,24 @@ const CodeVerifyPage = () => {
 
   const allFilled = digits.every((d) => d !== "");
 
+  // Desktop has no SMS autofill/WebOTP — let the user paste the code in one tap
+  // (read it from the clipboard, fill, submit). Fails silent if the browser blocks
+  // clipboard reads; manual entry and Ctrl+V into the field still work.
+  const canPasteCode =
+    typeof navigator !== "undefined" && !!navigator.clipboard && "readText" in navigator.clipboard;
+  const handlePasteCode = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const code = (text ?? "").replace(/\D/g, "").slice(0, CODE_LENGTH);
+      if (code.length === CODE_LENGTH) {
+        setDigits(code.split(""));
+        void handleVerify(code);
+      }
+    } catch {
+      /* clipboard blocked / empty — no-op */
+    }
+  }, [handleVerify]);
+
   return (
     <OnboardingShell>
       {/* Logo */}
@@ -137,6 +155,18 @@ const CodeVerifyPage = () => {
       >
         {resent ? "New code sent — check your messages." : "Codes usually arrive within a few seconds."}
       </p>
+
+      {/* One-tap paste — the only low-friction path on desktop (no SMS autofill there). */}
+      {canPasteCode && !isVerifying && (
+        <button
+          type="button"
+          onClick={handlePasteCode}
+          className="mx-auto -mt-3 mb-6 block text-[13px] transition-opacity hover:opacity-70"
+          style={{ color: "#B5935A", fontFamily: "var(--font-body)", textDecoration: "underline" }}
+        >
+          Paste code
+        </button>
+      )}
 
       {/* Error */}
       {error && (
