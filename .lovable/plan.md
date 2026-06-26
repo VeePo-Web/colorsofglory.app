@@ -1,78 +1,85 @@
-## Audit findings — current Create Account flow
+# Phone Sign-In Audit — Root Cause + Fix Plan
 
-What's on disk today (`EmailAuthPage.tsx` + `signUpWithPassword` in `src/integrations/cog/auth.ts`):
+## What's actually broken
 
-1. **Calls `supabase.auth.signUp` directly.** That triggers Supabase's built-in confirmation email — sent from a `noreply@…` Supabase address, with copy and styling we don't control. New users see a Lovable/Supabase-branded message, not Colors of Glory. ⛔ Fails "nothing through Lovable."
-2. **`emailRedirectTo: ${window.location.origin}/`** — on the preview that resolves to `…lovableproject.com` and on prod to `colorsofglory.app`. The link itself bounces through Supabase auth domain first. Another off-brand surface.
-3. **Password reset uses `supabase.auth.resetPasswordForEmail`** — same problem: branded reset email comes from Supabase.
-4. **No 2-step on email sign-in** (VeePo always asks for a 6-digit email OTP after password).
-5. **No lockout / rate-limit on the form** (VeePo locks out for 30s after 5 failed attempts, shows a live countdown).
-6. **Missing polish vs. VeePo portal:** no show/hide password toggle, no caps-lock warning, no per-attempt-remaining copy, no `noindex` meta, no "Verification required for security" footnote, no `aria-live` on countdown.
-7. **`disable_signup` is currently off** — anyone can call the Auth REST API directly and create accounts that skip our funnel.
+Auth logs are unambiguous:
+```
+POST /otp → 400 phone_provider_disabled
+```
 
-## What VeePo does (relevant patterns I'm copying)
+The frontend is calling Supabase's **native** phone OTP (`supabase.auth.signInWithOtp({ phone })`), but the native Phone provider in the Supabase Auth dashboard is OFF — and on Lovable Cloud we can't toggle that dashboard. That endpoint will never work for this project.
 
-- Custom email OTP after password — own edge function, own sender, 6-digit code, expiry, attempt cap.
-- 5-attempt lockout with 30s countdown, live remaining-seconds indicator.
-- "Don't have access? Contact us" pattern (we keep public signup since COG is a lead-magnet funnel — we deviate here intentionally).
-- `Helmet noindex,nofollow` on auth screens.
-- Caps-lock and show/hide password affordances on every password field.
-- Loading button copy switches between "Sending code…" / "Signing in…" / "Creating account…".
-- All auth state changes go through a single `AuthContext` listener — no scattered `getSession` calls.
+### Why "we built a custom Twilio flow" doesn't help right now
+The earlier handoff (`docs/claude-handoffs/2026-06-23-twilio-sms-signin-enable-and-ux.md`) and the more recent email-OTP rebuild both reference custom `phone-otp-start` / `phone-otp-verify` edge functions. **Those files are not in the repo.** Only `otp-guard`, `email-otp-start`, `email-otp-verify` exist under `supabase/functions/`. Same disappearance pattern as the email OTP functions a few turns ago.
 
-## Fix plan (backend = me, UI = handoff doc for Claude)
+Meanwhile the SDK (`src/integrations/cog/auth.ts:192–235`) still calls the native Supabase endpoints:
+```ts
+supabase.auth.signInWithOtp({ phone, … })   // line 222
+supabase.auth.verifyOtp({ phone, token, type: "sms" })  // line 230
+```
 
-### 1. New table — `email_otp_verifications`
-service-role-only RLS. Columns: `id, email_hash, code_hash, purpose ('signup'|'login'|'reset'), attempts, expires_at, used_at, ip_hash, created_at`. Hash with the existing `OTP_IP_SALT`. 10-minute expiry, max 5 wrong-code attempts before the row is burned.
+So the broken chain is: **UI → SDK → native Supabase phone provider (disabled) → 400.**
 
-### 2. New edge function — `email-otp-start` (anon, `verify_jwt = false`)
-Body: `{ email, purpose }`. Generates a 6-digit code, stores `code_hash`, sends a branded HTML email via Resend (`noreply@colorsofglory.app`) with COG cream + gold template, serif heading, plain code shown big. Returns `{ ok, expires_in: 600 }` or `{ ok:false, code }`. Rate-limited per email + per IP (reuses `check_and_record_otp_send` pattern). Never returns 5xx.
+### What's already healthy
+- Twilio connector linked. Secrets present: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_API_KEY`, `TWILIO_VERIFY_SERVICE_SID`.
+- `otp-guard` edge function + `check_and_record_otp_send` RPC (toll-fraud rails) are live and fail-open.
+- `OnboardingShell`, `PhoneLoginPage`, `CodeVerifyPage`, `OTPInput`, `useWebOtpAutofill` all built and styled — no UI rewrite needed.
+- Email OTP equivalent (`email-otp-start` / `email-otp-verify`) already works using Resend + Supabase Admin API — we mirror that exact shape.
 
-### 3. New edge function — `email-otp-verify` (anon, `verify_jwt = false`)
-Body: `{ email, code, purpose, password? }`.
-- `purpose='signup'`: verify code → `admin.createUser({ email, password, email_confirm: true })` (skips Supabase confirmation email entirely) → generateLink+verifyOtp dance to mint a session → return `{ access_token, refresh_token }`.
-- `purpose='login'`: verify code only → returns `{ ok:true }` (caller already authenticated by password in step prior).
-- `purpose='reset'`: verify code → `admin.updateUserById({ password })` → mint session.
+## Church Center UX research (applied)
 
-### 4. New edge function — `auth-rate-limit-check` (or reuse `otp-guard` pattern)
-Server-side 5-attempt password lockout per email-hash + IP-hash, 30s. Client lockout UI is mirrored but the server is source of truth.
+Church Center's phone sign-in is the gold standard for non-tech audiences:
+1. **One field, one ask.** Phone first, code next — no password, no "create account vs sign in" branching.
+2. **Forgiving input.** Strips formatting, accepts pasted `+1 (555)…`, country chip is decorative not interactive for US-only.
+3. **Honest errors.** "We couldn't send the code. Try again in a moment." — never a Supabase code string.
+4. **Auto-advance + auto-submit.** Six digits land, screen submits — no "Continue" button required once the code is full.
+5. **Resend with a countdown.** Disabled link until ~30s passes, then "Resend code".
+6. **Change number link.** Always visible on the verify screen.
+7. **One-tap SMS autofill.** `autocomplete="one-time-code"` + WebOTP (Android) — both already wired.
+8. **No marketing copy on auth screens.** Calm, single-purpose.
+9. **Same flow on a new device.** No "magic link in email" rescue path that drops users into a different mailbox app.
+10. **Sign-in == sign-up.** First valid OTP creates the account; no separate registration form.
 
-### 5. SDK rewire — `src/integrations/cog/auth.ts`
-- `signUpWithPassword({ email, password, firstName, lastName })` → calls `email-otp-start` with `purpose:'signup'`, stores pending payload in returned token, returns `{ pendingToken, expiresIn }`.
-- New `completeSignupWithCode({ pendingToken, code })` → invokes `email-otp-verify`, `supabase.auth.setSession(...)`.
-- `requestPasswordReset(email)` → invokes `email-otp-start` purpose=reset.
-- New `completePasswordReset({ email, code, newPassword })` → invokes `email-otp-verify` purpose=reset.
-- Optional 2FA on login (gated by `VITE_REQUIRE_LOGIN_2FA`): after `signInWithPassword`, immediately send purpose=login OTP and require verify before routing.
-- Map all backend `code` values to existing `AuthError` codes — UI copy stays calm/honest.
+Our current screens already follow 1, 2, 3, 5, 6, 7, 8, 10. Gap is the broken backend (4 fires but submission fails) and we should re-confirm 4 once verify works.
 
-### 6. Hard-disable Supabase's built-in email channel
-`configure_auth({ disable_signup: true, auto_confirm_email: false, password_hibp_enabled: true, external_anonymous_users_enabled: false })`. With `disable_signup: true`, *only* our edge function path (which uses `admin.createUser`) can mint accounts — every Lovable/Supabase email surface is closed.
+## Fix plan
 
-### 7. Resend connector
-Add Resend connector (Lovable has it) using `colorsofglory.app` as the sending domain. If DNS isn't ready yet, fall back to Resend's `onboarding@resend.dev` only for non-prod, and surface a TODO. No template lives on Lovable infra — markup is inlined in the edge function.
+### Step 1 — Recreate `phone-otp-start` edge function
+- Public (`verify_jwt = false` in `supabase/config.toml`).
+- Validates E.164 (`+1XXXXXXXXXX`), calls `otp-guard` RPC first (toll-fraud rails — block / cool down / geo-allow).
+- POSTs to Twilio Verify: `POST /v2/Services/{TWILIO_VERIFY_SERVICE_SID}/Verifications` with `To=<e164>&Channel=sms` via the gateway pattern Twilio docs use (`Authorization: Bearer LOVABLE_API_KEY`, `X-Connection-Api-Key: TWILIO_API_KEY`).
+- Returns typed JSON: `{ ok: true }` or `{ ok: false, code: "RATE_LIMITED" | "GEO_BLOCKED" | "INVALID_PHONE" | "PROVIDER_ERROR" }`.
+- Logs send to `phone_otp_verifications` audit table (create if missing — mirror `email_otp_verifications`).
 
-### 8. Claude handoff doc — `docs/claude-handoffs/2026-06-25-auth-portal-rebuild.md`
-Tells Claude exactly how to rebuild `EmailAuthPage` + a new `EmailCodeVerifyPage` + a new `PasswordResetPage` against the new SDK signatures. Includes:
-- Required UX: show/hide password, caps-lock badge, `noindex` meta, 5/30s lockout with `aria-live` countdown, per-attempt-remaining copy, "Creating account…" / "Sending code…" loading copy.
-- Required visual: cream + gold tokens, serif heading, OnboardingShell, 56-tall pill inputs, gold CTA — same system already in use on PhoneLoginPage.
-- The 6-digit code page is the same `CodeVerifyPage` pattern already on phone, parameterized for email.
+### Step 2 — Recreate `phone-otp-verify` edge function
+- Public, CORS on.
+- POSTs to Twilio Verify Check: `POST /v2/Services/{SID}/VerificationCheck` with `To=<e164>&Code=<code>`.
+- On `status === "approved"`: use **Supabase Admin API** to upsert a user keyed by phone (same trick as email-otp-verify), then mint a session via `admin.generateLink({ type: "magiclink", … })` OR sign in by creating a one-shot password — match exactly what `email-otp-verify` does so the pattern is consistent.
+- Returns `{ ok: true, session }` (access + refresh tokens) or `{ ok: false, code: "INVALID_OTP" | "EXPIRED" | "MAX_ATTEMPTS" }`.
 
-### 9. Verification I'll run before declaring done
-- `curl_edge_functions` smoke `email-otp-start` with my email → row appears, Resend message ID logged.
-- `email-otp-verify` rejects wrong code (5x → row burned), accepts correct code.
-- After a successful signup-via-OTP: `auth.users` row exists with `email_confirmed_at` set, `handle_new_user` trigger populated `profiles` with referral_code.
-- Confirm `supabase.auth.signUp` from the browser console now returns `signup_disabled` — proving the Supabase channel is closed.
+### Step 3 — Rewire SDK (`src/integrations/cog/auth.ts`)
+Replace the `signInWithOtp` / `verifyOtp` bodies in `sendPhoneOtp` / `verifyPhoneOtp` to call the new edge functions via `supabase.functions.invoke`, map response codes → existing `AuthError` enum. Keep the function signatures identical so `PhoneLoginPage.tsx` and `CodeVerifyPage.tsx` don't change.
 
-### Files I'll touch
-- `supabase/functions/email-otp-start/index.ts` (new)
-- `supabase/functions/email-otp-verify/index.ts` (new)
-- `supabase/migrations/<ts>_email_otp_verifications.sql` (new)
-- `supabase/config.toml` (add `verify_jwt = false` blocks)
-- `src/integrations/cog/auth.ts` (rewire signup + reset SDK)
-- `docs/claude-handoffs/2026-06-25-auth-portal-rebuild.md` (new — UI spec for Claude)
-- `configure_auth` call + `add_secret` for Resend (only if no Resend connector picked)
+### Step 4 — Config + audit table
+- `supabase/config.toml`: add `verify_jwt = false` blocks for both new functions.
+- Migration: `phone_otp_verifications` table (id, e164, status, attempts, ip_hash, created_at, verified_at), service-role only — no public GRANT. Plus index on `(e164, created_at desc)`.
 
-### What I'm explicitly NOT doing
-- Not redesigning the pages in `src/pages/auth` myself — that's Claude's lane. I'll ship the SDK + the handoff doc; Claude executes the UI in his next pass.
-- Not breaking existing phone OTP work (already shipped this turn).
-- Not making COG invite-only — the business model requires open signup.
+### Step 5 — Verify end-to-end
+- `curl` `phone-otp-start` with a test number → expect `{ok:true}` and a real Twilio Verify SMS.
+- `curl` `phone-otp-verify` with the received code → expect `{ok:true, session:{…}}`.
+- Confirm auth logs show no more `phone_provider_disabled`.
+- Smoke through the preview UI on a real device once curl is green.
+
+### Step 6 — Tiny UX polish (only if time, frontend lane)
+The OTP input is already 6 boxes with WebOTP hook; the handoff doc §6 noted iOS Security-Code AutoFill drops the full code into box 0 and `.slice(-1)` truncates it. If still present, that's a one-file change in `OTPInput.tsx` — flag for Claude rather than fix from this lane.
+
+## Files touched
+- **Add**: `supabase/functions/phone-otp-start/index.ts`, `supabase/functions/phone-otp-verify/index.ts`, one migration for `phone_otp_verifications`.
+- **Edit**: `supabase/config.toml` (two new function blocks), `src/integrations/cog/auth.ts` (`sendPhoneOtp` + `verifyPhoneOtp` bodies only).
+- **No UI files touched** — Claude's lane.
+
+## Definition of done
+- Real phone receives a Twilio Verify SMS within 5s of pressing Continue.
+- Entering the code lands signed-in on `/` with no console errors.
+- Auth logs show zero `phone_provider_disabled` for new attempts.
+- Rate-limit path (4+ sends in 15 min) returns `RATE_LIMITED` with kind copy.
