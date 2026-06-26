@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
@@ -28,6 +28,23 @@ const VoiceMemoAddedPage = () => {
   useEffect(() => {
     updateOnboardingStep("first_voice_memo_added").catch(() => {});
   }, []);
+
+  // Subtle "you did it" reveal: the success badge gently pops in and the content
+  // settles up on mount. Calm, reverent — not confetti. Reduced-motion users get
+  // the final state instantly.
+  const reduceMotion = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      !!window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (reduceMotion) { setShown(true); return; }
+    const r = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(r);
+  }, [reduceMotion]);
 
   return (
     <div
@@ -59,6 +76,9 @@ const VoiceMemoAddedPage = () => {
             height: 72,
             backgroundColor: "rgba(184,149,58,0.12)",
             border: "1.5px solid rgba(184,149,58,0.30)",
+            transform: shown ? "scale(1)" : "scale(0.82)",
+            opacity: shown ? 1 : 0,
+            transition: "transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 360ms ease",
           }}
         >
           <CheckCircle size={34} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
