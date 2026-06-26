@@ -272,10 +272,13 @@ const CanvasCardEl = ({
   // pointer position to canvas coords so the card follows correctly even at
   // non-1x zoom. This is intentionally separate from the canvas pan gesture.
   const { screenToCanvas } = useCanvasViewport();
+  const cardElRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{
     pointerId: number;
     startScreen: { x: number; y: number };
     startCard: { x: number; y: number };
+    lastX: number;
+    lastY: number;
   } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -287,6 +290,8 @@ const CanvasCardEl = ({
       pointerId: e.pointerId,
       startScreen: { x: e.clientX, y: e.clientY },
       startCard: { x: card.x, y: card.y },
+      lastX: card.x,
+      lastY: card.y,
     };
   };
 
@@ -301,17 +306,31 @@ const CanvasCardEl = ({
     const currCanvas = screenToCanvas(e.clientX, e.clientY);
     const newX = dragState.current.startCard.x + (currCanvas.x - startCanvas.x);
     const newY = dragState.current.startCard.y + (currCanvas.y - startCanvas.y);
-    onMove(card.id, newX, newY);
+    dragState.current.lastX = newX;
+    dragState.current.lastY = newY;
+    // Write the new position straight to THIS card's element — no setState per
+    // frame, so dragging one card never re-renders the whole board (the single
+    // biggest source of drag jank on a busy mobile canvas). React state is
+    // reconciled once, on pointer-up.
+    const el = cardElRef.current;
+    if (el) {
+      el.style.left = `${newX}px`;
+      el.style.top = `${newY}px`;
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragState.current) return;
-    e.currentTarget.releasePointerCapture(dragState.current.pointerId);
+    const { pointerId, lastX, lastY } = dragState.current;
+    e.currentTarget.releasePointerCapture(pointerId);
     dragState.current = null;
+    // Commit the final position to React state exactly once.
+    onMove(card.id, lastX, lastY);
   };
 
   return (
     <div
+      ref={cardElRef}
       style={{
         position: "absolute",
         left: card.x,
