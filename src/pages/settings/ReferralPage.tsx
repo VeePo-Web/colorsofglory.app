@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { fetchReferralStats, centsToDisplay, type ReferralStats } from "@/lib/pricing/pricingApi";
+import { setMyPayoutMethod } from "@/integrations/cog/referrals";
 
 const ReferralPage = () => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [payoutEmail, setPayoutEmail] = useState("");
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [savingPayout, setSavingPayout] = useState(false);
 
   useEffect(() => {
     fetchReferralStats()
@@ -17,6 +22,23 @@ const ReferralPage = () => {
       .catch(() => {/* keep null - use placeholder UI */})
       .finally(() => setIsLoading(false));
   }, []);
+
+  const handleSavePayout = async () => {
+    const email = payoutEmail.trim();
+    if (email.length < 3) return;
+    setSavingPayout(true);
+    try {
+      await setMyPayoutMethod({ method: "paypal", email });
+      const fresh = await fetchReferralStats();
+      setStats(fresh);
+      setEditingPayout(false);
+      toast.success("Payout details saved");
+    } catch (err) {
+      toast.error((err as Error)?.message ?? "Couldn't save payout details. Please try again.");
+    } finally {
+      setSavingPayout(false);
+    }
+  };
 
   const referralLink = stats?.link ?? "colorsofglory.app/r/...";
   const fullLink = stats?.link ?? `https://colorsofglory.app/r/...`;
@@ -207,6 +229,96 @@ const ReferralPage = () => {
             </div>
           ))}
         </div>
+
+        {/* Payout method — where earnings get sent. Completes the earn→collect loop. */}
+        {!isLoading && stats && (() => {
+          const method = stats.payoutMethod.kind;
+          const hasEarnings =
+            stats.earnings.payableCents + stats.earnings.pendingCents + stats.monthlyRecurringCents > 0;
+          // Stay quiet until there's a reason: money in motion, or the referrer chose to edit.
+          if (!method && !hasEarnings && !editingPayout) return null;
+          const showForm = editingPayout || !method;
+          return (
+            <div
+              className="rounded-2xl p-5 mb-6"
+              style={{
+                backgroundColor: "var(--cog-cream-light)",
+                border: method ? "1.5px solid var(--cog-border)" : "1.5px solid var(--cog-border-gold)",
+              }}
+            >
+              <p
+                className="text-xs font-medium uppercase tracking-wider mb-2"
+                style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+              >
+                Where we send your earnings
+              </p>
+              {method && !editingPayout ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm truncate" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                    {stats.payoutMethod.email ?? "Saved"}
+                    <span style={{ color: "var(--cog-warm-gray)" }}> · {method === "paypal" ? "PayPal" : method}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setPayoutEmail(stats.payoutMethod.email ?? ""); setEditingPayout(true); }}
+                    className="text-sm flex-shrink-0 transition-opacity hover:opacity-70"
+                    style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)" }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : showForm ? (
+                <>
+                  {!method && (
+                    <p className="text-sm mb-3" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+                      Add your PayPal email so we can send what you earn.
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      value={payoutEmail}
+                      onChange={(e) => setPayoutEmail(e.target.value)}
+                      placeholder="you@email.com"
+                      className="flex-1 rounded-xl px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--cog-cream)",
+                        border: "1px solid var(--cog-border)",
+                        color: "var(--cog-charcoal)",
+                        fontFamily: "var(--font-body)",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSavePayout}
+                      disabled={savingPayout || payoutEmail.trim().length < 3}
+                      className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white flex-shrink-0 transition-all duration-150 active:scale-95"
+                      style={{
+                        backgroundColor: "var(--cog-gold)",
+                        fontFamily: "var(--font-body)",
+                        opacity: savingPayout || payoutEmail.trim().length < 3 ? 0.6 : 1,
+                      }}
+                    >
+                      {savingPayout ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  {method && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPayout(false)}
+                      className="text-xs mt-2 transition-opacity hover:opacity-70"
+                      style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </>
+              ) : null}
+            </div>
+          );
+        })()}
 
         {/* CTA */}
         <button

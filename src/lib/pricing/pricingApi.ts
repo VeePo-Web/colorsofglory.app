@@ -110,6 +110,11 @@ export interface ReferralStats {
     hasPaidBefore: boolean;
     totalEarnedCents: number;
   }>;
+  /** Where earnings get sent. kind is null until the referrer sets it. */
+  payoutMethod: {
+    kind: "manual" | "paypal" | "stripe_connect" | null;
+    email: string | null;
+  };
 }
 
 const CHECKOUT_ERROR_MESSAGES: Record<string, string> = {
@@ -234,6 +239,10 @@ export async function fetchReferralStats(): Promise<ReferralStats> {
         totalEarnedCents: r.total_earned_cents ?? 0,
       }),
     ),
+    payoutMethod: {
+      kind: data.payout_method?.kind ?? null,
+      email: data.payout_method?.email ?? null,
+    },
   };
 }
 
