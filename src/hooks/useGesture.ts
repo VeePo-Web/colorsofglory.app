@@ -54,6 +54,9 @@ export function useGesture(
   const zoom = useRef(initialState.zoom);
   const rafId = useRef<number>(0);
   const isDirty = useRef(false);
+  // Active panTo() animation frame, tracked so a new gesture (or a new panTo, or
+  // unmount) can cancel it — otherwise two rAF loops fight over pan.current.
+  const panToRaf = useRef<number>(0);
 
   // Pointer tracking
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -113,6 +116,12 @@ export function useGesture(
     // Only respond to touch or left-button drag
     if (e.pointerType === "mouse" && e.button !== 0) return;
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // A direct touch always wins over an in-flight panTo animation — cancel it so
+    // the finger and the easing curve don't fight over pan.current.
+    if (panToRaf.current) {
+      cancelAnimationFrame(panToRaf.current);
+      panToRaf.current = 0;
+    }
     // Refresh the container offset at the start of each gesture — it can change
     // between gestures (scroll, rotate, keyboard) but is stable during one.
     const el = containerRef.current;
@@ -252,6 +261,7 @@ export function useGesture(
       el.removeEventListener("pointercancel", onPointerUp);
       el.removeEventListener("wheel", onWheel);
       if (rafId.current) cancelAnimationFrame(rafId.current);
+      if (panToRaf.current) cancelAnimationFrame(panToRaf.current);
     };
   }, [containerRef, onPointerDown, onPointerMove, onPointerUp, onWheel]);
 
@@ -276,6 +286,9 @@ export function useGesture(
     viewportCenterY: number,
     durationMs = 400
   ) => {
+    // Cancel any panTo already running so two animations can't fight.
+    if (panToRaf.current) cancelAnimationFrame(panToRaf.current);
+
     const startPanX = pan.current.x;
     const startPanY = pan.current.y;
     const targetPanX = viewportCenterX - targetCanvasX * zoom.current;
@@ -288,11 +301,15 @@ export function useGesture(
       pan.current.x = startPanX + (targetPanX - startPanX) * ease;
       pan.current.y = startPanY + (targetPanY - startPanY) * ease;
       onTransform(pan.current.x, pan.current.y, zoom.current);
-      if (t < 1) requestAnimationFrame(frame);
-      else onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      if (t < 1) {
+        panToRaf.current = requestAnimationFrame(frame);
+      } else {
+        panToRaf.current = 0;
+        onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      }
     }
 
-    requestAnimationFrame(frame);
+    panToRaf.current = requestAnimationFrame(frame);
   }, [onTransform, onTransformEnd]);
 
   return { canvasToScreen, screenToCanvas, panTo, panRef: pan, zoomRef: zoom };
