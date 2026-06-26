@@ -136,6 +136,24 @@ const SongMemoryPage = () => {
             This song isn't in your memory yet.
           </p>
         )}
+
+        {!isLoading && !isError && (
+          <button
+            onClick={() => navigate("/memory")}
+            className="w-full mt-7 py-4 rounded-2xl font-medium text-base transition-all duration-150 active:scale-[0.97]"
+            style={{
+              backgroundColor: "var(--cog-cream-light)",
+              border: "1.5px solid var(--cog-border)",
+              color: "var(--cog-charcoal)",
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            <span className="flex items-center justify-center gap-2">
+              Open your full memory
+              <ArrowRight size={16} style={{ color: "var(--cog-warm-gray)" }} />
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );
