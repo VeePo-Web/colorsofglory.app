@@ -60,6 +60,13 @@ export interface MemoryVoiceMemo {
   title: string | null;
 }
 
+/** A section's lyric body (one row per section in song_lyrics). */
+export interface MemoryLyric {
+  songId: string;
+  sectionId: string;
+  text: string;
+}
+
 /** Everything fetched read-only from Supabase, before reduction. */
 export interface MemoryRawBundle {
   userId: string;
@@ -69,6 +76,8 @@ export interface MemoryRawBundle {
   ideas: MemoryIdea[];
   people: MemoryPerson[];
   voiceMemos: MemoryVoiceMemo[];
+  /** Optional so existing bundle literals/tests stay valid; defaults to []. */
+  lyrics?: MemoryLyric[];
 }
 
 /**

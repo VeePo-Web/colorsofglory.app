@@ -14,6 +14,7 @@ import { createZip, type ZipEntry } from "@/lib/memory/zip";
 import type {
   MemoryGraph,
   MemoryIdea,
+  MemoryLyric,
   MemoryNote,
   MemoryPerson,
   MemoryRawBundle,
@@ -85,7 +86,7 @@ export async function fetchMemoryBundle(): Promise<MemoryRawBundle> {
     };
   });
 
-  const [sectionsRes, notesRes, ideasRes, membersRes, memosRes] = await Promise.all([
+  const [sectionsRes, notesRes, ideasRes, membersRes, memosRes, lyricsRes] = await Promise.all([
     supabase.from("song_sections").select("id, song_id, kind, label, position").in("song_id", ids),
     supabase.from("song_notes").select("id, song_id, body, section_id").in("song_id", ids),
     supabase
@@ -94,6 +95,8 @@ export async function fetchMemoryBundle(): Promise<MemoryRawBundle> {
       .in("song_id", ids),
     supabase.from("song_members").select("song_id, user_id, role").in("song_id", ids),
     supabase.from("voice_memos").select("id, song_id, title").in("song_id", ids),
+    // Real lyric bodies (one row per section). Fail-soft: missing/denied -> [].
+    supabase.from("song_lyrics").select("song_id, section_id, plain_text").in("song_id", ids),
   ]);
 
   const sections: MemorySection[] = ((sectionsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
@@ -160,7 +163,15 @@ export async function fetchMemoryBundle(): Promise<MemoryRawBundle> {
     };
   });
 
-  return { userId, songs, sections, notes, ideas, people, voiceMemos };
+  const lyrics: MemoryLyric[] = ((lyricsRes.data ?? []) as Array<Record<string, unknown>>)
+    .map((r) => ({
+      songId: r.song_id as string,
+      sectionId: r.section_id as string,
+      text: (r.plain_text as string | null) ?? "",
+    }))
+    .filter((l) => l.text.trim().length > 0);
+
+  return { userId, songs, sections, notes, ideas, people, voiceMemos, lyrics };
 }
 
 export interface LoadedMemory {

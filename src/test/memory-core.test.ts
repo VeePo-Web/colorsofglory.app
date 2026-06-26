@@ -24,6 +24,7 @@ function bundle(): MemoryRawBundle {
       { songId: "s2", userId: "u2", role: "collaborator", name: "Sarah", initials: "SA", color: "#53AB8B" },
     ],
     voiceMemos: [{ id: "v1", songId: "s1", title: "Idea 1" }],
+    lyrics: [{ songId: "s1", sectionId: "sec1", text: "Amazing grace how sweet\nthe sound" }],
   };
 }
 
@@ -106,6 +107,9 @@ describe("obsidian vault", () => {
     expect(paths).toContain("People/Sarah.md");
 
     const song = files.find((f) => f.path === "Songs/Grace in the Waiting.md")!;
+    expect(song.content).toContain("## Lyrics");
+    expect(song.content).toContain("### Verse 1");
+    expect(song.content).toContain("Amazing grace how sweet");
     expect(song.content).toContain("# Grace in the Waiting");
     expect(song.content).toContain("[[Psalm 23]]");
     expect(song.content).toContain("[[Sarah]]");

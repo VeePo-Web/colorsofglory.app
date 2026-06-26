@@ -210,9 +210,20 @@ function buildSongNote(
   }
 
   if (sections.length) {
-    body.push("## Sections");
-    for (const s of sections) body.push(`- ${s.label?.trim() || s.kind}`);
-    body.push("");
+    const lyricBySection = new Map<string, string>();
+    for (const l of bundle.lyrics ?? []) {
+      if (l.songId === song.id) lyricBySection.set(l.sectionId, l.text);
+    }
+    body.push("## Lyrics");
+    for (const s of sections) {
+      body.push(`### ${s.label?.trim() || s.kind}`);
+      const text = lyricBySection.get(s.id)?.trim();
+      if (text) {
+        // Two trailing spaces = hard line break so lyric lines render verbatim.
+        for (const line of text.split(/\r?\n/)) body.push(line.trim().length ? `${line}  ` : "");
+      }
+      body.push("");
+    }
   }
 
   // Ideas link OUT to their own atomic notes — this is the Zettelkasten move.
