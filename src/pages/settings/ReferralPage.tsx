@@ -114,7 +114,7 @@ const ReferralPage = () => {
           Invite songwriters. Earn monthly.
         </h1>
         <p className="text-base mb-8" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
-          You earn $10/month while each direct referral stays on Pro.
+          You earn {centsToDisplay(stats?.perReferralCents ?? 500)}/month while each direct referral stays on Pro.
         </p>
 
         {/* Recurring earnings — the motivating hero metric, only once it's real */}
@@ -405,7 +405,7 @@ const ReferralPage = () => {
           <ul className="flex flex-col gap-3">
             {[
               "Direct referrals only. No multi-level structure.",
-              "You earn $10/month per active Pro referral.",
+              `You earn ${centsToDisplay(stats?.perReferralCents ?? 500)}/month per active Pro referral.`,
               "Payouts begin 30 days after referral's first Pro payment.",
               "No commission during free or founder access periods.",
             ].map((rule, index) => (
