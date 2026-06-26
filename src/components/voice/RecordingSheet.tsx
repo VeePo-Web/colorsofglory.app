@@ -84,6 +84,13 @@ const RecordingSheet = ({
             onChange={(e) => onNoteChange(e.target.value)}
             placeholder="Add a label while you record..."
             disabled={isStopping}
+            // Songwriter-friendly mobile keyboard: capitalize like a title, but no
+            // autocorrect/spellcheck mangling creative or non-dictionary labels.
+            autoCapitalize="sentences"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            enterKeyHint="done"
             onKeyDown={(e) => { if (e.key === "Enter") noteRef.current?.blur(); }}
             style={{
               marginTop: 16,
@@ -92,7 +99,9 @@ const RecordingSheet = ({
               outline: "none",
               backgroundColor: "transparent",
               fontFamily: "var(--font-body)",
-              fontSize: 14,
+              // 16px is the floor that stops iOS Safari from auto-zooming the whole
+              // sheet the instant this field is focused.
+              fontSize: 16,
               color: "var(--cog-warm-gray)",
               textAlign: "center",
               caretColor: "var(--cog-gold)",

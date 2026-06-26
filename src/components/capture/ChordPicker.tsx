@@ -117,8 +117,11 @@ const ChordPicker = ({
                 }}
                 placeholder="BPM"
                 aria-label="Beats per minute"
-                className="w-16 text-center text-sm rounded-lg py-1.5"
-                style={{ background: "var(--cog-cream)", border: "1px solid var(--cog-border)" }}
+                enterKeyHint="done"
+                className="w-16 text-center rounded-lg py-1.5"
+                // 16px so iOS Safari doesn't zoom the canvas when the BPM field
+                // is focused.
+                style={{ background: "var(--cog-cream)", border: "1px solid var(--cog-border)", fontSize: 16 }}
               />
               <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>bpm</span>
             </div>
