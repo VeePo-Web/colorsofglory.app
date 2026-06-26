@@ -36,7 +36,11 @@ const SectionChip = ({ value, onChange, disabled = false }: SectionChipProps) =>
           display: "inline-flex",
           alignItems: "center",
           gap: 5,
-          padding: "5px 12px 5px 10px",
+          // 44px tall so it's a confident thumb-tap mid-recording — not a ~22px
+          // sliver. Height comes from minHeight; horizontal padding keeps the pill
+          // shape.
+          minHeight: 44,
+          padding: "0 14px",
           borderRadius: 9999,
           backgroundColor: "rgba(184,149,58,0.12)",
           border: "1px solid rgba(184,149,58,0.28)",
@@ -92,10 +96,13 @@ const SectionChip = ({ value, onChange, disabled = false }: SectionChipProps) =>
                 aria-selected={s === value}
                 onClick={() => { onChange(s); setOpen(false); }}
                 style={{
-                  display: "block",
+                  display: "flex",
+                  alignItems: "center",
                   width: "100%",
                   textAlign: "left",
-                  padding: "9px 16px",
+                  // 44px rows — comfortable to tap accurately in the picker list.
+                  minHeight: 44,
+                  padding: "0 16px",
                   fontFamily: "var(--font-body)",
                   fontSize: 13,
                   fontWeight: s === value ? 700 : 400,
