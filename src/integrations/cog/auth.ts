@@ -189,7 +189,7 @@ export async function signInWithGoogle(redirectTo?: string): Promise<void> {
 
 // ─── Phone OTP ───────────────────────────────────────────────────────────
 
-export async function sendPhoneOtp(e164: string): Promise<void> {
+export async function sendPhoneOtp(e164: string, captchaToken?: string): Promise<void> {
   // Toll-fraud / SMS-pumping gate (server-enforced via the otp-guard edge fn:
   // geo allowlist + per-phone/per-IP velocity caps + a global daily ceiling).
   // FAILS OPEN: a guard error/outage never blocks login — the Supabase dashboard
@@ -215,7 +215,14 @@ export async function sendPhoneOtp(e164: string): Promise<void> {
     // network/guard failure → fail open, proceed to send below.
   }
 
-  const { error } = await supabase.auth.signInWithOtp({ phone: e164 });
+  // captchaToken is forwarded when present so enabling CAPTCHA in the Supabase
+  // dashboard (part of the bypass-proof floor) does NOT break sends — the screen
+  // that owns the invisible Turnstile/hCaptcha widget just passes its token here.
+  // Undefined today = no-op, so current behavior is unchanged.
+  const { error } = await supabase.auth.signInWithOtp({
+    phone: e164,
+    options: captchaToken ? { captchaToken } : undefined,
+  });
   if (error) throw classify(error);
 }
 
