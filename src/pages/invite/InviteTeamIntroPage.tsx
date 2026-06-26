@@ -41,6 +41,13 @@ const InviteTeamIntroPage = () => {
   const collabFirstNames = displayedCollabs.map((c) => c.firstName);
   const collabSentence = formatCollaboratorNames(collabFirstNames);
 
+  // Reduced-motion users (and assistive tech) shouldn't be whisked off this
+  // screen on a 2.2s timer before they've read who's here — let them tap.
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const goToSong = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     clearInviteContext();
@@ -48,6 +55,9 @@ const InviteTeamIntroPage = () => {
   };
 
   useEffect(() => {
+    // Honor reduced motion: no bar animation, no auto-advance — the user taps in.
+    if (reduceMotion) return;
+
     // Start progress bar animation
     if (barRef.current) {
       barRef.current.style.width = '0%';
@@ -69,16 +79,19 @@ const InviteTeamIntroPage = () => {
       className="relative min-h-screen flex flex-col"
       style={{ backgroundColor: '#FAFAF6' }}
     >
-      {/* Auto-advance progress bar — thin gold line at very top */}
-      <div
-        className="fixed top-0 left-0 right-0"
-        style={{ height: 2, backgroundColor: 'rgba(181,147,90,0.15)', zIndex: 999 }}
-      >
+      {/* Auto-advance progress bar — thin gold line at very top. Hidden when the
+          user prefers reduced motion (auto-advance is disabled in that case). */}
+      {!reduceMotion && (
         <div
-          ref={barRef}
-          style={{ height: '100%', backgroundColor: '#B5935A', width: '0%', borderRadius: 9999 }}
-        />
-      </div>
+          className="fixed top-0 left-0 right-0"
+          style={{ height: 2, backgroundColor: 'rgba(181,147,90,0.15)', zIndex: 999 }}
+        >
+          <div
+            ref={barRef}
+            style={{ height: '100%', backgroundColor: '#B5935A', width: '0%', borderRadius: 9999 }}
+          />
+        </div>
+      )}
 
       {/* Subtle glow */}
       <div
@@ -165,7 +178,7 @@ const InviteTeamIntroPage = () => {
         </GoldButton>
 
         <p className="text-[0.75rem] text-center mt-3" style={{ color: '#999' }}>
-          Auto-entering in a moment...
+          {reduceMotion ? 'Tap to enter your song.' : 'Auto-entering in a moment...'}
         </p>
       </div>
     </div>
