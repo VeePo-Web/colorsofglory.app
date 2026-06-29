@@ -1,12 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
 
 // Drains pending rows from public.notification_queue and sends them via Resend.
 // If RESEND_API_KEY is not configured the function still marks rows as sent
 // (logs to console) so the queue does not grow unbounded in dev.
 
-const FROM = "Colors of Glory <referrals@colorsofglory.app>";
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
+const FROM = COG_SENDERS.referrals;
 const BATCH = 25;
 
 function subject(kind: string, amountCents: number | null): string {
@@ -91,26 +91,23 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const resp = await fetch(`${GATEWAY_URL}/emails`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${lovableKey}`,
-          "X-Connection-Api-Key": resendKey,
-        },
-        body: JSON.stringify({
-          from: FROM,
-          to: [email],
-          subject: subject(row.kind, amount),
-          html: body(row.kind, amount),
-        }),
-      });
+      const result = await sendViaResend({
+        from: FROM,
+        to: email,
+        subject: subject(row.kind, amount),
+        html: body(row.kind, amount),
+        tags: [
+          { name: "app", value: "cog" },
+          { name: "category", value: "referral" },
+          { name: "kind", value: row.kind },
+        ],
+      }).catch((e) => ({ ok: false, status: 0, body: String(e) } as const));
 
-      if (!resp.ok) {
-        const text = await resp.text();
+      if (!result.ok) {
+        const text = typeof result.body === "string" ? result.body : JSON.stringify(result.body);
         await supabase.from("notification_queue").update({
           attempts: row.attempts + 1,
-          last_error: `resend_${resp.status}:${text.slice(0, 200)}`,
+          last_error: `resend_${result.status}:${String(text).slice(0, 200)}`,
           updated_at: new Date().toISOString(),
         }).eq("id", row.id);
         failed++;
