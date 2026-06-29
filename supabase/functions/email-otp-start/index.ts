@@ -2,6 +2,7 @@
 // Sends the code via Resend through the Lovable Connector Gateway — never via
 // the default Supabase/Lovable branded email templates.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GATEWAY = "https://connector-gateway.lovable.dev/resend";
-const FROM = Deno.env.get("EMAIL_OTP_FROM") ?? "Colors of Glory <onboarding@resend.dev>";
+const FROM = Deno.env.get("EMAIL_OTP_FROM") ?? COG_SENDERS.security;
 const APP_NAME = "Colors of Glory";
 
 type Purpose = "signup" | "login" | "reset";
@@ -57,13 +57,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "invalid_request" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
-      return new Response(JSON.stringify({ error: "email_provider_unconfigured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
     const emailHash = await sha256Hex(email);
@@ -102,18 +97,25 @@ Deno.serve(async (req) => {
     });
 
     const { subject, html, text } = emailBody(code, purpose);
-    const resp = await fetch(`${GATEWAY}/emails`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": RESEND_API_KEY,
-      },
-      body: JSON.stringify({ from: FROM, to: [email], subject, html, text }),
-    });
-    if (!resp.ok) {
-      const detail = await resp.text();
-      console.error("resend_send_failed", resp.status, detail);
+    let result;
+    try {
+      result = await sendViaResend({
+        from: FROM,
+        to: email,
+        subject,
+        html,
+        text,
+        tags: [
+          { name: "app", value: "cog" },
+          { name: "category", value: "auth_otp" },
+          { name: "purpose", value: purpose },
+        ],
+      });
+    } catch (err) {
+      console.error("email-otp-start provider error", err);
+      return new Response(JSON.stringify({ error: "email_provider_unconfigured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!result.ok) {
       return new Response(JSON.stringify({ error: "send_failed" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
