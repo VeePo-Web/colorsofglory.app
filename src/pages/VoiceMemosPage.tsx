@@ -509,8 +509,8 @@ const VoiceMemosPage = () => {
   const handleStartRecording = useCallback(async () => {
     setRecordingSection("Raw idea");
     setRecordingNote("");
-    setFlow("recording");
-    await startRecording();
+    const started = await startRecording();
+    setFlow(started ? "recording" : "idle");
   }, [startRecording]);
 
   const handleStopRecording = useCallback(async () => {

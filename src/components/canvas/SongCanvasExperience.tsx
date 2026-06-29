@@ -989,8 +989,8 @@ const SongCanvasExperience = () => {
     recordingParentIdRef.current = parentId ?? null;
     setRecordingSection(parentId ? "Layer" : "Raw idea");
     setRecordingNote("");
-    setRecordingFlow("recording");
-    await startRecording();
+    const started = await startRecording();
+    setRecordingFlow(started ? "recording" : "idle");
   }, [isViewer, startRecording]);
 
   const handleStopRecording = useCallback(async () => {

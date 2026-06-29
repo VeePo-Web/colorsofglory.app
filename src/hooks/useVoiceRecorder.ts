@@ -43,7 +43,7 @@ export interface UseVoiceRecorderOptions {
 
 export interface UseVoiceRecorderReturn {
   state: VoiceRecorderState;
-  startRecording: () => Promise<void>;
+  startRecording: () => Promise<boolean>;
   stopRecording: () => Promise<RecordingResult | null>;
   cancelRecording: () => void;
 }
@@ -191,12 +191,12 @@ export function useVoiceRecorder(
     return () => window.removeEventListener("beforeunload", handler);
   }, [state.phase]);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (): Promise<boolean> => {
     // Concurrency guard: ignore double-taps and starts while one is in flight
     // or a recording is already live. Without this, an impatient tap spawns a
     // second getUserMedia + AudioContext and leaks the mic.
-    if (startingRef.current) return;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") return;
+    if (startingRef.current) return false;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") return true;
     startingRef.current = true;
 
     try {
@@ -206,7 +206,7 @@ export function useVoiceRecorder(
           phase: "error",
           error: "Recording isn't supported in this browser.",
         }));
-        return;
+        return false;
       }
 
       setState((s) => ({ ...s, phase: "requesting-permission", error: null }));
@@ -238,7 +238,7 @@ export function useVoiceRecorder(
               ? "Recording needs a secure HTTPS connection. Open the published site to record."
               : "Recording isn't supported in this browser.",
         }));
-        return;
+        return false;
       }
 
       let stream: MediaStream;
@@ -297,7 +297,7 @@ export function useVoiceRecorder(
             error: "Could not access the microphone. Please try again.",
           }));
         }
-        return;
+        return false;
       }
 
       streamRef.current = stream;
@@ -337,7 +337,18 @@ export function useVoiceRecorder(
         );
       } catch {
         // Some browsers throw on the options object — retry with bare defaults.
-        recorder = new MediaRecorder(stream);
+        try {
+          recorder = new MediaRecorder(stream);
+        } catch {
+          cleanup();
+          setState({
+            phase: "error",
+            durationMs: 0,
+            analyserNode: null,
+            error: "Recording could not start on this device. Please try again.",
+          });
+          return false;
+        }
       }
 
       endReasonRef.current = "manual";
@@ -400,8 +411,19 @@ export function useVoiceRecorder(
       // No timeslice: iOS Safari is unreliable with small timeslices (empty or
       // never-flushed chunks → unplayable blob). A single flush on stop() is the
       // most robust path across browsers.
-      recorder.start();
       mediaRecorderRef.current = recorder;
+      try {
+        recorder.start();
+      } catch {
+        cleanup();
+        setState({
+          phase: "error",
+          durationMs: 0,
+          analyserNode: null,
+          error: "Recording could not start after microphone access was granted. Please try again.",
+        });
+        return false;
+      }
       startTimeRef.current = Date.now();
 
       // Live duration ticker (Date.now() deltas, so it stays accurate even if
@@ -423,6 +445,7 @@ export function useVoiceRecorder(
         analyserNode: analyser,
         error: null,
       });
+      return true;
     } finally {
       startingRef.current = false;
     }

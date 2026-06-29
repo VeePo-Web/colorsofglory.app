@@ -206,9 +206,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     // Start recording fresh.
     setManualMarkers([]);
     setStatus("listening");
+    live.stop();
     live.reset();
+    const started = await recorder.startRecording();
+    if (!started) {
+      setStatus("idle");
+      return;
+    }
+    // Live STT is an enhancement. Let MediaRecorder own the mic first so a
+    // speech-recognition permission/session cannot masquerade as recording.
     if (live.supported) live.start();
-    await recorder.startRecording();
   }, [phase, recorder, saving, live, handleAudioFile]);
 
   const handleRailAction = useCallback(

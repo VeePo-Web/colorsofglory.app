@@ -22,6 +22,7 @@ function makeStream() {
 
 // ── Mock MediaRecorder ────────────────────────────────────────────────────
 let emitBytes = true;
+let throwOnStart = false;
 class MockMediaRecorder {
   static instanceCount = 0;
   static isTypeSupported() {
@@ -36,6 +37,7 @@ class MockMediaRecorder {
     MockMediaRecorder.instanceCount += 1;
   }
   start() {
+    if (throwOnStart) throw new DOMException("cannot start", "InvalidStateError");
     this.state = "recording";
   }
   stop() {
@@ -67,6 +69,7 @@ class MockAudioContext {
 
 beforeEach(() => {
   emitBytes = true;
+  throwOnStart = false;
   MockMediaRecorder.instanceCount = 0;
   vi.stubGlobal("MediaRecorder", MockMediaRecorder as unknown as typeof MediaRecorder);
   vi.stubGlobal("AudioContext", MockAudioContext as unknown as typeof AudioContext);
@@ -86,9 +89,11 @@ afterEach(() => {
 describe("useVoiceRecorder", () => {
   it("starts recording on startRecording()", async () => {
     const { result } = renderHook(() => useVoiceRecorder());
+    let started = false;
     await act(async () => {
-      await result.current.startRecording();
+      started = await result.current.startRecording();
     });
+    expect(started).toBe(true);
     expect(result.current.state.phase).toBe("recording");
     expect(MockMediaRecorder.instanceCount).toBe(1);
   });
@@ -163,5 +168,19 @@ describe("useVoiceRecorder", () => {
     });
     expect(result.current.state.phase).toBe("error");
     expect(result.current.state.error).toMatch(/secure|https/i);
+  });
+
+  it("does not get stuck if MediaRecorder.start() fails after mic permission", async () => {
+    throwOnStart = true;
+    const { result } = renderHook(() => useVoiceRecorder());
+    let started = true;
+    await act(async () => {
+      started = await result.current.startRecording();
+    });
+
+    expect(started).toBe(false);
+    expect(result.current.state.phase).toBe("error");
+    expect(result.current.state.error).toMatch(/could not start/i);
+    expect(lastTrack.stop).toHaveBeenCalledTimes(1);
   });
 });
