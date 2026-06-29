@@ -475,7 +475,6 @@ const SongSheetPage = () => {
           capo={capo}
           songTitle={songTitle}
           onClose={() => setPerform(false)}
-          onStepKey={stepKey}
         />
       )}
 
