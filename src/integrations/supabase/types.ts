@@ -928,6 +928,48 @@ export type Database = {
         }
         Relationships: []
       }
+      phone_otps: {
+        Row: {
+          attempts: number
+          code_hash: string
+          consumed_at: string | null
+          country: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          ip_hash: string | null
+          max_attempts: number
+          phone_e164: string
+          twilio_sid: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          consumed_at?: string | null
+          country?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_hash?: string | null
+          max_attempts?: number
+          phone_e164: string
+          twilio_sid?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          consumed_at?: string | null
+          country?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_hash?: string | null
+          max_attempts?: number
+          phone_e164?: string
+          twilio_sid?: string | null
+        }
+        Relationships: []
+      }
       plan_tiers: {
         Row: {
           allows_founder_code: boolean
