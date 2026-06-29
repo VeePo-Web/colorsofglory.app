@@ -16,6 +16,7 @@ const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
 const EmailAuthPage = lazy(() => import("./pages/auth/EmailAuthPage"));
 const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"));
 import RequireAuth from "./components/auth/RequireAuth";
 const FirstIntentPage = lazy(() => import("./pages/onboarding/FirstIntentPage"));
 const StartFirstSongPage = lazy(() => import("./pages/onboarding/StartFirstSongPage"));
@@ -136,6 +137,7 @@ const App = () => {
             <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
             <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
             <Route path="/auth/email" element={<EmailAuthPage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset" element={<ResetPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
