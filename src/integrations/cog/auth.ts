@@ -217,8 +217,8 @@ export async function verifyPhoneOtp(e164: string, code: string): Promise<Sessio
     body: { phone: e164, code },
   });
   if (error) throw new AuthError("UNKNOWN", "We couldn't verify that code. Please try again.");
-  const resp = (data ?? {}) as { ok?: boolean; code?: string; password?: string };
-  if (!resp.ok || !resp.password) {
+  const resp = (data ?? {}) as { ok?: boolean; code?: string; password?: string; email?: string };
+  if (!resp.ok || !resp.password || !resp.email) {
     switch (resp.code) {
       case "INVALID_OTP":
         throw new AuthError("INVALID_OTP", "That code isn't right. Double-check and try again.");
@@ -230,9 +230,10 @@ export async function verifyPhoneOtp(e164: string, code: string): Promise<Sessio
         throw new AuthError("UNKNOWN", "We couldn't verify that code. Please try again.");
     }
   }
-  // Exchange the one-shot password for a real session.
+  // Exchange the one-shot password for a real session via the email grant
+  // (the native phone provider is disabled on Cloud).
   const { data: signIn, error: signInErr } = await supabase.auth.signInWithPassword({
-    phone: e164,
+    email: resp.email,
     password: resp.password,
   });
   if (signInErr || !signIn.session) throw classify(signInErr ?? new Error("no_session"));

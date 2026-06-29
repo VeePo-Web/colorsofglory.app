@@ -82,13 +82,21 @@ Deno.serve(async (req) => {
     // Burn the code immediately.
     await admin.from("phone_otps").update({ consumed_at: new Date().toISOString() }).eq("id", otp.id);
 
-    // Look up or create the user, keyed by phone.
+    // Native phone provider is OFF on this Cloud project, so we can't use the
+    // phone+password grant. Instead, attach a deterministic synthetic email to
+    // each phone user and exchange via the (enabled) email+password grant.
+    const digits = phone.replace(/^\+/, "");
+    const syntheticEmail = `phone+${digits}@auth.colorsofglory.app`;
+
     let userId: string | null = null;
     let createdUser = false;
     for (let page = 1; page <= 10 && !userId; page++) {
       const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
       if (error) { console.error("listUsers failed", error); break; }
-      userId = data.users.find((u) => u.phone === phone.replace(/^\+/, "") || u.phone === phone)?.id ?? null;
+      const match = data.users.find(
+        (u) => u.phone === digits || u.phone === phone || u.email === syntheticEmail,
+      );
+      userId = match?.id ?? null;
       if (data.users.length < 200) break;
     }
 
@@ -96,7 +104,11 @@ Deno.serve(async (req) => {
 
     if (!userId) {
       const { data, error } = await admin.auth.admin.createUser({
-        phone, password: oneShotPassword, phone_confirm: true,
+        phone,
+        email: syntheticEmail,
+        password: oneShotPassword,
+        phone_confirm: true,
+        email_confirm: true,
       });
       if (error || !data.user) {
         console.error("createUser by phone failed", error);
@@ -106,7 +118,10 @@ Deno.serve(async (req) => {
       createdUser = true;
     } else {
       const { error } = await admin.auth.admin.updateUserById(userId, {
-        password: oneShotPassword, phone_confirm: true,
+        email: syntheticEmail,
+        password: oneShotPassword,
+        phone_confirm: true,
+        email_confirm: true,
       });
       if (error) {
         console.error("updateUserById failed", error);
@@ -118,7 +133,7 @@ Deno.serve(async (req) => {
       phone_e164: phone, status: "verified", user_id: userId, created_user: createdUser,
     });
 
-    return json({ ok: true, password: oneShotPassword, created: createdUser });
+    return json({ ok: true, email: syntheticEmail, password: oneShotPassword, created: createdUser });
   } catch (e) {
     console.error("phone-otp-verify error", e);
     return json({ ok: false, code: "PROVIDER_ERROR" }, 500);
