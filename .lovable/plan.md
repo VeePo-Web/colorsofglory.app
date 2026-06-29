@@ -1,94 +1,47 @@
-## Twilio phone sign-in audit findings
+## Root cause
 
-**Root cause:** the current `phone-otp-start` function is calling Twilio Verify at the wrong connector-gateway path:
+The phone OTP flow works up to the very last step. Logs prove it:
 
-```text
-/twilio/Verify/v2/Services/{VERIFY_SID}/Verifications
+```
+phone-otp-start  → 200 {ok:true}            (Twilio SMS sent)
+phone-otp-verify → 200 {ok:true, password}  (code matched, user upserted)
+/auth/v1/token?grant_type=password (phone+password) → 422 phone_provider_disabled
 ```
 
-The linked Twilio connector gateway automatically targets the classic Twilio Account API path, so this Verify v2 path is returning `404 {}`. That becomes `PROVIDER_ERROR`, and the app shows: “We couldn't send the code. Please try again.”
+The Auth server refuses `signInWithPassword({ phone, password })` because the native phone provider is OFF on this Cloud project. Our SDK then runs that error through `classify()`, which matches `phone_provider_disabled` and shows the "Text sign-in is just being switched on. Use email below to continue now." message — even though the SMS, code check, and user creation all succeeded.
 
-**Confirmed signals:**
-- Browser request: `phone-otp-start` returned `{ ok:false, code:"PROVIDER_ERROR" }`.
-- Function log: `twilio verify start failed 404 {}`.
-- Direct Twilio gateway smoke test works for classic Twilio resources (`IncomingPhoneNumbers.json` returns 200), which means the connector itself is linked and usable.
-- Direct gateway request to `/Services.json` fails because it is being routed under the classic `/2010-04-01/Accounts/...` prefix, not Verify v2.
-- No verify-function logs exist yet, because the user never gets past the send-code step.
+So the only thing broken is the **session exchange**. Everything before it is healthy.
 
-## Church Center UX benchmark notes
+## The fix: stop using phone+password grant
 
-Church Center’s phone login works because it keeps the flow extremely calm and narrow:
-- Phone/email first, then code second; no passwords in the primary flow.
-- Clear region support: phone login is primarily US/Canada; email fallback for unsupported regions.
-- Code-entry screen assumes SMS may be delayed and makes resend obvious without blaming the user.
-- Errors are specific: wrong code, expired code, rate-limited, unsupported phone, or delivery failed.
-- The best OTP UX avoids a generic dead-end when a provider fails.
+The phone provider can't be enabled here, so we replace the password-grant exchange with a path that works on this project:
 
-## Implementation plan
+Attach a deterministic synthetic email to every phone user (e.g. `phone+14038308930@auth.colorsofglory.app`) and exchange a one-shot password against **email+password** grant, which is enabled. The user still sees and signs in with their phone — the email is an internal handle only.
 
-### 1. Replace the broken Verify path with a working Twilio SMS OTP path
-Use the Twilio connector gateway’s supported Messaging API:
+## Changes
 
-```text
-POST /twilio/Messages.json
-```
+### `supabase/functions/phone-otp-verify/index.ts`
+- After OTP validation succeeds, when creating or updating the auth user via the Admin API, also set `email` to `phone+<digits>@auth.colorsofglory.app` and `email_confirm: true` alongside the existing `phone_confirm: true` and one-shot password.
+- For existing users without a synthetic email, patch it on the fly via `updateUserById`.
+- Response shape changes from `{ ok, password }` to `{ ok, email, password }`. Keep `password` field for back-compat in case any caller still reads it.
 
-Build `phone-otp-start` to generate our own short-lived 6-digit code server-side, hash it with a backend pepper, store only the hash, then send the code through Twilio SMS using the connected Twilio sender number.
+### `src/integrations/cog/auth.ts` → `verifyPhoneOtp`
+- Replace `supabase.auth.signInWithPassword({ phone, password })` with `supabase.auth.signInWithPassword({ email, password })` using the email returned by the edge function.
+- Keep the same `AuthError` mapping for INVALID_OTP / EXPIRED / MAX_ATTEMPTS.
 
-Why this is the right fix here:
-- The existing connector is confirmed working for classic Twilio Account API routes.
-- It avoids the broken Verify v2 routing through this gateway.
-- It keeps secrets server-side.
-- It gives us full control over Church Center-style UX states: resend cooldown, expiry, attempts, lockouts, and audit logging.
+### `src/integrations/cog/auth.ts` → `classify`
+- Narrow the `PHONE_PROVIDER_DISABLED` branch so it only fires when we deliberately call a phone-grant API, not as a catch-all. After the fix it should never trigger from the phone OTP flow at all.
 
-### 2. Harden `phone-otp-start`
-- Validate E.164 phone numbers.
-- Keep existing toll-fraud guard RPC (`check_and_record_otp_send`).
-- Require `TWILIO_FROM_NUMBER` or a Messaging Service SID secret for the sender.
-- Require `OTP_PEPPER` for hashing OTP codes.
-- Generate a 6-digit numeric OTP.
-- Store a hash, expiry time, attempt counter, and status in the existing OTP/audit table or create the missing storage table if needed.
-- Send SMS with short, branded copy, e.g. `Your Colors of Glory code is 123456. It expires in 10 minutes.`
-- Map Twilio errors into useful app codes: `INVALID_PHONE`, `RATE_LIMITED`, `GEO_BLOCKED`, `PROVIDER_ERROR`.
+### No DB migration required
+- `phone_otps`, `phone_otp_verifications`, and `profiles` already store everything we need. The synthetic email lives only in `auth.users.email` and is never displayed.
 
-### 3. Harden `phone-otp-verify`
-- Stop calling the broken Verify Check endpoint.
-- Look up the most recent unexpired pending OTP for the phone.
-- Hash the submitted code with `OTP_PEPPER` and compare server-side.
-- Increment attempts on wrong code.
-- Expire/lock after too many wrong attempts.
-- On success, mark the OTP verified and create/update the backend auth user for that phone.
-- Return the current one-shot password flow only if it remains the safest available bridge to create a browser session.
+## Verification
 
-### 4. Patch the thin SDK error handling
-Update `src/integrations/cog/auth.ts` only, staying in Lovable’s lane:
-- Surface `PROVIDER_ERROR` as a delivery failure.
-- Surface `RATE_LIMITED`, `INVALID_PHONE`, `GEO_BLOCKED`, `INVALID_OTP`, `EXPIRED`, and `MAX_ATTEMPTS` distinctly.
-- Avoid generic “couldn’t send” when the backend gives a better reason.
+1. `deploy_edge_functions(["phone-otp-verify"])`.
+2. `curl_edge_functions` `phone-otp-start` then `phone-otp-verify` with a real code → expect `{ ok:true, email:"phone+...@auth.colorsofglory.app", password:"..." }`.
+3. Reload preview, run phone sign-in end-to-end on `/auth/phone` → expect to land authenticated on `/`, no "switched on" banner, no 422 in network tab.
+4. `read_query` on `auth.users` to confirm the row has both `phone` and the synthetic `email`, both confirmed.
 
-### 5. Add/repair backend schema if the OTP storage table is missing
-If the current database only has audit rows and no pending-code storage, add a secure `phone_otps` table:
-- No anonymous access.
-- Service-role only table access.
-- RLS enabled.
-- Store phone, hash, expiry, attempts, consumed timestamp, IP hash, and provider message SID.
-- Add cleanup-friendly indexes.
+## Out of scope (Claude's lane, not this turn)
 
-### 6. Verify the end-to-end path
-After implementation:
-- Deploy `phone-otp-start` and `phone-otp-verify`.
-- Test send-code against the deployed function.
-- Confirm the function logs show a Twilio `SM...` message SID instead of a 404.
-- Test wrong-code behavior.
-- Test expired/attempt-limited behavior if possible.
-- Verify the app no longer returns the generic provider failure for the send step.
-
-## Secrets needed before/while implementing
-
-I will check current runtime secrets first. If either is missing, I will request it securely:
-- `TWILIO_FROM_NUMBER` — currently the connected Twilio account has `+15878044471` available; we can store that as the sender if you want.
-- `OTP_PEPPER` — should be generated and stored securely, never committed.
-
-## Deliverable
-
-A working custom Twilio SMS phone login path that does not use the broken native phone provider or broken Verify gateway route, with better Church Center-style reliability and clearer failure states.
+The verify screen copy ("Text sign-in is just being switched on…") is fine to keep as a fallback for any future genuine provider failure — but after this fix the phone flow will never surface it.
