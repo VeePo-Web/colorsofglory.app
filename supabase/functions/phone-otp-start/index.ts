@@ -1,7 +1,7 @@
-// Public phone OTP send via Twilio Verify. Bypasses Supabase's native phone
-// provider (which is OFF on Lovable Cloud and returns phone_provider_disabled).
-// Mirrors the email-otp-start shape: validate, run otp-guard rails, call
-// Twilio Verify through the Lovable connector gateway, log to audit table.
+// Public phone OTP send via Twilio Messaging. The Lovable connector gateway
+// only routes the classic Twilio Account API (/2010-04-01/Accounts/{Sid}/...),
+// so Twilio Verify v2 is NOT reachable through it. We mint our own 6-digit
+// code, store only a hash + pepper, and send the SMS through Twilio Messages.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -26,6 +26,13 @@ function clientIp(req: Request): string {
   return (req.headers.get("x-forwarded-for")?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "unknown").trim();
 }
 
+function genCode(): string {
+  // Cryptographically random 6-digit code, no leading-zero bias.
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return (buf[0] % 1_000_000).toString().padStart(6, "0");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, code: "METHOD" }, 405);
@@ -39,9 +46,10 @@ Deno.serve(async (req) => {
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
-    const VERIFY_SID = Deno.env.get("TWILIO_VERIFY_SERVICE_SID");
-    if (!LOVABLE_API_KEY || !TWILIO_API_KEY || !VERIFY_SID) {
-      console.error("phone-otp-start: missing Twilio env");
+    const FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
+    const OTP_PEPPER = Deno.env.get("OTP_PEPPER");
+    if (!LOVABLE_API_KEY || !TWILIO_API_KEY || !FROM_NUMBER || !OTP_PEPPER) {
+      console.error("phone-otp-start: missing env (need TWILIO_FROM_NUMBER + OTP_PEPPER)");
       return json({ ok: false, code: "PROVIDER_ERROR" }, 500);
     }
 
@@ -60,37 +68,59 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.warn("guard rpc failed (fail-open)", e); }
 
-    // Twilio Verify start — via Lovable connector gateway.
-    const formBody = new URLSearchParams({ To: phone, Channel: "sms" });
-    const verifyResp = await fetch(
-      `https://connector-gateway.lovable.dev/twilio/Verify/v2/Services/${VERIFY_SID}/Verifications`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "X-Connection-Api-Key": TWILIO_API_KEY,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formBody,
-      },
-    );
-    const verifyJson = await verifyResp.json().catch(() => ({}));
+    // Mint code, hash with pepper, store pending row.
+    const code = genCode();
+    const codeHash = await sha256Hex(`${OTP_PEPPER}|${phone}|${code}`);
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
 
-    if (!verifyResp.ok) {
-      console.error("twilio verify start failed", verifyResp.status, verifyJson);
+    // Invalidate any prior unconsumed codes for this phone — only one active code at a time.
+    await admin.from("phone_otps")
+      .update({ consumed_at: new Date().toISOString() })
+      .eq("phone_e164", phone)
+      .is("consumed_at", null);
+
+    const { data: otpRow, error: insErr } = await admin.from("phone_otps").insert({
+      phone_e164: phone, code_hash: codeHash, expires_at: expiresAt,
+      ip_hash: ipHash, country,
+    }).select("id").single();
+    if (insErr || !otpRow) {
+      console.error("phone_otps insert failed", insErr);
+      return json({ ok: false, code: "PROVIDER_ERROR" }, 500);
+    }
+
+    // Send SMS via Twilio Messages through Lovable connector gateway.
+    const messageBody = `Your Colors of Glory code is ${code}. It expires in 10 minutes.`;
+    const form = new URLSearchParams({ To: phone, From: FROM_NUMBER, Body: messageBody });
+    const smsResp = await fetch("https://connector-gateway.lovable.dev/twilio/Messages.json", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TWILIO_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+    });
+    const smsJson = await smsResp.json().catch(() => ({}));
+
+    if (!smsResp.ok) {
+      console.error("twilio messages send failed", smsResp.status, smsJson);
+      await admin.from("phone_otps").update({ consumed_at: new Date().toISOString() }).eq("id", otpRow.id);
       await admin.from("phone_otp_verifications").insert({
         phone_e164: phone, ip_hash: ipHash, country, status: "send_failed",
-        error_code: String((verifyJson as { code?: number }).code ?? verifyResp.status),
+        error_code: String((smsJson as { code?: number }).code ?? smsResp.status),
       });
-      const tcode = (verifyJson as { code?: number }).code;
-      if (tcode === 60200 || tcode === 60033) return json({ ok: false, code: "INVALID_PHONE" });
-      if (tcode === 60410 || tcode === 60203) return json({ ok: false, code: "RATE_LIMITED" });
+      const tcode = (smsJson as { code?: number }).code;
+      // 21211/21614 invalid To; 21408 permission to send to region; 21610 unsubscribed; 21612 unreachable carrier.
+      if (tcode === 21211 || tcode === 21614) return json({ ok: false, code: "INVALID_PHONE" });
+      if (tcode === 21408 || tcode === 21215) return json({ ok: false, code: "GEO_BLOCKED" });
+      if (tcode === 20429 || smsResp.status === 429) return json({ ok: false, code: "RATE_LIMITED" });
       return json({ ok: false, code: "PROVIDER_ERROR" });
     }
 
+    const sid = (smsJson as { sid?: string }).sid ?? null;
+    await admin.from("phone_otps").update({ twilio_sid: sid }).eq("id", otpRow.id);
     await admin.from("phone_otp_verifications").insert({
-      phone_e164: phone, ip_hash: ipHash, country, status: "sent",
-      twilio_sid: (verifyJson as { sid?: string }).sid ?? null,
+      phone_e164: phone, ip_hash: ipHash, country, status: "sent", twilio_sid: sid,
     });
     return json({ ok: true });
   } catch (e) {
