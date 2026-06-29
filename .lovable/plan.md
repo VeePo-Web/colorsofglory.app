@@ -1,47 +1,53 @@
-## Root cause
+# Fix: Forgot password sends nothing
 
-The phone OTP flow works up to the very last step. Logs prove it:
+## Why nothing arrived
 
+`EmailAuthPage.handleForgot` calls `supabase.auth.resetPasswordForEmail`, which routes through Supabase's default recovery email template. That template is not wired to a sender in this project (no Lovable auth-email-hook, no domain template), so the email is created on the auth side but never lands in the inbox.
+
+Meanwhile the project already ships a fully branded, working alternative — `email-otp-start` + `email-otp-verify` edge functions delivering a 6-digit code via Resend (the same path used for signup). Forgot-password was just never moved over. Per `docs/claude-handoffs/2026-06-25-auth-portal-rebuild.md`, this swap is required and explicit.
+
+## Plan (UI + SDK only, no backend changes)
+
+### 1. SDK — `src/integrations/cog/auth.ts`
+Replace the body of `requestPasswordReset(email)` so it calls:
 ```
-phone-otp-start  → 200 {ok:true}            (Twilio SMS sent)
-phone-otp-verify → 200 {ok:true, password}  (code matched, user upserted)
-/auth/v1/token?grant_type=password (phone+password) → 422 phone_provider_disabled
+startEmailOtp({ email, purpose: "reset" })
 ```
+…and drop the `resetPasswordForEmail` call entirely. This keeps the public SDK shape stable; every existing caller now sends a branded 6-digit code instead of a (silent) default Supabase email.
 
-The Auth server refuses `signInWithPassword({ phone, password })` because the native phone provider is OFF on this Cloud project. Our SDK then runs that error through `classify()`, which matches `phone_provider_disabled` and shows the "Text sign-in is just being switched on. Use email below to continue now." message — even though the SMS, code check, and user creation all succeeded.
+### 2. New page — `src/pages/auth/ForgotPasswordPage.tsx` (route `/auth/forgot-password`)
+A single VeePo-style screen with three internal steps:
 
-So the only thing broken is the **session exchange**. Everything before it is healthy.
+- **Step "email"** — email field + "Send code" → `startEmailOtp({ email, purpose: "reset" })`. On success, advance to "code".
+- **Step "code"** — 6-digit OTP input, 60s resend countdown, "Enter the code we just emailed to {email}".
+- **Step "password"** — new password + confirm, caps-lock warning, show/hide toggle. On submit:
+  1. `verifyEmailOtp({ email, code, purpose: "reset", password: newPassword })` — the edge function updates the password via Admin API.
+  2. `signInWithPassword({ email, password: newPassword })` — drop straight into the app.
+  3. Navigate to `/` via `routeAfterAuth`.
 
-## The fix: stop using phone+password grant
+Visuals: reuse `OnboardingShell`, `CogBrand`, `GoldButton`, the same input styling used in `EmailAuthPage` so it feels like one portal. No new design tokens.
 
-The phone provider can't be enabled here, so we replace the password-grant exchange with a path that works on this project:
+Error mapping (already classified by SDK):
+- `INVALID_OTP` → "That code didn't match. Try again."
+- `RATE_LIMITED` → "Too many attempts. Wait a minute and resend."
+- `WEAK_PASSWORD` → "Pick at least 8 characters."
 
-Attach a deterministic synthetic email to every phone user (e.g. `phone+14038308930@auth.colorsofglory.app`) and exchange a one-shot password against **email+password** grant, which is enabled. The user still sees and signs in with their phone — the email is an internal handle only.
+### 3. Hook it up in `EmailAuthPage.tsx`
+Replace the inline `handleForgot` logic with a simple `navigate("/auth/forgot-password", { state: { email } })` so the email already typed in the sign-in form is carried over. Remove the cooldown/timer there (it now lives on the dedicated page). The existing "Forgot password?" button stays in the same spot, same copy.
 
-## Changes
+### 4. Routing — `src/App.tsx`
+Add the new public route `/auth/forgot-password` → `ForgotPasswordPage` (lazy import, alongside the existing `/auth/email` and `/auth/reset-password` routes). Leave `/auth/reset-password` in place for any in-flight Supabase recovery links (harmless fallback).
 
-### `supabase/functions/phone-otp-verify/index.ts`
-- After OTP validation succeeds, when creating or updating the auth user via the Admin API, also set `email` to `phone+<digits>@auth.colorsofglory.app` and `email_confirm: true` alongside the existing `phone_confirm: true` and one-shot password.
-- For existing users without a synthetic email, patch it on the fly via `updateUserById`.
-- Response shape changes from `{ ok, password }` to `{ ok, email, password }`. Keep `password` field for back-compat in case any caller still reads it.
+## Acceptance test
 
-### `src/integrations/cog/auth.ts` → `verifyPhoneOtp`
-- Replace `supabase.auth.signInWithPassword({ phone, password })` with `supabase.auth.signInWithPassword({ email, password })` using the email returned by the edge function.
-- Keep the same `AuthError` mapping for INVALID_OTP / EXPIRED / MAX_ATTEMPTS.
+1. From `/auth/email`, type an email and tap **Forgot password?** → land on `/auth/forgot-password` with the email prefilled.
+2. Tap **Send code** → branded COG email arrives within seconds with a 6-digit code.
+3. Enter the code → password form appears.
+4. Set a new password → automatically signed in and routed home.
+5. Wrong code shows inline "didn't match"; 6th send within 15 min returns rate-limit copy.
 
-### `src/integrations/cog/auth.ts` → `classify`
-- Narrow the `PHONE_PROVIDER_DISABLED` branch so it only fires when we deliberately call a phone-grant API, not as a catch-all. After the fix it should never trigger from the phone OTP flow at all.
+## Out of scope
 
-### No DB migration required
-- `phone_otps`, `phone_otp_verifications`, and `profiles` already store everything we need. The synthetic email lives only in `auth.users.email` and is never displayed.
-
-## Verification
-
-1. `deploy_edge_functions(["phone-otp-verify"])`.
-2. `curl_edge_functions` `phone-otp-start` then `phone-otp-verify` with a real code → expect `{ ok:true, email:"phone+...@auth.colorsofglory.app", password:"..." }`.
-3. Reload preview, run phone sign-in end-to-end on `/auth/phone` → expect to land authenticated on `/`, no "switched on" banner, no 422 in network tab.
-4. `read_query` on `auth.users` to confirm the row has both `phone` and the synthetic `email`, both confirmed.
-
-## Out of scope (Claude's lane, not this turn)
-
-The verify screen copy ("Text sign-in is just being switched on…") is fine to keep as a fallback for any future genuine provider failure — but after this fix the phone flow will never surface it.
+- No backend/edge-function changes (`email-otp-start` / `email-otp-verify` already handle the `reset` purpose).
+- No design-token changes.
+- No removal of `/auth/reset-password`; it stays as a graceful fallback for any cached recovery links.

@@ -163,10 +163,9 @@ export async function completeEmailSignup(input: {
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${window.location.origin}/auth/reset-password`,
-  });
-  if (error) throw classify(error);
+  // Branded path only: send a 6-digit code via Resend through email-otp-start.
+  // Supabase's default recovery email is intentionally bypassed.
+  await startEmailOtp({ email, purpose: "reset" });
 }
 
 export async function updatePassword(newPassword: string): Promise<void> {
