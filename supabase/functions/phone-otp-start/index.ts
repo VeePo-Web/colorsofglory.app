@@ -63,8 +63,12 @@ Deno.serve(async (req) => {
         _phone: phone, _ip_hash: ipHash, _country: country,
       });
       if (guard && (guard as { ok?: boolean }).ok === false) {
-        const code = (guard as { code?: string }).code ?? "RATE_LIMITED";
-        return json({ ok: false, code });
+        const g = guard as { code?: string; retry_after_seconds?: number };
+        return json({
+          ok: false,
+          code: g.code ?? "RATE_LIMITED",
+          retry_after_seconds: g.retry_after_seconds ?? null,
+        });
       }
     } catch (e) { console.warn("guard rpc failed (fail-open)", e); }
 
@@ -89,7 +93,13 @@ Deno.serve(async (req) => {
     }
 
     // Send SMS via Twilio Messages through Lovable connector gateway.
-    const messageBody = `Your Colors of Glory code is ${code}. It expires in 10 minutes.`;
+    // Two-line body: human-readable first line + WebOTP origin-bound second
+    // line ("@<domain> #<code>") so Android Chrome auto-fills the code with
+    // zero typing. iOS gets the same number via the system keyboard suggestion
+    // from `autocomplete="one-time-code"` — no extra change needed there.
+    const messageBody =
+      `Your Colors of Glory code is ${code}. It expires in 10 minutes.\n\n` +
+      `@colorsofglory.app #${code}`;
     const form = new URLSearchParams({ To: phone, From: FROM_NUMBER, Body: messageBody });
     const smsResp = await fetch("https://connector-gateway.lovable.dev/twilio/Messages.json", {
       method: "POST",

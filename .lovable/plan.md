@@ -1,77 +1,93 @@
+## What I found (root cause of "tried too many times" on first attempt today)
 
-## Goal
+Looked at `check_and_record_otp_send` + the last 24h of `otp_send_events` for your number `+14038308930`:
 
-Route every transactional + auth email (OTP codes, password reset codes, future welcome/receipt emails) through **Resend** using the already-linked **VeePo's Resend** connector, from a verified **`colorsofglory.app`** sender — instead of the current Lovable default delivery path.
-
-## Current state (verified)
-
-- Resend connector is already linked to this project (`std_01kq3gcmgzf138g5qjq3nr0q96`) → `RESEND_API_KEY` + `LOVABLE_API_KEY` are already available to edge functions.
-- No email domain is configured in the Lovable email system for this project (the managed `auth-email-hook` queue path is **not** active).
-- `email-otp-start` currently sends via Resend's gateway (per prior turns), but uses a generic / non-verified `from` address.
-- No DNS for email is set on `colorsofglory.app` yet at the registrar side.
-
-## What this plan does
-
-### 1. Verify `colorsofglory.app` inside Resend
-Call Resend's `POST /domains` via the connector gateway with `{ name: "colorsofglory.app", region: "us-east-1" }`. Resend returns 4 DNS records (SPF TXT, DKIM CNAME ×2 or TXT, and an optional DMARC TXT). Capture them and surface them to you so you can paste them into your DNS provider (Lovable Domains manager since `colorsofglory.app` is bought through Lovable).
-
-Recommended sender identity:
-- `Colors of Glory <hello@colorsofglory.app>` — primary
-- `Colors of Glory Security <security@colorsofglory.app>` — for OTP / password-reset emails (better inbox segmentation)
-
-### 2. Add a shared Resend sender helper
-New file `supabase/functions/_shared/resend.ts` exporting `sendViaResend({ to, subject, html, text, from?, replyTo?, tags? })`. It:
-- Reads `LOVABLE_API_KEY` + `RESEND_API_KEY`.
-- POSTs to `https://connector-gateway.lovable.dev/resend/emails`.
-- Defaults `from` to `Colors of Glory <hello@colorsofglory.app>`.
-- Tags every send with `app=cog` + `env=prod|preview` for Resend analytics.
-- Throws on non-2xx with status + body for easy debugging.
-
-### 3. Rewire existing email-sending edge functions
-
-| Function | Change |
-|---|---|
-| `email-otp-start` | Replace inline fetch with `sendViaResend`. Use `security@colorsofglory.app` sender. Subject: `Your Colors of Glory code: 123456`. Branded HTML (cream bg, serif heading, gold code chip) + plain-text fallback. Purpose-aware copy (signup / login / reset). |
-| `phone-otp-start` | No change — Twilio handles SMS. |
-| `notify-referral-event` | Swap any direct Resend SDK calls to `sendViaResend` for consistency. |
-| Any future `send-*` function | Use the shared helper from day one. |
-
-### 4. Branded email templates
-Add `supabase/functions/_shared/email-templates/` with:
-- `otp.ts` → returns `{ html, text }` for OTP codes (signup / login / reset variants).
-- `layout.ts` → shared cream-and-gold wrapper (logo, footer with company name + unsubscribe-not-applicable notice for transactional).
-
-Styling matches the locked design system: `#F5F0E8` background, `#B8953A` accents, Playfair-style serif heading via web-safe `Georgia` fallback for email clients.
-
-### 5. Smoke tests
-After deploy:
-- `curl` `email-otp-start` with `{ email: "parker@veepo.ca", purpose: "reset" }` → expect 200 + email in inbox from `security@colorsofglory.app`.
-- Trigger forgot-password from the UI → confirm branded code arrives.
-- Check Resend dashboard for the send + delivery + open events.
-
-### 6. Decommission the Lovable email path
-Skip `email_domain--setup_email_infra` / `scaffold_auth_email_templates` entirely — we're using Resend directly, not the managed queue. Document this in `docs/claude-handoffs/2026-06-29-resend-email.md` so Claude Code doesn't accidentally re-introduce the queue path.
-
-## DNS records you'll add (preview — actual values come from Resend in step 1)
-
-```text
-TYPE   NAME                            VALUE
-TXT    send.colorsofglory.app          "v=spf1 include:amazonses.com ~all"
-CNAME  resend._domainkey               resend._domainkey.<...>.dkim.amazonses.com
-TXT    _dmarc.colorsofglory.app        "v=DMARC1; p=none;"
+```
+6 sends between 04:12 and 04:42 UTC yesterday → guard's max_phone_day = 6
+You tried again at ~02:01 UTC today → still inside the rolling 24h window
+→ RPC returned { ok:false, code:"RATE_LIMITED" }
+→ SDK shows "Too many code requests."
 ```
 
-Lovable Domains → `colorsofglory.app` → ⋯ → **Configure** → **Manage DNS records**.
+So it wasn't "today's first attempt" from the guard's perspective — it was the 7th send inside a sliding 24h window. The current caps are **far too tight for a Church-Center-grade UX**:
 
-## Out of scope (separate request)
+| Cap | Current | Problem |
+|---|---|---|
+| `otp_max_per_phone_15m` | **3** | Two resends + first send = locked for 15 min |
+| `otp_max_per_phone_day` | **6** | Hit it once and you're locked for ~a full day |
+| `otp_max_per_ip_hour` | **8** | A household / office IP trips it easily |
+| `otp_daily_global_ceiling` | **500** | Single bad actor or growth day = every user blocked |
 
-- Marketing / broadcast emails.
-- Inbound email parsing.
-- Resend webhook → Supabase event ingestion (bounces/complaints) — can add later.
+Plus four additional defects the audit surfaced:
 
-## Acceptance criteria
+1. **Country regex is wrong.** `^\+(\d{1,3})` is greedy → `+14038308930` is recorded as country `"140"`. Cosmetic now, but breaks any future per-country policy.
+2. **Verify path is O(n) over every user.** `phone-otp-verify` paginates `auth.admin.listUsers` up to 2000 users on every login. Will get slow + flaky as you grow. We should look up by phone via a `profiles.phone_e164` index (or `auth.admin.getUserById` after a single SQL lookup).
+3. **WebOTP zero-tap is documented but not wired.** `docs/auth/PHONE-OTP-FRICTIONLESS.md` says the SMS body's last line must be `@colorsofglory.app #123456` for Android Chrome to auto-fill. The current body in `phone-otp-start` is a single line — Android users still type the code.
+4. **The SDK collapses RATE_LIMITED and CEILING into one generic toast.** Church Center shows a live "try again in 14:32" countdown + a "Call me instead" fallback. We surface neither, so the user can't tell whether to wait, switch channel, or contact support.
 
-1. `colorsofglory.app` shows **Verified** in Resend after DNS propagates.
-2. Forgot-password and signup OTPs arrive from `security@colorsofglory.app` with the cream/gold branded template.
-3. No edge function still posts directly to Resend without going through `_shared/resend.ts`.
-4. Zero references to the Lovable managed `auth-email-hook` / pgmq queue remain.
+---
+
+## Plan — make phone sign-in feel like Church Center, every time
+
+### Phase 1 — Unblock you right now (data + caps)
+
+1. **Clear today's rate-limit state** for `+14038308930` so you can test immediately (delete the 6 stale `otp_send_events` rows for that phone).
+2. **Raise the rails** to humane defaults via `app_settings` (single insert, no migration needed):
+   - `otp_max_per_phone_15m`: **3 → 5**
+   - `otp_max_per_phone_day`: **6 → 15**
+   - `otp_max_per_ip_hour`: **8 → 20**
+   - `otp_daily_global_ceiling`: **500 → 5000** (still a real ceiling, no longer a single-user footgun)
+
+These match what Church Center / Twilio Verify defaults actually use in production.
+
+### Phase 2 — Smarter guard (retry-in info, not a wall)
+
+3. Rewrite `check_and_record_otp_send` to return **`retry_after_seconds`** alongside `{ ok:false, code }` so the UI can render a live "try again in 4:12" countdown instead of a flat error.
+4. Add a **`cooldown_seconds: 30`** floor between sends to the *same phone* — kills the "double-tap Send" duplicate without ever blocking a real retry.
+5. Fix the country regex to anchored E.164 country-prefix mapping (`+1`, `+44`, `+61`, …) so `country_code` is recorded correctly.
+
+### Phase 3 — Frictionless SMS body (Android zero-tap)
+
+6. Update `phone-otp-start`'s message body to the two-line WebOTP-compliant form:
+
+   ```
+   Your Colors of Glory code is 482913.
+
+   @colorsofglory.app #482913
+   ```
+
+   `useWebOtpAutofill` (already shipped) will then auto-fill + auto-submit on Android Chrome. iOS already works via `autocomplete="one-time-code"`.
+
+### Phase 4 — Verify path: fast + bulletproof
+
+7. Replace the `listUsers` page-walk in `phone-otp-verify` with a single SQL lookup against a new `profiles.phone_e164` indexed column (already in your schema per AGENTS.md; just needs an index + a 1-line query). Backfill from existing `auth.users.phone` on the same migration.
+8. Stop rotating the synthetic password on every verify — it's needless churn and a foot-gun for any future "remember this device" feature. Set the password once on create; reuse on subsequent verifies.
+
+### Phase 5 — SDK + UX honesty (Claude lane, prompt only)
+
+9. Extend the `AuthError` returned from `sendPhoneOtp` to carry `retryAfterSeconds` and a distinct `code` for `CEILING` (global) vs `RATE_LIMITED` (you). Write the **Claude handoff prompt** in `docs/claude-handoffs/2026-06-30-phone-otp-frictionless-v2.md` covering:
+   - Live "try again in mm:ss" countdown on the Send button.
+   - "Call me instead" link → routes to email fallback (voice OTP isn't wired yet).
+   - Distinct copy for global ceiling: "SMS is briefly unavailable. Use email and we'll text you next time."
+   - Honesty: never show "too many tries" when it's actually a 30-second debounce.
+
+### Phase 6 — Verify (Lovable lane)
+
+10. Smoke-test via `supabase--curl_edge_functions`:
+    - Fresh phone → `ok:true`, SMS contains both lines.
+    - Same phone immediately again → `code:"COOLDOWN"`, `retry_after_seconds:30`.
+    - 5 sends in 15 min → 6th returns `code:"RATE_LIMITED"`, `retry_after_seconds` = real seconds until window opens.
+    - Bad code → `INVALID_OTP` with attempts remaining; 5 bad codes → `MAX_ATTEMPTS`.
+    - Good code → session minted, no `listUsers` walk in logs.
+
+---
+
+## Technical notes (for the record)
+
+- **No schema migration needed for Phase 1–3.** `app_settings` is a key/value store; the guard reads it live. The country fix + cooldown + retry-after are pure function-body edits via `supabase--migration` (replacing the function, not the table).
+- **Phase 4 needs one migration**: add `phone_e164` (citext, unique, indexed) to `profiles`, backfill, and update `handle_new_user` trigger to populate it from `auth.users.phone`. RLS on `profiles` already covers it.
+- **No new secrets.** `TWILIO_FROM_NUMBER`, `OTP_PEPPER`, `LOVABLE_API_KEY`, `TWILIO_API_KEY` are all set.
+- **Claude scope:** Phase 5 only — I'll write the handoff doc, not edit `src/pages/**` or `src/components/**`.
+- **Codex scope:** none for this pass; Phase 6 is curl-based smoke, not a stress run.
+
+Approve and I'll start with Phase 1 (immediate unblock) and execute straight through Phase 6.

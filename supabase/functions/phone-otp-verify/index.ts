@@ -22,12 +22,6 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function randomPassword(): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes)).replace(/[^A-Za-z0-9]/g, "x") + "Aa1!";
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, code: "METHOD" }, 405);
@@ -88,25 +82,30 @@ Deno.serve(async (req) => {
     const digits = phone.replace(/^\+/, "");
     const syntheticEmail = `phone+${digits}@auth.colorsofglory.app`;
 
+    // O(1) lookup by indexed profiles.phone_e164 — replaces the legacy
+    // pagination over auth.admin.listUsers that scaled O(n) with total users.
     let userId: string | null = null;
-    let createdUser = false;
-    for (let page = 1; page <= 10 && !userId; page++) {
-      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-      if (error) { console.error("listUsers failed", error); break; }
-      const match = data.users.find(
-        (u) => u.phone === digits || u.phone === phone || u.email === syntheticEmail,
-      );
-      userId = match?.id ?? null;
-      if (data.users.length < 200) break;
+    {
+      const { data: prof } = await admin
+        .from("profiles")
+        .select("user_id")
+        .eq("phone_e164", phone)
+        .maybeSingle();
+      userId = (prof as { user_id?: string } | null)?.user_id ?? null;
     }
 
-    const oneShotPassword = randomPassword();
+    let createdUser = false;
+    // Deterministic password derived from phone + pepper — stable across
+    // verifies, so existing sessions stay valid and we never rotate on each
+    // login. The pepper makes it unguessable without the server secret.
+    const stablePassword =
+      (await sha256Hex(`${OTP_PEPPER}|pw|${phone}`)).slice(0, 40) + "Aa1!";
 
     if (!userId) {
       const { data, error } = await admin.auth.admin.createUser({
         phone,
         email: syntheticEmail,
-        password: oneShotPassword,
+        password: stablePassword,
         phone_confirm: true,
         email_confirm: true,
       });
@@ -117,9 +116,12 @@ Deno.serve(async (req) => {
       userId = data.user.id;
       createdUser = true;
     } else {
+      // Ensure the synthetic email + stable password are set (idempotent —
+      // a no-op for users already provisioned by this flow). We deliberately
+      // do NOT rotate the password on each verify.
       const { error } = await admin.auth.admin.updateUserById(userId, {
         email: syntheticEmail,
-        password: oneShotPassword,
+        password: stablePassword,
         phone_confirm: true,
         email_confirm: true,
       });
@@ -133,7 +135,7 @@ Deno.serve(async (req) => {
       phone_e164: phone, status: "verified", user_id: userId, created_user: createdUser,
     });
 
-    return json({ ok: true, email: syntheticEmail, password: oneShotPassword, created: createdUser });
+    return json({ ok: true, email: syntheticEmail, password: stablePassword, created: createdUser });
   } catch (e) {
     console.error("phone-otp-verify error", e);
     return json({ ok: false, code: "PROVIDER_ERROR" }, 500);
