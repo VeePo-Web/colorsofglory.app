@@ -59,10 +59,9 @@ Deno.serve(async (req) => {
 
     // Toll-fraud rails (fail-open on RPC error).
     try {
-      const { data: guard, error: guardErr } = await admin.rpc("check_and_record_otp_send", {
+      const { data: guard } = await admin.rpc("check_and_record_otp_send", {
         _phone: phone, _ip_hash: ipHash, _country: country,
       });
-      console.log("guard result", JSON.stringify(guard), "err", guardErr?.message);
       if (guard && (guard as { ok?: boolean }).ok === false) {
         const g = guard as { code?: string; retry_after_seconds?: number };
         return json({
