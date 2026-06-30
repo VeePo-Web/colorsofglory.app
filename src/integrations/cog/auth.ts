@@ -12,6 +12,8 @@ export type AuthErrorCode =
   | "EMAIL_NOT_CONFIRMED"
   | "WEAK_PASSWORD"
   | "RATE_LIMITED"
+  | "COOLDOWN"
+  | "CEILING"
   | "PHONE_PROVIDER_DISABLED"
   | "GEO_BLOCKED"
   | "INVALID_OTP"
@@ -21,9 +23,14 @@ export type AuthErrorCode =
 
 export class AuthError extends Error {
   code: AuthErrorCode;
-  constructor(code: AuthErrorCode, message: string) {
+  /** Seconds until the caller may retry. Present on COOLDOWN / RATE_LIMITED / CEILING. */
+  retryAfterSeconds?: number;
+  constructor(code: AuthErrorCode, message: string, retryAfterSeconds?: number) {
     super(message);
     this.code = code;
+    if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+      this.retryAfterSeconds = retryAfterSeconds;
+    }
   }
 }
 
@@ -189,21 +196,39 @@ export async function signInWithGoogle(redirectTo?: string): Promise<void> {
 // ─── Phone OTP ───────────────────────────────────────────────────────────
 
 export async function sendPhoneOtp(e164: string, captchaToken?: string): Promise<void> {
-  // Custom Twilio Verify path. The native Supabase phone provider is OFF on
-  // Lovable Cloud (returns phone_provider_disabled), so we run our own:
-  //   phone-otp-start  → otp-guard rails + Twilio Verify send
-  //   phone-otp-verify → Twilio Verify check + Admin API user upsert
+  // Custom Twilio path. The native Supabase phone provider is OFF on Lovable
+  // Cloud (returns phone_provider_disabled), so we run our own:
+  //   phone-otp-start  → guard (rate caps + cooldown + retry-after) → Twilio
+  //   phone-otp-verify → hash check → Admin API user upsert → session grant
   void captchaToken; // reserved for future CAPTCHA forwarding
   const { data, error } = await supabase.functions.invoke("phone-otp-start", { body: { phone: e164 } });
   if (error) throw new AuthError("UNKNOWN", "We couldn't send the code. Please try again.");
-  const resp = (data ?? {}) as { ok?: boolean; code?: string };
+  const resp = (data ?? {}) as { ok?: boolean; code?: string; retry_after_seconds?: number };
   if (resp.ok) return;
+  const retry = resp.retry_after_seconds ?? undefined;
   switch (resp.code) {
     case "GEO_BLOCKED":
       throw new AuthError("GEO_BLOCKED", "SMS sign-in isn't available in your region yet. Try email instead.");
-    case "RATE_LIMITED":
+    case "COOLDOWN":
+      throw new AuthError(
+        "COOLDOWN",
+        `Just sent a code. Try again in ${Math.max(retry ?? 30, 1)}s.`,
+        retry,
+      );
     case "CEILING":
-      throw new AuthError("RATE_LIMITED", "Too many code requests. Please wait a minute and try again.");
+      throw new AuthError(
+        "CEILING",
+        "SMS is briefly unavailable. Use email and we'll text you next time.",
+        retry,
+      );
+    case "RATE_LIMITED":
+      throw new AuthError(
+        "RATE_LIMITED",
+        retry
+          ? `Too many code requests. Try again in ${Math.ceil(retry / 60)} min.`
+          : "Too many code requests. Please wait a minute and try again.",
+        retry,
+      );
     case "INVALID_PHONE":
       throw new AuthError("UNKNOWN", "That phone number doesn't look right. Check it and try again.");
     default:
