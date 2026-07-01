@@ -195,16 +195,55 @@ export function buildVaultZip(graph: MemoryGraph, bundle: MemoryRawBundle): Uint
   return createZip(entries);
 }
 
-/** Trigger a browser download of the user's Obsidian vault. */
-export function downloadVault(graph: MemoryGraph, bundle: MemoryRawBundle): void {
-  const bytes = buildVaultZip(graph, bundle);
+const VAULT_FILENAME = "colors-of-glory-memory.zip";
+
+function triggerDownload(bytes: Uint8Array): void {
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "colors-of-glory-memory.zip";
+  anchor.download = VAULT_FILENAME;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Trigger a browser download of the user's Obsidian vault. */
+export function downloadVault(graph: MemoryGraph, bundle: MemoryRawBundle): void {
+  triggerDownload(buildVaultZip(graph, bundle));
+}
+
+export type VaultExportOutcome = "shared" | "downloaded" | "cancelled";
+
+/**
+ * Mobile-first vault export: hand the .zip to the native share sheet
+ * (AirDrop, Files, another app — iOS 15+/Android), falling back to a plain
+ * download where file-sharing isn't supported. A user cancelling the share
+ * sheet is a calm no-op, never an error.
+ */
+export async function shareOrDownloadVault(
+  graph: MemoryGraph,
+  bundle: MemoryRawBundle,
+): Promise<VaultExportOutcome> {
+  const bytes = buildVaultZip(graph, bundle);
+  try {
+    const file = new File([bytes.buffer as ArrayBuffer], VAULT_FILENAME, {
+      type: "application/zip",
+    });
+    const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+    if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: "Colors of Glory memory vault" });
+        return "shared";
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return "cancelled";
+        // Any other share failure falls through to the download path.
+      }
+    }
+  } catch {
+    /* File/share unsupported — fall through to download */
+  }
+  triggerDownload(bytes);
+  return "downloaded";
 }

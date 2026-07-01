@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Download, FileText, FolderOpen, Link2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { downloadVault } from "@/integrations/cog/memory";
+import { shareOrDownloadVault } from "@/integrations/cog/memory";
 import type { MemoryGraph, MemoryRawBundle } from "@/lib/memory/memoryTypes";
 
 interface Props {
@@ -13,7 +13,7 @@ interface Props {
 }
 
 const STEPS = [
-  { icon: Download, text: "Download the vault — a folder of notes, zipped." },
+  { icon: Download, text: "Export the vault — a folder of notes, zipped, straight to your share sheet." },
   { icon: FolderOpen, text: "Unzip it, then in Obsidian choose “Open folder as vault.”" },
   { icon: Link2, text: "Every idea, song, theme, and scripture links itself into one graph." },
 ];
@@ -26,12 +26,14 @@ const STEPS = [
 const ObsidianExportSheet = ({ open, graph, bundle, onClose }: Props) => {
   const [busy, setBusy] = useState(false);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!graph || !bundle) return;
     setBusy(true);
     try {
-      downloadVault(graph, bundle);
-      toast.success("Memory vault exported");
+      const outcome = await shareOrDownloadVault(graph, bundle);
+      if (outcome === "shared") toast.success("Memory vault shared");
+      else if (outcome === "downloaded") toast.success("Memory vault downloaded");
+      // "cancelled" — the user closed the share sheet; stay calm and quiet.
     } catch {
       toast.error("Could not export your vault. Your songs are safe — please try again.");
     } finally {
@@ -78,7 +80,7 @@ const ObsidianExportSheet = ({ open, graph, bundle, onClose }: Props) => {
           >
             <span className="flex items-center justify-center gap-2">
               <Download size={17} strokeWidth={2} />
-              {busy ? "Preparing…" : "Download vault"}
+              {busy ? "Preparing…" : "Export vault"}
             </span>
           </button>
 
