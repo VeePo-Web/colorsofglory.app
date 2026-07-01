@@ -7,7 +7,7 @@ import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import InviteErrorCard from "@/components/invite/InviteErrorCard";
 import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview } from "@/lib/invite/inviteApi";
-import { saveInviteContext, formatCollaboratorNames } from "@/lib/invite/inviteContext";
+import { saveInviteContext, loadInviteContext, formatCollaboratorNames } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
 import { requestNewInvite } from "@/integrations/cog/songs";
 
@@ -238,7 +238,19 @@ const InviteJoinPage = () => {
             <InviteErrorCard
               code={state.code}
               onRequestNew={handleRequestNew}
-              onOpenSong={() => navigate('/songs/1/lyrics')}
+              onOpenSong={() => {
+                // "Open the song" for an already-member re-tapping their invite
+                // link. Use the REAL song id from the invite context saved when
+                // this token previewed successfully — never a hardcoded id that
+                // opens someone else's song. Fresh session (no context)? Their
+                // catalog is the one always-correct landing: the song is there.
+                const saved = loadInviteContext();
+                if (saved?.token === token && saved.songId) {
+                  navigate(`/songs/${saved.songId}/room`);
+                } else {
+                  navigate('/');
+                }
+              }}
               onGoHome={() => navigate('/')}
             />
           )}
