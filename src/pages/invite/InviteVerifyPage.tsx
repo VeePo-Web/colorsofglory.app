@@ -8,6 +8,7 @@ import OTPInput from "@/components/cog/OTPInput";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { loadInviteContext, saveInviteContext } from "@/lib/invite/inviteContext";
 import { acceptInvite } from "@/lib/invite/inviteApi";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -32,6 +33,8 @@ function toFriendlyError(err: unknown): string {
 const InviteVerifyPage = () => {
   const navigate = useNavigate();
   const ctx = loadInviteContext();
+  // While the code arrives, fetch the name step so verify → name is instant.
+  useIdlePrefetch(() => import("@/pages/invite/InviteNamePage"));
 
   const e164 = sessionStorage.getItem('cog:phone-e164') ?? '';
   const displayPhone = sessionStorage.getItem('cog:phone-display') ?? 'your number';

@@ -10,6 +10,7 @@ import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview }
 import { saveInviteContext, loadInviteContext, formatCollaboratorNames } from "@/lib/invite/inviteContext";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
 import { requestNewInvite } from "@/integrations/cog/songs";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 // ─── Phone formatting ─────────────────────────────────────────────────────────
 
@@ -69,6 +70,11 @@ type PageState =
 const InviteJoinPage = () => {
   const { token = 'demo' } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  // While they read the invite card, fetch the next screens so joining is instant.
+  useIdlePrefetch(
+    () => import("@/pages/invite/InviteVerifyPage"),
+    () => import("@/pages/invite/InviteWelcomeBackPage"),
+  );
 
   const [state, setState] = useState<PageState>({ type: 'loading' });
   const [digits, setDigits] = useState('');

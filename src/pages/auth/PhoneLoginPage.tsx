@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendPhoneOtp, AuthError } from "@/integrations/cog/auth";
 import { useTurnstile } from "@/lib/auth/useTurnstile";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
@@ -35,6 +36,8 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
+  // While they type their number, fetch the verify screen so the next tap is instant.
+  useIdlePrefetch(() => import("@/pages/auth/CodeVerifyPage"));
   // Invisible CAPTCHA token (no-op until VITE_TURNSTILE_SITE_KEY is set).
   const { containerRef: turnstileRef, getToken } = useTurnstile();
   // Pre-fill the last number entered this session so "Change number" lands on a

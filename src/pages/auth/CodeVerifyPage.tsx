@@ -4,6 +4,7 @@ import { sendPhoneOtp, verifyPhoneOtp, AuthError } from "@/integrations/cog/auth
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
 import { useWebOtpAutofill } from "@/lib/auth/useWebOtpAutofill";
 import { useTurnstile } from "@/lib/auth/useTurnstile";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OTPInput from "@/components/cog/OTPInput";
@@ -29,6 +30,11 @@ function toFriendlyError(err: unknown): string {
 
 const CodeVerifyPage = () => {
   const navigate = useNavigate();
+  // While the code arrives, fetch the two commonest post-auth destinations.
+  useIdlePrefetch(
+    () => import("@/pages/onboarding/FirstIntentPage"),
+    () => import("@/pages/ReturningHomePage"),
+  );
   // Invisible CAPTCHA so resend also satisfies the floor (no-op without a key).
   const { containerRef: turnstileRef, getToken } = useTurnstile();
 

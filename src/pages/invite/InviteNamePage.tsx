@@ -5,6 +5,7 @@ import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { loadInviteContext, saveInviteContext } from "@/lib/invite/inviteContext";
 import { saveName } from "@/lib/invite/inviteApi";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 const fieldStyle = (active: boolean): React.CSSProperties => ({
   height: 56,
@@ -30,6 +31,8 @@ const fieldStyle = (active: boolean): React.CSSProperties => ({
 const InviteNamePage = () => {
   const navigate = useNavigate();
   const ctx = loadInviteContext();
+  // While they type their name, fetch the team-intro screen so continue is instant.
+  useIdlePrefetch(() => import("@/pages/invite/InviteTeamIntroPage"));
   const lastRef = useRef<HTMLInputElement>(null);
 
   const [firstName, setFirstName] = useState('');
