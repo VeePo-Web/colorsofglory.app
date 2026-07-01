@@ -192,17 +192,23 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
                 marginTop: 5,
                 padding: "2px 8px",
                 borderRadius: 9999,
-                backgroundColor: isFailed
+                // Once the blob is on the device the chip reads as reassurance
+                // (gold), never an alarm — "your idea is safe here" is the promise.
+                backgroundColor: (isFailed || hasLocal)
                   ? "rgba(184,149,58,0.12)"
                   : `${statusMeta.color}15`,
-                color: isFailed ? "var(--cog-gold)" : statusMeta.color,
+                color: (isFailed || hasLocal) ? "var(--cog-gold)" : statusMeta.color,
                 fontSize: 10,
                 fontWeight: 700,
                 fontFamily: "var(--font-body)",
                 letterSpacing: "0.04em",
               }}
             >
-              {isFailed ? "Saved on device · tap retry" : statusMeta.label}
+              {isFailed
+                ? "Saved on device · tap retry"
+                : hasLocal
+                  ? "Saved on device · syncing"
+                  : statusMeta.label}
             </span>
           )}
         </div>
