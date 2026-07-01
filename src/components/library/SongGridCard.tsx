@@ -1,0 +1,72 @@
+import { Mic } from "lucide-react";
+import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import { relativeDate, coverColor } from "@/lib/library/format";
+
+interface SongGridCardProps {
+  song: SongRow;
+  /** Compact = the denser 3-across grid (Apple Photos pinched-in). */
+  compact?: boolean;
+  onClick: () => void;
+}
+
+/**
+ * SongGridCard — one song as a tactile creative room (never a file tile).
+ * Two densities: comfortable (2-across) shows the full room; compact
+ * (3-across) keeps title + ideas so more of the catalog fits one glance.
+ */
+const SongGridCard = ({ song, compact = false, onClick }: SongGridCardProps) => (
+  <button
+    onClick={onClick}
+    aria-label={`Open ${song.title}, ${song.voice_memo_count} ${
+      song.voice_memo_count === 1 ? "idea" : "ideas"
+    }, last edited ${relativeDate(song.last_activity_at)}`}
+    className="group text-left w-full rounded-2xl flex flex-col justify-between bg-white border border-[var(--cog-border)] shadow-[0_2px_8px_rgba(28,26,23,0.06)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-1 hover:border-[var(--cog-border-gold)] hover:shadow-[0_16px_32px_-16px_rgba(184,149,58,0.32)] active:scale-[0.97]"
+    style={{ minHeight: compact ? 104 : 140, padding: compact ? 12 : 16 }}
+  >
+    <div className="w-full">
+      {/* Cover swatch — the song's own color, its visual identity in the library */}
+      <div
+        aria-hidden
+        className="rounded-lg mb-2.5"
+        style={{
+          width: compact ? 18 : 26,
+          height: compact ? 18 : 26,
+          background: `linear-gradient(135deg, ${coverColor(song.cover_color)}, var(--cog-cream-dark))`,
+          border: "1px solid var(--cog-border)",
+        }}
+      />
+
+      <p
+        className={`font-bold leading-snug text-[var(--cog-charcoal)] transition-colors duration-200 group-hover:text-[var(--cog-gold)] ${
+          compact ? "text-[0.8125rem] mb-1 line-clamp-2" : "text-[0.9375rem] mb-2"
+        }`}
+        style={{ fontFamily: "var(--font-display)" }}
+      >
+        {song.title}
+      </p>
+
+      <div className="flex items-center gap-1.5">
+        <Mic size={compact ? 10 : 11} style={{ color: "var(--cog-gold)" }} />
+        <span
+          className={`font-medium ${compact ? "text-[0.6875rem]" : "text-[0.75rem]"}`}
+          style={{ color: "var(--cog-muted)" }}
+        >
+          {song.voice_memo_count} {song.voice_memo_count === 1 ? "idea" : "ideas"}
+        </span>
+      </div>
+    </div>
+
+    {!compact && (
+      <div className="flex w-full items-end justify-between mt-3">
+        <span className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+          {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
+        </span>
+        <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+          {relativeDate(song.last_activity_at)}
+        </p>
+      </div>
+    )}
+  </button>
+);
+
+export default SongGridCard;

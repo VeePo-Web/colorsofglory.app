@@ -5,6 +5,12 @@ import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
+import LibraryControls from "@/components/library/LibraryControls";
+import LibrarySongList from "@/components/library/LibrarySongList";
+import AlbumsShelf from "@/components/library/AlbumsShelf";
+import AlbumEditSheet from "@/components/library/AlbumEditSheet";
+import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
+import { listAlbums, createAlbum, updateAlbum, deleteAlbum, type SongAlbum } from "@/lib/library/albums";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
 import { listMySongs, createSong, type SongCard as SongRow } from "@/integrations/cog/songs";
 import {
@@ -18,19 +24,11 @@ import {
 
 type Tab = "Owned" | "Invited" | "Archived";
 
-function relativeDate(iso: string | null): string {
-  if (!iso) return "Just now";
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(ms / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+const EMPTY_COPY: Record<Tab, string> = {
+  Owned: "No songs yet. Tap New song to start brainstorming.",
+  Invited: "No invited songs yet. Songs shared with you will appear here.",
+  Archived: "Archived songs stay safe and readable here.",
+};
 
 const SongCatalogPage = () => {
   const navigate = useNavigate();
@@ -42,33 +40,87 @@ const SongCatalogPage = () => {
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const refresh = async () => {
-    try {
-      const list = await listMySongs();
-      setSongs(list);
-    } catch {
-      toast.error("Couldn't load your songs");
-    } finally {
-      setLoading(false);
-    }
+  // Library organization — view prefs persist so the catalog reopens the way
+  // the songwriter left it (Apple Music remembers your Library view).
+  const [prefs, setPrefs] = useState<LibraryPrefs>(() => loadLibraryPrefs());
+  const [query, setQuery] = useState("");
+  const [albums, setAlbums] = useState<SongAlbum[]>(() => listAlbums());
+  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
+  const [albumSheet, setAlbumSheet] = useState<{ open: boolean; album: SongAlbum | null }>({
+    open: false,
+    album: null,
+  });
+
+  const updatePrefs = (changes: Partial<LibraryPrefs>) =>
+    setPrefs((prev) => {
+      const next = { ...prev, ...changes };
+      saveLibraryPrefs(next);
+      return next;
+    });
+
+  // View cycle: comfortable grid → compact grid → list → back.
+  const cycleView = () => {
+    if (prefs.view === "grid" && prefs.density === 2) updatePrefs({ density: 3 });
+    else if (prefs.view === "grid") updatePrefs({ view: "list" });
+    else updatePrefs({ view: "grid", density: 2 });
   };
 
   useEffect(() => {
-    refresh();
+    (async () => {
+      try {
+        setSongs(await listMySongs());
+      } catch {
+        toast.error("Couldn't load your songs");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const filteredSongs = useMemo(() => {
-    return songs.filter((s) => {
+  const activeAlbum = albums.find((a) => a.id === activeAlbumId) ?? null;
+
+  const visibleSongs = useMemo(() => {
+    let list = songs.filter((s) => {
       if (activeTab === "Owned") return s.my_role === "owner" && s.status !== "archived";
       if (activeTab === "Invited") return s.my_role !== "owner" && s.status !== "archived";
       return s.status === "archived";
     });
-  }, [songs, activeTab]);
+    if (activeTab === "Owned" && activeAlbum) {
+      const inAlbum = new Set(activeAlbum.songIds);
+      list = list.filter((s) => inAlbum.has(s.id));
+    }
+    const q = query.trim().toLowerCase();
+    if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
+
+    const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
+    const sorted = [...list];
+    if (prefs.sort === "alpha") sorted.sort((a, b) => a.title.localeCompare(b.title));
+    else if (prefs.sort === "ideas") sorted.sort((a, b) => b.voice_memo_count - a.voice_memo_count);
+    else sorted.sort((a, b) => time(b) - time(a));
+    return sorted;
+  }, [songs, activeTab, activeAlbum, query, prefs.sort]);
 
   // Rooms a captured idea can move into — the songwriter's own active rooms.
-  const fileableSongs = songs
-    .filter((s) => s.my_role === "owner" && s.status !== "archived")
-    .map((s) => ({ id: s.id, title: s.title }));
+  const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
+  const fileableSongs = ownedSongs.map((s) => ({ id: s.id, title: s.title }));
+
+  const handleAlbumSave = (name: string, songIds: string[]) => {
+    if (albumSheet.album) {
+      setAlbums(updateAlbum(albumSheet.album.id, { name, songIds }));
+    } else {
+      const album = createAlbum(name, songIds);
+      setAlbums(listAlbums());
+      setActiveAlbumId(album.id);
+    }
+    setAlbumSheet({ open: false, album: null });
+  };
+
+  const handleAlbumDelete = (id: string) => {
+    setAlbums(deleteAlbum(id));
+    if (activeAlbumId === id) setActiveAlbumId(null);
+    setAlbumSheet({ open: false, album: null });
+    toast("Album removed — your songs are untouched");
+  };
 
   const handleCreateSong = async () => {
     if (isCheckingCreate) return;
@@ -78,8 +130,7 @@ const SongCatalogPage = () => {
       if (allowed) {
         setNewTitle("");
         setDialogOpen(true);
-      }
-      else navigate("/upgrade?source=song_gate_free");
+      } else navigate("/upgrade?source=song_gate_free");
     } catch {
       setNewTitle("");
       setDialogOpen(true);
@@ -116,7 +167,6 @@ const SongCatalogPage = () => {
         }}
       >
         <div className="mx-auto w-full max-w-[430px] px-5 pt-14 pb-0 md:max-w-3xl lg:max-w-5xl">
-          {/* Crown + wordmark + settings icon */}
           <div className="flex items-center justify-between mb-4">
             <CogBrand variant="horizontal" size="sm" theme="dark" />
             <div className="flex items-center">
@@ -139,7 +189,6 @@ const SongCatalogPage = () => {
             </div>
           </div>
 
-          {/* "Your songs" heading */}
           <h1
             className="font-bold mb-5"
             style={{
@@ -153,12 +202,14 @@ const SongCatalogPage = () => {
             Your songs
           </h1>
 
-          {/* Tab row — underline style on dark bg */}
           <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.10)" }}>
             {(["Owned", "Invited", "Archived"] as Tab[]).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  setActiveTab(tab);
+                  setActiveAlbumId(null);
+                }}
                 className={`mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center ${
                   activeTab === tab ? "text-white" : "text-white/40 hover:text-white/70"
                 }`}
@@ -178,33 +229,46 @@ const SongCatalogPage = () => {
         </div>
       </div>
 
-      {/* ── SONG CARD GRID ─────────────────────────────────────────────── */}
+      {/* ── LIBRARY ────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:max-w-5xl lg:px-8">
         <SeedIdeasShelf songs={fileableSongs} />
 
-        {filteredSongs.length === 0 ? (
-          <div className="text-center pt-16">
-            <p className="text-[0.9375rem]" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
-              {loading
-                ? "Loading your songs…"
-                : activeTab === "Owned"
-                ? "No songs yet. Tap New song to start brainstorming."
-                : activeTab === "Invited"
-                ? "No invited songs yet. Songs shared with you will appear here."
-                : "Archived songs stay safe and readable here."}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
-            {filteredSongs.map((song) => (
-              <SongCard
-                key={song.id}
-                song={song}
-                onClick={() => navigate(`/songs/${song.id}/brainstorm`)}
-              />
-            ))}
-          </div>
+        <LibraryControls
+          query={query}
+          onQueryChange={setQuery}
+          sort={prefs.sort}
+          onSortChange={(sort) => updatePrefs({ sort })}
+          view={prefs.view}
+          density={prefs.density}
+          onViewCycle={cycleView}
+        />
+
+        {activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
+          <AlbumsShelf
+            albums={albums}
+            songs={ownedSongs}
+            activeAlbumId={activeAlbumId}
+            onSelect={setActiveAlbumId}
+            onNew={() => setAlbumSheet({ open: true, album: null })}
+            onEdit={(album) => setAlbumSheet({ open: true, album })}
+          />
         )}
+
+        <LibrarySongList
+          songs={visibleSongs}
+          view={prefs.view}
+          density={prefs.density}
+          onDensityChange={(density) => updatePrefs({ view: "grid", density })}
+          sort={prefs.sort}
+          query={query}
+          loading={loading}
+          emptyCopy={
+            activeAlbum && activeTab === "Owned"
+              ? "This album is empty. Tap the pencil on it to add songs."
+              : EMPTY_COPY[activeTab]
+          }
+          onOpen={(id) => navigate(`/songs/${id}/brainstorm`)}
+        />
       </div>
 
       {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
@@ -229,6 +293,16 @@ const SongCatalogPage = () => {
       </button>
 
       <BottomNav active="songs" />
+
+      {albumSheet.open && (
+        <AlbumEditSheet
+          album={albumSheet.album}
+          songs={ownedSongs}
+          onSave={handleAlbumSave}
+          onDelete={handleAlbumDelete}
+          onClose={() => setAlbumSheet({ open: false, album: null })}
+        />
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-sm">
@@ -270,45 +344,5 @@ const SongCatalogPage = () => {
     </div>
   );
 };
-
-interface SongCardProps {
-  song: SongRow;
-  onClick: () => void;
-}
-
-// SongCard — real data: title + memo count + last-activity friendly time.
-const SongCard = ({ song, onClick }: SongCardProps) => (
-  <button
-    onClick={onClick}
-    className="group text-left w-full rounded-2xl p-4 flex flex-col justify-between bg-white border border-[var(--cog-border)] shadow-[0_2px_8px_rgba(28,26,23,0.06)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-1 hover:border-[var(--cog-border-gold)] hover:shadow-[0_16px_32px_-16px_rgba(184,149,58,0.32)] active:scale-[0.97]"
-    style={{ minHeight: "140px" }}
-  >
-    <div>
-      {/* Song title */}
-      <p
-        className="font-bold text-[0.9375rem] leading-snug mb-2 text-[var(--cog-charcoal)] transition-colors duration-200 group-hover:text-[var(--cog-gold)]"
-        style={{ fontFamily: "var(--font-display)" }}
-      >
-        {song.title}
-      </p>
-
-      <div className="flex items-center gap-1.5">
-        <Mic size={11} style={{ color: "var(--cog-gold)" }} />
-        <span className="text-[0.75rem] font-medium" style={{ color: "var(--cog-muted)" }}>
-          {song.voice_memo_count} {song.voice_memo_count === 1 ? "idea" : "ideas"}
-        </span>
-      </div>
-    </div>
-
-    <div className="flex items-end justify-between mt-3">
-      <span className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
-        {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
-      </span>
-      <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
-        {relativeDate(song.last_activity_at)}
-      </p>
-    </div>
-  </button>
-);
 
 export default SongCatalogPage;
