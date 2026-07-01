@@ -71,14 +71,26 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
+  const [hasLocal, setHasLocal] = useState(false);
+
   const bars = generateWaveform(memo.id, WAVEFORM_BARS);
   const statusMeta = STATUS_LABELS[memo.status ?? "ready"] ?? STATUS_LABELS.ready;
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
   const isFailed = memo.status === "failed" && !!onRetry;
+  // A take is playable the instant its blob is on the device — even while it's
+  // still uploading, or after a failed upload. Benchmark: "play the take locally
+  // while upload is pending." Instant, offline-safe, no signed URL needed.
+  const canPlay = isReady || hasLocal;
+
+  useEffect(() => {
+    let alive = true;
+    void audioCache.get(memo.id).then((b) => { if (alive) setHasLocal(!!b); });
+    return () => { alive = false; };
+  }, [memo.id, memo.status]);
 
   const togglePlay = useCallback(async () => {
-    if (!isReady) return;
+    if (!canPlay) return;
     if (isPlaying) {
       audioRef.current?.pause();
       setIsPlaying(false);
@@ -91,12 +103,17 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
       let url: string;
 
       if (cached) {
+        // Instant local playback — the source of truth for a just-captured take.
         url = URL.createObjectURL(cached);
         if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = url;
-      } else {
+      } else if (isReady) {
         url = await getSignedUrl(memo.id);
         audioCache.prefetch(memo.id, url);
+      } else {
+        // Local-only take whose cached blob has vanished — nothing to play yet.
+        setIsLoading(false);
+        return;
       }
 
       if (!audioRef.current) audioRef.current = new Audio();
@@ -111,7 +128,7 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
     } finally {
       setIsLoading(false);
     }
-  }, [memo.id, isReady, isPlaying]);
+  }, [memo.id, isReady, isPlaying, canPlay]);
 
   return (
     <div
@@ -217,19 +234,19 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
           <button
             type="button"
             onClick={togglePlay}
-            disabled={!isReady || isLoading}
+            disabled={!canPlay || isLoading}
             style={{
               width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-              backgroundColor: isReady ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
+              backgroundColor: canPlay ? "var(--cog-gold)" : "rgba(0,0,0,0.08)",
               color: "#FFF",
               border: "none",
-              cursor: isReady ? "pointer" : "not-allowed",
+              cursor: canPlay ? "pointer" : "not-allowed",
               display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: isReady ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
+              boxShadow: canPlay ? "0 4px 16px rgba(184,149,58,0.30)" : "none",
               transition: "transform 120ms ease",
               opacity: isLoading ? 0.7 : 1,
             }}
-            onMouseDown={(e) => isReady && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
+            onMouseDown={(e) => canPlay && ((e.currentTarget as HTMLElement).style.transform = "scale(0.95)")}
             onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
             aria-label={isPlaying ? `Pause ${memo.title}` : `Play ${memo.title}`}
           >
@@ -293,9 +310,9 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
       <div
         style={{
           display: "flex", alignItems: "flex-end", gap: 3, height: WAVEFORM_MAX_H,
-          cursor: isReady ? "pointer" : "default",
+          cursor: canPlay ? "pointer" : "default",
         }}
-        onClick={isReady ? togglePlay : undefined}
+        onClick={canPlay ? togglePlay : undefined}
         aria-hidden="true"
       >
         {bars.map((h, i) => {
