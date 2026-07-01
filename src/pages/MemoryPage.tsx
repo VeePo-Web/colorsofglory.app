@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import { loadMemory } from "@/integrations/cog/memory";
 import { searchMemory } from "@/lib/memory/searchMemory";
 import { applyHidden, toggleHidden, loadHiddenIds, saveHiddenIds } from "@/lib/memory/hidden";
+import { loadMemorySnapshot } from "@/lib/memory/localCache";
 import { freshSongs, loadLastSeen, saveLastSeen } from "@/lib/memory/recency";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import MemoryClusterCard from "@/components/memory/MemoryClusterCard";
@@ -48,7 +49,12 @@ const MemoryPage = () => {
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>(() => loadHiddenIds());
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ["memory"], queryFn: loadMemory });
+  // Local-first: the last snapshot renders in ~0ms while the fetch revalidates.
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["memory"],
+    queryFn: loadMemory,
+    placeholderData: () => loadMemorySnapshot(),
+  });
   const graph = data?.graph ?? null;
 
   // "New since you last opened" — capture the prior visit, then stamp this one.
@@ -69,16 +75,19 @@ const MemoryPage = () => {
   const hasSongs = (graph?.stats.songCount ?? 0) > 0;
 
   const searching = query.trim().length > 0;
+  // Defer result computation off the keystroke path — typing stays at 60fps
+  // even on a large catalog; results catch up a frame later.
+  const deferredQuery = useDeferredValue(query);
   const results = useMemo(() => {
-    if (!graph || !data?.bundle || !searching) return null;
-    const r = searchMemory(graph, data.bundle, query);
+    if (!graph || !data?.bundle || deferredQuery.trim().length === 0) return null;
+    const r = searchMemory(graph, data.bundle, deferredQuery);
     return {
       ...r,
       themes: applyHidden(r.themes, hidden),
       scriptures: applyHidden(r.scriptures, hidden),
       people: applyHidden(r.people, hidden),
     };
-  }, [graph, data?.bundle, query, searching, hidden]);
+  }, [graph, data?.bundle, deferredQuery, hidden]);
   const openSong = (id: string) => navigate(`/songs/${id}/room`);
 
   const persistHidden = (next: string[]) => {

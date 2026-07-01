@@ -9,6 +9,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { listMySongs } from "./songs";
 import { buildMemoryGraph } from "@/lib/memory/buildGraph";
+import { saveMemorySnapshot } from "@/lib/memory/localCache";
 import { buildVault } from "@/lib/memory/obsidianVault";
 import { createZip, type ZipEntry } from "@/lib/memory/zip";
 import type {
@@ -182,6 +183,8 @@ export interface LoadedMemory {
 /** Fetch + reduce into the memory graph. Keeps the bundle for vault export. */
 export async function loadMemory(): Promise<LoadedMemory> {
   const bundle = await fetchMemoryBundle();
+  // Local-first: snapshot for instant cold opens (fail-soft, user-scoped).
+  saveMemorySnapshot(bundle);
   return { graph: buildMemoryGraph(bundle), bundle };
 }
 

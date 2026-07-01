@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { loadMemory } from "@/integrations/cog/memory";
 import { buildSongMemory } from "@/lib/memory/buildGraph";
+import { loadMemorySnapshot } from "@/lib/memory/localCache";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 
 const Chip = ({ cluster }: { cluster: MemoryCluster }) => {
@@ -23,7 +24,12 @@ const SongMemoryPage = () => {
   const { id } = useParams<{ id: string }>();
   const songId = id ?? "";
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ["memory"], queryFn: loadMemory });
+  // Local-first: the last snapshot renders in ~0ms while the fetch revalidates.
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["memory"],
+    queryFn: loadMemory,
+    placeholderData: () => loadMemorySnapshot(),
+  });
   const songMemory = useMemo(
     () => (data?.graph ? buildSongMemory(data.graph, songId) : null),
     [data, songId],
