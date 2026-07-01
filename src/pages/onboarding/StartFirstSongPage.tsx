@@ -8,6 +8,7 @@ import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { setSong } from "@/lib/songContext";
 import { supabase } from "@/integrations/supabase/client";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -25,6 +26,9 @@ const fieldStyle = (active: boolean): React.CSSProperties => ({
 
 const StartFirstSongPage = () => {
   const navigate = useNavigate();
+  // While they name the song, fetch the capture surface (the heaviest chunk in
+  // the app) so "Create song" lands in their first song instantly — the aha.
+  useIdlePrefetch(() => import("@/pages/CapturePage"));
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
   const [bpm, setBpm] = useState("");

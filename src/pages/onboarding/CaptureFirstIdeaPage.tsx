@@ -4,6 +4,7 @@ import { PenLine } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 // ─── Animated waveform ────────────────────────────────────────────────────────
 
@@ -60,6 +61,8 @@ const CaptureFirstIdeaPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const songId = id ?? "1";
+  // While they record, fetch the celebration screen so stop → saved is instant.
+  useIdlePrefetch(() => import("@/pages/onboarding/VoiceMemoAddedPage"));
 
   const [isRecording, setIsRecording] = useState(false);
   const waveHeights = useWaveform(isRecording);

@@ -8,6 +8,7 @@ import {
   formatCollaboratorNames,
   clearInviteContext,
 } from "@/lib/invite/inviteContext";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 const AUTO_ADVANCE_MS = 2200;
 
@@ -26,6 +27,9 @@ const ROLE_LABELS = {
  */
 const InviteTeamIntroPage = () => {
   const navigate = useNavigate();
+  // This screen auto-advances into the song in ~2.2s — fetch the song canvas
+  // now so the invitee's first landing in the song renders instantly.
+  useIdlePrefetch(() => import("@/pages/SongCanvasPage"));
   const ctx = loadInviteContext();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
