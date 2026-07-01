@@ -92,12 +92,41 @@ const VoiceReviewSheet = ({
     }
   };
 
+  // When a take auto-finalized (call, Bluetooth swap, tab hidden, or the length
+  // ceiling), reassure the songwriter in pastoral language — never a technical
+  // reason. The idea was salvaged; say so gently.
+  const interruptionNote =
+    recording.reason === "interrupted"
+      ? "The mic was interrupted, but your idea is safe."
+      : recording.reason === "page-hidden"
+        ? "Saved your idea before you stepped away."
+        : recording.reason === "max-duration"
+          ? "That's a long one — we saved it here."
+          : null;
+
   return (
     <CaptureSheetShell
       ariaLabel="Review your recording"
       liveStatus={isSaving ? "Saving your memo" : "Review your recording"}
     >
       <div style={{ padding: "20px 24px 0" }}>
+        {interruptionNote && (
+          <p
+            role="status"
+            style={{
+              margin: "0 0 16px",
+              padding: "10px 12px",
+              borderRadius: 10,
+              backgroundColor: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.22)",
+              fontFamily: "var(--font-body)",
+              fontSize: 13,
+              color: "var(--cog-charcoal)",
+            }}
+          >
+            {interruptionNote}
+          </p>
+        )}
         {/* Waveform preview row */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           {/* Play button */}

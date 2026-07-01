@@ -413,13 +413,29 @@ const VoiceMemosPage = () => {
   const [showUpload, setShowUpload] = useState(false);
 
   // Recording flow
-  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   type Flow = "idle" | "recording" | "reviewing";
   const [flow, setFlow] = useState<Flow>("idle");
   const [recordingSection, setRecordingSection] = useState("Raw idea");
   const [recordingNote, setRecordingNote] = useState("");
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
   const memoCountRef = useRef(0);
+
+  // A take that auto-finalized (call, Bluetooth swap, tab hidden, length ceiling)
+  // must still reach review — otherwise an interrupted in-song idea is salvaged by
+  // the recorder but silently lost from the flow. Surface it; the review sheet
+  // greets it with pastoral copy about why it stopped.
+  const handleAutoFinalize = useCallback((result: RecordingResult | null) => {
+    if (result) {
+      setPendingRecording(result);
+      setFlow("reviewing");
+    } else {
+      setFlow("idle");
+    }
+  }, []);
+
+  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder({
+    onAutoFinalize: handleAutoFinalize,
+  });
 
   // Fetch memo list
   const loadMemos = useCallback(async () => {
