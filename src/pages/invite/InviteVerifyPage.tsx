@@ -63,25 +63,43 @@ const InviteVerifyPage = () => {
     if (code.length < CODE_LENGTH || isVerifying || !ctx?.token) return;
     setIsVerifying(true);
     setError(null);
+
+    // Phase 1 — verify the code. Only a genuine OTP failure may clear the
+    // boxes and ask again.
     try {
       await verifyPhoneOtp(e164, code);
-
-      // Accept invite immediately after auth
-      await acceptInvite(ctx.token);
-      saveInviteContext({ isExistingUser: false });
-      // Subtle "you're in" beat — flash the cells gold, then continue. Reduced-
-      // motion users skip the pause; the form stays locked through it.
-      setSuccess(true);
-      const reduce = typeof window !== 'undefined' && !!window.matchMedia &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
-      navigate('/invite/name');
     } catch (err) {
       setError(toFriendlyError(err));
       setDigits(Array(CODE_LENGTH).fill(''));
       setIsVerifying(false);
+      return;
     }
-  }, [e164, isVerifying, ctx, navigate]);
+
+    // Phase 2 — the code is consumed and the user IS signed in. From here we
+    // must never say "that code didn't work" or re-prompt for it (re-entering
+    // a used code always fails — a dead-end loop). Accept the invite with one
+    // retry for transient blips; if it still fails, return to the join screen,
+    // where the signed-in one-tap path accepts without another SMS.
+    try {
+      try {
+        await acceptInvite(ctx.token);
+      } catch {
+        await acceptInvite(ctx.token);
+      }
+    } catch {
+      navigate(backToJoin, { replace: true });
+      return;
+    }
+
+    saveInviteContext({ isExistingUser: false });
+    // Subtle "you're in" beat — flash the cells gold, then continue. Reduced-
+    // motion users skip the pause; the form stays locked through it.
+    setSuccess(true);
+    const reduce = typeof window !== 'undefined' && !!window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
+    navigate('/invite/name');
+  }, [e164, isVerifying, ctx, navigate, backToJoin]);
 
   // Lowest-friction path: auto-read the SMS code (Android Chrome), fill, submit.
   // Progressive — no-ops where unsupported; manual entry always still works.
