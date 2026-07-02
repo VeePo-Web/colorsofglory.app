@@ -15,6 +15,21 @@ export const COG_SENDERS = {
   referrals: "Colors of Glory Referrals <referrals@colorsofglory.app>",
 } as const;
 
+// Inbound mail is handled by Google Workspace on colorsofglory.com.
+// Every outbound Resend send gets a Reply-To on the .com domain so any human
+// reply lands in the monitored Workspace inbox rather than the unmonitored
+// .app sending domain.
+const REPLY_TO_DEFAULTS: Record<string, string> = {
+  "hello@colorsofglory.app": "hello@colorsofglory.com",
+  "security@colorsofglory.app": "support@colorsofglory.com",
+  "referrals@colorsofglory.app": "referrals@colorsofglory.com",
+};
+
+function extractAddress(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  return (m ? m[1] : from).trim().toLowerCase();
+}
+
 export interface ResendSendArgs {
   to: string | string[];
   subject: string;
@@ -55,7 +70,12 @@ export async function sendViaResend(args: ResendSendArgs): Promise<ResendSendRes
     html: args.html,
   };
   if (args.text) payload.text = args.text;
-  if (args.replyTo) payload.reply_to = args.replyTo;
+  if (args.replyTo) {
+    payload.reply_to = args.replyTo;
+  } else {
+    const fallback = REPLY_TO_DEFAULTS[extractAddress(from)];
+    if (fallback) payload.reply_to = fallback;
+  }
   if (args.headers) payload.headers = args.headers;
   if (args.tags && args.tags.length > 0) payload.tags = args.tags;
   else payload.tags = [{ name: "app", value: "cog" }];

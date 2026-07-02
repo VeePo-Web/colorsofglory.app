@@ -58,7 +58,7 @@ const TermsPage = () => (
     </LegalSection>
 
     <LegalSection heading="Questions">
-      Reach us anytime at hello@colorsofglory.app.
+      Reach us anytime at <a href="mailto:hello@colorsofglory.com">hello@colorsofglory.com</a>.
     </LegalSection>
   </LegalLayout>
 );

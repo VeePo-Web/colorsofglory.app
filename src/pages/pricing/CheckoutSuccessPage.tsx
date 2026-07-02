@@ -86,7 +86,13 @@ const CheckoutSuccessPage = () => {
 
         {/* Support */}
         <p className="text-xs mt-8" style={{ color: "#CCC" }}>
-          Questions? <span style={{ textDecoration: "underline" }}>help@colorsofglory.app</span>
+          Questions?{" "}
+          <a
+            href="mailto:help@colorsofglory.com"
+            style={{ textDecoration: "underline", color: "inherit" }}
+          >
+            help@colorsofglory.com
+          </a>
         </p>
       </div>
 
