@@ -7,7 +7,7 @@ export const BRAND = {
   wordmark: "FLY4MEDIA",
   slogan: "Perspective Changes Everything.",
   tagline: "A cinematic perspective studio · Alberta, Canada",
-  email: "tobyrennick@gmail.com",
+  email: "people@colorsofglory.com",
   phone: "403 818 9686",
   phoneTel: "+14038189686",
   website: "https://fly4me.ca",
