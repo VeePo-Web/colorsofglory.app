@@ -15,14 +15,15 @@ export const COG_SENDERS = {
   referrals: "Colors of Glory Referrals <referrals@colorsofglory.app>",
 } as const;
 
-// Inbound mail is handled by Google Workspace on colorsofglory.com.
-// Every outbound Resend send gets a Reply-To on the .com domain so any human
-// reply lands in the monitored Workspace inbox rather than the unmonitored
-// .app sending domain.
+// Inbound mail is handled by Google Workspace on colorsofglory.com. Every
+// outbound Resend send gets a Reply-To pointing at the single monitored
+// people@ inbox so human replies never land on the unmonitored .app sending
+// domain. Callers can still pass an explicit `replyTo` to override.
+const PEOPLE_INBOX = "people@colorsofglory.com";
 const REPLY_TO_DEFAULTS: Record<string, string> = {
-  "hello@colorsofglory.app": "hello@colorsofglory.com",
-  "security@colorsofglory.app": "support@colorsofglory.com",
-  "referrals@colorsofglory.app": "referrals@colorsofglory.com",
+  "hello@colorsofglory.app": PEOPLE_INBOX,
+  "security@colorsofglory.app": PEOPLE_INBOX,
+  "referrals@colorsofglory.app": PEOPLE_INBOX,
 };
 
 function extractAddress(from: string): string {

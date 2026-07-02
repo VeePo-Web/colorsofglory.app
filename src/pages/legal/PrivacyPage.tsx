@@ -49,7 +49,7 @@ const PrivacyPage = () => (
     </LegalSection>
 
     <LegalSection heading="Questions">
-      Reach us anytime at <a href="mailto:hello@colorsofglory.com">hello@colorsofglory.com</a>.
+      Reach us anytime at <a href="mailto:people@colorsofglory.com">people@colorsofglory.com</a>.
     </LegalSection>
   </LegalLayout>
 );

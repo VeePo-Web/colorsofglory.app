@@ -88,10 +88,10 @@ const CheckoutSuccessPage = () => {
         <p className="text-xs mt-8" style={{ color: "#CCC" }}>
           Questions?{" "}
           <a
-            href="mailto:help@colorsofglory.com"
+            href="mailto:people@colorsofglory.com"
             style={{ textDecoration: "underline", color: "inherit" }}
           >
-            help@colorsofglory.com
+            people@colorsofglory.com
           </a>
         </p>
       </div>
