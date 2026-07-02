@@ -130,7 +130,10 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
 
       <div className="flex flex-col items-center" style={{ gap: 4 }}>
         <p
-          aria-live="polite"
+          // The ticking timer must NOT be a live region — it would spam a screen
+          // reader with a new number every 100ms. The status line below carries
+          // the announceable state.
+          aria-live="off"
           style={{
             fontFamily: "var(--font-display)",
             fontSize: 36,
@@ -143,6 +146,8 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
           {formatDurationLive(durationMs)}
         </p>
         <p
+          // Phase changes (starting → recording → saving) ARE announced here.
+          aria-live="polite"
           style={{
             fontFamily: "var(--font-body)",
             fontSize: 13,
@@ -157,7 +162,7 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
             : phase === "requesting-permission"
               ? "Starting the mic…"
               : phase === "stopping"
-                ? "Saving…"
+                ? "Saving your idea…"
                 : recording
                   ? "Tap to stop · say “Verse” or “Chorus” to split"
                   : "Tap to record"}
