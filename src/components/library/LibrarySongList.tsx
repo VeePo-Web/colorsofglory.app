@@ -3,6 +3,7 @@ import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { LibraryDensity, LibrarySort, LibraryView } from "@/lib/library/libraryPrefs";
 import SongGridCard from "./SongGridCard";
 import SongListRow from "./SongListRow";
+import LibrarySkeleton from "./LibrarySkeleton";
 
 interface LibrarySongListProps {
   songs: SongRow[];
@@ -14,6 +15,7 @@ interface LibrarySongListProps {
   loading: boolean;
   emptyCopy: string;
   onOpen: (id: string) => void;
+  onSongActions?: (song: SongRow) => void;
 }
 
 /**
@@ -63,6 +65,7 @@ const LibrarySongList = ({
   loading,
   emptyCopy,
   onOpen,
+  onSongActions,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
 
@@ -80,6 +83,11 @@ const LibrarySongList = ({
     return [...map.entries()];
   }, [songs, view, sort]);
 
+  // Skeleton cards while loading — never a blank page, never a spinner (PV11).
+  if (loading && songs.length === 0) {
+    return <LibrarySkeleton view={view} density={density} />;
+  }
+
   if (songs.length === 0) {
     return (
       <div className="pt-16 text-center">
@@ -87,20 +95,25 @@ const LibrarySongList = ({
           className="text-[0.9375rem]"
           style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
         >
-          {loading
-            ? "Loading your songs…"
-            : query
-            ? `No songs match “${query}”.`
-            : emptyCopy}
+          {query ? `No songs match “${query}”.` : emptyCopy}
         </p>
       </div>
     );
   }
 
+  const rowFor = (song: SongRow) => (
+    <SongListRow
+      key={song.id}
+      song={song}
+      onClick={() => onOpen(song.id)}
+      onLongPress={onSongActions ? () => onSongActions(song) : undefined}
+    />
+  );
+
   if (view === "list") {
     if (alphaSections) {
       return (
-        <div className="flex flex-col gap-2">
+        <div key="list-alpha" className="flex animate-in fade-in flex-col gap-2 duration-200">
           {alphaSections.map(([letter, group]) => (
             <section key={letter} aria-label={`Songs starting with ${letter}`}>
               <p
@@ -109,21 +122,15 @@ const LibrarySongList = ({
               >
                 {letter}
               </p>
-              <div className="flex flex-col gap-2">
-                {group.map((song) => (
-                  <SongListRow key={song.id} song={song} onClick={() => onOpen(song.id)} />
-                ))}
-              </div>
+              <div className="flex flex-col gap-2">{group.map(rowFor)}</div>
             </section>
           ))}
         </div>
       );
     }
     return (
-      <div className="flex flex-col gap-2">
-        {songs.map((song) => (
-          <SongListRow key={song.id} song={song} onClick={() => onOpen(song.id)} />
-        ))}
+      <div key="list" className="flex animate-in fade-in flex-col gap-2 duration-200">
+        {songs.map(rowFor)}
       </div>
     );
   }
@@ -136,13 +143,19 @@ const LibrarySongList = ({
       : "grid grid-cols-3 gap-2 md:grid-cols-4 md:gap-3 lg:grid-cols-5";
 
   return (
-    <div {...pinch} className={gridClass} style={{ touchAction: "pan-y" }}>
+    <div
+      {...pinch}
+      key={`grid-${density}`}
+      className={`${gridClass} animate-in fade-in duration-200`}
+      style={{ touchAction: "pan-y" }}
+    >
       {songs.map((song) => (
         <SongGridCard
           key={song.id}
           song={song}
           compact={density === 3}
           onClick={() => onOpen(song.id)}
+          onLongPress={onSongActions ? () => onSongActions(song) : undefined}
         />
       ))}
     </div>

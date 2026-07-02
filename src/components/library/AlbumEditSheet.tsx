@@ -8,6 +8,8 @@ interface AlbumEditSheetProps {
   /** null = creating a new album. */
   album: SongAlbum | null;
   songs: SongRow[];
+  /** Pre-selected songs when creating (e.g. "New album with this song"). */
+  initialSongIds?: string[];
   onSave: (name: string, songIds: string[]) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -17,10 +19,12 @@ interface AlbumEditSheetProps {
  * AlbumEditSheet — bottom sheet for naming an album and choosing its songs.
  * Songs are only ever referenced: removing an album never touches a song.
  */
-const AlbumEditSheet = ({ album, songs, onSave, onDelete, onClose }: AlbumEditSheetProps) => {
+const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClose }: AlbumEditSheetProps) => {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState(album?.name ?? "");
-  const [selected, setSelected] = useState<Set<string>>(new Set(album?.songIds ?? []));
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(album?.songIds ?? initialSongIds ?? []),
+  );
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));

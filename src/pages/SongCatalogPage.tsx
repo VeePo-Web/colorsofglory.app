@@ -9,10 +9,17 @@ import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
+import SongActionsSheet from "@/components/library/SongActionsSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { listAlbums, createAlbum, updateAlbum, deleteAlbum, type SongAlbum } from "@/lib/library/albums";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
-import { listMySongs, createSong, type SongCard as SongRow } from "@/integrations/cog/songs";
+import {
+  listMySongs,
+  createSong,
+  archiveSong,
+  unarchiveSong,
+  type SongCard as SongRow,
+} from "@/integrations/cog/songs";
 import {
   Dialog,
   DialogContent,
@@ -46,10 +53,12 @@ const SongCatalogPage = () => {
   const [query, setQuery] = useState("");
   const [albums, setAlbums] = useState<SongAlbum[]>(() => listAlbums());
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
-  const [albumSheet, setAlbumSheet] = useState<{ open: boolean; album: SongAlbum | null }>({
-    open: false,
-    album: null,
-  });
+  const [albumSheet, setAlbumSheet] = useState<{
+    open: boolean;
+    album: SongAlbum | null;
+    initialSongIds?: string[];
+  }>({ open: false, album: null });
+  const [actionsSong, setActionsSong] = useState<SongRow | null>(null);
 
   const updatePrefs = (changes: Partial<LibraryPrefs>) =>
     setPrefs((prev) => {
@@ -120,6 +129,35 @@ const SongCatalogPage = () => {
     if (activeAlbumId === id) setActiveAlbumId(null);
     setAlbumSheet({ open: false, album: null });
     toast("Album removed — your songs are untouched");
+  };
+
+  const toggleSongInAlbum = (albumId: string, songId: string) => {
+    const album = albums.find((a) => a.id === albumId);
+    if (!album) return;
+    const songIds = album.songIds.includes(songId)
+      ? album.songIds.filter((id) => id !== songId)
+      : [...album.songIds, songId];
+    setAlbums(updateAlbum(albumId, { songIds }));
+  };
+
+  // Archive / restore — optimistic, always reversible, never a delete.
+  const setSongStatus = async (song: SongRow, archived: boolean) => {
+    setActionsSong(null);
+    const prev = songs;
+    const status = (archived ? "archived" : "active") as SongRow["status"];
+    setSongs((s) => s.map((x) => (x.id === song.id ? { ...x, status } : x)));
+    try {
+      if (archived) {
+        await archiveSong(song.id);
+        toast("Song archived — it stays safe in the Archived tab");
+      } else {
+        await unarchiveSong(song.id);
+        toast("Song restored");
+      }
+    } catch {
+      setSongs(prev);
+      toast.error(archived ? "Couldn't archive that song" : "Couldn't restore that song");
+    }
   };
 
   const handleCreateSong = async () => {
@@ -268,6 +306,10 @@ const SongCatalogPage = () => {
               : EMPTY_COPY[activeTab]
           }
           onOpen={(id) => navigate(`/songs/${id}/brainstorm`)}
+          onSongActions={(song) => {
+            // Organization actions are the owner's — invited songs stay tap-to-open only.
+            if (song.my_role === "owner") setActionsSong(song);
+          }}
         />
       </div>
 
@@ -298,9 +340,31 @@ const SongCatalogPage = () => {
         <AlbumEditSheet
           album={albumSheet.album}
           songs={ownedSongs}
+          initialSongIds={albumSheet.initialSongIds}
           onSave={handleAlbumSave}
           onDelete={handleAlbumDelete}
           onClose={() => setAlbumSheet({ open: false, album: null })}
+        />
+      )}
+
+      {actionsSong && (
+        <SongActionsSheet
+          song={actionsSong}
+          albums={albums}
+          onToggleAlbum={(albumId) => toggleSongInAlbum(albumId, actionsSong.id)}
+          onNewAlbum={() => {
+            const songId = actionsSong.id;
+            setActionsSong(null);
+            setAlbumSheet({ open: true, album: null, initialSongIds: [songId] });
+          }}
+          onOpen={() => {
+            const songId = actionsSong.id;
+            setActionsSong(null);
+            navigate(`/songs/${songId}/brainstorm`);
+          }}
+          onArchive={() => setSongStatus(actionsSong, true)}
+          onUnarchive={() => setSongStatus(actionsSong, false)}
+          onClose={() => setActionsSong(null)}
         />
       )}
 
