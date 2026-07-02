@@ -27,6 +27,7 @@ import {
   listPendingUploads,
   discardPendingUpload,
 } from "@/lib/voice/pendingUploads";
+import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -577,7 +578,7 @@ const VoiceMemosPage = () => {
     if (!pendingRecording) return;
 
     memoCountRef.current++;
-    const title = name.trim() || `Voice Memo ${memoCountRef.current}`;
+    const title = name.trim() || defaultCaptureName();
 
     // Local-first: write the blob to the device BEFORE any network call. From
     // here on the take cannot be lost — not by a dropped upload, not by the tab
@@ -643,8 +644,7 @@ const VoiceMemosPage = () => {
     try {
       const durationMs = await getAudioFileDuration(file);
       const mimeType = file.type || getBestMimeType();
-      const count = memos.length + 1;
-      const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${count}`;
+      const title = file.name.replace(/\.[^.]+$/, "") || defaultCaptureName();
 
       // Local-first, just like a recorded take: the imported file is cached to the
       // device before any upload and retried on failure, so no save path is left
@@ -907,7 +907,7 @@ const VoiceMemosPage = () => {
       {flow === "reviewing" && pendingRecording && (
         <VoiceReviewSheet
           recording={pendingRecording}
-          defaultName={recordingNote.trim() || `Voice Memo ${memoCountRef.current + 1}`}
+          defaultName={recordingNote.trim() || defaultCaptureName()}
           section={recordingSection}
           onSave={handleSaveMemo}
           onDiscard={handleCancelRecording}

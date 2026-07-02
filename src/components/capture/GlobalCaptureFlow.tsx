@@ -6,6 +6,7 @@ import CaptureShell from "./CaptureShell";
 import SeedReviewSheet from "./SeedReviewSheet";
 import OutboxSyncPill from "@/components/voice/OutboxSyncPill";
 import type { SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
+import { defaultCaptureName } from "@/lib/voice/captureNaming";
 
 const HIDDEN_ROUTE_PREFIXES = [
   "/auth",
@@ -35,8 +36,9 @@ function openMicSettings(): void {
 }
 
 function defaultIdeaName(): string {
-  const stamp = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `Idea — ${stamp}`;
+  // Warm, time-of-day-aware default — a captured idea reads like songwriting, not
+  // a meeting recording. The songwriter can rename it in review.
+  return defaultCaptureName();
 }
 
 /**
