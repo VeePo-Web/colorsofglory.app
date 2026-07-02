@@ -12,6 +12,9 @@ import { pendingCount, subscribeOutbox } from "@/lib/voice/captureOutbox";
  */
 const OutboxSyncPill = () => {
   const [pending, setPending] = useState(0);
+  const [online, setOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
 
   useEffect(() => {
     // Seed from current state, then track every change.
@@ -22,14 +25,31 @@ const OutboxSyncPill = () => {
     return unsubscribe;
   }, []);
 
+  // Connection awareness: offline, "syncing" is a lie — the take is safe and
+  // *waiting*. Say so pastorally so the songwriter never thinks it's stuck.
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
   if (pending <= 0) return null;
 
-  const label = pending === 1 ? "Syncing 1 idea…" : `Syncing ${pending} ideas…`;
+  const noun = pending === 1 ? "idea" : "ideas";
+  const label = online
+    ? `Syncing ${pending} ${noun}…`
+    : `${pending} ${noun} saved · will sync when you're back online`;
 
   return (
     <div
       role="status"
       aria-live="polite"
+      data-outbox-sync-pill=""
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -52,9 +72,11 @@ const OutboxSyncPill = () => {
           height: 7,
           borderRadius: "50%",
           backgroundColor: "var(--cog-gold)",
-          // Calm confirmation that work is in progress — a gentle breath, never a
-          // spinner or alarm. Honors reduced-motion via the keyframe guard below.
-          animation: "outbox-sync-breath 1.6s ease-in-out infinite",
+          flexShrink: 0,
+          // Breathe only while actually syncing (online). Offline the dot rests
+          // steady — the take is safe and waiting, not working. Never a spinner.
+          animation: online ? "outbox-sync-breath 1.6s ease-in-out infinite" : "none",
+          opacity: online ? undefined : 0.7,
         }}
       />
       {label}
@@ -64,7 +86,7 @@ const OutboxSyncPill = () => {
           50%      { opacity: 1; }
         }
         @media (prefers-reduced-motion: reduce) {
-          [role="status"] span[aria-hidden="true"] { animation: none !important; opacity: 0.8; }
+          [data-outbox-sync-pill] span[aria-hidden="true"] { animation: none !important; opacity: 0.8; }
         }
       `}</style>
     </div>
