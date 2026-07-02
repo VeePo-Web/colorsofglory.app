@@ -439,11 +439,11 @@ const InviteJoinPage = () => {
         </>
         )}
 
-        {/* T&C */}
+        {/* T&C — plain text until the legal pages exist. Underlined dead spans
+            were fake affordances at the trust-decision moment; re-link when the
+            content owner ships /terms + /privacy. */}
         <p className="text-[0.6875rem] text-center mt-auto pt-8" style={{ color: '#CCC' }}>
-          By continuing you agree to our{' '}
-          <span className="underline cursor-pointer">Terms</span> &{' '}
-          <span className="underline cursor-pointer">Privacy Policy</span>
+          By continuing you agree to our Terms & Privacy Policy
         </p>
       </div>
     </div>

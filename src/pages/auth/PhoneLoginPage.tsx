@@ -36,8 +36,12 @@ function toFriendlyError(err: unknown): string {
 
 const PhoneLoginPage = () => {
   const navigate = useNavigate();
-  // While they type their number, fetch the verify screen so the next tap is instant.
-  useIdlePrefetch(() => import("@/pages/auth/CodeVerifyPage"));
+  // While they type their number, fetch the verify screen (primary path) and the
+  // email fallback (visible link below) so either next tap is instant.
+  useIdlePrefetch(
+    () => import("@/pages/auth/CodeVerifyPage"),
+    () => import("@/pages/auth/EmailAuthPage"),
+  );
   // Invisible CAPTCHA token (no-op until VITE_TURNSTILE_SITE_KEY is set).
   const { containerRef: turnstileRef, getToken } = useTurnstile();
   // Pre-fill the last number entered this session so "Change number" lands on a

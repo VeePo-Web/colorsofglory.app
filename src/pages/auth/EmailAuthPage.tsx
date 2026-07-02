@@ -11,6 +11,7 @@ import {
   AuthError,
 } from "@/integrations/cog/auth";
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
+import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 type Mode = "signin" | "signup";
 
@@ -27,6 +28,12 @@ function friendly(err: unknown): string {
 
 const EmailAuthPage = () => {
   const navigate = useNavigate();
+  // While they type credentials, fetch the two commonest post-auth destinations
+  // so sign-in lands instantly (same treatment as the phone verify screen).
+  useIdlePrefetch(
+    () => import("@/pages/onboarding/FirstIntentPage"),
+    () => import("@/pages/ReturningHomePage"),
+  );
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -280,15 +287,9 @@ const EmailAuthPage = () => {
           className="mt-8 text-center text-[0.75rem]"
           style={{ color: "#A09689" }}
         >
-          By continuing you agree to our{" "}
-          <Link to="#" className="underline">
-            Terms
-          </Link>{" "}
-          and{" "}
-          <Link to="#" className="underline">
-            Privacy
-          </Link>
-          .
+          {/* Plain text until the legal pages exist — dead `to="#"` links were
+              fake affordances; re-link when the content owner ships them. */}
+          By continuing you agree to our Terms and Privacy.
         </p>
       </div>
     </OnboardingShell>
