@@ -34,7 +34,7 @@ const InviteTeamIntroPage = () => {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
-  const songId = ctx?.songId ?? '1';
+  const songId = ctx?.songId ?? null;
   const songTitle = ctx?.songTitle ?? 'the song';
   const collaborators = ctx?.collaborators ?? [];
   const assignedRole = ctx?.assignedRole ?? 'contributor';
@@ -55,6 +55,13 @@ const InviteTeamIntroPage = () => {
   const goToSong = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     clearInviteContext();
+    // Invite context lost (storage cleared/unavailable)? The catalog is the
+    // one always-correct landing — their just-joined song is right there.
+    // Never a hardcoded song id that opens someone else's song.
+    if (!songId) {
+      navigate('/', { replace: true });
+      return;
+    }
     navigate(`/songs/${songId}/lyrics?invite=1&role=${assignedRole}`, { replace: true });
   };
 
