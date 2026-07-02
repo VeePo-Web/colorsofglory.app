@@ -65,7 +65,9 @@ describe("SongCatalogPage — world-class hero (content-locked, token-precise)",
 
   it("renders the song grid (2->3->4 cols) with five-state hover + card tokens", async () => {
     const { container } = renderPage();
-    expect(await screen.findByText("Grace in the Waiting")).toBeInTheDocument();
+    // The most recent song appears twice by design: once in the
+    // "Pick up where you left off" hero shelf, once in the grid.
+    expect((await screen.findAllByText("Grace in the Waiting")).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Hold On")).toBeInTheDocument();
     const html = container.innerHTML;
     // grid breaks out of the phone column on tablet/desktop

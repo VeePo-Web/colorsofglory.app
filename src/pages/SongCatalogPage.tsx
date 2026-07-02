@@ -8,6 +8,7 @@ import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
+import ContinueShelf from "@/components/library/ContinueShelf";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
@@ -112,6 +113,16 @@ const SongCatalogPage = () => {
   // Rooms a captured idea can move into — the songwriter's own active rooms.
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
   const fileableSongs = ownedSongs.map((s) => ({ id: s.id, title: s.title }));
+
+  // "Pick up where you left off" — PV11: prioritize the last active song for
+  // returning users. Hidden while searching, album-focused, or trivially small.
+  const continueSong = useMemo(() => {
+    if (activeTab !== "Owned" || query.trim() || activeAlbumId) return null;
+    if (ownedSongs.length < 2) return null;
+    const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
+    return [...ownedSongs].sort((a, b) => time(b) - time(a))[0] ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songs, activeTab, query, activeAlbumId]);
 
   const handleAlbumSave = (name: string, songIds: string[]) => {
     if (albumSheet.album) {
@@ -280,6 +291,13 @@ const SongCatalogPage = () => {
           density={prefs.density}
           onViewCycle={cycleView}
         />
+
+        {continueSong && (
+          <ContinueShelf
+            song={continueSong}
+            onOpen={() => navigate(`/songs/${continueSong.id}/brainstorm`)}
+          />
+        )}
 
         {activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
           <AlbumsShelf

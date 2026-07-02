@@ -1,9 +1,10 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { LibraryDensity, LibrarySort, LibraryView } from "@/lib/library/libraryPrefs";
 import SongGridCard from "./SongGridCard";
 import SongListRow from "./SongListRow";
 import LibrarySkeleton from "./LibrarySkeleton";
+import AlphaScrubber from "./AlphaScrubber";
 
 interface LibrarySongListProps {
   songs: SongRow[];
@@ -68,6 +69,31 @@ const LibrarySongList = ({
   onSongActions,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  // Desktop parity for the density gesture: a trackpad pinch (or ctrl+wheel)
+  // reports as a ctrlKey wheel event — zoom in for bigger cards, out for
+  // more. Non-passive listener so the browser's page-zoom doesn't fire.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || view !== "grid") return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY < -8 && density !== 2) onDensityChange(2);
+      else if (e.deltaY > 8 && density !== 3) onDensityChange(3);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [view, density, onDensityChange]);
+
+  // Instant jump for the A–Z scrubber — offset clears the sticky dark header.
+  const jumpToLetter = (letter: string) => {
+    const el = sectionRefs.current[letter];
+    if (!el) return;
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 150 });
+  };
 
   // A–Z sections for the alphabetical list — the Apple Music Library pattern.
   const alphaSections = useMemo(() => {
@@ -115,7 +141,13 @@ const LibrarySongList = ({
       return (
         <div key="list-alpha" className="flex animate-in fade-in flex-col gap-2 duration-200">
           {alphaSections.map(([letter, group]) => (
-            <section key={letter} aria-label={`Songs starting with ${letter}`}>
+            <section
+              key={letter}
+              ref={(el) => {
+                sectionRefs.current[letter] = el;
+              }}
+              aria-label={`Songs starting with ${letter}`}
+            >
               <p
                 className="px-1 pb-1.5 pt-2 text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
                 style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)" }}
@@ -125,6 +157,10 @@ const LibrarySongList = ({
               <div className="flex flex-col gap-2">{group.map(rowFor)}</div>
             </section>
           ))}
+          {/* Index rail appears once the catalog is big enough to need it */}
+          {alphaSections.length > 4 && (
+            <AlphaScrubber letters={alphaSections.map(([l]) => l)} onJump={jumpToLetter} />
+          )}
         </div>
       );
     }
@@ -145,6 +181,7 @@ const LibrarySongList = ({
   return (
     <div
       {...pinch}
+      ref={gridRef}
       key={`grid-${density}`}
       className={`${gridClass} animate-in fade-in duration-200`}
       style={{ touchAction: "pan-y" }}
