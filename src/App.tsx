@@ -64,6 +64,10 @@ const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedire
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// Legal (public) — linked from the auth + invite trust lines
+const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
+
 // Admin (internal-only)
 const RequireAdmin = lazy(() => import("./components/admin/RequireAdmin"));
 const AdminHomePage = lazy(() => import("./pages/admin/AdminHomePage"));
@@ -213,6 +217,10 @@ const App = () => {
             <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
             {/* Admin (internal) — routes defined in src/routes/AdminRoutes.tsx */}
             {adminRoutes}
+
+            {/* Legal (public) */}
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<NotFound />} />

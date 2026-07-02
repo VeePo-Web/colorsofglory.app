@@ -287,9 +287,16 @@ const EmailAuthPage = () => {
           className="mt-8 text-center text-[0.75rem]"
           style={{ color: "#A09689" }}
         >
-          {/* Plain text until the legal pages exist — dead `to="#"` links were
-              fake affordances; re-link when the content owner ships them. */}
-          By continuing you agree to our Terms and Privacy.
+          {/* Real links, new tab — the typed email/password state survives. */}
+          By continuing you agree to our{" "}
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
+            Terms
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">
+            Privacy
+          </a>
+          .
         </p>
       </div>
     </OnboardingShell>
