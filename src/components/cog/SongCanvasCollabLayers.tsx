@@ -1,5 +1,5 @@
 import { ElementType, ReactNode } from "react";
-import { Activity as ActivityIcon, Users } from "lucide-react";
+import { Activity as ActivityIcon, ChevronRight, UserPlus, Users } from "lucide-react";
 
 interface Collaborator {
   initials: string;
@@ -18,9 +18,15 @@ interface ActivityItem {
 
 interface SongCanvasCollabLayersProps {
   activeLayer: string;
+  /** Real room members; falls back to the demo trio until the roster loads. */
+  collaborators?: Collaborator[];
+  /** Opens the copy-link invite sheet. Omitted for viewers. */
+  onInvite?: () => void;
+  /** Opens the What Changed recap sheet. */
+  onOpenRecap?: () => void;
 }
 
-const COLLABORATORS: Collaborator[] = [
+const FALLBACK_COLLABORATORS: Collaborator[] = [
   { initials: "PK", name: "Parker", role: "Owner", color: "#B8953A" },
   { initials: "SM", name: "Sarah M.", role: "Contributor", color: "#53AB8B" },
   { initials: "CR", name: "Caleb R.", role: "Reviewer", color: "#8070C4" },
@@ -50,10 +56,14 @@ const ACTIVITY: ActivityItem[] = [
   },
 ];
 
-const SongCanvasCollabLayers = ({ activeLayer }: SongCanvasCollabLayersProps) => (
+const SongCanvasCollabLayers = ({ activeLayer, collaborators, onInvite, onOpenRecap }: SongCanvasCollabLayersProps) => (
   <section className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
-    <PeopleRoomCard active={activeLayer === "people" || activeLayer === "room"} />
-    <ActivityRoomCard />
+    <PeopleRoomCard
+      active={activeLayer === "people" || activeLayer === "room"}
+      collaborators={collaborators?.length ? collaborators : FALLBACK_COLLABORATORS}
+      onInvite={onInvite}
+    />
+    <ActivityRoomCard onOpenRecap={onOpenRecap} />
   </section>
 );
 
@@ -97,11 +107,19 @@ const RoomHeading = ({ icon: Icon, eyebrow, title }: { icon: ElementType; eyebro
   </div>
 );
 
-const PeopleRoomCard = ({ active }: { active: boolean }) => (
+const PeopleRoomCard = ({
+  active,
+  collaborators,
+  onInvite,
+}: {
+  active: boolean;
+  collaborators: Collaborator[];
+  onInvite?: () => void;
+}) => (
   <RoomCard id="layer-people" active={active}>
     <RoomHeading icon={Users} eyebrow="Collaboration" title="In this room" />
     <div className="grid gap-2 sm:grid-cols-3">
-      {COLLABORATORS.map((person) => (
+      {collaborators.map((person) => (
         <article
           key={person.name}
           className="flex items-center gap-3 rounded-2xl p-3"
@@ -124,10 +142,27 @@ const PeopleRoomCard = ({ active }: { active: boolean }) => (
         </article>
       ))}
     </div>
+    {onInvite && (
+      <button
+        type="button"
+        onClick={onInvite}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
+        style={{
+          minHeight: 48,
+          backgroundColor: "rgba(184,149,58,0.10)",
+          border: "1.5px dashed var(--cog-border-gold)",
+          color: "var(--cog-gold)",
+          fontFamily: "var(--font-body)",
+        }}
+      >
+        <UserPlus size={16} strokeWidth={1.8} />
+        Invite someone into this song
+      </button>
+    )}
   </RoomCard>
 );
 
-const ActivityRoomCard = () => (
+const ActivityRoomCard = ({ onOpenRecap }: { onOpenRecap?: () => void }) => (
   <RoomCard>
     <RoomHeading icon={ActivityIcon} eyebrow="Remember changes" title="What changed" />
     <div className="space-y-2">
@@ -150,6 +185,23 @@ const ActivityRoomCard = () => (
         </article>
       ))}
     </div>
+    {onOpenRecap && (
+      <button
+        type="button"
+        onClick={onOpenRecap}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
+        style={{
+          minHeight: 48,
+          backgroundColor: "rgba(28,26,23,0.04)",
+          border: "1px solid rgba(28,26,23,0.08)",
+          color: "var(--cog-warm-gray)",
+          fontFamily: "var(--font-body)",
+        }}
+      >
+        See the full recap
+        <ChevronRight size={15} strokeWidth={2} />
+      </button>
+    )}
   </RoomCard>
 );
 

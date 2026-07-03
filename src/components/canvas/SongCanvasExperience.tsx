@@ -21,6 +21,8 @@ import {
   Users,
   GitBranch,
   BookOpen,
+  History,
+  UserPlus,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
@@ -50,6 +52,7 @@ import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import StackSheet from "@/components/voice/StackSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import { useSongCollaborators } from "@/lib/invite/useSongCollaborators";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
@@ -61,6 +64,7 @@ import MergeActionBar from "@/components/canvas/MergeActionBar";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
+const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -699,6 +703,9 @@ const SongCanvasExperience = () => {
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
   const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
   const [showRecap, setShowRecap] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
+  // Real room roster — the same source the People surface reads.
+  const songMembers = useSongCollaborators(songId);
   const [lineSuggest, setLineSuggest] = useState<{
     cardId: string;
     originalLine: string;
@@ -1136,6 +1143,33 @@ const SongCanvasExperience = () => {
     }
     return Array.from(seen.values());
   }, [cards]);
+
+  // Header presence prefers the real roster; card contributors fill in until it loads.
+  const presenceStack = useMemo(
+    () =>
+      songMembers.length > 0
+        ? songMembers.map((m) => ({
+            userId: m.userId,
+            firstName: m.firstName,
+            lastName: m.lastName,
+            avatarColor: m.avatarColor,
+            avatarInitials: m.avatarInitials,
+          }))
+        : roomCollaborators,
+    [songMembers, roomCollaborators],
+  );
+
+  // The people layer's roster rows (name + role); demo fallback lives in the layer.
+  const peopleLayerCollaborators = useMemo(
+    () =>
+      songMembers.map((m) => ({
+        initials: m.avatarInitials,
+        name: `${m.firstName} ${m.lastName}`.trim(),
+        role: m.role,
+        color: m.avatarColor,
+      })),
+    [songMembers],
+  );
   const dockActions = useMemo(
     () => [
       {
@@ -1232,28 +1266,56 @@ const SongCanvasExperience = () => {
       </header>
 
       <div className="relative z-30 mx-auto flex w-full max-w-[1180px] items-center justify-between gap-3 px-5 pb-2">
-        <p
-          aria-live="polite"
-          className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
-          style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}
-        >
-          {canvasStatus}
-        </p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p
+            aria-live="polite"
+            className="truncate rounded-full px-3 py-1.5 text-[11px] font-semibold"
+            style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}
+          >
+            {canvasStatus}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowRecap(true)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-70 active:scale-[0.94]"
+            style={{ color: "var(--cog-warm-gray)" }}
+            aria-label="What changed since you left"
+          >
+            <History size={16} strokeWidth={1.9} />
+          </button>
+        </div>
         {isViewer ? (
           <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
             You can view this canvas. Ask the owner if you need to contribute.
           </p>
-        ) : roomCollaborators.length > 0 ? (
-          <div className="flex items-center gap-2" aria-label={`In this room: ${roomCollaborators.length} ${roomCollaborators.length === 1 ? "person" : "people"}`}>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowShareSheet(true)}
+            className="flex min-h-11 shrink-0 items-center gap-2 rounded-full py-1 pl-2 pr-1.5 transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.75)",
+              border: "1px solid rgba(184,149,58,0.25)",
+              boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
+            }}
+            aria-label={
+              presenceStack.length > 0
+                ? `In this room: ${presenceStack.length} ${presenceStack.length === 1 ? "person" : "people"} — invite someone`
+                : "Invite someone into this song"
+            }
+          >
+            {presenceStack.length > 0 && (
+              <CollaboratorAvatarStack collaborators={presenceStack} size={26} maxVisible={3} />
+            )}
             <span
-              className="hidden sm:inline"
-              style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
+              className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold"
+              style={{ backgroundColor: "var(--cog-gold)", color: "#FFFFFF", fontFamily: "var(--font-body)" }}
             >
-              In this room
+              <UserPlus size={12} strokeWidth={2.2} />
+              Invite
             </span>
-            <CollaboratorAvatarStack collaborators={roomCollaborators} size={28} maxVisible={4} />
-          </div>
-        ) : null}
+          </button>
+        )}
       </div>
 
       {/* ── Canvas viewport ──────────────────────────────────────────────── */}
@@ -1412,7 +1474,12 @@ const SongCanvasExperience = () => {
                     <SongCanvasWorkLayers activeLayer={activeLayer} />
                   </Suspense>
                   <Suspense fallback={null}>
-                    <SongCanvasCollabLayers activeLayer={activeLayer} />
+                    <SongCanvasCollabLayers
+                      activeLayer={activeLayer}
+                      collaborators={peopleLayerCollaborators}
+                      onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
+                      onOpenRecap={() => setShowRecap(true)}
+                    />
                   </Suspense>
                 </>
               )}
@@ -1488,6 +1555,18 @@ const SongCanvasExperience = () => {
       {/* What Changed recap sheet */}
       {showRecap && (
         <WhatChangedRecapSheet songId={songId} onDismiss={() => setShowRecap(false)} />
+      )}
+
+      {/* Copy-link invite sheet — one tap from the room's presence stack */}
+      {showShareSheet && (
+        <Suspense fallback={null}>
+          <ShareSongSheet
+            songId={songId}
+            songTitle={songTitle}
+            collaborators={songMembers}
+            onClose={() => setShowShareSheet(false)}
+          />
+        </Suspense>
       )}
 
       {/* Line-level suggestion sheet (F19) */}

@@ -14,6 +14,7 @@ import {
   updateOnboardingStep,
 } from "@/lib/invite/inviteApi";
 import { supabase } from "@/integrations/supabase/client";
+import { copyTextToClipboard } from "@/lib/invite/clipboard";
 import { getAvatarColor, getAvatarInitials } from "@/lib/invite/inviteContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,7 +110,10 @@ const GeneratedLinkPanel = ({
   const [revoking, setRevoking] = useState(false);
 
   const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(invite.inviteUrl); } catch { /* fallback */ }
+    // Only confirm when the text actually landed on the clipboard — the link
+    // stays visible above for a manual long-press copy if both paths fail.
+    const ok = await copyTextToClipboard(invite.inviteUrl);
+    if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
