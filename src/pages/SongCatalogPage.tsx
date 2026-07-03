@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Settings, Mic, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
+import { useSwipeNav } from "@/lib/nav/useSwipeNav";
+import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
@@ -202,8 +204,33 @@ const SongCatalogPage = () => {
     }
   };
 
+  // Spatial nav — Capture lives to the RIGHT of Songs. Swiping left pages
+  // back to the mic; the raised BottomNav mic stays the visible contract.
+  const pageRef = useRef<HTMLDivElement>(null);
+  useSwipeNav(pageRef, {
+    onSwipeLeft: () => {
+      setNavDirection("right");
+      navigate("/");
+    },
+    disabled: dialogOpen || albumSheet.open || actionsSong !== null,
+  });
+  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+
+  // Scroll restoration — coming back from a song must land exactly where
+  // the songwriter left off (the list never "resets" under them).
+  useLayoutEffect(() => {
+    if (loading) return;
+    const saved = Number(sessionStorage.getItem("cog:songs-scroll") ?? 0);
+    if (saved > 0) window.scrollTo(0, saved);
+  }, [loading]);
+  useEffect(() => {
+    return () => {
+      sessionStorage.setItem("cog:songs-scroll", String(window.scrollY));
+    };
+  }, []);
+
   return (
-    <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream)" }}>
+    <div ref={pageRef} className={`relative min-h-screen ${enterClass}`} style={{ backgroundColor: "var(--cog-cream)" }}>
       {/* Signature warm radial glow — the brand's spiritual warmth, behind the catalog */}
       <div aria-hidden className="cog-glow pointer-events-none fixed inset-0 z-0" />
 

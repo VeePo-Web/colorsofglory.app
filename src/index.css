@@ -480,3 +480,33 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
     0%, 100% { transform: scale(1); opacity: 0.18; }
   }
 }
+
+/* ── Spatial nav entrances — geography over hierarchy ──
+   Peer surfaces slide sideways (Songs live left of Capture);
+   detail surfaces rise. Transform/opacity only, 250ms --cog-ease.
+   Direction is set by navDirection.ts; deep links get no motion. */
+@keyframes nav-enter-from-left {
+  from { transform: translateX(-24px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes nav-enter-from-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes nav-enter-from-below {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes nav-enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.nav-enter-from-left  { animation: nav-enter-from-left  250ms var(--cog-ease) both; }
+.nav-enter-from-right { animation: nav-enter-from-right 250ms var(--cog-ease) both; }
+.nav-enter-from-below { animation: nav-enter-from-below 250ms var(--cog-ease) both; }
+.nav-enter-fade       { animation: nav-enter-fade 150ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-enter-from-left, .nav-enter-from-right, .nav-enter-from-below {
+    animation: nav-enter-fade 150ms ease-out both;
+  }
+}

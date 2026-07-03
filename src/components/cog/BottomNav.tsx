@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings } from "lucide-react";
+import { setNavDirection } from "@/lib/nav/navDirection";
 
 interface BottomNavProps {
   /** Override active tab for programmatic control */
@@ -19,8 +20,8 @@ const BottomNav = ({ active }: BottomNavProps) => {
 
   function isTab(tab: "songs" | "capture" | "settings"): boolean {
     if (active) return active === tab;
-    if (tab === "songs") return pathname === "/";
-    if (tab === "capture") return pathname === "/capture";
+    if (tab === "songs") return pathname === "/songs";
+    if (tab === "capture") return pathname === "/" || pathname === "/capture";
     if (tab === "settings") return pathname.startsWith("/settings");
     return false;
   }
@@ -53,7 +54,7 @@ const BottomNav = ({ active }: BottomNavProps) => {
       {/* ── Songs ── */}
       <button
         type="button"
-        onClick={() => navigate("/")}
+        onClick={() => { setNavDirection("left"); navigate("/songs"); }}
         aria-label="Songs"
         aria-current={songsActive ? "page" : undefined}
         style={{
@@ -105,7 +106,7 @@ const BottomNav = ({ active }: BottomNavProps) => {
       >
         <button
           type="button"
-          onClick={() => navigate("/capture")}
+          onClick={() => { setNavDirection("right"); navigate("/capture"); }}
           aria-label="Capture idea"
           aria-current={captureActive ? "page" : undefined}
           style={{

@@ -75,7 +75,7 @@ const SongWorkspacePage = () => {
         style={{ maxWidth: 430, margin: "0 auto", width: "100%" }}
       >
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/songs")}
           className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
           style={{ color: "#999", minHeight: 44 }}
         >

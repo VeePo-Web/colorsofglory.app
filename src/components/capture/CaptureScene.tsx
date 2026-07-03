@@ -20,6 +20,8 @@ import LatestPeekStrip from "./LatestPeekStrip";
 import CommitRibbon from "./CommitRibbon";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
+import { useSwipeNav } from "@/lib/nav/useSwipeNav";
+import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
 
 interface CaptureSceneProps {
   /** When provided, captures attach to this song; otherwise they land in Unfiled. */
@@ -311,8 +313,23 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     [songTitle],
   );
 
+  // Spatial nav — Songs live to the LEFT of Capture. Swiping right pages
+  // over to the library (Snapchat/Apple Camera geography); the header
+  // chevron stays as the visible contract. The gesture is off while a take
+  // is in flight or a sheet is open so it can never interrupt a recording.
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const goToSongs = useCallback(() => {
+    setNavDirection("left");
+    navigate("/songs");
+  }, [navigate]);
+  useSwipeNav(sceneRef, {
+    onSwipeRight: goToSongs,
+    disabled: phase !== "idle" || review.open || sheetAction !== null,
+  });
+  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+
   return (
-    <div className="relative min-h-[100dvh] w-full" style={{ background: "var(--cog-cream)" }}>
+    <div ref={sceneRef} className={`relative min-h-[100dvh] w-full ${enterClass}`} style={{ background: "var(--cog-cream)" }}>
       <div aria-hidden className="pointer-events-none fixed inset-0 cog-glow" />
 
       {/* Header */}
@@ -322,7 +339,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       >
         <button
           type="button"
-          onClick={() => navigate("/songs")}
+          onClick={goToSongs}
           aria-label="Open songs"
           className="flex items-center transition-transform active:scale-95"
           style={{
@@ -350,7 +367,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         {songId ? (
           <button
             type="button"
-            onClick={() => navigate(`/songs/${songId}/room`)}
+            onClick={() => { setNavDirection("up"); navigate(`/songs/${songId}/room`); }}
             aria-label={`Open ${songTitle ?? "song"} room`}
             className="transition-transform active:scale-95"
             style={{
