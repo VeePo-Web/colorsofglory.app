@@ -7,9 +7,25 @@ interface OTPInputProps {
   onComplete?: (code: string) => void;
   disabled?: boolean;
   error?: boolean;
-  /** Brief gold "correct!" flash on the cells once the code verifies. */
+  /** Full-power flash on the cells once the code verifies. */
   success?: boolean;
 }
+
+/**
+ * ROYGBV power-up palette — one refined jewel tone per cell, so each digit
+ * "powers up" its box as it lands. Tones are warmed to sit with the cream/gold
+ * brand palette (the Y slot IS the brand gold, tying the rainbow to the brand)
+ * rather than raw RGB primaries. Index = cell position.
+ */
+const CELL_HUES = [
+  "#C94F4F", // R — warm crimson
+  "#CE7A3B", // O — amber
+  "#B8953A", // Y — the brand gold
+  "#6E9B63", // G — sage
+  "#5C7FB8", // B — dusty cobalt
+  "#8A64A8", // V — soft violet
+];
+const hueFor = (idx: number) => CELL_HUES[idx % CELL_HUES.length];
 
 /**
  * 6-box OTP input with:
@@ -17,7 +33,8 @@ interface OTPInputProps {
  * - Backspace moves to previous box
  * - Full-code paste support
  * - Auto-submit callback when all digits filled
- * - Gold border on focused/filled state
+ * - Gold focus ring on the active empty cell; each filled cell powers up in its
+ *   own ROYGBV jewel tone (see CELL_HUES) with a subtle pop
  *
  * WebOTP auto-read (Android Chrome) is owned by the shared `useWebOtpAutofill`
  * hook at the verify-screen level, NOT here — a single listener avoids competing
@@ -82,31 +99,53 @@ const OTPInput = ({
         className="absolute inset-0 z-10 h-full w-full opacity-0 disabled:cursor-not-allowed"
         style={{ caretColor: "transparent" }}
       />
+      {/* Power-up pop when a digit lands. Reduced-motion drops the pop —
+          the colors stay (color isn't motion). Scoped keyframe, GPU-only. */}
+      <style>{`
+        @keyframes cogOtpPop {
+          0% { transform: scale(1); }
+          45% { transform: scale(1.09); }
+          100% { transform: scale(1); }
+        }
+        .cog-otp-pop { animation: cogOtpPop 240ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @media (prefers-reduced-motion: reduce) { .cog-otp-pop { animation: none; } }
+      `}</style>
       {/* Cells are purely visual — the labeled input above carries all semantics.
-          Hidden from assistive tech so a screen reader reads one field, not six boxes. */}
+          Hidden from assistive tech so a screen reader reads one field, not six boxes.
+          Each cell powers up in its own ROYGBV hue the instant its digit lands;
+          on success the whole row glows at full power. */}
       <div className="flex gap-2 justify-center pointer-events-none" aria-hidden="true">
         {Array.from({ length }).map((_, idx) => {
           const char = code[idx] ?? "";
-          const highlight = (char !== "" || (idx === focusedIndex && !disabled)) && !error;
+          const filled = char !== "";
+          const hue = hueFor(idx);
+          const focusRing = idx === focusedIndex && !disabled && !error && !filled;
+          const powered = filled && !error;
           return (
             <div
               key={idx}
-              className="flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-200"
+              className={`flex items-center justify-center text-2xl font-bold rounded-2xl transition-all duration-200 ${powered ? "cog-otp-pop" : ""}`}
               style={{
                 width: 48,
                 height: 64,
-                backgroundColor: success ? "var(--cog-gold-glow)" : "#FFFFFF",
-                border: success
-                  ? "1.5px solid var(--cog-gold)"
-                  : error
+                backgroundColor: powered ? `${hue}${success ? "1F" : "12"}` : "#FFFFFF",
+                border: error
                   ? "1.5px solid #E05440"
-                  : highlight
+                  : powered
+                  ? `1.5px solid ${hue}`
+                  : focusRing
                   ? "1.5px solid var(--cog-gold)"
                   : "1.5px solid rgba(0,0,0,0.12)",
-                color: success ? "var(--cog-gold)" : "#1A1A1A",
+                color: powered ? hue : "#1A1A1A",
                 fontFamily: "var(--font-body)",
-                boxShadow: success || highlight ? "0 0 0 3px var(--cog-gold-glow)" : "none",
-                transform: success ? "scale(1.03)" : "scale(1)",
+                boxShadow: powered
+                  ? success
+                    ? `0 0 0 3px ${hue}33, 0 6px 18px ${hue}4D`
+                    : `0 0 0 3px ${hue}26, 0 4px 14px ${hue}33`
+                  : focusRing
+                  ? "0 0 0 3px var(--cog-gold-glow)"
+                  : "none",
+                transform: success && !error ? "scale(1.04)" : "scale(1)",
                 opacity: disabled && !success ? 0.4 : 1,
               }}
             >
