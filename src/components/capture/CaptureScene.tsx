@@ -98,13 +98,24 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // can retry instead of re-recording.
   const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number } | null>(null);
 
-  // Reset state if the user navigates between contexts.
+  // Tear down the mic ONLY when the scene unmounts.
+  //
+  // Previously this effect depended on [recorder, live]. Both are fresh object
+  // literals every render (their .state / values are recreated), so the dep array
+  // changed on EVERY render — which fired this cleanup on every render. The instant
+  // startRecording() flipped phase to "recording" the component re-rendered, the
+  // cleanup ran cancelRecording(), and it killed the recording that had just begun
+  // ("flashes listening, then reverts, never records"). Route the latest teardown
+  // through a ref and run it only on unmount so a live recording is never cancelled
+  // mid-render.
+  const teardownRef = useRef<() => void>(() => {});
+  teardownRef.current = () => {
+    recorder.cancelRecording();
+    live.stop();
+  };
   useEffect(() => {
-    return () => {
-      recorder.cancelRecording();
-      live.stop();
-    };
-  }, [recorder, live]);
+    return () => teardownRef.current();
+  }, []);
 
   const blocks = useMemo(() => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
