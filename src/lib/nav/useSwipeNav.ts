@@ -10,18 +10,27 @@ interface SwipeNavOptions {
 }
 
 const EDGE_GUARD_PX = 44;   // leave the screen edges to iOS Safari's own back/forward swipe
-const TRIGGER_PX = 64;      // horizontal travel required to commit
+const INTENT_PX = 14;       // horizontal travel before the drag "locks" and starts tracking
+const TRIGGER_PX = 64;      // horizontal travel required to commit on release
 const AXIS_RATIO = 1.6;     // horizontal must dominate vertical by this factor
+const RESIST = 0.22;        // damping when dragging toward a direction with no destination
 
 /**
  * useSwipeNav — spatial paging gesture between peer surfaces.
  *
- * DOM-level touch handlers (zero React re-renders while tracking).
+ * Finger-tracking: once horizontal intent locks, the surface translates 1:1
+ * under the thumb (Snapchat/Apple Camera physicality), commits past the
+ * threshold on release, and springs back on cancel. Directions without a
+ * destination resist heavily instead of moving freely, so the geography
+ * never lies. All motion is direct DOM transform — zero React re-renders.
+ *
  * Guards: ignores touches starting within 44px of the viewport edges
  * (never fights the browser's edge-back gesture), touches inside
  * horizontal scrollers or elements marked data-no-swipe-nav, and
- * vertical-dominant movement (scrolling). The gesture is an accelerator
- * only — every destination it reaches also has a visible tap affordance.
+ * vertical-dominant movement (scrolling). Honors prefers-reduced-motion
+ * by skipping the visual tracking while keeping the release commit.
+ * The gesture is an accelerator only — every destination it reaches also
+ * has a visible tap affordance.
  */
 export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions): void {
   const { onSwipeRight, onSwipeLeft, disabled } = opts;
@@ -30,9 +39,16 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     const el = ref.current;
     if (!el || disabled) return;
 
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
     let startX = 0;
     let startY = 0;
-    let tracking = false;
+    let tracking = false;   // touch is eligible for the gesture
+    let locked = false;     // horizontal intent confirmed — surface follows the finger
+    let raf = 0;
+    let lastDx = 0;
 
     const insideOptOut = (target: EventTarget | null): boolean => {
       let node = target instanceof Element ? target : null;
@@ -49,8 +65,41 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       return false;
     };
 
+    const dampen = (dx: number): number => {
+      // Full travel only toward a real destination; heavy resistance otherwise.
+      if (dx > 0) return onSwipeRight ? dx : dx * RESIST;
+      return onSwipeLeft ? dx : dx * RESIST;
+    };
+
+    const paint = () => {
+      raf = 0;
+      if (!locked) return;
+      el.style.transform = `translateX(${dampen(lastDx)}px)`;
+    };
+
+    const releaseVisual = (springBack: boolean) => {
+      if (!locked) return;
+      locked = false;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (springBack) {
+        el.style.transition = "transform 250ms var(--cog-ease)";
+        el.style.transform = "translateX(0)";
+        window.setTimeout(() => {
+          el.style.transition = "";
+          el.style.transform = "";
+          el.style.willChange = "";
+        }, 280);
+      } else {
+        // Committing — the route change unmounts this surface; the destination's
+        // directional entrance continues the motion.
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.willChange = "";
+      }
+    };
+
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) { tracking = false; return; }
+      if (e.touches.length !== 1) { tracking = false; releaseVisual(true); return; }
       const t = e.touches[0];
       const vw = window.innerWidth;
       if (t.clientX < EDGE_GUARD_PX || t.clientX > vw - EDGE_GUARD_PX) { tracking = false; return; }
@@ -58,28 +107,63 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       startX = t.clientX;
       startY = t.clientY;
       tracking = true;
+      locked = false;
+      lastDx = 0;
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!tracking) return;
-      tracking = false;
-      const t = e.changedTouches[0];
+    const onTouchMove = (e: TouchEvent) => {
+      if (!tracking || reducedMotion) return;
+      const t = e.touches[0];
       if (!t) return;
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
-      if (Math.abs(dx) < TRIGGER_PX) return;
-      if (Math.abs(dx) < Math.abs(dy) * AXIS_RATIO) return; // scroll, not a page
+      if (!locked) {
+        if (Math.abs(dy) > Math.abs(dx) * 1.2 && Math.abs(dy) > INTENT_PX) {
+          // Vertical intent — this is a scroll; stand down for the rest of the touch.
+          tracking = false;
+          return;
+        }
+        if (Math.abs(dx) < INTENT_PX || Math.abs(dx) < Math.abs(dy) * AXIS_RATIO) return;
+        locked = true;
+        el.style.animation = "none"; // a lingering entrance keyframe must not pin the transform
+        el.style.transition = "none";
+        el.style.willChange = "transform";
+      }
+      lastDx = dx;
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const wasTracking = tracking;
+      tracking = false;
+      if (!wasTracking) return;
+      const t = e.changedTouches[0];
+      if (!t) { releaseVisual(true); return; }
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      const valid =
+        Math.abs(dx) >= TRIGGER_PX &&
+        Math.abs(dx) >= Math.abs(dy) * AXIS_RATIO &&
+        (dx > 0 ? !!onSwipeRight : !!onSwipeLeft);
+      releaseVisual(!valid);
+      if (!valid) return;
       if (dx > 0) onSwipeRight?.();
       else onSwipeLeft?.();
     };
 
-    const onTouchCancel = () => { tracking = false; };
+    const onTouchCancel = () => {
+      tracking = false;
+      releaseVisual(true);
+    };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("touchcancel", onTouchCancel, { passive: true });
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchCancel);
     };
