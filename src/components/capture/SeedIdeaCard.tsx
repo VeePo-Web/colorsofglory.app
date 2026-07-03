@@ -294,6 +294,9 @@ interface SongPickerSheetProps {
  */
 const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps) => {
   const [visible, setVisible] = useState(false);
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -302,13 +305,13 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
 
   return (
     <>
-      {/* Frosted backdrop */}
+      {/* Frosted charcoal scrim (COG tokens, matching CaptureSheetShell) */}
       <div
         style={{
           position: "fixed",
           inset: 0,
           zIndex: 799,
-          backgroundColor: "rgba(26,26,26,0.65)",
+          backgroundColor: "rgba(28,26,23,0.65)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           opacity: visible ? 1 : 0,
@@ -331,14 +334,19 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
           zIndex: 800,
           display: "flex",
           flexDirection: "column",
-          maxHeight: "70vh",
-          backgroundColor: "#FAFAF6",
+          maxHeight: "70dvh",
+          backgroundColor: "var(--cog-cream-light)",
           borderRadius: "24px 24px 0 0",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 -24px 60px rgba(0,0,0,0.20)",
+          borderTop: "1px solid var(--cog-border)",
+          boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-          transform: visible ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+          // Reduced motion: cross-fade in place instead of sliding up.
+          ...(reduceMotion
+            ? { opacity: visible ? 1 : 0, transition: "opacity 200ms ease" }
+            : {
+                transform: visible ? "translateY(0)" : "translateY(100%)",
+                transition: "transform 350ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }),
         }}
       >
         {/* Handle */}
@@ -347,7 +355,7 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
             width: 40,
             height: 4,
             borderRadius: 9999,
-            backgroundColor: "#CCC",
+            backgroundColor: "var(--cog-border-light)",
             margin: "12px auto 0",
             flexShrink: 0,
           }}
@@ -435,6 +443,8 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
           disabled={busy}
           style={{
             margin: "8px 28px 0",
+            minHeight: 44,
+            padding: "0 20px",
             fontFamily: "var(--font-body)",
             fontSize: 13,
             color: "var(--cog-warm-gray)",
