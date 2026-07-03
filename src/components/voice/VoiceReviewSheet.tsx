@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Trash2 } from "lucide-react";
+import { Play, Pause, Trash2, Sparkles } from "lucide-react";
 import SectionChip from "./SectionChip";
 import CaptureSheetShell from "./CaptureSheetShell";
 import { formatDuration } from "@/lib/voice/audioFormat";
@@ -30,6 +30,12 @@ interface VoiceReviewSheetProps {
   defaultName: string;
   section: string;
   isPro?: boolean;
+  /**
+   * When set (global capture → the Ideas shelf), the section picker is replaced by
+   * a calm "here's where this is going" line — the idea has a clear home without
+   * asking the songwriter to file it into a song right now.
+   */
+  destinationNote?: string;
   onSave: (params: { name: string; section: string; transcribe: boolean }) => Promise<void>;
   onDiscard: () => void;
 }
@@ -39,6 +45,7 @@ const VoiceReviewSheet = ({
   defaultName,
   section: initialSection,
   isPro = false,
+  destinationNote,
   onSave,
   onDiscard,
 }: VoiceReviewSheetProps) => {
@@ -251,13 +258,33 @@ const VoiceReviewSheet = ({
           />
         </div>
 
-        {/* Section picker */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-warm-gray)" }}>
-            Save to:
-          </span>
-          <SectionChip value={section} onChange={setSection} />
-        </div>
+        {/* Destination — a section within a song, or a calm "goes to Ideas" note */}
+        {destinationNote ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+              padding: "10px 12px",
+              borderRadius: 10,
+              backgroundColor: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.22)",
+            }}
+          >
+            <Sparkles size={15} style={{ color: "var(--cog-gold)", flexShrink: 0 }} />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-charcoal)" }}>
+              {destinationNote}
+            </span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-warm-gray)" }}>
+              Save to:
+            </span>
+            <SectionChip value={section} onChange={setSection} />
+          </div>
+        )}
 
         {/* Transcribe toggle */}
         <div

@@ -36,6 +36,7 @@ const SeedReviewSheet = ({ recording, defaultName, onSaved, onDiscard }: SeedRev
       recording={recording}
       defaultName={defaultName}
       section="Unfiled"
+      destinationNote="Saved to your Ideas — file it into a song whenever you like."
       onSave={handleSave}
       onDiscard={onDiscard}
     />
