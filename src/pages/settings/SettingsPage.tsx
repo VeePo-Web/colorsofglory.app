@@ -9,11 +9,13 @@ import {
   User,
   Bell,
   ShieldCheck,
+  Compass,
   LogOut,
 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { useCurrentAccount } from "@/integrations/cog/auth";
+import { resetTour } from "@/lib/onboarding/tour";
 
 interface SettingsRow {
   id: string;
@@ -21,7 +23,7 @@ interface SettingsRow {
   label: string;
   sublabel?: string;
   to?: string;
-  action?: "signout";
+  action?: "signout" | "tour";
   accent?: boolean;
   destructive?: boolean;
 }
@@ -45,6 +47,7 @@ const SettingsPage = () => {
       { id: "referral", icon: Gift, label: "Refer & Earn", sublabel: "Invite a co-writer, you both benefit", to: "/settings/referral" },
       { id: "notifications", icon: Bell, label: "Notifications", to: "#" },
       { id: "privacy", icon: ShieldCheck, label: "Privacy & Security", to: "#" },
+      { id: "tour", icon: Compass, label: "Show me around", sublabel: "A quick tour of your song's room", action: "tour" },
       { id: "signout", icon: LogOut, label: "Sign out", action: "signout", destructive: true },
     ],
     [accountSublabel],
@@ -54,6 +57,12 @@ const SettingsPage = () => {
     if (row.action === "signout") {
       await signOut();
       navigate("/auth/login", { replace: true });
+      return;
+    }
+    if (row.action === "tour") {
+      // Re-arm every tour beat and start where the tour starts: the catalog.
+      resetTour();
+      navigate("/");
       return;
     }
     if (row.to) navigate(row.to);

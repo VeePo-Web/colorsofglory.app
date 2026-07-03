@@ -17,6 +17,8 @@ import SongActionsSheet from "@/components/library/SongActionsSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { listAlbums, createAlbum, updateAlbum, deleteAlbum, type SongAlbum } from "@/lib/library/albums";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
+import CoachMark from "@/components/onboarding/CoachMark";
+import { useCoachMark } from "@/components/onboarding/useCoachMark";
 import {
   listMySongs,
   createSong,
@@ -259,6 +261,11 @@ const SongCatalogPage = () => {
     };
   }, []);
 
+  // First-run tour, beat 1 — arms once real songs are on screen. See
+  // docs/onboarding/first-run-tour-plan.md; integration is ref + hook only.
+  const catalogTourRef = useRef<HTMLDivElement>(null);
+  const catalogTour = useCoachMark("tour_catalog_seen", !loading && visibleSongs.length > 0);
+
   return (
     <div ref={pageRef} className={`relative min-h-screen ${enterClass}`} style={{ backgroundColor: "var(--cog-cream)" }}>
       {/* Signature warm radial glow — the brand's spiritual warmth, behind the catalog */}
@@ -377,6 +384,7 @@ const SongCatalogPage = () => {
           />
         )}
 
+        <div ref={catalogTourRef}>
         <LibrarySongList
           songs={visibleSongs}
           view={prefs.view}
@@ -397,6 +405,17 @@ const SongCatalogPage = () => {
           }}
           onSwipeArchive={(song) => setSongStatus(song, song.status !== "archived")}
         />
+        </div>
+
+        {catalogTour.visible && (
+          <CoachMark
+            targetRef={catalogTourRef}
+            lead="This is your song's room."
+            body="Everything for it — lyrics, voice memos, people — lives inside. Tap to enter."
+            onGotIt={catalogTour.gotIt}
+            onSkip={catalogTour.skip}
+          />
+        )}
       </div>
 
       {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
