@@ -15,6 +15,7 @@
 //   - A "Start Here" note onboards a first-time vault opener in seconds.
 
 import { buildSongMemory, normaliseKey, titleCase } from "./buildGraph";
+import { buildInsights } from "./insights";
 import type { MemoryCluster, MemoryGraph, MemoryIdea, MemoryRawBundle, MemorySong } from "./memoryTypes";
 
 export interface VaultFile {
@@ -29,6 +30,7 @@ const MOC_SCRIPTURE = "All Scripture";
 const MOC_PEOPLE = "Collaborators";
 const MOC_IDEAS = "All Ideas";
 const MOC_TIMELINE = "Timeline";
+const INSIGHTS_NOTE = "Insights";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -473,6 +475,43 @@ function buildCanvas(graph: MemoryGraph): VaultFile {
   return { path: "Memory Map.canvas", content: JSON.stringify({ nodes, edges }, null, 2) + "\n" };
 }
 
+/** "Your writing, by the numbers" — word/scripture/theme frequency in the vault. */
+function buildInsightsNote(bundle: MemoryRawBundle): VaultFile {
+  const insights = buildInsights(bundle);
+  const lines: string[] = ["---", "tags: [insights]", "---", ""];
+  lines.push(`# ${INSIGHTS_NOTE}`, "");
+  lines.push("Your writing, by the numbers. It refreshes on every export.", "");
+
+  const t = insights.totals;
+  lines.push(
+    `- Songs: ${t.songs} · Ideas: ${t.ideas} · Notes: ${t.notes} · Voice memos: ${t.voiceMemos}`,
+    `- Lyric lines: ${t.lyricLines} · Words written: ${t.wordsWritten}`,
+    "",
+  );
+
+  if (insights.topWords.length) {
+    lines.push("## Words you return to");
+    for (const w of insights.topWords) lines.push(`- ${w.word} — ${w.count}`);
+    lines.push("");
+  }
+
+  if (insights.scriptures.length) {
+    lines.push("## Scripture you lean on");
+    for (const s of insights.scriptures) {
+      lines.push(`- ${wikilink(s.label)} — ${s.count} ${s.count === 1 ? "mention" : "mentions"}`);
+    }
+    lines.push("");
+  }
+
+  if (insights.themes.length) {
+    lines.push("## Themes");
+    for (const th of insights.themes) lines.push(`- ${wikilink(th.label)} — ${th.count}`);
+    lines.push("");
+  }
+
+  return { path: `${INSIGHTS_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
+}
+
 function buildStartHereNote(graph: MemoryGraph): VaultFile {
   const lines: string[] = ["---", "tags: [colors-of-glory, guide]", "---", ""];
   lines.push(`# ${START_NOTE}`, "");
@@ -494,6 +533,7 @@ function buildStartHereNote(graph: MemoryGraph): VaultFile {
   lines.push(`- [[${MOC_SCRIPTURE}]] — ${graph.stats.scriptureCount} scriptures`);
   lines.push(`- [[${MOC_PEOPLE}]] — ${graph.stats.personCount} collaborators`);
   lines.push(`- [[${MOC_TIMELINE}]] — your songs over time`);
+  lines.push(`- [[${INSIGHTS_NOTE}]] — your writing, by the numbers`);
   lines.push("");
   lines.push(
     "This vault is plain Markdown. Nothing here depends on Colors of Glory —",
@@ -518,6 +558,7 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
   lines.push(`- [[${MOC_SCRIPTURE}]]`);
   lines.push(`- [[${MOC_PEOPLE}]]`);
   lines.push(`- [[${MOC_TIMELINE}]]`);
+  lines.push(`- [[${INSIGHTS_NOTE}]]`);
   lines.push("");
 
   lines.push(
@@ -556,6 +597,7 @@ export function buildVault(graph: MemoryGraph, bundle: MemoryRawBundle): VaultFi
     buildIdeasMoc(graph, bundle, ideaNames),
     buildTimelineMoc(graph),
     buildCanvas(graph),
+    buildInsightsNote(bundle),
   ];
 
   files.push(...buildJournalNotes(graph));

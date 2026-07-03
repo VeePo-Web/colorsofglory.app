@@ -7,6 +7,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import { loadMemory } from "@/integrations/cog/memory";
 import { searchMemory } from "@/lib/memory/searchMemory";
 import { applyHidden, toggleHidden, loadHiddenIds, saveHiddenIds } from "@/lib/memory/hidden";
+import { buildInsights } from "@/lib/memory/insights";
 import { loadMemorySnapshot } from "@/lib/memory/localCache";
 import { freshSongs, loadLastSeen, saveLastSeen } from "@/lib/memory/recency";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
@@ -68,6 +69,9 @@ const MemoryPage = () => {
     saveLastSeen(userId, new Date().toISOString());
   }, [userId]);
   const fresh = useMemo(() => (graph ? freshSongs(graph.songs, seenAt) : []), [graph, seenAt]);
+
+  // "Your writing, by the numbers" — word/scripture recurrence across everything.
+  const insights = useMemo(() => (data?.bundle ? buildInsights(data.bundle) : null), [data?.bundle]);
 
   const recurring = useMemo(() => applyHidden(graph?.clusters.filter((c) => c.recurring) ?? [], hidden), [graph, hidden]);
   const single = useMemo(() => applyHidden(graph?.clusters.filter((c) => !c.recurring) ?? [], hidden), [graph, hidden]);
@@ -250,6 +254,49 @@ const MemoryPage = () => {
                         <Section title="Recurring across your songs" clusters={recurring} onOpen={setActive} />
                         <Section title="Threads" clusters={single} onOpen={setActive} />
                       </>
+                    )}
+
+                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0) && (
+                      <div className="mb-7">
+                        <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--cog-warm-gray)" }}>
+                          Your writing, by the numbers
+                        </h2>
+                        {insights.topWords.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {insights.topWords.slice(0, 8).map((w) => (
+                              <span
+                                key={w.word}
+                                className="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-full text-sm"
+                                style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
+                              >
+                                <span style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)", fontWeight: 500 }}>
+                                  {w.word}
+                                </span>
+                                <span className="text-xs" style={{ color: "var(--cog-gold-alt)" }}>
+                                  {w.count}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {insights.scriptures.length > 0 && (
+                          <div className="flex flex-col gap-1.5">
+                            {insights.scriptures.slice(0, 5).map((s) => (
+                              <div key={s.label} className="flex items-baseline justify-between px-1">
+                                <span className="text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                  {s.label}
+                                </span>
+                                <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>
+                                  {s.count} {s.count === 1 ? "mention" : "mentions"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs mt-3" style={{ color: "var(--cog-muted)" }}>
+                          {insights.totals.wordsWritten.toLocaleString()} words written across {insights.totals.lyricLines.toLocaleString()} lyric lines.
+                        </p>
+                      </div>
                     )}
 
                     {hiddenCount > 0 && (
