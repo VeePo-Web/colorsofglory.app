@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronRight, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { claimSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
+import { audioCache } from "@/lib/voice/audioCache";
 
 // Re-use waveform seed pattern from VoiceReviewSheet — here seeded with the
 // idea's id (a seed has no blob at list-render time, only its index record).
@@ -58,7 +59,43 @@ interface SeedIdeaCardProps {
 const SeedIdeaCard = ({ idea, songs, onClaimed }: SeedIdeaCardProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
   const bars = buildPreviewBars(idea.id, PREVIEW_BAR_COUNT);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+  }, []);
+
+  // Hear the spark before deciding its home — plays instantly from the local
+  // cache (the seed's blob lives in audioCache until it's filed). Offline-safe.
+  const togglePlay = async () => {
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      return;
+    }
+    try {
+      const blob = await audioCache.get(idea.id);
+      if (!blob) {
+        toast.error("This idea's audio isn't on this device.");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = url;
+      if (!audioRef.current) audioRef.current = new Audio();
+      const audio = audioRef.current;
+      audio.src = url;
+      audio.onended = () => setIsPlaying(false);
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
+    }
+  };
 
   const handlePick = async (songId: string) => {
     if (claiming) return;
@@ -88,29 +125,54 @@ const SeedIdeaCard = ({ idea, songs, onClaimed }: SeedIdeaCardProps) => {
         }}
       >
         <div>
-          {/* Static waveform thumbnail */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: 2,
-              height: PREVIEW_BAR_MAX_H,
-              marginBottom: 14,
-            }}
-            aria-hidden="true"
-          >
-            {bars.map((h, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  height: Math.round(h * PREVIEW_BAR_MAX_H),
-                  borderRadius: 2,
-                  backgroundColor: "var(--cog-gold-pale)",
-                  opacity: h * 0.6 + 0.25,
-                }}
-              />
-            ))}
+          {/* Play + waveform row — tap either to hear the idea from local cache */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <button
+              type="button"
+              onClick={togglePlay}
+              aria-label={isPlaying ? `Pause ${idea.title}` : `Play ${idea.title}`}
+              style={{
+                width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                backgroundColor: "var(--cog-gold)",
+                color: "#FFF",
+                border: "none",
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(184,149,58,0.30)",
+                transition: "transform 120ms ease",
+              }}
+              onMouseDown={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(0.94)")}
+              onMouseUp={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.transform = "scale(1)")}
+            >
+              {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
+            </button>
+            <div
+              onClick={togglePlay}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 2,
+                height: PREVIEW_BAR_MAX_H,
+                cursor: "pointer",
+              }}
+              aria-hidden="true"
+            >
+              {bars.map((h, i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: Math.round(h * PREVIEW_BAR_MAX_H),
+                    borderRadius: 2,
+                    backgroundColor: isPlaying ? "var(--cog-gold)" : "var(--cog-gold-pale)",
+                    opacity: h * 0.6 + 0.25,
+                    transition: "background-color 150ms ease",
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <p
