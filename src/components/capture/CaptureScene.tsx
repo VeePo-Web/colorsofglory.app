@@ -10,6 +10,12 @@ import { submitSharedAudio } from "@/integrations/cog/intake";
 import { createSong } from "@/integrations/cog/songs";
 import { getPrimaryTakeIdForMemo } from "@/integrations/cog/transcript";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  saveFailedCapture,
+  listFailedCaptures,
+  getFailedCaptureFile,
+  clearAllFailedCaptures,
+} from "@/lib/voice/failedCaptureStore";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
@@ -138,6 +144,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
         setStatus("ready");
         setFailedTake(null);
+        // A recovered take just saved — retire any durable failed-capture record.
+        void clearAllFailedCaptures();
         setReview({
           open: true,
           takeId,
@@ -150,6 +158,13 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         setStatus("skipped");
         // Keep the recording so the idea survives a flaky network — never discard.
         setFailedTake({ file, durationMs: fileDurationMs });
+        // AND persist it durably, so it survives a reload too (not just React
+        // state) — a captured idea must never be lost.
+        void saveFailedCapture(file, {
+          songId: songId ?? null,
+          title: songTitle ? `${songTitle} — capture` : "Capture",
+          durationMs: fileDurationMs,
+        });
         const msg = err instanceof Error ? err.message : "Unknown error";
         toast.error("Couldn't save that take — your recording is safe.", { description: msg.slice(0, 120) });
       } finally {
@@ -163,6 +178,22 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     if (!failedTake) return;
     void handleAudioFile(failedTake.file, failedTake.durationMs);
   }, [failedTake, handleAudioFile]);
+
+  // Recovery sweep: a take whose save failed last session is still safe in the
+  // durable store. Surface it on load so the songwriter can retry — the idea
+  // survives a reload, not just an in-session retry.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rows = listFailedCaptures();
+      if (cancelled || rows.length === 0) return;
+      const file = await getFailedCaptureFile(rows[0].id);
+      if (cancelled || !file) return;
+      setFailedTake({ file, durationMs: rows[0].durationMs });
+      setStatus("skipped");
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Auto-saved takes (interruption / ceiling / page hidden) flow through the
   // same upload path as a manual stop, so the idea lands in review either way.
