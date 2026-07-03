@@ -78,6 +78,7 @@ const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
 const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
 // Admin (internal-only) — all admin routing lives in src/routes/AdminRoutes.tsx
 import { adminRoutes } from "@/routes/AdminRoutes";
+import SongSurfaceTracker from "@/components/nav/SongSurfaceTracker";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -133,6 +134,7 @@ const App = () => {
       <Sonner />
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <PracticePlayerProvider>
+        <SongSurfaceTracker />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Auth — phone-first front door (Twilio SMS OTP); email is the fallback */}

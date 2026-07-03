@@ -7,6 +7,7 @@ import BottomNav from "@/components/cog/BottomNav";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
+import { resumePathFor } from "@/lib/nav/songResume";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
@@ -369,7 +370,7 @@ const SongCatalogPage = () => {
         {continueSong && (
           <ContinueShelf
             song={continueSong}
-            onOpen={() => { setNavDirection("up"); navigate(`/songs/${continueSong.id}/brainstorm`); }}
+            onOpen={() => { setNavDirection("up"); navigate(resumePathFor(continueSong.id) ?? `/songs/${continueSong.id}/brainstorm`); }}
           />
         )}
 
@@ -398,7 +399,7 @@ const SongCatalogPage = () => {
               ? "This album is empty. Tap the pencil on it to add songs."
               : EMPTY_COPY[activeTab]
           }
-          onOpen={(id) => { setNavDirection("up"); navigate(`/songs/${id}/brainstorm`); }}
+          onOpen={(id) => { setNavDirection("up"); navigate(resumePathFor(id) ?? `/songs/${id}/brainstorm`); }}
           onSongActions={(song) => {
             // Organization actions are the owner's — invited songs stay tap-to-open only.
             if (song.my_role === "owner") setActionsSong(song);
