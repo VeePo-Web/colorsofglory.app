@@ -1,5 +1,5 @@
 import type { ElementType } from "react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
+import { useSwipeNav } from "@/lib/nav/useSwipeNav";
+import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
 
 interface Module {
   id: string;
@@ -55,9 +57,17 @@ const SongWorkspacePage = () => {
 
   const sid = id ?? "1";
 
+  // Depth surface: the room rose from the catalog, so paging back is a
+  // rightward swipe (mid-screen — the browser keeps its own edge gesture).
+  const roomRef = useRef<HTMLDivElement>(null);
+  const backToSongs = useCallback(() => navigate("/songs"), [navigate]);
+  useSwipeNav(roomRef, { onSwipeRight: backToSongs });
+  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+
   return (
     <div
-      className="relative min-h-screen flex flex-col"
+      ref={roomRef}
+      className={`relative min-h-screen flex flex-col ${enterClass}`}
       style={{ backgroundColor: "#FAFAF6", paddingBottom: 96 }}
     >
       {/* Subtle bottom-right glow */}
@@ -75,7 +85,7 @@ const SongWorkspacePage = () => {
         style={{ maxWidth: 430, margin: "0 auto", width: "100%" }}
       >
         <button
-          onClick={() => navigate("/songs")}
+          onClick={backToSongs}
           className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
           style={{ color: "#999", minHeight: 44 }}
         >
@@ -123,13 +133,14 @@ const SongWorkspacePage = () => {
             <ModuleCard
               key={module.id}
               module={module}
-              onClick={() =>
+              onClick={() => {
+                setNavDirection("up");
                 navigate(
                   module.id === "lyrics" || module.id === "chords"
                     ? `/songs/${sid}/sheet`
                     : `/songs/${sid}/canvas?layer=${module.route}`,
-                )
-              }
+                );
+              }}
             />
           ))}
         </div>

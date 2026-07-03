@@ -205,6 +205,7 @@ const SongCatalogPage = () => {
     try {
       const { song } = await createSong({ title });
       setDialogOpen(false);
+      setNavDirection("up");
       navigate(`/songs/${song.id}/brainstorm`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't create that song");
@@ -341,7 +342,7 @@ const SongCatalogPage = () => {
         {continueSong && (
           <ContinueShelf
             song={continueSong}
-            onOpen={() => navigate(`/songs/${continueSong.id}/brainstorm`)}
+            onOpen={() => { setNavDirection("up"); navigate(`/songs/${continueSong.id}/brainstorm`); }}
           />
         )}
 
@@ -369,7 +370,7 @@ const SongCatalogPage = () => {
               ? "This album is empty. Tap the pencil on it to add songs."
               : EMPTY_COPY[activeTab]
           }
-          onOpen={(id) => navigate(`/songs/${id}/brainstorm`)}
+          onOpen={(id) => { setNavDirection("up"); navigate(`/songs/${id}/brainstorm`); }}
           onSongActions={(song) => {
             // Organization actions are the owner's — invited songs stay tap-to-open only.
             if (song.my_role === "owner") setActionsSong(song);
@@ -425,11 +426,13 @@ const SongCatalogPage = () => {
           onOpen={() => {
             const songId = actionsSong.id;
             setActionsSong(null);
+            setNavDirection("up");
             navigate(`/songs/${songId}/brainstorm`);
           }}
           onQuickRoute={(surface) => {
             const songId = actionsSong.id;
             setActionsSong(null);
+            setNavDirection("up");
             navigate(`/songs/${songId}/${surface}`);
           }}
           onArchive={() => setSongStatus(actionsSong, true)}

@@ -328,6 +328,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   });
   const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
 
+  // First-visit wayfinding: nudge the Songs affordance once, then never again.
+  const [hintNudge] = useState(() => {
+    try {
+      if (localStorage.getItem("cog:nav-swipe-hint")) return false;
+      localStorage.setItem("cog:nav-swipe-hint", "1");
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
   return (
     <div ref={sceneRef} className={`relative min-h-[100dvh] w-full ${enterClass}`} style={{ background: "var(--cog-cream)" }}>
       <div aria-hidden className="pointer-events-none fixed inset-0 cog-glow" />
@@ -341,7 +352,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           type="button"
           onClick={goToSongs}
           aria-label="Open songs"
-          className="flex items-center transition-transform active:scale-95"
+          className={`flex items-center transition-transform active:scale-95 ${hintNudge ? "nav-hint-nudge" : ""}`}
           style={{
             background: "transparent",
             border: "none",

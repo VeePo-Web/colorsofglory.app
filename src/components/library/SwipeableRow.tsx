@@ -67,6 +67,7 @@ const SwipeableRow = ({ children, onSwipe, restore = false }: SwipeableRowProps)
   return (
     <div
       className="relative overflow-hidden rounded-2xl"
+      data-no-swipe-nav
       style={{ touchAction: "pan-y" }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}

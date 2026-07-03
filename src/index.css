@@ -510,3 +510,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
     animation: nav-enter-fade 150ms ease-out both;
   }
 }
+
+/* One-time wayfinding nudge — the Songs affordance breathes left twice on
+   first visit only, teaching "the library lives to your left." */
+@keyframes nav-hint-nudge {
+  0%, 100% { transform: translateX(0); }
+  12%      { transform: translateX(-5px); }
+  24%      { transform: translateX(0); }
+  36%      { transform: translateX(-5px); }
+  48%      { transform: translateX(0); }
+}
+.nav-hint-nudge { animation: nav-hint-nudge 2200ms var(--cog-ease) 1400ms 1 both; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-hint-nudge { animation: none; }
+}
