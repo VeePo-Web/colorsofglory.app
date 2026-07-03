@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3 } from "lucide-react";
+import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, GitBranch, FileText, Mic } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -10,6 +10,8 @@ interface SongActionsSheetProps {
   onToggleAlbum: (albumId: string) => void;
   onNewAlbum: () => void;
   onOpen: () => void;
+  /** Route straight into another lane's surface for this song. */
+  onQuickRoute: (surface: "canvas" | "sheet" | "voice") => void;
   onArchive: () => void;
   onUnarchive: () => void;
   onClose: () => void;
@@ -26,6 +28,7 @@ const SongActionsSheet = ({
   onToggleAlbum,
   onNewAlbum,
   onOpen,
+  onQuickRoute,
   onArchive,
   onUnarchive,
   onClose,
@@ -126,6 +129,31 @@ const SongActionsSheet = ({
               Open song
             </span>
           </button>
+
+          {/* Straight into any surface of this song — the library as switchboard */}
+          {!archived &&
+            (
+              [
+                { surface: "canvas", label: "Open canvas", Icon: GitBranch },
+                { surface: "sheet", label: "Open lyric sheet", Icon: FileText },
+                { surface: "voice", label: "Voice memos", Icon: Mic },
+              ] as const
+            ).map(({ surface, label, Icon }) => (
+              <button
+                key={surface}
+                onClick={() => onQuickRoute(surface)}
+                className={rowClass}
+                style={{ minHeight: 48 }}
+              >
+                <Icon size={16} strokeWidth={1.9} style={{ color: "var(--cog-warm-gray)" }} />
+                <span
+                  className="flex-1 text-[0.9375rem]"
+                  style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+                >
+                  {label}
+                </span>
+              </button>
+            ))}
 
           {/* Albums — instant placement, Apple "Add to Playlist" pattern */}
           {!archived && (

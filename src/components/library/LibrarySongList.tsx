@@ -5,6 +5,7 @@ import SongGridCard from "./SongGridCard";
 import SongListRow from "./SongListRow";
 import LibrarySkeleton from "./LibrarySkeleton";
 import AlphaScrubber from "./AlphaScrubber";
+import SwipeableRow from "./SwipeableRow";
 
 interface LibrarySongListProps {
   songs: SongRow[];
@@ -17,6 +18,8 @@ interface LibrarySongListProps {
   emptyCopy: string;
   onOpen: (id: string) => void;
   onSongActions?: (song: SongRow) => void;
+  /** Swipe-left on an owned list row → archive (or restore when archived). */
+  onSwipeArchive?: (song: SongRow) => void;
 }
 
 /**
@@ -67,6 +70,7 @@ const LibrarySongList = ({
   emptyCopy,
   onOpen,
   onSongActions,
+  onSwipeArchive,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -127,14 +131,28 @@ const LibrarySongList = ({
     );
   }
 
-  const rowFor = (song: SongRow) => (
-    <SongListRow
-      key={song.id}
-      song={song}
-      onClick={() => onOpen(song.id)}
-      onLongPress={onSongActions ? () => onSongActions(song) : undefined}
-    />
-  );
+  const rowFor = (song: SongRow) => {
+    const row = (
+      <SongListRow
+        song={song}
+        onClick={() => onOpen(song.id)}
+        onLongPress={onSongActions ? () => onSongActions(song) : undefined}
+      />
+    );
+    // Swipe triage is the owner's gesture — invited rows stay tap-only.
+    if (onSwipeArchive && song.my_role === "owner") {
+      return (
+        <SwipeableRow
+          key={song.id}
+          restore={song.status === "archived"}
+          onSwipe={() => onSwipeArchive(song)}
+        >
+          {row}
+        </SwipeableRow>
+      );
+    }
+    return <div key={song.id}>{row}</div>;
+  };
 
   if (view === "list") {
     if (alphaSections) {

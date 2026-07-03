@@ -162,7 +162,10 @@ const SongCatalogPage = () => {
     try {
       if (archived) {
         await archiveSong(song.id);
-        toast("Song archived — it stays safe in the Archived tab");
+        toast("Song archived — it stays safe in the Archived tab", {
+          duration: 6000,
+          action: { label: "Undo", onClick: () => setSongStatus(song, false) },
+        });
       } else {
         await unarchiveSong(song.id);
         toast("Song restored");
@@ -171,6 +174,12 @@ const SongCatalogPage = () => {
       setSongs(prev);
       toast.error(archived ? "Couldn't archive that song" : "Couldn't restore that song");
     }
+  };
+
+  const tabCounts: Record<Tab, number> = {
+    Owned: ownedSongs.length,
+    Invited: songs.filter((s) => s.my_role !== "owner" && s.status !== "archived").length,
+    Archived: songs.filter((s) => s.status === "archived").length,
   };
 
   const handleCreateSong = async () => {
@@ -286,13 +295,23 @@ const SongCatalogPage = () => {
                   setActiveTab(tab);
                   setActiveAlbumId(null);
                 }}
-                className={`mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center ${
+                className={`mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center gap-1.5 ${
                   activeTab === tab ? "text-white" : "text-white/40 hover:text-white/70"
                 }`}
                 style={{ fontFamily: "var(--font-body)", minHeight: 44 }}
                 aria-selected={activeTab === tab}
+                aria-label={tab}
               >
                 {tab}
+                {!loading && tabCounts[tab] > 0 && (
+                  <span
+                    aria-hidden
+                    className="text-[0.6875rem] font-semibold"
+                    style={{ color: activeTab === tab ? "var(--cog-gold)" : "rgba(255,255,255,0.30)" }}
+                  >
+                    {tabCounts[tab]}
+                  </span>
+                )}
                 {activeTab === tab && (
                   <span
                     className="absolute bottom-0 left-0 right-0 rounded-t-full"
@@ -355,6 +374,7 @@ const SongCatalogPage = () => {
             // Organization actions are the owner's — invited songs stay tap-to-open only.
             if (song.my_role === "owner") setActionsSong(song);
           }}
+          onSwipeArchive={(song) => setSongStatus(song, song.status !== "archived")}
         />
       </div>
 
@@ -406,6 +426,11 @@ const SongCatalogPage = () => {
             const songId = actionsSong.id;
             setActionsSong(null);
             navigate(`/songs/${songId}/brainstorm`);
+          }}
+          onQuickRoute={(surface) => {
+            const songId = actionsSong.id;
+            setActionsSong(null);
+            navigate(`/songs/${songId}/${surface}`);
           }}
           onArchive={() => setSongStatus(actionsSong, true)}
           onUnarchive={() => setSongStatus(actionsSong, false)}
