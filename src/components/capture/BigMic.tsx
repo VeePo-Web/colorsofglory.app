@@ -75,6 +75,8 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
                 background: "var(--cog-gold)",
                 opacity: 0.18,
                 animation: "cog-mic-ripple 1.6s ease-out infinite",
+                // Decorative only — must never swallow the tap meant for the mic.
+                pointerEvents: "none",
               }}
             />
             <span
@@ -84,6 +86,7 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
                 background: "var(--cog-gold)",
                 opacity: 0.12,
                 animation: "cog-mic-ripple 1.6s ease-out infinite 0.5s",
+                pointerEvents: "none",
               }}
             />
           </>
@@ -98,6 +101,9 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
             inset: 24,
             border: "2px solid rgba(184,149,58,0.45)",
             transition: "transform 80ms linear",
+            // The amplitude ring overlaps the button box — without this it could
+            // intercept the tap. Decorative, so it never receives pointer events.
+            pointerEvents: "none",
           }}
         />
 
