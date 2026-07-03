@@ -57,7 +57,7 @@ const SeedIdeasShelf = ({ songs }: SeedIdeasShelfProps) => {
         }}
       >
         {ideas.map((idea) => (
-          <SeedIdeaCard key={idea.id} idea={idea} songs={songs} onClaimed={refresh} />
+          <SeedIdeaCard key={idea.id} idea={idea} songs={songs} onClaimed={refresh} onDiscarded={refresh} />
         ))}
       </div>
     </section>
