@@ -71,6 +71,7 @@ const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit, on
       </p>
 
       <div
+        data-no-swipe-nav
         className="flex gap-3 overflow-x-auto pb-1"
         style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >

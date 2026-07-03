@@ -147,6 +147,9 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         (dx > 0 ? !!onSwipeRight : !!onSwipeLeft);
       releaseVisual(!valid);
       if (!valid) return;
+      // A single soft tick confirms the page turn (Android-only enhancement —
+      // iOS has no vibrate API; the visual slide carries the confirmation).
+      try { navigator.vibrate?.(8); } catch { /* never let a nicety throw */ }
       if (dx > 0) onSwipeRight?.();
       else onSwipeLeft?.();
     };
