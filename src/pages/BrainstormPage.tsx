@@ -8,6 +8,8 @@ import {
 } from "@/integrations/cog/brainstorm";
 import { getSong, type SongDetail } from "@/integrations/cog/songs";
 import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
+import CoachMark from "@/components/onboarding/CoachMark";
+import { useCoachMark } from "@/components/onboarding/useCoachMark";
 
 const BrainstormMemosPanel = lazy(() => import("@/components/brainstorm/BrainstormMemosPanel"));
 
@@ -207,6 +209,11 @@ const BrainstormPage = () => {
 
   const elapsedLabel = useMemo(() => formatTime(elapsedMs / 1000), [elapsedMs]);
 
+  // First-run tour, beat 2 — "one song, one room", anchored on the song
+  // header once it's real. Ref + hook only; see first-run-tour-plan.md.
+  const roomTourRef = useRef<HTMLElement>(null);
+  const roomTour = useCoachMark("tour_room_seen", !loading);
+
   return (
     <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream, #F5F0E8)" }}>
       <div
@@ -219,7 +226,7 @@ const BrainstormPage = () => {
       />
 
       <div className="relative mx-auto w-full" style={{ maxWidth: 430 }}>
-        <header className="flex items-center justify-between px-5 pb-4 pt-12">
+        <header ref={roomTourRef} className="flex items-center justify-between px-5 pb-4 pt-12">
           <button
             onClick={() => navigate("/")}
             aria-label="Back to songs"
@@ -241,6 +248,16 @@ const BrainstormPage = () => {
           </div>
           <div className="w-10" />
         </header>
+
+        {roomTour.visible && (
+          <CoachMark
+            targetRef={roomTourRef}
+            lead="One song, one room."
+            body="Ideas, voice memos, and your people — everything for this song lives here."
+            onGotIt={roomTour.gotIt}
+            onSkip={roomTour.skip}
+          />
+        )}
 
         <div className="flex flex-col items-center pb-10 pt-6">
           <button
