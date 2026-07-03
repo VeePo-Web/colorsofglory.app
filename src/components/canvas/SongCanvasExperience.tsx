@@ -30,7 +30,7 @@ import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
 import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport, { useCanvasViewport } from "@/components/canvas/CanvasViewport";
+import CanvasViewport, { useCanvasViewport, type ViewportCtx } from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
@@ -664,6 +664,18 @@ const CanvasCardEl = ({
   );
 };
 
+// ─── Viewport bridge ─────────────────────────────────────────────────────────
+
+/**
+ * Exposes the viewport's pan/zoom API to the page shell (header, sheets) that
+ * lives OUTSIDE <CanvasViewport>. Renders nothing; just forwards the context.
+ */
+const CanvasViewportBridge = ({ apiRef }: { apiRef: React.MutableRefObject<ViewportCtx | null> }) => {
+  const ctx = useCanvasViewport();
+  apiRef.current = ctx;
+  return null;
+};
+
 // ─── isLayerId guard ──────────────────────────────────────────────────────────
 
 const isLayerId = (v: string | null): v is LayerId =>
@@ -706,6 +718,9 @@ const SongCanvasExperience = () => {
   const [showShareSheet, setShowShareSheet] = useState(false);
   // Real room roster — the same source the People surface reads.
   const songMembers = useSongCollaborators(songId);
+  // Viewport pan/zoom API, bridged out of <CanvasViewport> for presence-jump.
+  const viewportApiRef = useRef<ViewportCtx | null>(null);
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
   const [lineSuggest, setLineSuggest] = useState<{
     cardId: string;
     originalLine: string;
@@ -1170,6 +1185,86 @@ const SongCanvasExperience = () => {
       })),
     [songMembers],
   );
+
+  // The invite sheet's roster: real members when they exist, otherwise the
+  // people already visible on cards — so presence-jump works in every room.
+  const sheetRoster = useMemo(
+    () =>
+      songMembers.length > 0
+        ? songMembers
+        : roomCollaborators.map((c) => ({
+            userId: c.userId,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            role: "Contributor",
+            isOwner: false,
+            avatarColor: c.avatarColor,
+            avatarInitials: c.avatarInitials,
+          })),
+    [songMembers, roomCollaborators],
+  );
+
+  // Fly the canvas so a card lands at the viewport center, then select it.
+  const jumpToCard = useCallback((card: CanvasCard) => {
+    const area = canvasAreaRef.current;
+    // Land the card's center at the viewport's center (card is 200px wide).
+    viewportApiRef.current?.panTo(
+      card.x + 100,
+      card.y + 70,
+      (area?.clientWidth ?? window.innerWidth) / 2,
+      (area?.clientHeight ?? window.innerHeight) / 2,
+      450,
+    );
+    setSelectedId(card.id);
+  }, []);
+
+  const jumpToCardId = useCallback(
+    (cardId: string) => {
+      const target = cards.find((c) => c.id === cardId);
+      if (target) jumpToCard(target);
+    },
+    [cards, jumpToCard],
+  );
+
+  // Presence as navigation: fly the canvas to this person's latest idea and
+  // select it, so "who is in the room" becomes "where they are working".
+  const jumpToCollaborator = useCallback(
+    (person: { firstName: string; lastName: string }) => {
+      const fullName = `${person.firstName} ${person.lastName}`.trim();
+      // Cards are prepended on add, so the first match is the latest idea.
+      // Layers live inside stacks — only board-positioned cards are targets.
+      const target = cards.find(
+        (c) =>
+          !c.parentMemoId &&
+          (c.contributor === fullName || c.contributor === person.firstName),
+      );
+      setShowShareSheet(false);
+      if (!target) {
+        toast(`${person.firstName} hasn't added an idea here yet`, {
+          description: "Their work will appear on the canvas as they contribute.",
+        });
+        return;
+      }
+      jumpToCard(target);
+    },
+    [cards, jumpToCard],
+  );
+
+  // The recap digest, from the room's real cards: what other hands added,
+  // latest first, each row a deep link to its card (COG Product 12).
+  const recapItems = useMemo(
+    () =>
+      cards
+        .filter((c) => !c.parentMemoId && c.contributor && c.contributor !== currentUserName)
+        .slice(0, 5)
+        .map((c) => ({
+          id: `recap-${c.id}`,
+          text: `${c.contributor} added "${c.title}" · ${c.section}`,
+          dotColor: c.accent,
+          targetCardId: c.id,
+        })),
+    [cards, currentUserName],
+  );
   const dockActions = useMemo(
     () => [
       {
@@ -1319,7 +1414,7 @@ const SongCanvasExperience = () => {
       </div>
 
       {/* ── Canvas viewport ──────────────────────────────────────────────── */}
-      <div className="relative flex-1 min-h-0">
+      <div ref={canvasAreaRef} className="relative flex-1 min-h-0">
         <CanvasViewport
           className="w-full h-full"
           overlay={
@@ -1407,6 +1502,7 @@ const SongCanvasExperience = () => {
           }
         >
           {/* Canvas content — all positioned absolutely */}
+          <CanvasViewportBridge apiRef={viewportApiRef} />
           <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
           <SongRootCard title={songTitle} />
           <ZoneLabels />
@@ -1554,7 +1650,12 @@ const SongCanvasExperience = () => {
 
       {/* What Changed recap sheet */}
       {showRecap && (
-        <WhatChangedRecapSheet songId={songId} onDismiss={() => setShowRecap(false)} />
+        <WhatChangedRecapSheet
+          songId={songId}
+          items={recapItems}
+          onJumpToCard={jumpToCardId}
+          onDismiss={() => setShowRecap(false)}
+        />
       )}
 
       {/* Copy-link invite sheet — one tap from the room's presence stack */}
@@ -1563,7 +1664,8 @@ const SongCanvasExperience = () => {
           <ShareSongSheet
             songId={songId}
             songTitle={songTitle}
-            collaborators={songMembers}
+            collaborators={sheetRoster}
+            onJumpTo={jumpToCollaborator}
             onClose={() => setShowShareSheet(false)}
           />
         </Suspense>

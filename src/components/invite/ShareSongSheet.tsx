@@ -16,6 +16,8 @@ interface ShareSongSheetProps {
   songTitle: string;
   collaborators: SongCollaborator[];
   onClose: () => void;
+  /** Fly the canvas to this person's latest idea (Freeform "jump to their spot"). */
+  onJumpTo?: (person: SongCollaborator) => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface ShareSongSheetProps {
  * instant and the clipboard write stays inside the tap gesture. Links are
  * cached per role — flipping Contribute/Listen never mints duplicate tokens.
  */
-const ShareSongSheet = ({ songId, songTitle, collaborators, onClose }: ShareSongSheetProps) => {
+const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo }: ShareSongSheetProps) => {
   const [visible, setVisible] = useState(false);
   const [role, setRole] = useState<InviteRole>("contributor");
   const [copied, setCopied] = useState(false);
@@ -265,24 +267,52 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose }: ShareSong
             <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--cog-muted)", fontFamily: "var(--font-body)", marginBottom: 8 }}>
               In this room
             </p>
-            {collaborators.map((c) => (
-              <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-                <span
+            {collaborators.map((c) => {
+              const row = (
+                <>
+                  <span
+                    style={{
+                      width: 34, height: 34, borderRadius: "50%", backgroundColor: c.avatarColor,
+                      color: "#FFF", fontSize: 11, fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  >
+                    {c.avatarInitials}
+                  </span>
+                  <p style={{ flex: 1, textAlign: "left", fontSize: 14, fontWeight: 600, color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                    {c.firstName} {c.lastName}
+                  </p>
+                  <p style={{ fontSize: 12, color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>{c.role}</p>
+                </>
+              );
+              // With a jump handler, each person is a destination: tap → the
+              // canvas flies to their latest idea (presence as navigation).
+              return onJumpTo ? (
+                <button
+                  key={c.userId}
+                  type="button"
+                  onClick={() => onJumpTo(c)}
+                  aria-label={`Go to ${c.firstName}'s latest idea on the canvas`}
                   style={{
-                    width: 34, height: 34, borderRadius: "50%", backgroundColor: c.avatarColor,
-                    color: "#FFF", fontSize: 11, fontWeight: 700,
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    display: "flex", alignItems: "center", gap: 10, width: "100%",
+                    minHeight: 48, padding: "6px 0", background: "none", border: "none",
+                    borderBottom: "1px solid rgba(0,0,0,0.05)", cursor: "pointer",
                   }}
-                  aria-hidden="true"
                 >
-                  {c.avatarInitials}
-                </span>
-                <p style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
-                  {c.firstName} {c.lastName}
-                </p>
-                <p style={{ fontSize: 12, color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>{c.role}</p>
-              </div>
-            ))}
+                  {row}
+                </button>
+              ) : (
+                <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+                  {row}
+                </div>
+              );
+            })}
+            {onJumpTo && (
+              <p style={{ fontSize: 11, color: "var(--cog-muted)", fontFamily: "var(--font-body)", marginTop: 8 }}>
+                Tap a person to see their latest idea on the canvas.
+              </p>
+            )}
           </div>
         )}
 

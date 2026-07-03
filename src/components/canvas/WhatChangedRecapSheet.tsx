@@ -3,15 +3,21 @@ import { getCreatorColor } from "@/lib/canvas/creatorColors";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-interface RecapItem {
+export interface RecapItem {
   id: string;
   text: string;
   dotColor: string;
+  /** Canvas card this change points at — makes the digest row a deep link. */
+  targetCardId?: string;
 }
 
 interface WhatChangedRecapSheetProps {
   songId: string;
   onDismiss: () => void;
+  /** Real digest entries from the room; the demo digest renders when absent. */
+  items?: RecapItem[];
+  /** Fly the canvas to a changed card (Product 12: rows deep-link to the change). */
+  onJumpToCard?: (cardId: string) => void;
 }
 
 // ─── Demo digest (replaced by server activity-feed data in production) ──────
@@ -37,7 +43,7 @@ const DEMO_ITEMS: RecapItem[] = [
  * cog-fade-in backdrop, cog-sheet-rise panel, Escape-to-dismiss, idempotency
  * guard on the primary CTA, prefers-reduced-motion safe.
  */
-const WhatChangedRecapSheet = ({ songId: _songId, onDismiss }: WhatChangedRecapSheetProps) => {
+const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItems, onJumpToCard }: WhatChangedRecapSheetProps) => {
   const [phase, setPhase] = useState<"loading" | "ready">("loading");
   const [ctaLabel, setCtaLabel] = useState("Review changes");
   const ctaRef = useRef<HTMLButtonElement>(null);
@@ -70,7 +76,7 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss }: WhatChangedRecapS
     window.setTimeout(onDismiss, 320);
   };
 
-  const items = phase === "ready" ? DEMO_ITEMS : [];
+  const items = phase === "ready" ? (providedItems?.length ? providedItems : DEMO_ITEMS) : [];
   const subtitle =
     phase === "loading"
       ? "Checking what changed…"
@@ -172,45 +178,75 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss }: WhatChangedRecapS
           {/* ── Digest item cards ─────────────────────────────────────── */}
           {phase === "ready" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-              {items.map((item, idx) => (
-                <div
-                  key={item.id}
-                  className="cog-recap-item"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "15px 16px",
-                    borderRadius: 18,
-                    backgroundColor: "var(--cog-cream-light)",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-                    animation: `cog-item-rise 240ms cubic-bezier(0.22,1,0.36,1) ${idx * 36}ms both`,
-                  }}
-                >
-                  {/* Contributor color dot */}
-                  <div
-                    aria-hidden="true"
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      backgroundColor: item.dotColor,
-                      flexShrink: 0,
+              {items.map((item, idx) => {
+                const canJump = Boolean(item.targetCardId && onJumpToCard);
+                const rowStyle: React.CSSProperties = {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  width: "100%",
+                  padding: "15px 16px",
+                  borderRadius: 18,
+                  backgroundColor: "var(--cog-cream-light)",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                  border: "none",
+                  textAlign: "left",
+                  cursor: canJump ? "pointer" : "default",
+                  animation: `cog-item-rise 240ms cubic-bezier(0.22,1,0.36,1) ${idx * 36}ms both`,
+                };
+                const rowContent = (
+                  <>
+                    {/* Contributor color dot */}
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: item.dotColor,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 500,
+                        color: "var(--cog-charcoal)",
+                        lineHeight: 1.35,
+                        flex: 1,
+                      }}
+                    >
+                      {item.text}
+                    </span>
+                    {canJump && (
+                      <span aria-hidden="true" style={{ color: "var(--cog-muted)", fontSize: 14 }}>
+                        ›
+                      </span>
+                    )}
+                  </>
+                );
+                // A row that points at a card is a deep link: tap → the canvas
+                // flies to that exact change (COG Product 12).
+                return canJump ? (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="cog-recap-item"
+                    style={rowStyle}
+                    onClick={() => {
+                      onJumpToCard?.(item.targetCardId as string);
+                      onDismiss();
                     }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 500,
-                      color: "var(--cog-charcoal)",
-                      lineHeight: 1.35,
-                      flex: 1,
-                    }}
+                    aria-label={`${item.text} — see it on the canvas`}
                   >
-                    {item.text}
-                  </span>
-                </div>
-              ))}
+                    {rowContent}
+                  </button>
+                ) : (
+                  <div key={item.id} className="cog-recap-item" style={rowStyle}>
+                    {rowContent}
+                  </div>
+                );
+              })}
             </div>
           )}
 
