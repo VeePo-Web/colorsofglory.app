@@ -1,4 +1,4 @@
-import { Mic } from "lucide-react";
+import { Mic, Pin } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import { relativeDate, coverColor } from "@/lib/library/format";
 import { songStatusChip } from "@/lib/library/songStatus";
@@ -12,6 +12,8 @@ interface SongGridCardProps {
   onClick: () => void;
   /** Press-and-hold (or right-click) → the song's contextual actions. */
   onLongPress?: () => void;
+  /** Held at the top of the library (Apple Notes). */
+  pinned?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface SongGridCardProps {
  * Two densities: comfortable (2-across) shows the full room; compact
  * (3-across) keeps title + ideas so more of the catalog fits one glance.
  */
-const SongGridCard = ({ song, compact = false, onClick, onLongPress }: SongGridCardProps) => (
+const SongGridCard = ({ song, compact = false, onClick, onLongPress, pinned = false }: SongGridCardProps) => (
   <button
     onClick={onClick}
     {...useLongPress(onLongPress)}
@@ -46,7 +48,18 @@ const SongGridCard = ({ song, compact = false, onClick, onLongPress }: SongGridC
             border: "1px solid var(--cog-border)",
           }}
         />
-        {!compact && <StatusChip spec={songStatusChip(song)} />}
+        <span className="flex items-center gap-1.5">
+          {pinned && (
+            <Pin
+              size={compact ? 10 : 12}
+              strokeWidth={2.2}
+              fill="var(--cog-gold)"
+              style={{ color: "var(--cog-gold)" }}
+              aria-label="Pinned"
+            />
+          )}
+          {!compact && <StatusChip spec={songStatusChip(song)} />}
+        </span>
       </div>
 
       <p

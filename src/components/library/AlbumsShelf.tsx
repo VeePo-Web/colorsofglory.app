@@ -2,6 +2,7 @@ import { Plus, Pencil, Disc3 } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
+import { useShelfReorder } from "./useShelfReorder";
 
 interface AlbumsShelfProps {
   albums: SongAlbum[];
@@ -10,6 +11,8 @@ interface AlbumsShelfProps {
   onSelect: (id: string | null) => void;
   onNew: () => void;
   onEdit: (album: SongAlbum) => void;
+  /** Hold a card still, then slide — commits the new shelf order. */
+  onReorder: (orderedIds: string[]) => void;
 }
 
 const FALLBACKS = [
@@ -51,8 +54,12 @@ const AlbumCover = ({ colors, empty }: { colors: string[]; empty: boolean }) => 
  * as a horizontal shelf above the catalog. Tap an album to focus the library
  * on it; tap again to release. Selected album grows a quiet edit affordance.
  */
-const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit }: AlbumsShelfProps) => {
+const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit, onReorder }: AlbumsShelfProps) => {
   const songById = new Map(songs.map((s) => [s.id, s]));
+  const reorder = useShelfReorder(
+    albums.map((a) => a.id),
+    onReorder,
+  );
 
   return (
     <div className="mb-4">
@@ -72,9 +79,16 @@ const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit }: 
             .map((id) => songById.get(id))
             .filter((s): s is SongRow => Boolean(s));
           const selected = activeAlbumId === album.id;
+          const { ref, style, ...dragHandlers } = reorder.handlersFor(album.id);
 
           return (
-            <div key={album.id} className="relative w-[88px] shrink-0">
+            <div
+              key={album.id}
+              ref={ref}
+              {...dragHandlers}
+              className="relative w-[88px] shrink-0 select-none"
+              style={{ WebkitTouchCallout: "none", ...style }}
+            >
               <button
                 onClick={() => onSelect(selected ? null : album.id)}
                 aria-pressed={selected}

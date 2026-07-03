@@ -16,7 +16,8 @@ import ContinueShelf from "@/components/library/ContinueShelf";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
-import { listAlbums, createAlbum, updateAlbum, deleteAlbum, type SongAlbum } from "@/lib/library/albums";
+import { listAlbums, createAlbum, updateAlbum, deleteAlbum, reorderAlbums, type SongAlbum } from "@/lib/library/albums";
+import { loadPins, togglePin, MAX_PINS } from "@/lib/library/pins";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
 import CoachMark from "@/components/onboarding/CoachMark";
 import { useCoachMark } from "@/components/onboarding/useCoachMark";
@@ -70,6 +71,8 @@ const SongCatalogPage = () => {
     initialSongIds?: string[];
   }>({ open: false, album: null });
   const [actionsSong, setActionsSong] = useState<SongRow | null>(null);
+  const [pins, setPins] = useState<string[]>(() => loadPins());
+  const pinnedIds = useMemo(() => new Set(pins), [pins]);
 
   const updatePrefs = (changes: Partial<LibraryPrefs>) =>
     setPrefs((prev) => {
@@ -132,8 +135,15 @@ const SongCatalogPage = () => {
     if (prefs.sort === "alpha") sorted.sort((a, b) => a.title.localeCompare(b.title));
     else if (prefs.sort === "ideas") sorted.sort((a, b) => b.voice_memo_count - a.voice_memo_count);
     else sorted.sort((a, b) => time(b) - time(a));
+    // Pinned songs hold the top of Owned whatever the sort (Apple Notes).
+    if (activeTab === "Owned" && !activeAlbum && pinnedIds.size > 0) {
+      return [
+        ...sorted.filter((s) => pinnedIds.has(s.id)),
+        ...sorted.filter((s) => !pinnedIds.has(s.id)),
+      ];
+    }
     return sorted;
-  }, [songs, activeTab, activeAlbum, query, prefs.sort]);
+  }, [songs, activeTab, activeAlbum, query, prefs.sort, pinnedIds]);
 
   // Rooms a captured idea can move into — the songwriter's own active rooms.
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
@@ -165,6 +175,12 @@ const SongCatalogPage = () => {
     if (activeAlbumId === id) setActiveAlbumId(null);
     setAlbumSheet({ open: false, album: null });
     toast("Album removed — your songs are untouched");
+  };
+
+  const handleTogglePin = (songId: string) => {
+    const result = togglePin(songId);
+    setPins(result.pins);
+    if (result.limited) toast(`You can pin up to ${MAX_PINS} songs`);
   };
 
   const toggleSongInAlbum = (albumId: string, songId: string) => {
@@ -382,6 +398,7 @@ const SongCatalogPage = () => {
             onSelect={setActiveAlbumId}
             onNew={() => setAlbumSheet({ open: true, album: null })}
             onEdit={(album) => setAlbumSheet({ open: true, album })}
+            onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
           />
         )}
 
@@ -405,6 +422,7 @@ const SongCatalogPage = () => {
             if (song.my_role === "owner") setActionsSong(song);
           }}
           onSwipeArchive={(song) => setSongStatus(song, song.status !== "archived")}
+          pinnedIds={pinnedIds}
         />
         </div>
 
@@ -475,6 +493,8 @@ const SongCatalogPage = () => {
             setNavDirection("up");
             navigate(`/songs/${songId}/${surface}`);
           }}
+          pinned={pinnedIds.has(actionsSong.id)}
+          onTogglePin={() => handleTogglePin(actionsSong.id)}
           onArchive={() => setSongStatus(actionsSong, true)}
           onUnarchive={() => setSongStatus(actionsSong, false)}
           onClose={() => setActionsSong(null)}

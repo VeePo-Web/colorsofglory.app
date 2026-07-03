@@ -20,6 +20,8 @@ interface LibrarySongListProps {
   onSongActions?: (song: SongRow) => void;
   /** Swipe-left on an owned list row → archive (or restore when archived). */
   onSwipeArchive?: (song: SongRow) => void;
+  /** Songs held at the top of the library (Apple Notes pinning). */
+  pinnedIds?: Set<string>;
 }
 
 /**
@@ -71,6 +73,7 @@ const LibrarySongList = ({
   onOpen,
   onSongActions,
   onSwipeArchive,
+  pinnedIds,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -137,6 +140,7 @@ const LibrarySongList = ({
         song={song}
         onClick={() => onOpen(song.id)}
         onLongPress={onSongActions ? () => onSongActions(song) : undefined}
+        pinned={pinnedIds?.has(song.id)}
       />
     );
     // Swipe triage is the owner's gesture — invited rows stay tap-only.
@@ -211,6 +215,7 @@ const LibrarySongList = ({
           compact={density === 3}
           onClick={() => onOpen(song.id)}
           onLongPress={onSongActions ? () => onSongActions(song) : undefined}
+          pinned={pinnedIds?.has(song.id)}
         />
       ))}
     </div>

@@ -81,3 +81,15 @@ export function deleteAlbum(id: string): SongAlbum[] {
   persist(next);
   return next;
 }
+
+/** Persist a new shelf order (drag-to-reorder). Unknown ids keep their place at the end. */
+export function reorderAlbums(orderedIds: string[]): SongAlbum[] {
+  const all = listAlbums();
+  const byId = new Map(all.map((a) => [a.id, a]));
+  const next = [
+    ...orderedIds.map((id) => byId.get(id)).filter((a): a is SongAlbum => Boolean(a)),
+    ...all.filter((a) => !orderedIds.includes(a.id)),
+  ];
+  persist(next);
+  return next;
+}

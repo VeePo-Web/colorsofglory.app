@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Pin } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import { relativeDate, coverColor } from "@/lib/library/format";
 import { songStatusChip } from "@/lib/library/songStatus";
@@ -10,6 +10,8 @@ interface SongListRowProps {
   onClick: () => void;
   /** Press-and-hold (or right-click) → the song's contextual actions. */
   onLongPress?: () => void;
+  /** Held at the top of the library (Apple Notes). */
+  pinned?: boolean;
 }
 
 /**
@@ -17,7 +19,7 @@ interface SongListRowProps {
  * serif title, quiet one-line meta, trailing chevron. Built for fast vertical
  * scanning of a large catalog.
  */
-const SongListRow = ({ song, onClick, onLongPress }: SongListRowProps) => {
+const SongListRow = ({ song, onClick, onLongPress, pinned = false }: SongListRowProps) => {
   const meta = [
     `${song.voice_memo_count} ${song.voice_memo_count === 1 ? "idea" : "ideas"}`,
     song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you",
@@ -56,6 +58,16 @@ const SongListRow = ({ song, onClick, onLongPress }: SongListRowProps) => {
         </p>
       </div>
 
+      {pinned && (
+        <Pin
+          size={11}
+          strokeWidth={2.2}
+          fill="var(--cog-gold)"
+          className="shrink-0"
+          style={{ color: "var(--cog-gold)" }}
+          aria-label="Pinned"
+        />
+      )}
       <StatusChip spec={songStatusChip(song)} small />
       <ChevronRight
         size={16}
