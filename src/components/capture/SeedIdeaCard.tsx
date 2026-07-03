@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { claimSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
+import { claimSeedIdea, deleteSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
 import { audioCache } from "@/lib/voice/audioCache";
 
 // Re-use waveform seed pattern from VoiceReviewSheet — here seeded with the
@@ -48,6 +48,7 @@ interface SeedIdeaCardProps {
   idea: SeedIdeaRecord;
   songs: SeedIdeaCardSong[];
   onClaimed?: () => void;
+  onDiscarded?: () => void;
 }
 
 /**
@@ -56,18 +57,42 @@ interface SeedIdeaCardProps {
  * which uploads it through the existing voice memo pipeline and the card
  * disappears from the shelf — the idea now lives in that song's room.
  */
-const SeedIdeaCard = ({ idea, songs, onClaimed }: SeedIdeaCardProps) => {
+const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bars = buildPreviewBars(idea.id, PREVIEW_BAR_COUNT);
 
   useEffect(() => () => {
     audioRef.current?.pause();
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
   }, []);
+
+  // Two-tap confirm — a captured idea is irreplaceable, so discard is never a
+  // single accidental tap. First tap arms it ("Tap to remove") for 3s; second
+  // tap removes. Kept visually subordinate to "File into a song" (benchmark:
+  // discard must never be more prominent than save).
+  const handleDiscard = async () => {
+    if (!confirmDiscard) {
+      setConfirmDiscard(true);
+      confirmTimerRef.current = setTimeout(() => setConfirmDiscard(false), 3000);
+      return;
+    }
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    try {
+      audioRef.current?.pause();
+      await deleteSeedIdea(idea.id);
+      onDiscarded?.();
+    } catch {
+      toast.error("Couldn't remove that just now — it's still safe here.");
+      setConfirmDiscard(false);
+    }
+  };
 
   // Hear the spark before deciding its home — plays instantly from the local
   // cache (the seed's blob lives in audioCache until it's filed). Offline-safe.
@@ -189,23 +214,55 @@ const SeedIdeaCard = ({ idea, songs, onClaimed }: SeedIdeaCardProps) => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="mt-3 self-start text-left transition-transform duration-150 active:scale-[0.97]"
+        <div
           style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--cog-gold)",
-            background: "none",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
+            marginTop: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
           }}
         >
-          File into a song →
-        </button>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="text-left transition-transform duration-150 active:scale-[0.97]"
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              color: "var(--cog-gold)",
+              background: "none",
+              border: "none",
+              padding: "6px 0",
+              minHeight: 32,
+              cursor: "pointer",
+            }}
+          >
+            File into a song →
+          </button>
+          <button
+            type="button"
+            onClick={handleDiscard}
+            aria-label={confirmDiscard ? "Tap again to remove this idea" : "Discard idea"}
+            className="transition-transform duration-150 active:scale-[0.97]"
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              // Subordinate to "File" — muted until armed, then a gentle prompt.
+              color: confirmDiscard ? "var(--cog-charcoal)" : "var(--cog-muted)",
+              background: "none",
+              border: "none",
+              padding: "6px 4px",
+              minHeight: 32,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {confirmDiscard ? "Tap to remove" : "Discard"}
+          </button>
+        </div>
       </div>
 
       {pickerOpen && (
