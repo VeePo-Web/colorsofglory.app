@@ -13,6 +13,7 @@ import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
 import ContinueShelf from "@/components/library/ContinueShelf";
+import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
@@ -373,6 +374,11 @@ const SongCatalogPage = () => {
       <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:max-w-5xl lg:px-8">
         <SeedIdeasShelf songs={fileableSongs} />
 
+        {/* PV11 empty Owned state — an invitation, not controls over nothing */}
+        {activeTab === "Owned" && !loading && ownedSongs.length === 0 ? (
+          <EmptyLibraryHero onStart={handleCreateSong} checking={isCheckingCreate} />
+        ) : (
+        <>
         <LibraryControls
           query={query}
           onQueryChange={setQuery}
@@ -423,10 +429,14 @@ const SongCatalogPage = () => {
           }}
           onSwipeArchive={(song) => setSongStatus(song, song.status !== "archived")}
           pinnedIds={pinnedIds}
+          monthSections={activeTab === "Archived"}
+          onSearchMemory={() => navigate("/memory")}
         />
         </div>
+        </>
+        )}
 
-        {catalogTour.visible && (
+        {catalogTour.visible && ownedSongs.length > 0 && (
           <CoachMark
             targetRef={catalogTourRef}
             lead="This is your song's room."

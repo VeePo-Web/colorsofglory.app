@@ -22,6 +22,10 @@ interface LibrarySongListProps {
   onSwipeArchive?: (song: SongRow) => void;
   /** Songs held at the top of the library (Apple Notes pinning). */
   pinnedIds?: Set<string>;
+  /** Group by month (Archived tab, recent sort) — Apple Photos rhythm. */
+  monthSections?: boolean;
+  /** Offered when a search finds nothing — jump to the memory graph. */
+  onSearchMemory?: () => void;
 }
 
 /**
@@ -74,6 +78,8 @@ const LibrarySongList = ({
   onSongActions,
   onSwipeArchive,
   pinnedIds,
+  monthSections = false,
+  onSearchMemory,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -116,6 +122,23 @@ const LibrarySongList = ({
     return [...map.entries()];
   }, [songs, view, sort]);
 
+  // Month sections for the archive — "June 2026" keeps archived songs safe
+  // AND navigable (PV11 archive trust; Apple Photos rhythm).
+  const monthGroups = useMemo(() => {
+    if (!monthSections || sort !== "recent") return null;
+    const groups: { label: string; songs: SongRow[] }[] = [];
+    for (const song of songs) {
+      const iso = song.last_activity_at ?? song.created_at;
+      const label = iso
+        ? new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+        : "Earlier";
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.songs.push(song);
+      else groups.push({ label, songs: [song] });
+    }
+    return groups.length > 1 ? groups : null;
+  }, [songs, monthSections, sort]);
+
   // Skeleton cards while loading — never a blank page, never a spinner (PV11).
   if (loading && songs.length === 0) {
     return <LibrarySkeleton view={view} density={density} />;
@@ -130,6 +153,15 @@ const LibrarySongList = ({
         >
           {query ? `No songs match “${query}”.` : emptyCopy}
         </p>
+        {query && onSearchMemory && (
+          <button
+            onClick={onSearchMemory}
+            className="mt-4 text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+            style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+          >
+            Search your memory instead →
+          </button>
+        )}
       </div>
     );
   }
@@ -186,6 +218,23 @@ const LibrarySongList = ({
         </div>
       );
     }
+    if (monthGroups) {
+      return (
+        <div key="list-months" className="flex animate-in fade-in flex-col gap-2 duration-200">
+          {monthGroups.map(({ label, songs: group }) => (
+            <section key={label} aria-label={label}>
+              <p
+                className="px-1 pb-1.5 pt-2 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
+                style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+              >
+                {label}
+              </p>
+              <div className="flex flex-col gap-2">{group.map(rowFor)}</div>
+            </section>
+          ))}
+        </div>
+      );
+    }
     return (
       <div key="list" className="flex animate-in fade-in flex-col gap-2 duration-200">
         {songs.map(rowFor)}
@@ -200,6 +249,41 @@ const LibrarySongList = ({
       ? "grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4"
       : "grid grid-cols-3 gap-2 md:grid-cols-4 md:gap-3 lg:grid-cols-5";
 
+  const gridCardFor = (song: SongRow) => (
+    <SongGridCard
+      key={song.id}
+      song={song}
+      compact={density === 3}
+      onClick={() => onOpen(song.id)}
+      onLongPress={onSongActions ? () => onSongActions(song) : undefined}
+      pinned={pinnedIds?.has(song.id)}
+    />
+  );
+
+  if (monthGroups) {
+    return (
+      <div
+        {...pinch}
+        ref={gridRef}
+        key={`grid-months-${density}`}
+        className="animate-in fade-in duration-200"
+        style={{ touchAction: "pan-y" }}
+      >
+        {monthGroups.map(({ label, songs: group }) => (
+          <section key={label} aria-label={label} className="mb-4">
+            <p
+              className="px-1 pb-2 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
+              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+            >
+              {label}
+            </p>
+            <div className={gridClass}>{group.map(gridCardFor)}</div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       {...pinch}
@@ -208,16 +292,7 @@ const LibrarySongList = ({
       className={`${gridClass} animate-in fade-in duration-200`}
       style={{ touchAction: "pan-y" }}
     >
-      {songs.map((song) => (
-        <SongGridCard
-          key={song.id}
-          song={song}
-          compact={density === 3}
-          onClick={() => onOpen(song.id)}
-          onLongPress={onSongActions ? () => onSongActions(song) : undefined}
-          pinned={pinnedIds?.has(song.id)}
-        />
-      ))}
+      {songs.map(gridCardFor)}
     </div>
   );
 };
