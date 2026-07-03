@@ -22,6 +22,7 @@ import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/secti
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
+import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 
 interface CaptureSceneProps {
   /** When provided, captures attach to this song; otherwise they land in Unfiled. */
@@ -327,6 +328,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     disabled: phase !== "idle" || review.open || sheetAction !== null,
   });
   const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+
+  // Songs are one swipe to the left — have their chunk warm before the
+  // first slide so the neighbor appears instantly, never a loading frame.
+  useEffect(() => {
+    preloadOnIdle(() => import("@/pages/SongCatalogPage"));
+  }, []);
 
   // First-visit wayfinding: nudge the Songs affordance once, then never again.
   const [hintNudge] = useState(() => {

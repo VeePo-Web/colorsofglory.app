@@ -6,6 +6,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
+import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
@@ -40,12 +41,16 @@ const EMPTY_COPY: Record<Tab, string> = {
   Archived: "Archived songs stay safe and readable here.",
 };
 
+// Session-warm song list — returning to the catalog paints the last known
+// list instantly (0ms perceived) while a background refresh reconciles.
+let songsWarmCache: SongRow[] | null = null;
+
 const SongCatalogPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
   const [isCheckingCreate, setIsCheckingCreate] = useState(false);
-  const [songs, setSongs] = useState<SongRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [songs, setSongs] = useState<SongRow[]>(() => songsWarmCache ?? []);
+  const [loading, setLoading] = useState(songsWarmCache === null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
@@ -82,11 +87,26 @@ const SongCatalogPage = () => {
       try {
         setSongs(await listMySongs());
       } catch {
-        toast.error("Couldn't load your songs");
+        // A warm cache means stale-but-present beats an error wall.
+        if (songsWarmCache === null) toast.error("Couldn't load your songs");
       } finally {
         setLoading(false);
       }
     })();
+  }, []);
+
+  // Keep the warm cache current so the next visit paints instantly.
+  useEffect(() => {
+    if (!loading) songsWarmCache = songs;
+  }, [songs, loading]);
+
+  // The mic is one swipe to the right; opening a song is one tap away —
+  // both chunks warm while the songwriter is browsing.
+  useEffect(() => {
+    preloadOnIdle(
+      () => import("@/pages/CapturePage"),
+      () => import("@/pages/BrainstormPage"),
+    );
   }, []);
 
   const activeAlbum = albums.find((a) => a.id === activeAlbumId) ?? null;
