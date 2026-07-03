@@ -75,6 +75,32 @@ function safeCloseContext(ctx: AudioContext | null): void {
   }
 }
 
+/**
+ * Force MediaRecorder to emit its buffered audio BEFORE stop(). We start the
+ * recorder with no timeslice (the most iOS-robust config), which means audio is
+ * only delivered to ondataavailable when the browser flushes — and on several
+ * engines stop()'s implicit flush is unreliable and yields a 0-byte blob, so the
+ * take "records" but saves nothing. requestData() guarantees the buffered audio
+ * lands in chunks first; the subsequent onstop then always sees real data.
+ * No-ops safely where requestData is unsupported (falls back to stop()'s flush).
+ */
+function flushBeforeStop(recorder: MediaRecorder): void {
+  try {
+    const mime = (recorder.mimeType || "").toLowerCase();
+    // Only force an extra flush on STREAMING containers (webm/ogg), where an
+    // additional mid-stream chunk concatenates into a valid file. mp4/m4a (iOS
+    // Safari's output) is NOT safely concatenable from multiple chunks, so we
+    // never requestData there — its single stop() flush is the correct,
+    // guaranteed-playable path and must be left alone.
+    const concatSafe = mime.includes("webm") || mime.includes("ogg");
+    if (concatSafe && recorder.state === "recording" && typeof recorder.requestData === "function") {
+      recorder.requestData();
+    }
+  } catch {
+    /* unsupported / wrong state — stop() will still attempt its own flush */
+  }
+}
+
 function safeResumeContext(ctx: AudioContext): Promise<void> {
   try {
     const r = ctx.resume() as unknown;
@@ -156,6 +182,7 @@ export function useVoiceRecorder(
     maxTimerRef.current = null;
     setState((s) => (s.phase === "recording" ? { ...s, phase: "stopping" } : s));
     try {
+      flushBeforeStop(recorder);
       recorder.stop();
     } catch {
       /* already inactive */
@@ -480,6 +507,7 @@ export function useVoiceRecorder(
       };
 
       try {
+        flushBeforeStop(recorder);
         recorder.stop();
       } catch {
         const pending = resolveStopRef.current;
