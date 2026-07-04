@@ -495,6 +495,8 @@ const SongCatalogPage = () => {
                   setActiveTab(tab);
                   setActiveAlbumId(null);
                   setReorderingAlbum(false);
+                  // Switching tabs starts the new list from the top (Apple).
+                  if (tab !== activeTab) window.scrollTo({ top: 0 });
                 }}
                 className={`mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center gap-1.5 ${
                   activeTab === tab ? "text-white" : "text-white/40 hover:text-white/70"
