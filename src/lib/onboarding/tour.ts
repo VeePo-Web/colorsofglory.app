@@ -25,8 +25,8 @@ export const TOUR_STEPS = [
   "tour_catalog_seen", // SongCatalogPage — the song card
   "tour_room_seen",    // BrainstormPage — the song header
   "tour_capture_seen", // BrainstormPage — the record button
-  // "tour_lyrics_seen",  // canvas lane — the lyrics affordance (plan §4)
-  // "tour_invite_seen",  // canvas lane — the invite/People affordance (plan §4)
+  "tour_invite_seen",  // SongCanvasExperience — the Invite button
+  // "tour_lyrics_seen", // canvas lane — the lyrics affordance (plan §4)
 ] as const;
 
 export type TourStep = (typeof TOUR_STEPS)[number];
@@ -82,6 +82,17 @@ export function seenCount(): number {
 export function isTourDone(): boolean {
   const s = getTourState();
   return s.skipped || s.seen.length >= TOUR_STEPS.length;
+}
+
+/**
+ * Will dismissing this beat COMPLETE the tour? True iff it's the last unseen
+ * beat. Position-independent, so the completion moment fires on whichever beat
+ * the user genuinely finishes on — the tour is contextual, not linear, so a
+ * canvas beat can be reached before an earlier one.
+ */
+export function isLastPending(step: TourStep): boolean {
+  const s = getTourState();
+  return !s.skipped && !s.seen.includes(step) && s.seen.length >= TOUR_STEPS.length - 1;
 }
 
 /** Should this beat's coach mark arm on its surface right now? */

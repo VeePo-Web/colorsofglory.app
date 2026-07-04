@@ -59,6 +59,8 @@ import {
 import StackSheet from "@/components/voice/StackSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import CoachMark from "@/components/onboarding/CoachMark";
+import { useCoachMark } from "@/components/onboarding/useCoachMark";
 import { useSongCollaborators } from "@/lib/invite/useSongCollaborators";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { useSongPresence } from "@/lib/canvas/useSongPresence";
@@ -732,6 +734,12 @@ const SongCanvasExperience = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isViewer = searchParams.get("role") === "viewer";
+
+  // First-run tour, beat 5 — the collaboration beat, anchored on the Invite
+  // button. Only contributors see the button, so only they get the tip.
+  // Ref + hook only; see docs/onboarding/first-run-tour-plan.md.
+  const inviteTourRef = useRef<HTMLButtonElement>(null);
+  const inviteTour = useCoachMark("tour_invite_seen", !isViewer);
 
   // Real signed-in identity so contributions + presence carry the actual person,
   // not a hardcoded "You". Falls back gracefully before the profile resolves.
@@ -1744,6 +1752,7 @@ const SongCanvasExperience = () => {
           </p>
         ) : (
           <button
+            ref={inviteTourRef}
             type="button"
             onClick={() => setShowShareSheet(true)}
             className="flex min-h-11 shrink-0 items-center gap-2 rounded-full py-1 pl-2 pr-1.5 transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
@@ -2204,6 +2213,17 @@ const SongCanvasExperience = () => {
           }}
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}
+        />
+      )}
+
+      {inviteTour.visible && (
+        <CoachMark
+          targetRef={inviteTourRef}
+          lead="Songs are better together."
+          body="Invite a co-writer — they join with just their phone number."
+          onGotIt={inviteTour.gotIt}
+          onSkip={inviteTour.skip}
+          isFinal={inviteTour.isFinal}
         />
       )}
 

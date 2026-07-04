@@ -3,6 +3,7 @@ import {
   TOUR_STEPS,
   getTourState,
   isStepPending,
+  isLastPending,
   isTourDone,
   markSeen,
   seenCount,
@@ -47,6 +48,27 @@ describe("tour state", () => {
     expect(completions[completions.length - 1]).toBe(true); // the final beat
     expect(isTourDone()).toBe(true);
     for (const step of TOUR_STEPS) expect(isStepPending(step)).toBe(false);
+  });
+
+  it("isLastPending marks only the final UNSEEN beat, in any order", () => {
+    const [first, ...rest] = TOUR_STEPS;
+    const last = TOUR_STEPS[TOUR_STEPS.length - 1];
+    // Nothing seen yet: no single beat completes the tour (unless it's a 1-beat tour).
+    expect(isLastPending(first)).toBe(TOUR_STEPS.length === 1);
+    // See everything except the FIRST beat (out of registry order): now the
+    // first beat is the one that will finish the tour — position-independent.
+    for (const s of rest) markSeen(s);
+    expect(isLastPending(first)).toBe(true);
+    // An already-seen beat never "completes" the tour.
+    expect(isLastPending(last)).toBe(false);
+  });
+
+  it("isLastPending is false once skipped", () => {
+    const last = TOUR_STEPS[TOUR_STEPS.length - 1];
+    for (const s of TOUR_STEPS.slice(0, -1)) markSeen(s);
+    expect(isLastPending(last)).toBe(true);
+    skipTour();
+    expect(isLastPending(last)).toBe(false);
   });
 
   it("skip ends every beat forever, silently", () => {
