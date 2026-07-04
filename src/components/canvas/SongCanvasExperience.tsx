@@ -77,6 +77,7 @@ const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCol
 const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
 const CardEditSheet = lazy(() => import("@/components/canvas/CardEditSheet"));
 const CardActionsSheet = lazy(() => import("@/components/canvas/CardActionsSheet"));
+const AddPartSheet = lazy(() => import("@/components/canvas/AddPartSheet"));
 const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReviewQueueSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -818,6 +819,8 @@ const SongCanvasExperience = () => {
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
   // Card whose overflow action sheet is open (Compare, Suggest, Path, Merge…).
   const [moreCardId, setMoreCardId] = useState<string | null>(null);
+  // The "Add a part" section picker (Verse / Chorus / Bridge…).
+  const [showAddPart, setShowAddPart] = useState(false);
   // Which zone the viewport is showing — drives the Ideas ⇄ Final quick-nav.
   const [viewZone, setViewZone] = useState<"ideas" | "final">("ideas");
   // Real room roster — the same source the People surface reads.
@@ -1107,6 +1110,41 @@ const SongCanvasExperience = () => {
     // Fly to the new card (it's placed below the fold) AND open the editor so
     // the idea gets written right away — capture-then-fill, nothing lost if
     // they dismiss (the card persists).
+    setFocusCardId(newCard.id);
+    setEditCardId(newCard.id);
+  }, [cards, isViewer, currentUserName]);
+
+  // Add a named song PART (Verse / Chorus / …) — the songwriter's real mental
+  // model. Repeatable parts auto-number (Verse 1, Verse 2). Opens the editor.
+  const addPart = useCallback((choice: { section: string; type: CanvasCardType }) => {
+    if (isViewer) return;
+    setShowAddPart(false);
+    const ideaIndex = cards.filter((c) => c.tree === "ideas" && !c.parentMemoId).length;
+    let section = choice.section;
+    if (section === "Verse" || section === "Chorus") {
+      const n = cards.filter((c) => c.section?.startsWith(section)).length + 1;
+      section = `${section} ${n}`;
+    }
+    const title =
+      choice.section === "Raw idea"
+        ? choice.type === "chord" ? "Chord idea" : choice.type === "note" ? "New idea" : "Lyric"
+        : section;
+    const newCard: CanvasCard = {
+      id: `card-${Date.now()}`,
+      tree: "ideas",
+      type: choice.type,
+      title,
+      body: "",
+      meta: "",
+      section,
+      contributor: currentUserName,
+      status: "raw",
+      accent: getCreatorColor(currentUserName).base,
+      ...ideaColumnSlot(ideaIndex),
+    };
+    setCards((prev) => [newCard, ...prev]);
+    setSelectedId(newCard.id);
+    setCanvasStatus("Saved to this song.");
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
   }, [cards, isViewer, currentUserName]);
@@ -1703,14 +1741,14 @@ const SongCanvasExperience = () => {
       },
       {
         id: "idea",
-        label: "Add idea",
+        label: "Add part",
         icon: Plus,
-        onClick: () => addCard("note"),
+        onClick: () => setShowAddPart(true),
         disabled: isViewer,
         haptic: [5],
       },
     ],
-    [addCard, handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
+    [handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
   );
 
   return (
@@ -2272,6 +2310,13 @@ const SongCanvasExperience = () => {
           </Suspense>
         );
       })()}
+
+      {/* Add a part — Verse / Chorus / Bridge section picker */}
+      {showAddPart && (
+        <Suspense fallback={null}>
+          <AddPartSheet onPick={addPart} onClose={() => setShowAddPart(false)} />
+        </Suspense>
+      )}
 
       {/* Line-level suggestion sheet (F19) */}
       {lineSuggest && (
