@@ -135,9 +135,13 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // ("flashes listening, then reverts, never records"). Route the latest teardown
   // through a ref and run it only on unmount so a live recording is never cancelled
   // mid-render.
+  // On unmount, only stop the live transcript. We deliberately DO NOT
+  // cancelRecording() here: the recorder hook now salvages a mid-record unmount
+  // (route change / back-swipe) through its own auto-finalize path and releases
+  // the mic itself. Cancelling here would discard the take before that salvage
+  // could run (CaptureScene's cleanup fires before the hook's, reverse order).
   const teardownRef = useRef<() => void>(() => {});
   teardownRef.current = () => {
-    recorder.cancelRecording();
     live.stop();
   };
   useEffect(() => {
