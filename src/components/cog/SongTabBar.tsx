@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { useNavigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { FileText, GitBranch, Mic, Music, StickyNote, Users } from "lucide-react";
 
@@ -27,7 +28,9 @@ interface SongTabBarProps {
  * Replaces the main BottomNav when you're deep inside a song.
  * Frosted cream glass, gold underline on active tab, 60px height.
  */
-const SongTabBar = ({ activeTab }: SongTabBarProps) => {
+// forwardRef so the first-run tour can anchor a coach mark on the bar (the
+// onboarding "every feature" beat). Purely additive — no behaviour change.
+const SongTabBar = forwardRef<HTMLElement, SongTabBarProps>(({ activeTab }, ref) => {
   const navigate = useNavigate();
   const { id: songId } = useParams<{ id: string }>();
   const location = useLocation();
@@ -47,6 +50,7 @@ const SongTabBar = ({ activeTab }: SongTabBarProps) => {
 
   return (
     <nav
+      ref={ref}
       aria-label="Song sections"
       className="fixed bottom-0 left-0 right-0 flex items-stretch"
       style={{
@@ -118,6 +122,8 @@ const SongTabBar = ({ activeTab }: SongTabBarProps) => {
       })}
     </nav>
   );
-};
+});
+
+SongTabBar.displayName = "SongTabBar";
 
 export default SongTabBar;

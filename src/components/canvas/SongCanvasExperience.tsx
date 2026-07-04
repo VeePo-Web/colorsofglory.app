@@ -785,6 +785,7 @@ const SongCanvasExperience = () => {
 
   // First-run tour refs — the canvas hooks live below, after showFirstRun is
   // known, so they can wait for the empty-room first-action guide to finish.
+  const featuresTourRef = useRef<HTMLElement>(null);
   const ideasTourRef = useRef<HTMLDivElement>(null);
   const inviteTourRef = useRef<HTMLButtonElement>(null);
 
@@ -1248,9 +1249,11 @@ const SongCanvasExperience = () => {
   const showFirstRun = !isViewer && ideasCards.length === 0 && finalCards.length === 0;
 
   // Canvas tour beats — armed only once the board isn't empty, so they never
-  // compete with the empty-room first-action guide. Ideas (the two-tree mental
-  // model) is declared first, so it teaches before the Invite beat. Ref + hook
-  // only; see docs/onboarding/first-run-tour-plan.md.
+  // compete with the empty-room first-action guide. Declared in teaching order
+  // (the one-tip lock presents them in this sequence): Features (the tab bar —
+  // orient to every part of the song), then Ideas (the two-tree mental model),
+  // then Invite. Ref + hook only; see docs/onboarding/first-run-tour-plan.md.
+  const featuresTour = useCoachMark("tour_features_seen", !isViewer && !showFirstRun);
   const ideasTour = useCoachMark("tour_ideas_seen", !isViewer && !showFirstRun);
   const inviteTour = useCoachMark("tour_invite_seen", !isViewer && !showFirstRun);
 
@@ -2109,7 +2112,7 @@ const SongCanvasExperience = () => {
         onClear={() => setListenQueue([])}
         onSave={saveListenArrangement}
       />
-      <SongTabBar activeTab="canvas" />
+      <SongTabBar activeTab="canvas" ref={featuresTourRef} />
       <SongRoomSaveToast
         moment={saveMoment}
         onDone={() => setSaveMoment(null)}
@@ -2296,6 +2299,17 @@ const SongCanvasExperience = () => {
           }}
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}
+        />
+      )}
+
+      {featuresTour.visible && (
+        <CoachMark
+          targetRef={featuresTourRef}
+          lead="Every part of your song."
+          body="Lyrics, voice, chords, notes, and your people — each has its own space down here. Tap any to open it."
+          onGotIt={featuresTour.gotIt}
+          onSkip={featuresTour.skip}
+          isFinal={featuresTour.isFinal}
         />
       )}
 

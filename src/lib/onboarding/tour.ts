@@ -19,15 +19,18 @@ export const TOUR_ENABLED = true;
 // Every registered beat MUST be reliably reachable in a normal first session,
 // or the tour never reaches completion (isTourDone needs them all seen). The
 // spine is therefore the guaranteed path: the catalog on-ramp, then the CANVAS
-// — a song-card tap always opens /songs/:id/canvas, so both canvas beats are
-// certain to be reached. The old brainstorm beats (room/capture) lived on an
-// isolated dead-end surface off this path and stranded the rail, so they were
-// retired; the canvas's own empty-room guide already teaches first capture.
+// — a song-card tap always opens /songs/:id/canvas, and the canvas carries the
+// SongTabBar (every feature: lyrics, voice, chords, notes, people) plus the
+// two-tree and invite, so all three canvas beats are certain to be reached.
+// The old brainstorm beats (room/capture) lived on an isolated dead-end surface
+// off this path and stranded the rail, so they were retired; the canvas's own
+// empty-room guide already teaches first capture.
 // The dot rail sizes off this list, and safeParse only persists keys here.
 export const TOUR_STEPS = [
-  "tour_catalog_seen", // SongCatalogPage — the song card (on-ramp into the canvas)
-  "tour_ideas_seen",   // SongCanvasExperience — the Ideas ⇄ Final nav (two-tree)
-  "tour_invite_seen",  // SongCanvasExperience — the Invite button
+  "tour_catalog_seen",  // SongCatalogPage — the song card (on-ramp into the canvas)
+  "tour_features_seen", // SongCanvasExperience — the SongTabBar (every feature of the song)
+  "tour_ideas_seen",    // SongCanvasExperience — the Ideas ⇄ Final nav (two-tree)
+  "tour_invite_seen",   // SongCanvasExperience — the Invite button
   // "tour_lyrics_seen", // the sheet editor's lyrics affordance (plan §4)
 ] as const;
 
