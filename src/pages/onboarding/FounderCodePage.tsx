@@ -109,9 +109,13 @@ const FounderCodePage = () => {
             </p>
           </div>
 
-          {/* Bottom CTA — matches reference: gold pill at bottom of screen */}
+          {/* Bottom CTA — the button says "Start a song", so it must start a
+              song. It previously routed to /onboarding/earn (the referral
+              money screen) — a label/destination mismatch that also broke the
+              North Star (into the first song, not the referral program). The
+              earn program stays discoverable in Settings → Refer & Earn. */}
           <div className="w-full">
-            <GoldButton onClick={() => navigate("/onboarding/earn")}>
+            <GoldButton onClick={() => navigate("/onboarding/start-song")}>
               Start a song
             </GoldButton>
           </div>
