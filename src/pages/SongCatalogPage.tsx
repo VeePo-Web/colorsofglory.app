@@ -426,7 +426,7 @@ const SongCatalogPage = () => {
       {/* Swipe + entrance layer. The pinned chrome (glow above, BottomNav below)
           stays OUTSIDE this element so the 1:1 finger-drag never reparents a
           position:fixed child — otherwise the bottom nav jumps mid-swipe. */}
-      <div ref={pageRef} className={enterClass}>
+      <div ref={pageRef} className={`min-h-[100dvh] ${enterClass}`}>
 
       {/* ── DARK HEADER — matches reference image exactly ──────────────── */}
       <div
