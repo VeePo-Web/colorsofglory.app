@@ -11,7 +11,6 @@ import { useGesture } from "@/hooks/useGesture";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
-  IDEAS_ZONE_WIDTH,
 } from "@/lib/canvas/canvasConstants";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -133,13 +132,11 @@ const CanvasViewport = ({
     if (initialPan) {
       panRef.current = { x: initialPan.x, y: initialPan.y };
     } else {
-      // Center on the Ideas zone horizontally, offset vertically
-      const vw = el.clientWidth;
-      const vh = el.clientHeight;
-      panRef.current = {
-        x: vw / 2 - IDEAS_ZONE_WIDTH / 2,
-        y: vh / 2 - 400,
-      };
+      // Land on the CONTENT — the root song card + the Ideas column at the
+      // canvas's top-left — not on the empty space between ideas and the
+      // divider (which read as a blank void on a phone). A small margin keeps
+      // the root card off the very edge.
+      panRef.current = { x: 20, y: 20 };
     }
     zoomRef.current = initialZoom;
     applyTransform(panRef.current.x, panRef.current.y, zoomRef.current);

@@ -215,6 +215,13 @@ const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
 const SHOW_LEGACY_CANVAS_FABS = false;
 
+// New cards flow into a single tidy vertical column per zone, under the labels,
+// so the board reads like a scrollable feed of ideas instead of a 2D scatter.
+const COLUMN_TOP = 220;
+const COLUMN_GAP = 156;
+const ideaColumnSlot = (index: number) => ({ x: 80, y: COLUMN_TOP + index * COLUMN_GAP });
+const finalColumnSlot = (index: number) => ({ x: DIVIDER_X + 80, y: COLUMN_TOP + index * COLUMN_GAP });
+
 const getStoredCards = (songId: string): CanvasCard[] => {
   try {
     const stored = localStorage.getItem(CARDS_KEY(songId));
@@ -763,6 +770,8 @@ const SongCanvasExperience = () => {
   // once it exists (new cards land below the fold, so we bring them into view).
   const [editCardId, setEditCardId] = useState<string | null>(null);
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
+  // Which zone the viewport is showing — drives the Ideas ⇄ Final quick-nav.
+  const [viewZone, setViewZone] = useState<"ideas" | "final">("ideas");
   // Real room roster — the same source the People surface reads.
   const songMembers = useSongCollaborators(songId);
   // Viewport pan/zoom API, bridged out of <CanvasViewport> for presence-jump.
@@ -976,14 +985,13 @@ const SongCanvasExperience = () => {
         // Original stays as dimmed reference
         return { ...c, isDimmedReference: true };
       }).concat((() => {
-        const finalIndex = prev.filter((c) => c.tree === "final").length;
+        const finalIndex = prev.filter((c) => c.tree === "final" && !c.parentMemoId).length;
         return {
           ...prev.find((c) => c.id === cardId)!,
           id: `${cardId}-final`,
           tree: "final" as const,
           isDimmedReference: false,
-          x: DIVIDER_X + 80 + (finalIndex % 2) * 240,
-          y: 200 + Math.floor(finalIndex / 2) * 190,
+          ...finalColumnSlot(finalIndex),
           status: "approved" as const,
         };
       })())
@@ -1026,7 +1034,7 @@ const SongCanvasExperience = () => {
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
     dismissFirstAction();
-    const ideaIndex = cards.filter((card) => card.tree === "ideas").length;
+    const ideaIndex = cards.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
     const titleByType: Record<CanvasCardType, string> = {
       hum: "Quick hum",
       lyric: "New lyric",
@@ -1047,8 +1055,9 @@ const SongCanvasExperience = () => {
       contributor: currentUserName,
       status: "raw",
       accent: getCreatorColor(currentUserName).base,
-      x: 80 + (ideaIndex % 3) * 240,
-      y: 700 + Math.floor(ideaIndex / 3) * 180,
+      // A single tidy column under the root, so ideas read like a scrollable
+      // feed instead of a scatter dumped off-screen in 2D space.
+      ...ideaColumnSlot(ideaIndex),
     };
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
@@ -1137,12 +1146,12 @@ const SongCanvasExperience = () => {
     });
 
     setCards((prev) => {
-      const ideaIndex = prev.filter((card) => card.tree === "ideas").length;
+      const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
       const newCard: CanvasCard = {
         id: pending.id, tree: "ideas", type: "voice",
         title: name, body: "", meta: formatDuration(rec.durationMs),
         section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
-        x: 80 + (ideaIndex % 3) * 240, y: 700 + Math.floor(ideaIndex / 3) * 180,
+        ...ideaColumnSlot(ideaIndex),
         parentMemoId, durationMs: rec.durationMs,
         isProcessing: true,
       };
@@ -1337,6 +1346,18 @@ const SongCanvasExperience = () => {
       450,
     );
     setSelectedId(card.id);
+  }, []);
+
+  // One-tap navigation to a zone's column — no more panning a 2D void to find
+  // Final (it lives 1200px to the right of Ideas).
+  const goToZone = useCallback((zone: "ideas" | "final") => {
+    setViewZone(zone);
+    const area = canvasAreaRef.current;
+    const vw = area?.clientWidth ?? window.innerWidth;
+    const vh = area?.clientHeight ?? window.innerHeight;
+    const columnCenterX = (zone === "ideas" ? 80 : DIVIDER_X + 80) + 100;
+    // Land the column's top comfortably: horizontally centred-ish, near the top.
+    viewportApiRef.current?.panTo(columnCenterX, COLUMN_TOP + 40, vw * 0.42, vh * 0.3, 420);
   }, []);
 
   // Bring a just-created card into view once it's on the board (add / record).
@@ -1752,8 +1773,43 @@ const SongCanvasExperience = () => {
       <div ref={canvasAreaRef} className="relative flex-1 min-h-0">
         <CanvasViewport
           className="w-full h-full"
+          initialZoom={0.8}
           overlay={
             <>
+              {/* Ideas ⇄ Final quick-nav — the phone can't show both zones at
+                  once, so one tap flies to each. Floating, thumb-reachable. */}
+              <div
+                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2"
+                style={{ top: 12 }}
+                role="tablist"
+                aria-label="Jump between Ideas and Final"
+              >
+                <div
+                  className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
+                >
+                  {(["ideas", "final"] as const).map((zone) => {
+                    const active = viewZone === zone;
+                    return (
+                      <button
+                        key={zone}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => goToZone(zone)}
+                        className="flex min-h-9 items-center rounded-full px-4 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                        style={{
+                          backgroundColor: active ? (zone === "ideas" ? "var(--cog-gold)" : "#53AB8B") : "transparent",
+                          color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
+                          fontFamily: "var(--font-body)",
+                        }}
+                      >
+                        {zone === "ideas" ? "Ideas" : "Final"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {showFirstAction && (
                 <FirstActionPrompt
                   onHum={() => { addCard("hum"); dismissFirstAction(); }}
