@@ -19,15 +19,30 @@ import { useEffect, useRef, useState } from "react";
 export type NavDirection = "left" | "right" | "up" | "none";
 
 let pending: NavDirection = "none";
+let pendingAt = 0;
+
+// A declared direction is consumed on the very next surface mount — effectively
+// immediate (well under this window even behind a warm lazy chunk). Anything
+// older is orphaned: the navigation it was declared for never happened (e.g.
+// navigate() to the route already showing, so no mount consumed it). Ignoring a
+// stale pending stops it leaking a wrong-direction entrance onto the next,
+// unrelated surface the songwriter opens later.
+const PENDING_TTL_MS = 1500;
+
+const nowMs = (): number =>
+  typeof performance !== "undefined" && performance.now ? performance.now() : new Date().getTime();
 
 export function setNavDirection(dir: NavDirection): void {
   pending = dir;
+  pendingAt = nowMs();
 }
 
-/** Read and clear the pending direction (one-shot). */
+/** Read and clear the pending direction (one-shot, freshness-gated). */
 export function consumeNavDirection(): NavDirection {
-  const dir = pending;
+  const fresh = pending !== "none" && nowMs() - pendingAt <= PENDING_TTL_MS;
+  const dir = fresh ? pending : "none";
   pending = "none";
+  pendingAt = 0;
   return dir;
 }
 
