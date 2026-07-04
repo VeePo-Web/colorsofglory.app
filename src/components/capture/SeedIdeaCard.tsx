@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { claimSeedIdea, deleteSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
+import { claimSeedIdea, deleteSeedIdea, renameSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
 import { audioCache } from "@/lib/voice/audioCache";
 
 // Re-use waveform seed pattern from VoiceReviewSheet — here seeded with the
@@ -62,6 +62,17 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
   const [claiming, setClaiming] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(idea.title);
+
+  // Rename in place — a captured idea can always be given a better name. Local
+  // index only; the audio blob is untouched.
+  const commitRename = async () => {
+    setEditing(false);
+    const next = title.trim();
+    if (!next) { setTitle(idea.title); return; }
+    if (next !== idea.title) await renameSeedIdea(idea.id, next);
+  };
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -155,7 +166,7 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
             <button
               type="button"
               onClick={togglePlay}
-              aria-label={isPlaying ? `Pause ${idea.title}` : `Play ${idea.title}`}
+              aria-label={isPlaying ? `Pause ${title}` : `Play ${title}`}
               style={{
                 width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
                 backgroundColor: "var(--cog-gold)",
@@ -200,12 +211,51 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
             </div>
           </div>
 
-          <p
-            className="font-bold text-[0.9375rem] leading-snug truncate"
-            style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
-          >
-            {idea.title}
-          </p>
+          {editing ? (
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") { setTitle(idea.title); setEditing(false); }
+              }}
+              autoCapitalize="sentences"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="done"
+              className="font-bold leading-snug w-full"
+              style={{
+                fontFamily: "var(--font-display)",
+                color: "var(--cog-charcoal)",
+                // 16px so iOS never zooms the shelf when renaming.
+                fontSize: 16,
+                background: "transparent",
+                border: "none",
+                borderBottom: "1.5px solid var(--cog-gold)",
+                outline: "none",
+                padding: "1px 0",
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setTitle(idea.title); setEditing(true); }}
+              className="font-bold text-[0.9375rem] leading-snug truncate w-full text-left"
+              style={{
+                fontFamily: "var(--font-display)",
+                color: "var(--cog-charcoal)",
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "text",
+              }}
+              aria-label={`Rename ${title}`}
+            >
+              {title}
+            </button>
+          )}
           <p
             className="text-[0.75rem] mt-1"
             style={{ fontFamily: "var(--font-body)", color: "var(--cog-warm-gray)" }}
