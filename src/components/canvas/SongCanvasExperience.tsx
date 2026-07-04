@@ -214,7 +214,6 @@ const INITIAL_CARDS: CanvasCard[] = [
   },
 ];
 
-const FIRST_VISIT_KEY = (songId: string) => `cog:canvas-first-visit-${songId}`;
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
 const SHOW_LEGACY_CANVAS_FABS = false;
 
@@ -755,9 +754,6 @@ const SongCanvasExperience = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
-  const [showFirstAction, setShowFirstAction] = useState(() => {
-    return !localStorage.getItem(FIRST_VISIT_KEY(songId));
-  });
   const [activeLayer, setActiveLayer] = useState<LayerId>(() => {
     const layer = searchParams.get("layer");
     return isLayerId(layer) ? layer : "room";
@@ -968,11 +964,6 @@ const SongCanvasExperience = () => {
     return unsubscribe;
   }, [songId, hydrateVoiceMemos]);
 
-  const dismissFirstAction = useCallback(() => {
-    localStorage.setItem(FIRST_VISIT_KEY(songId), "1");
-    setShowFirstAction(false);
-  }, [songId]);
-
   // ── Card manipulation ──────────────────────────────────────────────────────
 
   /** Called by CanvasCardEl's pointer-capture drag with the new canvas-space position. */
@@ -1036,7 +1027,6 @@ const SongCanvasExperience = () => {
 
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
-    dismissFirstAction();
     const ideaIndex = cards.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
     const titleByType: Record<CanvasCardType, string> = {
       hum: "Quick hum",
@@ -1070,7 +1060,7 @@ const SongCanvasExperience = () => {
     // they dismiss (the card persists).
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
-  }, [cards, dismissFirstAction, isViewer, currentUserName]);
+  }, [cards, isViewer, currentUserName]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
@@ -1203,6 +1193,11 @@ const SongCanvasExperience = () => {
   // Layers live inside their base's stack, not loose on the board.
   const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
   const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
+
+  // First-run guide is driven by an ACTUALLY empty board, not a one-time visit
+  // flag — so it guides a new song, returns if the room is ever cleared (never
+  // a dead-end blank), and never overlays a song that already has ideas.
+  const showFirstRun = !isViewer && ideasCards.length === 0 && finalCards.length === 0;
 
   // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
   // Number each Final card by its vertical position so it reads like a set list.
@@ -1842,11 +1837,11 @@ const SongCanvasExperience = () => {
                   })}
                 </div>
               </div>
-              {showFirstAction && (
+              {showFirstRun && (
                 <FirstActionPrompt
-                  onHum={() => { addCard("hum"); dismissFirstAction(); }}
-                  onLyric={() => { addCard("lyric"); dismissFirstAction(); }}
-                  onChords={() => { addCard("chord"); dismissFirstAction(); }}
+                  onHum={() => addCard("hum")}
+                  onLyric={() => addCard("lyric")}
+                  onChords={() => addCard("chord")}
                 />
               )}
               <CreativeActionDock actions={dockActions} />
