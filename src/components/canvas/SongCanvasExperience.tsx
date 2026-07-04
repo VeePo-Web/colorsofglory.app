@@ -292,6 +292,8 @@ interface CanvasCardProps {
   onEdit?: () => void;
   /** Opens the overflow action sheet (Compare, Suggest, Listen Path, Merge…). */
   onMore?: () => void;
+  /** 1-based position in the Final arrangement (Final cards only). */
+  finalOrder?: number;
 }
 
 const CanvasCardEl = ({
@@ -312,6 +314,7 @@ const CanvasCardEl = ({
   onMergeSelect,
   mergeSelected,
   onMore,
+  finalOrder,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
@@ -465,8 +468,24 @@ const CanvasCardEl = ({
       onPointerCancel={handlePointerUp}
       role="button"
       aria-pressed={selected}
-      aria-label={`${card.type} card: ${card.title}`}
+      aria-label={finalOrder != null ? `${card.type} card: ${card.title}, arrangement position ${finalOrder}` : `${card.type} card: ${card.title}`}
     >
+      {/* Final arrangement position — the song's set-list number */}
+      {finalOrder != null && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute", top: -10, left: -10,
+            minWidth: 24, height: 24, padding: "0 6px", borderRadius: 12,
+            backgroundColor: "#53AB8B", color: "#FFF", fontSize: 12, fontWeight: 800,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(83,171,139,0.40)", border: "2px solid #FAFAF6",
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          {finalOrder}
+        </div>
+      )}
       {/* Creator dot — top right */}
       <div
         style={{
@@ -1176,6 +1195,34 @@ const SongCanvasExperience = () => {
   // Layers live inside their base's stack, not loose on the board.
   const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
   const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
+
+  // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
+  // Number each Final card by its vertical position so it reads like a set list.
+  const finalOrder = useMemo(() => {
+    const ordered = [...finalCards].sort((a, b) => a.y - b.y);
+    const map: Record<string, number> = {};
+    ordered.forEach((c, i) => { map[c.id] = i + 1; });
+    return map;
+  }, [finalCards]);
+
+  // Reorder a Final card by swapping column slots with its neighbour — keeps the
+  // arrangement tidy and the numbers correct without free-hand dragging.
+  const moveFinalCard = useCallback((cardId: string, dir: -1 | 1) => {
+    setCards((prev) => {
+      const finals = prev
+        .filter((c) => c.tree === "final" && !c.parentMemoId)
+        .sort((a, b) => a.y - b.y);
+      const idx = finals.findIndex((c) => c.id === cardId);
+      const swapIdx = idx + dir;
+      if (idx < 0 || swapIdx < 0 || swapIdx >= finals.length) return prev;
+      const a = finals[idx];
+      const b = finals[swapIdx];
+      return prev.map((c) =>
+        c.id === a.id ? { ...c, x: b.x, y: b.y } : c.id === b.id ? { ...c, x: a.x, y: a.y } : c,
+      );
+    });
+  }, []);
+
   const layerCountByBase = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const c of cards) {
@@ -1902,6 +1949,7 @@ const SongCanvasExperience = () => {
               mergeSelected={mergeSelection.includes(card.id)}
               onEdit={!isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined}
               onMore={() => setMoreCardId(card.id)}
+              finalOrder={card.tree === "final" ? finalOrder[card.id] : undefined}
             />
           ))}
         </CanvasViewport>
@@ -2085,6 +2133,16 @@ const SongCanvasExperience = () => {
         const c = cards.find((card) => card.id === moreCardId);
         if (!c) return null;
         const actions = [] as import("@/components/canvas/CardActionsSheet").CardAction[];
+        // Final arrangement reorder — move this card up/down the set list.
+        if (c.tree === "final" && !isViewer) {
+          const pos = finalOrder[c.id];
+          if (pos && pos > 1) {
+            actions.push({ id: "up", label: "Move up in the arrangement", tone: "muted", onClick: () => moveFinalCard(c.id, -1) });
+          }
+          if (pos && pos < finalCards.length) {
+            actions.push({ id: "down", label: "Move down in the arrangement", tone: "muted", onClick: () => moveFinalCard(c.id, 1) });
+          }
+        }
         if (c.type === "lyric" && !isViewer) {
           actions.push({
             id: "suggest",
