@@ -12,16 +12,19 @@ interface IntentCardProps {
   description: string;
   onClick: () => void;
   accent?: boolean;
+  /** Position in the list — drives the staggered entrance delay. */
+  index?: number;
 }
 
-const IntentCard = ({ icon: Icon, title, description, onClick, accent }: IntentCardProps) => (
+const IntentCard = ({ icon: Icon, title, description, onClick, accent, index = 0 }: IntentCardProps) => (
   <button
     onClick={onClick}
-    className="w-full text-left rounded-2xl p-5 transition-all duration-150 active:scale-[0.98] active:shadow-none"
+    className="cog-intent-in w-full text-left rounded-2xl p-5 transition-all duration-150 active:scale-[0.98] active:shadow-none"
     style={{
       backgroundColor: "#FFFFFF",
       border: accent ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.08)",
       boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+      animationDelay: `${160 + index * 90}ms`,
     }}
   >
     <div className="flex items-start gap-4">
@@ -80,6 +83,17 @@ const FirstIntentPage = () => {
         Choose where to begin.
       </p>
 
+      {/* The two choices arrive in sequence — a calm, considered reveal after
+          the screen settles. Reduced-motion shows them in place. GPU-only. */}
+      <style>{`
+        @keyframes cogIntentIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .cog-intent-in { animation: cogIntentIn 380ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+        @media (prefers-reduced-motion: reduce) { .cog-intent-in { animation: none; } }
+      `}</style>
+
       {/* Intent cards */}
       <div className="flex flex-col gap-4 mb-8">
         <IntentCard
@@ -91,12 +105,14 @@ const FirstIntentPage = () => {
             navigate("/onboarding/start-song");
           }}
           accent
+          index={0}
         />
         <IntentCard
           icon={Users}
           title="Join a song"
           description="Use an invite from someone you are writing with."
           onClick={() => navigate("/join")}
+          index={1}
         />
       </div>
 
