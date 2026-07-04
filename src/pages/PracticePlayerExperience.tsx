@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { goBackOr } from "@/lib/nav/safeBack";
 import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
@@ -18,12 +19,15 @@ import type { PracticeSection } from "@/lib/audio/practiceTypes";
 export default function PracticePlayerPage() {
   const { songId } = useParams<{ songId: string }>();
   const navigate   = useNavigate();
+  const location   = useLocation();
   const hook       = usePracticeContext();
   const { state, initSession } = hook;
 
+  // Practice launches from the canvas; closing pops back there, but on a cold
+  // load / deep link it lands on the song's canvas instead of dead-ending.
   const handleClose = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+    goBackOr(navigate, location.key, songId ? `/songs/${songId}/canvas` : "/songs");
+  }, [navigate, location.key, songId]);
 
   // Init on mount — sections come from navigation state or we derive from route
   useEffect(() => {
