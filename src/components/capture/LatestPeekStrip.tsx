@@ -3,10 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { listSeedIdeas } from "@/lib/voice/seedIdeaApi";
 
 interface PeekItem {
   memo_id: string;
-  song_id: string;
+  // Where the capture lives. "idea" = local Unfiled shelf (the global-capture
+  // path); "memo" = a take already inside a song. Both surface here so a hum
+  // is visibly "somewhere" below the mic the instant it's saved — the reassurance
+  // a first-time songwriter needs most.
+  source: "memo" | "idea";
+  song_id: string | null;
   song_title: string;
   title: string | null;
   duration_ms: number | null;
@@ -34,38 +40,60 @@ const LatestPeekStrip = ({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Local Unfiled ideas — always available, even offline / signed-out, so a
+      // brand-new songwriter's first hums show up here immediately.
+      let ideaItems: PeekItem[] = [];
+      try {
+        const ideas = await listSeedIdeas();
+        ideaItems = ideas.map((i) => ({
+          memo_id: i.id,
+          source: "idea" as const,
+          song_id: null,
+          song_title: "Unfiled idea",
+          title: i.title,
+          duration_ms: i.durationMs,
+          section_count: 0,
+          created_at: i.createdAt,
+        }));
+      } catch {
+        /* local ideas are a bonus — never block the strip on them */
+      }
+
       const { data: userRes } = await supabase.auth.getUser();
       const uid = userRes?.user?.id;
-      if (!uid) {
-        if (!cancelled) setItems([]);
-        return;
+      let memoItems: PeekItem[] = [];
+      if (uid) {
+        const { data, error } = await supabase
+          .from("voice_memos")
+          .select("id, song_id, title, duration_ms, created_at, songs(title), takes(transcript_json)")
+          .eq("author_user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(3);
+        if (!error && data) {
+          memoItems = data.map((row) => {
+            const blocks =
+              (row.takes as Array<{ transcript_json?: { blocks?: unknown[] } }> | null)?.[0]
+                ?.transcript_json?.blocks ?? [];
+            return {
+              memo_id: row.id as string,
+              source: "memo" as const,
+              song_id: row.song_id as string,
+              song_title: (row.songs as { title?: string } | null)?.title ?? "Untitled",
+              title: (row.title as string | null) ?? null,
+              duration_ms: (row.duration_ms as number | null) ?? null,
+              section_count: Array.isArray(blocks) ? blocks.length : 0,
+              created_at: row.created_at as string,
+            };
+          });
+        }
       }
-      const { data, error } = await supabase
-        .from("voice_memos")
-        .select("id, song_id, title, duration_ms, created_at, songs(title), takes(transcript_json)")
-        .eq("author_user_id", uid)
-        .order("created_at", { ascending: false })
-        .limit(3);
+
       if (cancelled) return;
-      if (error || !data) {
-        setItems([]);
-        return;
-      }
-      const mapped: PeekItem[] = data.map((row) => {
-        const blocks =
-          (row.takes as Array<{ transcript_json?: { blocks?: unknown[] } }> | null)?.[0]
-            ?.transcript_json?.blocks ?? [];
-        return {
-          memo_id: row.id as string,
-          song_id: row.song_id as string,
-          song_title: (row.songs as { title?: string } | null)?.title ?? "Untitled",
-          title: (row.title as string | null) ?? null,
-          duration_ms: (row.duration_ms as number | null) ?? null,
-          section_count: Array.isArray(blocks) ? blocks.length : 0,
-          created_at: row.created_at as string,
-        };
-      });
-      setItems(mapped);
+      // Newest first across both homes, capped at 3.
+      const merged = [...ideaItems, ...memoItems]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 3);
+      setItems(merged);
     })();
     return () => {
       cancelled = true;
@@ -106,11 +134,12 @@ const LatestPeekStrip = ({
           <button
             key={it.memo_id}
             type="button"
-            onClick={() =>
-              onResume
-                ? onResume(it.memo_id, it.song_id)
-                : navigate(`/songs/${it.song_id}/canvas`)
-            }
+            onClick={() => {
+              // An Unfiled idea lives on the shelf — go there to hear / file it.
+              if (it.source === "idea") { navigate("/songs"); return; }
+              if (onResume && it.song_id) { onResume(it.memo_id, it.song_id); return; }
+              if (it.song_id) navigate(`/songs/${it.song_id}/canvas`);
+            }}
             className="text-left transition-transform active:scale-[0.98]"
             style={{
               flex: "0 0 200px",
@@ -144,14 +173,19 @@ const LatestPeekStrip = ({
               style={{ gap: 6, fontSize: 11, color: "var(--cog-warm-gray)" }}
             >
               {it.duration_ms != null && <span>{formatDuration(it.duration_ms)}</span>}
-              {it.section_count > 0 && (
+              {it.source === "idea" ? (
+                <>
+                  {it.duration_ms != null && <span aria-hidden>·</span>}
+                  <span style={{ color: "var(--cog-gold)", fontWeight: 600 }}>Unfiled</span>
+                </>
+              ) : it.section_count > 0 ? (
                 <>
                   <span aria-hidden>·</span>
                   <span>
                     {it.section_count} {it.section_count === 1 ? "section" : "sections"}
                   </span>
                 </>
-              )}
+              ) : null}
             </div>
           </button>
         ))}
