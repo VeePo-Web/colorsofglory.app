@@ -256,7 +256,7 @@ const MemoryPage = () => {
                       </>
                     )}
 
-                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0) && (
+                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0 || insights.collaborators.length > 0 || insights.keys.length > 0) && (
                       <div className="mb-7">
                         <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--cog-warm-gray)" }}>
                           Your writing, by the numbers
@@ -293,8 +293,32 @@ const MemoryPage = () => {
                             ))}
                           </div>
                         )}
+                        {(insights.collaborators.length > 0 || insights.keys.length > 0) && (
+                          <div className="flex flex-col gap-1.5 mt-2">
+                            {insights.collaborators.slice(0, 4).map((c) => (
+                              <div key={`collab-${c.label}`} className="flex items-baseline justify-between px-1">
+                                <span className="text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                  Written with {c.label}
+                                </span>
+                                <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>
+                                  {c.count} {c.count === 1 ? "song" : "songs"}
+                                </span>
+                              </div>
+                            ))}
+                            {insights.keys.length > 0 && (
+                              <div className="flex items-baseline justify-between px-1">
+                                <span className="text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                  Keys you write in
+                                </span>
+                                <span className="text-xs truncate ml-3" style={{ color: "var(--cog-warm-gray)" }}>
+                                  {insights.keys.map((k) => k.label).join(" · ")}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <p className="text-xs mt-3" style={{ color: "var(--cog-muted)" }}>
-                          {insights.totals.wordsWritten.toLocaleString()} words written across {insights.totals.lyricLines.toLocaleString()} lyric lines.
+                          {insights.totals.wordsWritten.toLocaleString()} words written ({insights.totals.uniqueWords.toLocaleString()} unique) across {insights.totals.lyricLines.toLocaleString()} lyric lines.
                         </p>
                       </div>
                     )}

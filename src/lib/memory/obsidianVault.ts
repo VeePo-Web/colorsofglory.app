@@ -530,7 +530,7 @@ function buildInsightsNote(bundle: MemoryRawBundle): VaultFile {
   const t = insights.totals;
   lines.push(
     `- Songs: ${t.songs} · Ideas: ${t.ideas} · Notes: ${t.notes} · Voice memos: ${t.voiceMemos}`,
-    `- Lyric lines: ${t.lyricLines} · Words written: ${t.wordsWritten}`,
+    `- Lyric lines: ${t.lyricLines} · Words written: ${t.wordsWritten} · Vocabulary: ${t.uniqueWords} unique words`,
     "",
   );
 
@@ -551,6 +551,20 @@ function buildInsightsNote(bundle: MemoryRawBundle): VaultFile {
   if (insights.themes.length) {
     lines.push("## Themes");
     for (const th of insights.themes) lines.push(`- ${wikilink(th.label)} — ${th.count}`);
+    lines.push("");
+  }
+
+  if (insights.collaborators.length) {
+    lines.push("## Who you write with");
+    for (const c of insights.collaborators) {
+      lines.push(`- ${wikilink(c.label)} — ${c.count} ${c.count === 1 ? "song" : "songs"}`);
+    }
+    lines.push("");
+  }
+
+  if (insights.keys.length) {
+    lines.push("## Keys you write in");
+    for (const k of insights.keys) lines.push(`- ${k.label} — ${k.count} ${k.count === 1 ? "song" : "songs"}`);
     lines.push("");
   }
 

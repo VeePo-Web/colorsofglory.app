@@ -18,7 +18,11 @@ function bundle(): MemoryRawBundle {
       { id: "i2", songId: "s2", title: null, lyricSnippet: null, scriptureRef: "psalm 23", tags: [] },
       { id: "i3", songId: "s2", title: null, lyricSnippet: null, scriptureRef: "John 3:16", tags: [] },
     ],
-    people: [],
+    people: [
+      { songId: "s1", userId: "me", role: "owner", name: "Me", initials: "ME", color: null },
+      { songId: "s1", userId: "u2", role: "collaborator", name: "Sarah", initials: "SA", color: "#53AB8B" },
+      { songId: "s2", userId: "u2", role: "collaborator", name: "Sarah", initials: "SA", color: "#53AB8B" },
+    ],
     voiceMemos: [{ id: "v1", songId: "s1", title: "Idea" }],
     lyrics: [
       { songId: "s1", sectionId: "sec1", text: "Amazing grace how sweet the sound\nGrace will lead me home" },
@@ -65,6 +69,21 @@ describe("buildInsights", () => {
     expect(insights.totals.voiceMemos).toBe(1);
     expect(insights.totals.lyricLines).toBe(2);
     expect(insights.totals.wordsWritten).toBeGreaterThan(15); // stopwords included
+    // vocabulary = distinct meaningful words; at least as many as recurring ones.
+    expect(insights.totals.uniqueWords).toBeGreaterThanOrEqual(insights.topWords.length);
+    expect(insights.topWords.every((w) => w.count >= 2)).toBe(true);
+  });
+
+  it("counts collaborators by shared songs and excludes the current user", () => {
+    expect(insights.collaborators).toHaveLength(1);
+    expect(insights.collaborators[0].label).toBe("Sarah");
+    expect(insights.collaborators[0].count).toBe(2); // s1 + s2
+  });
+
+  it("counts key signatures across songs", () => {
+    const g = insights.keys.find((k) => k.label === "G");
+    expect(g?.count).toBe(1); // only s1 has a key
+    expect(insights.keys).toHaveLength(1);
   });
 
   it("survives an old snapshot bundle with no lyrics field", () => {
@@ -89,7 +108,11 @@ describe("vault Insights note", () => {
     expect(note.content).toContain("## Words you return to");
     expect(note.content).toContain("- grace — 5");
     expect(note.content).toContain("[[Psalm 23]] — 2 mentions");
-    expect(note.content).toContain("Words written:");
+    expect(note.content).toContain("Vocabulary:");
+    expect(note.content).toContain("## Who you write with");
+    expect(note.content).toContain("[[Sarah]] — 2 songs");
+    expect(note.content).toContain("## Keys you write in");
+    expect(note.content).toContain("- G — 1 song");
 
     const home = files.find((f) => f.path === "Your Memory.md")!;
     expect(home.content).toContain("[[Insights]]");

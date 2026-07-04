@@ -28,6 +28,8 @@ export interface MemoryInsights {
     lyricLines: number;
     /** Every word written (lyrics + idea fragments + notes), stopwords included. */
     wordsWritten: number;
+    /** Distinct meaningful words — a vocabulary-richness signal. */
+    uniqueWords: number;
   };
   /** Meaningful words that recur (count >= 2), most-used first. */
   topWords: WordCount[];
@@ -35,6 +37,10 @@ export interface MemoryInsights {
   scriptures: LabelCount[];
   /** Theme tags by number of occurrences across songs and ideas. */
   themes: LabelCount[];
+  /** Collaborators by number of songs written together, most first. */
+  collaborators: LabelCount[];
+  /** Key signatures by number of songs written in them. */
+  keys: LabelCount[];
 }
 
 // Function words that say nothing about a writer's voice. Deliberately does
@@ -122,6 +128,29 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
   for (const idea of bundle.ideas) for (const tag of idea.tags ?? []) addTheme(tag);
   const themes: LabelCount[] = [...themeCounts.values()].sort(sortCounts((t) => t.label));
 
+  // --- collaborators (distinct songs written together, excluding self) -------
+  const collabByUser = new Map<string, { label: string; songs: Set<string> }>();
+  for (const person of bundle.people) {
+    if (person.userId === bundle.userId) continue;
+    const acc = collabByUser.get(person.userId) ?? { label: person.name?.trim() || "Collaborator", songs: new Set<string>() };
+    acc.songs.add(person.songId);
+    collabByUser.set(person.userId, acc);
+  }
+  const collaborators: LabelCount[] = [...collabByUser.values()]
+    .map((c) => ({ label: c.label, count: c.songs.size }))
+    .sort(sortCounts((c) => c.label));
+
+  // --- key signatures --------------------------------------------------------
+  const keyCounts = new Map<string, { label: string; count: number }>();
+  for (const song of bundle.songs) {
+    const raw = song.keySignature?.trim();
+    if (!raw) continue;
+    const acc = keyCounts.get(raw) ?? { label: raw, count: 0 };
+    acc.count++;
+    keyCounts.set(raw, acc);
+  }
+  const keys: LabelCount[] = [...keyCounts.values()].sort(sortCounts((k) => k.label));
+
   return {
     totals: {
       songs: bundle.songs.length,
@@ -130,9 +159,12 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
       voiceMemos: bundle.voiceMemos.length,
       lyricLines,
       wordsWritten,
+      uniqueWords: wordCounts.size,
     },
     topWords,
     scriptures,
     themes,
+    collaborators,
+    keys,
   };
 }
