@@ -33,6 +33,10 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
   const rafRef = useRef<number | null>(null);
   const recording = phase === "recording";
   const busy = phase === "requesting-permission" || phase === "stopping";
+  // The brief getUserMedia wait on a cold first tap. A calm pulsing ring here
+  // confirms "we heard you — arming the mic" so the moment feels instant instead
+  // of frozen, without a spinner (reverent, not busy-looking).
+  const arming = phase === "requesting-permission";
   const reduceMotion =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -90,6 +94,22 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
               }}
             />
           </>
+        )}
+
+        {/* Arming pulse — while the mic is being requested (cold first tap), a
+            single gentle ring breathes so the tap feels acknowledged instantly.
+            Reduced-motion users get the static amplitude ring below instead. */}
+        {arming && !reduceMotion && (
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{
+              inset: 24,
+              border: "2px solid var(--cog-gold)",
+              animation: "cog-mic-arming 1.05s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
         )}
 
         {/* Amplitude ring (driven by analyser) */}
@@ -174,6 +194,16 @@ const BigMic = ({ phase, durationMs, analyser, onTap }: BigMicProps) => {
                   : "Tap to record"}
         </p>
       </div>
+
+      {/* Scoped keyframe for the arming pulse — kept here so BigMic owns its own
+          motion without touching global CSS. */}
+      <style>{`
+        @keyframes cog-mic-arming {
+          0%   { transform: scale(1);    opacity: 0.55; }
+          50%  { transform: scale(1.05); opacity: 0.9; }
+          100% { transform: scale(1);    opacity: 0.55; }
+        }
+      `}</style>
     </div>
   );
 };
