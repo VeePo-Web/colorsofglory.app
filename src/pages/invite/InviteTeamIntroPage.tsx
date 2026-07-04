@@ -99,8 +99,31 @@ const InviteTeamIntroPage = () => {
         >
           <div
             ref={barRef}
-            style={{ height: '100%', backgroundColor: '#B5935A', width: '0%', borderRadius: 9999 }}
-          />
+            style={{
+              position: 'relative',
+              height: '100%',
+              background: 'linear-gradient(90deg, rgba(181,147,90,0.55) 0%, #B5935A 100%)',
+              width: '0%',
+              borderRadius: 9999,
+            }}
+          >
+            {/* A soft "comet head" rides the leading edge as the bar fills —
+                turns the auto-advance wait into a cinematic beat. */}
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                right: -3,
+                top: '50%',
+                width: 7,
+                height: 7,
+                marginTop: -3.5,
+                borderRadius: 9999,
+                backgroundColor: '#E8D5A0',
+                boxShadow: '0 0 8px 2px rgba(212,174,92,0.85)',
+              }}
+            />
+          </div>
         </div>
       )}
 
