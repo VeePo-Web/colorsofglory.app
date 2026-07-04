@@ -134,9 +134,10 @@ const ScripturePicker = ({ onPicked, onFallback }: ScripturePickerProps) => {
                 key={t.value}
                 type="button"
                 onClick={() => setTranslation(t.value)}
-                className="transition-colors"
+                className="transition-colors inline-flex items-center justify-center"
                 style={{
-                  padding: "4px 10px",
+                  padding: "0 12px",
+                  minHeight: 36,
                   borderRadius: 999,
                   fontFamily: "var(--font-display)",
                   fontSize: 11,
