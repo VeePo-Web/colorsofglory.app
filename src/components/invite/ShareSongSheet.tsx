@@ -18,6 +18,8 @@ interface ShareSongSheetProps {
   onClose: () => void;
   /** Fly the canvas to this person's latest idea (Freeform "jump to their spot"). */
   onJumpTo?: (person: SongCollaborator) => void;
+  /** Lowercased names of people live in the room right now (green "here now" dot). */
+  presentNames?: Set<string>;
 }
 
 /**
@@ -28,7 +30,12 @@ interface ShareSongSheetProps {
  * instant and the clipboard write stays inside the tap gesture. Links are
  * cached per role — flipping Contribute/Listen never mints duplicate tokens.
  */
-const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo }: ShareSongSheetProps) => {
+const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, presentNames }: ShareSongSheetProps) => {
+  const isHereNow = (c: SongCollaborator) => {
+    if (!presentNames || presentNames.size === 0) return false;
+    const full = `${c.firstName} ${c.lastName}`.trim().toLowerCase();
+    return presentNames.has(full) || presentNames.has(c.firstName.toLowerCase());
+  };
   const [visible, setVisible] = useState(false);
   const [role, setRole] = useState<InviteRole>("contributor");
   const [copied, setCopied] = useState(false);
@@ -268,22 +275,36 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo }:
               In this room
             </p>
             {collaborators.map((c) => {
+              const hereNow = isHereNow(c);
               const row = (
                 <>
-                  <span
-                    style={{
-                      width: 34, height: 34, borderRadius: "50%", backgroundColor: c.avatarColor,
-                      color: "#FFF", fontSize: 11, fontWeight: 700,
-                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                    }}
-                    aria-hidden="true"
-                  >
-                    {c.avatarInitials}
+                  <span style={{ position: "relative", flexShrink: 0 }}>
+                    <span
+                      style={{
+                        width: 34, height: 34, borderRadius: "50%", backgroundColor: c.avatarColor,
+                        color: "#FFF", fontSize: 11, fontWeight: 700,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                      aria-hidden="true"
+                    >
+                      {c.avatarInitials}
+                    </span>
+                    {hereNow && (
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          position: "absolute", bottom: -1, right: -1, width: 11, height: 11,
+                          borderRadius: "50%", backgroundColor: "#53AB8B", border: "2px solid #FAFAF6",
+                        }}
+                      />
+                    )}
                   </span>
                   <p style={{ flex: 1, textAlign: "left", fontSize: 14, fontWeight: 600, color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
                     {c.firstName} {c.lastName}
                   </p>
-                  <p style={{ fontSize: 12, color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>{c.role}</p>
+                  <p style={{ fontSize: 12, color: hereNow ? "#53AB8B" : "var(--cog-muted)", fontWeight: hereNow ? 600 : 400, fontFamily: "var(--font-body)" }}>
+                    {hereNow ? "Here now" : c.role}
+                  </p>
                 </>
               );
               // With a jump handler, each person is a destination: tap → the

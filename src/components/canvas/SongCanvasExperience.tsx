@@ -1193,6 +1193,31 @@ const SongCanvasExperience = () => {
     () => livePresence.filter((m) => !m.isSelf).length,
     [livePresence],
   );
+  // Names present right now → the invite sheet's "here now" dots.
+  const presentNames = useMemo(
+    () => new Set(livePresence.map((m) => m.name.trim().toLowerCase())),
+    [livePresence],
+  );
+
+  // The arrival moment: when you copy a link and send it, the payoff is seeing
+  // them walk in. Toast only for someone NEW after the first sync (so it never
+  // fires for everyone already here on load), and never for yourself.
+  const knownPresenceRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const currentOthers = livePresence.filter((m) => !m.isSelf);
+    const currentIds = new Set(currentOthers.map((m) => m.userId));
+    if (knownPresenceRef.current === null) {
+      if (livePresence.length > 0) knownPresenceRef.current = currentIds;
+      return;
+    }
+    for (const m of currentOthers) {
+      if (!knownPresenceRef.current.has(m.userId)) {
+        const first = m.name.split(" ")[0] || m.name;
+        toast(`${first} joined the room`, { description: "They're here with you now." });
+      }
+    }
+    knownPresenceRef.current = currentIds;
+  }, [livePresence]);
 
   const presenceStack = useMemo(() => {
     // Prefer the live "here now" roster; fall back to members, then to the
@@ -1845,6 +1870,7 @@ const SongCanvasExperience = () => {
             songTitle={songTitle}
             collaborators={sheetRoster}
             onJumpTo={jumpToCollaborator}
+            presentNames={presentNames}
             onClose={() => setShowShareSheet(false)}
           />
         </Suspense>
