@@ -34,6 +34,23 @@ describe("tokenize", () => {
   it("lowercases, collapses apostrophes, splits on non-letters", () => {
     expect(tokenize("Don't rush — the Bridge!")).toEqual(["dont", "rush", "the", "bridge"]);
   });
+
+  it("keeps non-English worship words whole (Spanish/Portuguese/French)", () => {
+    expect(tokenize("Tu amor por mi corazón")).toEqual(["tu", "amor", "por", "mi", "corazón"]);
+    expect(tokenize("Santo, Espírito")).toEqual(["santo", "espírito"]);
+    // Decomposed accent (e + U+0301) normalises to the same token as precomposed.
+    expect(tokenize("café")).toEqual(["café"]);
+  });
+
+  it("counts an accented word by its real spelling, not a mangled fragment", () => {
+    const b: MemoryRawBundle = {
+      userId: "me", songs: [], sections: [], notes: [], ideas: [], people: [], voiceMemos: [],
+      lyrics: [{ songId: "s1", sectionId: "sec1", text: "corazón\ncorazón mío" }],
+    };
+    const i = buildInsights(b);
+    expect(i.topWords.find((w) => w.word === "corazón")?.count).toBe(2);
+    expect(i.topWords.find((w) => w.word === "coraz")).toBeUndefined();
+  });
 });
 
 describe("buildInsights", () => {

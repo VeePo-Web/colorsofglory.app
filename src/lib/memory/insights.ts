@@ -59,12 +59,18 @@ const STOPWORDS = new Set(
   ).split(/\s+/),
 );
 
-/** Lowercase word tokens; apostrophes collapse ("don't" -> "dont"). */
+/**
+ * Lowercase word tokens; apostrophes collapse ("don't" -> "dont"). Unicode-aware
+ * so worship lyrics in Spanish, Portuguese, French, etc. tokenize correctly
+ * ("corazón" stays one word, not "coraz" + "n"). NFC-normalised so decomposed
+ * accents (e + combining mark) count as their letter, not a word boundary.
+ */
 export function tokenize(text: string): string[] {
   return text
+    .normalize("NFC")
     .toLowerCase()
     .replace(/['’]/g, "")
-    .split(/[^a-z]+/)
+    .split(/[^\p{L}]+/u)
     .filter((w) => w.length >= 2);
 }
 
