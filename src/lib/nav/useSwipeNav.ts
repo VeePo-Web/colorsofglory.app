@@ -57,6 +57,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     let raf = 0;
     let lastDx = 0;
     let armed = false;      // drag has passed the commit threshold this gesture
+    let commitTimer = 0;    // pending navigate after the fly-out animation
     // Rolling ~100ms position history for release-velocity (flick) detection.
     // Measuring only the last move→lift gap gives a near-zero window and misses
     // fast flicks; a short window over recent samples captures true flick speed.
@@ -195,13 +196,26 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         hasLeft: !!cbRef.current.onSwipeLeft,
         hasRight: !!cbRef.current.onSwipeRight,
       });
-      releaseVisual(dir === null);
-      if (!dir) return;
-      // A single soft tick confirms the page turn (Android-only enhancement —
-      // iOS has no vibrate API; the visual slide carries the confirmation).
+      if (!dir) { releaseVisual(true); return; }
+
+      // COMMIT — a real page turn. Instead of snapping the surface back to
+      // centre and blinking it out (which read as "a screen got replaced"),
+      // fling it the rest of the way off in the drag direction AND fade it,
+      // then change the route into that fade. The opacity cross-fade masks
+      // the single-surface mount swap; the incoming page slides in from its
+      // spatial side to complete the motion.
+      locked = false;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
       try { navigator.vibrate?.(8); } catch { /* never let a nicety throw */ }
-      if (dir === "right") cbRef.current.onSwipeRight?.();
-      else cbRef.current.onSwipeLeft?.();
+      const outX = Math.round(window.innerWidth * (dir === "right" ? 0.5 : -0.5));
+      el.style.transition = "transform 220ms cubic-bezier(0.4,0,1,1), opacity 200ms ease-out";
+      el.style.transform = `translateX(${outX}px)`;
+      el.style.opacity = "0";
+      commitTimer = window.setTimeout(() => {
+        commitTimer = 0;
+        if (dir === "right") cbRef.current.onSwipeRight?.();
+        else cbRef.current.onSwipeLeft?.();
+      }, 150);
     };
 
     const onTouchCancel = () => {
@@ -215,6 +229,18 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     el.addEventListener("touchcancel", onTouchCancel, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
+      // A commit fly-out is mid-flight and the surface is about to be torn down
+      // for a reason other than our own navigate — cancel the pending route
+      // change and restore the surface so it can never be stranded faded/offset.
+      if (commitTimer) {
+        clearTimeout(commitTimer);
+        commitTimer = 0;
+        el.style.transform = "";
+        el.style.transition = "";
+        el.style.opacity = "";
+        el.style.willChange = "";
+        el.style.boxShadow = "";
+      }
       // If we're torn down mid-drag (disabled flipped, a sheet opened, the
       // callbacks changed identity), never leave the surface frozen offset —
       // reset the inline styles we applied. Only when actually locked, so an
