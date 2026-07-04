@@ -33,8 +33,20 @@ const OnboardingShell = ({
       />
     )}
 
+    {/* Every onboarding/auth/invite screen settles in on mount — a calm,
+        consistent breath instead of a hard cut, so the whole flow feels
+        considered (Church Center / Apple). One-shot CSS animation runs on
+        mount; reduced-motion shows the final state instantly. GPU-only. */}
+    <style>{`
+      @keyframes cogShellIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .cog-shell-in { animation: cogShellIn 400ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @media (prefers-reduced-motion: reduce) { .cog-shell-in { animation: none; } }
+    `}</style>
     <div
-      className="relative flex flex-col flex-1 w-full mx-auto px-6"
+      className="cog-shell-in relative flex flex-col flex-1 w-full mx-auto px-6"
       // Real safe-area padding (the comment promised it; it was missing) so
       // content clears the notch + home indicator on notched devices. Insets
       // are 0 on non-notched/desktop, so this is a no-op there.
