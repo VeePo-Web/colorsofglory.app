@@ -58,6 +58,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     let lastDx = 0;
     let armed = false;      // drag has passed the commit threshold this gesture
     let commitTimer = 0;    // pending navigate after the fly-out animation
+    let springTimer = 0;    // pending spring-back cleanup (cancel on re-grab/teardown)
     // Rolling ~100ms position history for release-velocity (flick) detection.
     // Measuring only the last move→lift gap gives a near-zero window and misses
     // fast flicks; a short window over recent samples captures true flick speed.
@@ -114,7 +115,8 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.transition = "transform 250ms var(--cog-ease)";
         el.style.transform = "translateX(0)";
         el.style.boxShadow = "";
-        window.setTimeout(() => {
+        springTimer = window.setTimeout(() => {
+          springTimer = 0;
           el.style.transition = "";
           el.style.transform = "";
           el.style.willChange = "";
@@ -130,6 +132,16 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     };
 
     const onTouchStart = (e: TouchEvent) => {
+      // Re-grabbing during a spring-back: cancel its pending cleanup and settle
+      // the surface at rest NOW, so the stale timer can't clear will-change mid
+      // new drag (which would de-promote the layer and jank the rest of it).
+      if (springTimer) {
+        clearTimeout(springTimer);
+        springTimer = 0;
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.willChange = "";
+      }
       if (e.touches.length !== 1) { tracking = false; releaseVisual(true); return; }
       const t = e.touches[0];
       const vw = window.innerWidth;
@@ -241,6 +253,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.willChange = "";
         el.style.boxShadow = "";
       }
+      if (springTimer) clearTimeout(springTimer);
       // If we're torn down mid-drag (disabled flipped, a sheet opened, the
       // callbacks changed identity), never leave the surface frozen offset —
       // reset the inline styles we applied. Only when actually locked, so an
