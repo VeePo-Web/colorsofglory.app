@@ -11,7 +11,9 @@ interface SwipeNavOptions {
 
 const EDGE_GUARD_PX = 44;   // leave the screen edges to iOS Safari's own back/forward swipe
 const INTENT_PX = 14;       // horizontal travel before the drag "locks" and starts tracking
-const TRIGGER_PX = 64;      // horizontal travel required to commit on release
+const TRIGGER_PX = 64;      // horizontal travel required to commit on a slow drag
+const MIN_FLICK_PX = 24;    // a fast flick still needs this much travel (vs a tap jitter)
+const FLICK_VELOCITY = 0.4; // px/ms at release that commits a short quick flick (~native)
 const AXIS_RATIO = 1.6;     // horizontal must dominate vertical by this factor
 const RESIST = 0.22;        // damping when dragging toward a direction with no destination
 
@@ -49,6 +51,11 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     let locked = false;     // horizontal intent confirmed — surface follows the finger
     let raf = 0;
     let lastDx = 0;
+    let lastX = 0;          // for release-velocity (flick) detection
+    let lastT = 0;
+
+    const now = () =>
+      (typeof performance !== "undefined" && performance.now) ? performance.now() : new Date().getTime();
 
     const insideOptOut = (target: EventTarget | null): boolean => {
       let node = target instanceof Element ? target : null;
@@ -130,6 +137,8 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.willChange = "transform";
       }
       lastDx = dx;
+      lastX = t.clientX;
+      lastT = now();
       if (!raf) raf = requestAnimationFrame(paint);
     };
 
@@ -141,9 +150,19 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       if (!t) { releaseVisual(true); return; }
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
+      // Release velocity (px/ms) over the final move → commit a fast flick even
+      // under the distance threshold, the way native pagers do. A finger held
+      // still before release has a stale lastT, so velocity decays to ~0 and we
+      // fall back to pure distance — a deliberate hold never false-commits.
+      const dt = now() - lastT;
+      const velocity = dt > 0 && dt < 120 ? (t.clientX - lastX) / dt : 0;
+      const axisOk = Math.abs(dx) >= Math.abs(dy) * AXIS_RATIO;
+      const farEnough = Math.abs(dx) >= TRIGGER_PX;
+      const flicked = Math.abs(dx) >= MIN_FLICK_PX && Math.abs(velocity) >= FLICK_VELOCITY
+        && Math.sign(velocity) === Math.sign(dx);
       const valid =
-        Math.abs(dx) >= TRIGGER_PX &&
-        Math.abs(dx) >= Math.abs(dy) * AXIS_RATIO &&
+        (farEnough || flicked) &&
+        axisOk &&
         (dx > 0 ? !!onSwipeRight : !!onSwipeLeft);
       releaseVisual(!valid);
       if (!valid) return;
