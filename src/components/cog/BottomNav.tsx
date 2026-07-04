@@ -24,11 +24,15 @@ const BottomNav = ({ active }: BottomNavProps) => {
   // idle wherever the nav is shown, so tapping any tab (incl. Settings→Songs or
   // anywhere→Settings, which no page prefetches) lands with no loading frame.
   // The current surface's own chunk is already loaded, so that import is a no-op.
+  // Also warm the upgrade page: the BottomNav shows across the library + every
+  // Settings/Billing/Storage page — exactly where the upgrade CTAs live — so the
+  // FIRST "Upgrade" tap opens instantly instead of downloading its chunk then.
   useEffect(() => {
     preloadOnIdle(
       () => import("@/pages/SongCatalogPage"),
       () => import("@/pages/CapturePage"),
       () => import("@/pages/settings/SettingsPage"),
+      () => import("@/pages/pricing/UpgradePage"),
     );
   }, []);
 
