@@ -486,15 +486,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
    detail surfaces rise. Transform/opacity only, 250ms --cog-ease.
    Direction is set by navDirection.ts; deep links get no motion. */
 @keyframes nav-enter-from-left {
-  from { transform: translateX(-24px); opacity: 0; }
+  from { transform: translateX(-72px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
 }
 @keyframes nav-enter-from-right {
-  from { transform: translateX(24px); opacity: 0; }
+  from { transform: translateX(72px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
 @keyframes nav-enter-from-below {
-  from { transform: translateY(20px); opacity: 0; }
+  from { transform: translateY(28px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
 @keyframes nav-enter-fade {
