@@ -77,8 +77,10 @@ const ChordPicker = ({
                 setTonic(k.replace(/m$/, ""));
                 setKeyChosen(true);
               }}
-              className="px-3 py-2 rounded-xl text-sm font-medium transition-transform active:scale-95"
+              className="px-4 rounded-xl text-sm font-medium transition-transform active:scale-95"
               style={{
+                minHeight: 44,
+                minWidth: 44,
                 background: "white",
                 border: "1px solid var(--cog-border)",
                 color: "var(--cog-charcoal)",
@@ -215,31 +217,58 @@ const ChordPicker = ({
             </span>
           )}
           {chords.map((c, i) => (
-            <button
+            // Two real buttons in one chip (never a button nested in a button):
+            // a wide "edit" hit and a distinct 44px "remove" hit, so a thumb can
+            // reliably tap either without mis-firing — and the ✕ is always
+            // visible (no hover, which doesn't exist on touch).
+            <div
               key={i}
-              type="button"
-              onClick={() => setEditingIndex(i)}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-transform active:scale-95"
+              className="rounded-lg text-sm font-medium flex items-center overflow-hidden"
               style={{
                 background: "var(--cog-gold-pale)",
                 color: "var(--cog-charcoal)",
                 border: editingIndex === i ? "1px solid var(--cog-gold)" : "1px solid transparent",
               }}
             >
-              {render(c)}
-              <span
-                role="button"
-                aria-label="Remove chord"
-                onClick={(e) => {
-                  e.stopPropagation();
+              <button
+                type="button"
+                onClick={() => setEditingIndex(i)}
+                aria-label={`Edit chord ${render(c)}`}
+                className="transition-transform active:scale-95"
+                style={{
+                  minHeight: 44,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "0 6px 0 12px",
+                  background: "transparent",
+                  border: "none",
+                  color: "inherit",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                {render(c)}
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove chord ${render(c)}`}
+                onClick={() => {
                   setChords((prev) => prev.filter((_, idx) => idx !== i));
                   if (editingIndex === i) setEditingIndex(null);
                 }}
-                className="opacity-60 hover:opacity-100"
+                className="flex items-center justify-center transition-transform active:scale-90"
+                style={{
+                  minWidth: 40,
+                  minHeight: 44,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--cog-warm-gray)",
+                  cursor: "pointer",
+                }}
               >
-                <X size={12} />
-              </span>
-            </button>
+                <X size={15} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -323,8 +352,9 @@ function KeyPicker({
               key={k}
               type="button"
               onClick={() => onTonic(t)}
-              className="px-2.5 py-1 rounded-lg text-sm font-medium shrink-0 transition-transform active:scale-95"
+              className="px-3 rounded-lg text-sm font-medium shrink-0 transition-transform active:scale-95"
               style={{
+                minHeight: 44,
                 background: active ? "var(--cog-gold)" : "white",
                 color: active ? "white" : "var(--cog-charcoal)",
                 border: active ? "1px solid var(--cog-gold)" : "1px solid var(--cog-border)",
@@ -351,11 +381,14 @@ function PaletteChip({
     <button
       type="button"
       onClick={onTap}
-      className={`rounded-xl flex flex-col items-center justify-center transition-transform active:scale-95 ${compact ? "px-3 py-1.5" : "py-2"}`}
+      className={`rounded-xl flex flex-col items-center justify-center transition-transform active:scale-95 ${compact ? "px-3" : ""}`}
       style={{
         background: "white",
         border: "1px solid var(--cog-border)",
         color: "var(--cog-charcoal)",
+        // Apple-HIG comfortable tap target — this palette is the core "tap to
+        // build the progression" loop, so it must never be a cramped hit.
+        minHeight: compact ? 44 : 48,
       }}
     >
       <span className="text-xs" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-display, Georgia)" }}>
