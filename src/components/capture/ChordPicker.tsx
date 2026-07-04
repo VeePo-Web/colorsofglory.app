@@ -144,10 +144,11 @@ const ChordPicker = ({
                 key={d}
                 type="button"
                 onClick={() => setDisplay(d)}
-                className="px-3 py-1 text-xs rounded-full transition-colors"
+                className="px-3 text-xs rounded-full transition-colors inline-flex items-center justify-center"
                 style={{
                   background: display === d ? "var(--cog-gold)" : "transparent",
                   color: display === d ? "white" : "var(--cog-charcoal)",
+                  minHeight: 36,
                 }}
               >
                 {d === "letters" ? "Letters" : "Numbers"}
@@ -176,7 +177,7 @@ const ChordPicker = ({
           type="button"
           onClick={() => setMoreOpen((o) => !o)}
           className="mt-2 text-xs inline-flex items-center gap-1"
-          style={{ color: "var(--cog-gold)" }}
+          style={{ color: "var(--cog-gold)", minHeight: 44, padding: "0 4px" }}
         >
           <ChevronDown size={12} style={{ transform: moreOpen ? "rotate(180deg)" : undefined }} />
           {moreOpen ? "Hide" : "+ more"} chords
