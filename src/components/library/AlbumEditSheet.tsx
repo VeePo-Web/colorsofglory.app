@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { X, Check } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { X, Check, Search } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -25,6 +25,20 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
   const [selected, setSelected] = useState<Set<string>>(
     new Set(album?.songIds ?? initialSongIds ?? []),
   );
+  const [query, setQuery] = useState("");
+  // Captured once so the list order stays stable — the album's current songs
+  // sit at the top on open, and toggling never makes a row leap around.
+  const [initialMembers] = useState(() => new Set(album?.songIds ?? initialSongIds ?? []));
+
+  // The search filters a long catalog down to what you're looking for; the
+  // album's existing songs lead so its shape is in view before you scroll.
+  const listed = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matched = q ? songs.filter((s) => s.title.toLowerCase().includes(q)) : songs;
+    return [...matched].sort(
+      (a, b) => Number(!initialMembers.has(a.id)) - Number(!initialMembers.has(b.id)),
+    );
+  }, [songs, query, initialMembers]);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -124,12 +138,52 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
           />
         </div>
 
-        <p
-          className="px-6 pb-1.5 pt-4 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
-          style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-        >
-          Songs in this album
-        </p>
+        <div className="flex items-baseline justify-between px-6 pb-1.5 pt-4">
+          <p
+            className="text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
+            style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+          >
+            Songs in this album
+          </p>
+          {selected.size > 0 && (
+            <span
+              className="text-[0.6875rem] font-semibold"
+              style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)" }}
+              aria-live="polite"
+            >
+              {selected.size} selected
+            </span>
+          )}
+        </div>
+
+        {/* Search the catalog — find songs to gather without scrolling */}
+        {songs.length > 6 && (
+          <div className="px-5 pb-1">
+            <div className="relative">
+              <Search
+                size={14}
+                aria-hidden
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--cog-muted)" }}
+              />
+              <input
+                type="search"
+                inputMode="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your songs"
+                aria-label="Search your songs"
+                className="h-10 w-full rounded-full border-none pl-8 pr-3 outline-none focus-visible:ring-2 focus-visible:ring-[var(--cog-border-gold)] [&::-webkit-search-cancel-button]:hidden"
+                style={{
+                  backgroundColor: "var(--cog-cream)",
+                  color: "var(--cog-charcoal)",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 16,
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Song checklist */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
@@ -137,8 +191,12 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
             <p className="py-6 text-center text-[0.875rem]" style={{ color: "var(--cog-muted)" }}>
               Your songs will appear here once you have some.
             </p>
+          ) : listed.length === 0 ? (
+            <p className="py-6 text-center text-[0.875rem]" style={{ color: "var(--cog-muted)" }}>
+              No songs match “{query.trim()}”.
+            </p>
           ) : (
-            songs.map((song) => {
+            listed.map((song) => {
               const on = selected.has(song.id);
               return (
                 <button
