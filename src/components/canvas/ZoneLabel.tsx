@@ -1,109 +1,64 @@
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 
 /**
- * The two zone header labels: "Ideas Tree" and "Final Song"
- * Rendered as absolute elements within the canvas layer.
- * They pan with the canvas, so they always appear in the correct zone.
+ * The two zone header labels: "Ideas Tree" and "Final Song".
+ *
+ * Compact by design: the floating Ideas/Final quick-nav pills are now the
+ * primary zone indicator, so these in-canvas markers stay small and sit BELOW
+ * the root song card (which anchors the top-left of the Ideas zone) rather
+ * than colliding with it.
  */
+const LABEL_TOP = 188;
+
+const ZoneMarker = ({
+  left,
+  eyebrow,
+  title,
+  sub,
+  color,
+}: {
+  left: number;
+  eyebrow: string;
+  title: string;
+  sub: string;
+  color: string;
+}) => (
+  <div aria-hidden="true" style={{ position: "absolute", left, top: LABEL_TOP, pointerEvents: "none", maxWidth: 240 }}>
+    <p
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color,
+        textTransform: "uppercase",
+        letterSpacing: "0.20em",
+        fontFamily: "var(--font-body)",
+        marginBottom: 4,
+      }}
+    >
+      {eyebrow}
+    </p>
+    <p
+      style={{
+        fontSize: 20,
+        fontWeight: 700,
+        color: "#1A1A1A",
+        fontFamily: "var(--font-display)",
+        lineHeight: 1.1,
+        marginBottom: 2,
+      }}
+    >
+      {title}
+    </p>
+    <p style={{ fontSize: 12, color: "#999", fontFamily: "var(--font-body)", lineHeight: 1.45 }}>
+      {sub}
+    </p>
+  </div>
+);
+
 const ZoneLabels = () => (
   <>
-    {/* Ideas Tree label — left zone */}
-    <div
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        left: 48,
-        top: 40,
-        pointerEvents: "none",
-      }}
-    >
-      <p
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#B5935A",
-          textTransform: "uppercase",
-          letterSpacing: "0.20em",
-          fontFamily: "var(--font-body)",
-          marginBottom: 6,
-        }}
-      >
-        Ideas Tree
-      </p>
-      <p
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: "#1A1A1A",
-          fontFamily: "var(--font-display)",
-          lineHeight: 1.1,
-          maxWidth: 220,
-        }}
-      >
-        Every idea,{"\n"}unfiltered
-      </p>
-      <p
-        style={{
-          fontSize: 13,
-          color: "#999",
-          fontFamily: "var(--font-body)",
-          marginTop: 6,
-          maxWidth: 260,
-          lineHeight: 1.5,
-        }}
-      >
-        Nothing is ever deleted. Capture, explore, keep going.
-      </p>
-    </div>
-
-    {/* Final Song label — right zone */}
-    <div
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        left: DIVIDER_X + 48,
-        top: 40,
-        pointerEvents: "none",
-      }}
-    >
-      <p
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#53AB8B",
-          textTransform: "uppercase",
-          letterSpacing: "0.20em",
-          fontFamily: "var(--font-body)",
-          marginBottom: 6,
-        }}
-      >
-        Final Song
-      </p>
-      <p
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: "#1A1A1A",
-          fontFamily: "var(--font-display)",
-          lineHeight: 1.1,
-          maxWidth: 220,
-        }}
-      >
-        Ready to{"\n"}worship
-      </p>
-      <p
-        style={{
-          fontSize: 13,
-          color: "#999",
-          fontFamily: "var(--font-body)",
-          marginTop: 6,
-          maxWidth: 260,
-          lineHeight: 1.5,
-        }}
-      >
-        Drag ideas across to build the final arrangement.
-      </p>
-    </div>
+    <ZoneMarker left={48} eyebrow="Ideas Tree" title="Every idea, unfiltered" sub="Nothing is deleted — capture and explore." color="#B5935A" />
+    <ZoneMarker left={DIVIDER_X + 48} eyebrow="Final Song" title="Ready to worship" sub="The chosen arrangement, in order." color="#53AB8B" />
   </>
 );
 

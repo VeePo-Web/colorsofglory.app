@@ -219,7 +219,7 @@ const SHOW_LEGACY_CANVAS_FABS = false;
 
 // New cards flow into a single tidy vertical column per zone, under the labels,
 // so the board reads like a scrollable feed of ideas instead of a 2D scatter.
-const COLUMN_TOP = 220;
+const COLUMN_TOP = 272;
 const COLUMN_GAP = 156;
 // A card only starts moving once the finger travels past this (screen px), so a
 // tap or a small wiggle selects instead of nudging the card.
