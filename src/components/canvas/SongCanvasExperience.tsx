@@ -220,6 +220,9 @@ const SHOW_LEGACY_CANVAS_FABS = false;
 // so the board reads like a scrollable feed of ideas instead of a 2D scatter.
 const COLUMN_TOP = 220;
 const COLUMN_GAP = 156;
+// A card only starts moving once the finger travels past this (screen px), so a
+// tap or a small wiggle selects instead of nudging the card.
+const DRAG_THRESHOLD_PX = 7;
 const ideaColumnSlot = (index: number) => ({ x: 80, y: COLUMN_TOP + index * COLUMN_GAP });
 const finalColumnSlot = (index: number) => ({ x: DIVIDER_X + 80, y: COLUMN_TOP + index * COLUMN_GAP });
 
@@ -334,12 +337,19 @@ const CanvasCardEl = ({
     startCard: { x: number; y: number };
     lastX: number;
     lastY: number;
+    /** True once the pointer crosses the threshold — only then does it move. */
+    moved: boolean;
   } | null>(null);
+  // Suppresses the click that fires after a real drag, so dropping a card never
+  // also toggles its selection.
+  const justDraggedRef = useRef(false);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Only primary button (left-click / single touch)
     if (e.button !== 0 && e.pointerType === "mouse") return;
     e.stopPropagation(); // prevent canvas pan from starting
+    // Clear any stale suppress flag (in case a click never fired after a drag).
+    justDraggedRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragState.current = {
       pointerId: e.pointerId,
@@ -347,22 +357,37 @@ const CanvasCardEl = ({
       startCard: { x: card.x, y: card.y },
       lastX: card.x,
       lastY: card.y,
+      moved: false,
     };
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState.current) return;
+    const st = dragState.current;
+    if (!st) return;
+    // A tap must never nudge the card. Hold position until the finger crosses a
+    // small threshold; below it, the gesture is still a tap, not a drag.
+    if (!st.moved) {
+      const dx = e.clientX - st.startScreen.x;
+      const dy = e.clientY - st.startScreen.y;
+      if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+      st.moved = true;
+      const el = cardElRef.current;
+      if (el) {
+        // Physical "lift" the moment a real drag begins (CapCut/Apple feel).
+        el.style.transform = "scale(1.05)";
+        el.style.zIndex = "40";
+        el.style.boxShadow = `0 14px 34px ${card.accent}45`;
+        el.style.cursor = "grabbing";
+      }
+    }
     // Convert both the start and current screen positions to canvas coords so
     // the delta is expressed in canvas space (respects zoom level).
-    const startCanvas = screenToCanvas(
-      dragState.current.startScreen.x,
-      dragState.current.startScreen.y,
-    );
+    const startCanvas = screenToCanvas(st.startScreen.x, st.startScreen.y);
     const currCanvas = screenToCanvas(e.clientX, e.clientY);
-    const newX = dragState.current.startCard.x + (currCanvas.x - startCanvas.x);
-    const newY = dragState.current.startCard.y + (currCanvas.y - startCanvas.y);
-    dragState.current.lastX = newX;
-    dragState.current.lastY = newY;
+    const newX = st.startCard.x + (currCanvas.x - startCanvas.x);
+    const newY = st.startCard.y + (currCanvas.y - startCanvas.y);
+    st.lastX = newX;
+    st.lastY = newY;
     // Write the new position straight to THIS card's element — no setState per
     // frame, so dragging one card never re-renders the whole board (the single
     // biggest source of drag jank on a busy mobile canvas). React state is
@@ -375,12 +400,24 @@ const CanvasCardEl = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState.current) return;
-    const { pointerId, lastX, lastY } = dragState.current;
-    e.currentTarget.releasePointerCapture(pointerId);
+    const st = dragState.current;
+    if (!st) return;
+    e.currentTarget.releasePointerCapture(st.pointerId);
     dragState.current = null;
-    // Commit the final position to React state exactly once.
-    onMove(card.id, lastX, lastY);
+    const el = cardElRef.current;
+    if (el) {
+      // Hand transform/shadow/z back to React's style prop.
+      el.style.transform = "";
+      el.style.zIndex = "";
+      el.style.boxShadow = "";
+      el.style.cursor = "";
+    }
+    if (st.moved) {
+      justDraggedRef.current = true;
+      // Commit the final position to React state exactly once.
+      onMove(card.id, st.lastX, st.lastY);
+    }
+    // A pointer that never crossed the threshold is a tap → onClick selects it.
   };
 
   return (
@@ -417,7 +454,11 @@ const CanvasCardEl = ({
         padding: 14,
         boxSizing: "border-box",
       }}
-      onClick={onSelect}
+      onClick={() => {
+        // Ignore the click synthesised at the end of a real drag.
+        if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+        onSelect();
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
