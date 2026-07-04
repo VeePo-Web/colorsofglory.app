@@ -228,7 +228,7 @@ const BrainstormPage = () => {
       <div className="relative mx-auto w-full" style={{ maxWidth: 430 }}>
         <header ref={roomTourRef} className="flex items-center justify-between px-5 pb-4 pt-12">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/songs")}
             aria-label="Back to songs"
             className="flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90"
             style={{ color: "#1C1A17" }}
