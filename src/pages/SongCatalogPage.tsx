@@ -53,6 +53,11 @@ const EMPTY_COPY: Record<Tab, string> = {
 // list instantly (0ms perceived) while a background refresh reconciles.
 let songsWarmCache: SongRow[] | null = null;
 
+// Remember which album the songwriter was inside, so tapping a song → the
+// whiteboard → back returns them to that album (working an EP song by song),
+// not to "all songs". Survives the page remount that navigation causes.
+let lastActiveAlbumId: string | null = null;
+
 const SongCatalogPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
@@ -68,7 +73,7 @@ const SongCatalogPage = () => {
   const [prefs, setPrefs] = useState<LibraryPrefs>(() => loadLibraryPrefs());
   const [query, setQuery] = useState("");
   const [albums, setAlbums] = useState<SongAlbum[]>(() => listAlbums());
-  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
+  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(lastActiveAlbumId);
   const [albumSheet, setAlbumSheet] = useState<{
     open: boolean;
     album: SongAlbum | null;
@@ -115,6 +120,16 @@ const SongCatalogPage = () => {
   useEffect(() => {
     if (!loading) songsWarmCache = songs;
   }, [songs, loading]);
+
+  // Remember the focused album across navigations; drop the memory if that
+  // album was since removed so we never restore into a ghost.
+  useEffect(() => {
+    if (activeAlbumId && !albums.some((a) => a.id === activeAlbumId)) {
+      setActiveAlbumId(null);
+      return;
+    }
+    lastActiveAlbumId = activeAlbumId;
+  }, [activeAlbumId, albums]);
 
   // The mic is one swipe to the right; opening a song is one tap away —
   // both chunks warm while the songwriter is browsing.
