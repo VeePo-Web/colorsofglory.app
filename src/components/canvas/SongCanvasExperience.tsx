@@ -218,12 +218,19 @@ const SHOW_LEGACY_CANVAS_FABS = false;
 const getStoredCards = (songId: string): CanvasCard[] => {
   try {
     const stored = localStorage.getItem(CARDS_KEY(songId));
-    if (!stored) return INITIAL_CARDS;
-    const parsed = JSON.parse(stored) as CanvasCard[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CARDS;
+    // Respect a saved board exactly — including an empty one. A songwriter who
+    // clears their canvas must not have demo cards resurrected on reload.
+    if (stored) {
+      const parsed = JSON.parse(stored) as CanvasCard[];
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {
-    return INITIAL_CARDS;
+    // Fall through to a clean start.
   }
+  // No saved board yet: a real song is a private, empty room (the first-action
+  // prompt guides the first idea). Only the explicit demo route shows samples,
+  // so no real song is ever pre-filled with someone else's words.
+  return songId === "demo" ? INITIAL_CARDS : [];
 };
 
 const VISUALLY_HIDDEN: CSSProperties = {
