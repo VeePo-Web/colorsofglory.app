@@ -11,6 +11,9 @@ export function updateMediaSession(params: {
   onPrev: () => void;
   onNext: () => void;
   onRestartCurrent: () => void;
+  /** Album mode only — when set, the lock-screen ⏮/⏭ skip whole songs. */
+  onPrevSong?: () => void;
+  onNextSong?: () => void;
 }): void {
   if (!("mediaSession" in navigator)) return;
 
@@ -23,14 +26,16 @@ export function updateMediaSession(params: {
     ],
   });
 
-  // seekbackward = restart THIS section (most useful while driving)
-  // previoustrack = go to the previous section
+  // seekbackward = restart THIS section (most useful while driving).
+  // In album mode the ⏮/⏭ track buttons skip whole songs (hands-free song
+  // change in the car); seekforward still advances one section.
+  const albumMode = Boolean(params.onNextSong && params.onPrevSong);
   navigator.mediaSession.setActionHandler("play",          params.onPlay);
   navigator.mediaSession.setActionHandler("pause",         params.onPause);
   navigator.mediaSession.setActionHandler("seekbackward",  params.onRestartCurrent);
   navigator.mediaSession.setActionHandler("seekforward",   params.onNext);
-  navigator.mediaSession.setActionHandler("previoustrack", params.onPrev);
-  navigator.mediaSession.setActionHandler("nexttrack",     params.onNext);
+  navigator.mediaSession.setActionHandler("previoustrack", albumMode ? params.onPrevSong! : params.onPrev);
+  navigator.mediaSession.setActionHandler("nexttrack",     albumMode ? params.onNextSong! : params.onNext);
 
   try {
     navigator.mediaSession.setPositionState({

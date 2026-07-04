@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   SkipBack,
   SkipForward,
   Play,
@@ -29,7 +31,7 @@ interface FullPracticePlayerProps {
 export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
   const {
     state,
-    play, pause, goToSection, goToPrevSection, goToNextSection, restartCurrentSection,
+    play, pause, goToSection, goToPrevSection, goToNextSection, goToPrevSong, goToNextSong, restartCurrentSection,
     setLoopMode, setLoopRegion, setPlaybackSpeed, setGapMs, setRepeatPerSection, setCountInEnabled,
     setSpeedTrainer, setTimerEndTimeMs, toggleDriveMode, setSequence, setShowLyrics,
     dismissSummary, endSession,
@@ -42,6 +44,16 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
 
   const activeSection = sections[activeSectionIndex];
   const colors = activeSection ? getSectionColor(activeSection.label) : getSectionColor("");
+
+  // Album mode — the flattened section list spans several songs. Surface a
+  // song-level skip so a solid song can be left in one tap, not five.
+  const albumSongs = useMemo(() => {
+    const seen: string[] = [];
+    for (const s of sections) if (s.songId && !seen.includes(s.songId)) seen.push(s.songId);
+    return seen;
+  }, [sections]);
+  const isAlbum = albumSongs.length > 1;
+  const songIndex = activeSection?.songId ? albumSongs.indexOf(activeSection.songId) : -1;
 
   const isPlaying = status === "playing";
   const isCaching = status === "caching";
@@ -244,6 +256,31 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
             <ListOrdered size={22} color={state.loopMode === "sequence" ? colors.bg : "var(--cog-warm-gray)"} />
           </IconBtn>
         </div>
+
+        {/* Album song skip — "this song's solid, next song" in one tap */}
+        {isAlbum && (
+          <div className="relative z-10 flex items-center justify-center gap-3 px-6 pb-3">
+            <button
+              onClick={goToPrevSong}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 active:scale-95"
+              style={{ backgroundColor: "rgba(28,26,23,0.06)", color: "var(--cog-warm-gray)", border: "none", fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 600, minHeight: 36 }}
+              aria-label="Previous song"
+            >
+              <ChevronLeft size={15} /> Song
+            </button>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 600, color: "var(--cog-muted)" }}>
+              {songIndex >= 0 ? `${songIndex + 1} of ${albumSongs.length}` : `${albumSongs.length} songs`}
+            </span>
+            <button
+              onClick={goToNextSong}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 active:scale-95"
+              style={{ backgroundColor: "rgba(28,26,23,0.06)", color: "var(--cog-warm-gray)", border: "none", fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 600, minHeight: 36 }}
+              aria-label="Next song"
+            >
+              Song <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
 
         {/* Secondary controls row */}
         <div className="relative z-10 flex items-center justify-center gap-4 px-6 pb-6">

@@ -257,6 +257,8 @@ export function usePracticePlayer() {
         onPrev:            () => goToPrevSection(),
         onNext:            () => goToNextSection(),
         onRestartCurrent:  () => restartCurrentSection(),
+        onPrevSong:        section.songId ? () => goToPrevSong() : undefined,
+        onNextSong:        section.songId ? () => goToNextSong() : undefined,
       });
       setMediaSessionPlaybackState("playing");
 
@@ -338,6 +340,8 @@ export function usePracticePlayer() {
       onPrev:           () => goToPrevSection(),
       onNext:           () => goToNextSection(),
       onRestartCurrent: () => restartCurrentSection(),
+      onPrevSong:       section.songId ? () => goToPrevSong() : undefined,
+      onNextSong:       section.songId ? () => goToNextSong() : undefined,
     });
 
     // Determine what plays next
@@ -559,6 +563,41 @@ export function usePracticePlayer() {
     goToSection(prev);
   }, [goToSection]);
 
+  // ─── Album song-level navigation ──────────────────────────────────────
+  // Album sessions flatten every song's sections in order; each section carries
+  // its songId, so a song is a contiguous block. Skip to the next/previous
+  // block's first section — the "this song's solid, next song" car gesture.
+
+  const goToNextSong = useCallback(() => {
+    const s = stateRef.current;
+    const secs = s.sections;
+    const cur = secs[s.activeSectionIndex]?.songId;
+    if (!cur) return; // not an album session
+    for (let step = 1; step <= secs.length; step++) {
+      const idx = (s.activeSectionIndex + step) % secs.length;
+      const sid = secs[idx]?.songId;
+      if (sid && sid !== cur) { goToSection(idx); return; }
+    }
+  }, [goToSection]);
+
+  const goToPrevSong = useCallback(() => {
+    const s = stateRef.current;
+    const secs = s.sections;
+    const cur = secs[s.activeSectionIndex]?.songId;
+    if (!cur) return;
+    // Start of the current song block.
+    let start = s.activeSectionIndex;
+    while (start > 0 && secs[start - 1]?.songId === cur) start--;
+    // Apple behavior: if we're past the start, restart the current song first.
+    if (s.activeSectionIndex > start) { goToSection(start); return; }
+    // Otherwise jump to the start of the previous song (wrap to last).
+    const prevEnd = start === 0 ? secs.length - 1 : start - 1;
+    const prevSong = secs[prevEnd]?.songId;
+    let prevStart = prevEnd;
+    while (prevStart > 0 && secs[prevStart - 1]?.songId === prevSong) prevStart--;
+    goToSection(prevStart);
+  }, [goToSection]);
+
   const restartCurrentSection = useCallback(() => {
     const audio = audioRef.current;
     // With an A/B loop set, "restart" means restart the drilled window.
@@ -692,6 +731,8 @@ export function usePracticePlayer() {
     goToSection,
     goToNextSection,
     goToPrevSection,
+    goToNextSong,
+    goToPrevSong,
     restartCurrentSection,
     setLoopMode,
     setLoopRegion,
