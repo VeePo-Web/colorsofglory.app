@@ -65,6 +65,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     onAutoFinalize: (r) => autoFinalizeRef.current(r),
   });
   const { phase, durationMs, analyserNode } = recorder.state;
+  // While a take is live, navigating away unmounts the scene and the cleanup
+  // discards the in-progress recording — losing the idea. Lock the header nav
+  // during recording/stopping so the only exit is Stop (which saves). The swipe
+  // gesture is already disabled off-idle; this closes the button vector too.
+  const navLocked = phase === "recording" || phase === "stopping";
   const live = useLiveTranscript();
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
@@ -470,13 +475,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         <button
           type="button"
           onClick={goToSongs}
+          disabled={navLocked}
           aria-label="Open songs"
           className={`flex items-center transition-transform active:scale-95 ${hintNudge ? "nav-hint-nudge" : ""}`}
           style={{
             background: "transparent",
             border: "none",
             color: "var(--cog-charcoal)",
-            cursor: "pointer",
+            cursor: navLocked ? "default" : "pointer",
+            opacity: navLocked ? 0.35 : 1,
+            transition: "opacity 200ms ease",
             padding: "8px 10px 8px 6px",
             minHeight: 44,
           }}
@@ -498,6 +506,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           <button
             type="button"
             onClick={() => { setNavDirection("up"); navigate(`/songs/${songId}/room`); }}
+            disabled={navLocked}
             aria-label={`Open ${songTitle ?? "song"} room`}
             className="transition-transform active:scale-95"
             style={{
@@ -508,7 +517,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
               borderRadius: 999,
               background: "rgba(184,149,58,0.10)",
               border: "1px solid rgba(184,149,58,0.25)",
-              cursor: "pointer",
+              cursor: navLocked ? "default" : "pointer",
+              opacity: navLocked ? 0.35 : 1,
+              transition: "opacity 200ms ease",
             }}
           >
             {songTitle ?? "Open room"}
@@ -517,6 +528,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           <button
             type="button"
             onClick={goToSongs}
+            disabled={navLocked}
             aria-label={
               seedCount > 0
                 ? `View your ${seedCount} unfiled idea${seedCount === 1 ? "" : "s"}`
@@ -534,7 +546,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
               borderRadius: 999,
               background: "rgba(184,149,58,0.10)",
               border: "1px solid rgba(184,149,58,0.25)",
-              cursor: "pointer",
+              cursor: navLocked ? "default" : "pointer",
+              opacity: navLocked ? 0.35 : 1,
+              transition: "opacity 200ms ease",
             }}
           >
             Unfiled
@@ -568,12 +582,15 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           type="button"
           aria-label="Settings"
           onClick={() => navigate("/settings")}
+          disabled={navLocked}
           className="flex items-center justify-center transition-transform active:scale-95"
           style={{
             background: "transparent",
             border: "none",
             color: "var(--cog-charcoal)",
-            cursor: "pointer",
+            cursor: navLocked ? "default" : "pointer",
+            opacity: navLocked ? 0.35 : 1,
+            transition: "opacity 200ms ease",
             padding: 8,
             minHeight: 44,
             minWidth: 44,
