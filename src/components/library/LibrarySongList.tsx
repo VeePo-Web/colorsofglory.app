@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { LibraryDensity, LibrarySort, LibraryView } from "@/lib/library/libraryPrefs";
 import SongGridCard from "./SongGridCard";
@@ -95,6 +95,30 @@ const LibrarySongList = ({
   const gridRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
+  // Windowed rendering — a large catalog paints only the first PAGE cards and
+  // appends the next batch as a sentinel nears the viewport (append-only, so
+  // the scrollbar never jumps). Keeps first paint + scroll instant at scale.
+  // Section views (A–Z, month) render whole so their headers stay correct.
+  const PAGE = 60;
+  const [limit, setLimit] = useState(PAGE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  // Any change to what's shown resets the window to the top batch.
+  useEffect(() => {
+    setLimit(PAGE);
+  }, [view, sort, query, songs.length]);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) setLimit((l) => l + PAGE);
+      },
+      { rootMargin: "800px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [limit, songs.length]);
+
   // Desktop parity for the density gesture: a trackpad pinch (or ctrl+wheel)
   // reports as a ctrlKey wheel event — zoom in for bigger cards, out for
   // more. Non-passive listener so the browser's page-zoom doesn't fire.
@@ -153,6 +177,14 @@ const LibrarySongList = ({
   if (loading && songs.length === 0) {
     return <LibrarySkeleton view={view} density={density} />;
   }
+
+  // Only the plain (non-sectioned) grid/list is windowed; sections render whole.
+  const windowed = !alphaSections && !monthGroups && songs.length > PAGE;
+  const shown = windowed ? songs.slice(0, Math.min(limit, songs.length)) : songs;
+  const hasMore = windowed && limit < songs.length;
+  const sentinel = hasMore ? (
+    <div ref={sentinelRef} aria-hidden style={{ height: 1, gridColumn: "1 / -1" }} />
+  ) : null;
 
   if (songs.length === 0) {
     return (
@@ -252,7 +284,8 @@ const LibrarySongList = ({
     }
     return (
       <div key="list" className="flex animate-in fade-in flex-col gap-2 duration-200">
-        {songs.map(rowFor)}
+        {shown.map(rowFor)}
+        {sentinel}
       </div>
     );
   }
@@ -309,7 +342,8 @@ const LibrarySongList = ({
       className={`${gridClass} animate-in fade-in duration-200`}
       style={{ touchAction: "pan-y" }}
     >
-      {songs.map(gridCardFor)}
+      {shown.map(gridCardFor)}
+      {sentinel}
     </div>
   );
 };
