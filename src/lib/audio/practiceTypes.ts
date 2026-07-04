@@ -76,6 +76,14 @@ export interface PersistedPracticeSession {
   playbackSpeed: number;
   driveMode: boolean;
   savedAt: string;
+  /**
+   * Human label for a "Resume practice" card — the song/album name, the
+   * section left off on, and its loop count. Optional so older saved sessions
+   * still parse. `songId` starting with `album:` marks an album session.
+   */
+  title?: string;
+  sectionLabel?: string;
+  loopCount?: number;
 }
 
 export function masteryFromLoops(loopsAtFullSpeed: number): MasteryLevel {

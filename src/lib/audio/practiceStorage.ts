@@ -34,6 +34,43 @@ export function clearSession(songId: string): void {
   } catch { /* non-fatal */ }
 }
 
+const SESSION_PREFIX = "cog:practice:session:";
+
+/**
+ * The single newest, non-expired saved practice session across every song and
+ * album — powers the "Resume practice" card on the home screen so the drive
+ * picks up exactly where it left off. Prunes expired sessions as it scans.
+ */
+export function loadMostRecentSession(): PersistedPracticeSession | null {
+  try {
+    let newest: PersistedPracticeSession | null = null;
+    const expired: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(SESSION_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as PersistedPracticeSession;
+      const age = Date.now() - new Date(parsed.savedAt).getTime();
+      if (age > SESSION_TTL_MS) { expired.push(key); continue; }
+      if (!newest || new Date(parsed.savedAt) > new Date(newest.savedAt)) {
+        newest = parsed;
+      }
+    }
+    for (const key of expired) localStorage.removeItem(key);
+    return newest;
+  } catch {
+    return null;
+  }
+}
+
+/** The practice route for a saved session — album sessions reopen on the album route. */
+export function practiceRouteForSession(session: PersistedPracticeSession): string {
+  return session.songId.startsWith("album:")
+    ? `/albums/${session.songId.slice("album:".length)}/practice`
+    : `/songs/${session.songId}/practice`;
+}
+
 // ─── Practice history (mastery data) ──────────────────────────────────────
 
 export interface SectionHistory {

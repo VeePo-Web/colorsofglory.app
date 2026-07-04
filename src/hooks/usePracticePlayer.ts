@@ -506,6 +506,9 @@ export function usePracticePlayer() {
       playbackSpeed: s.playbackSpeed,
       driveMode: s.driveMode,
       savedAt: new Date().toISOString(),
+      title: s.songTitle,
+      sectionLabel: s.sections[s.activeSectionIndex]?.label,
+      loopCount: s.loopCount,
     });
   }, [clearGapTimer, stopPositionRaf]);
 

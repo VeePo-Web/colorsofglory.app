@@ -15,6 +15,7 @@ import AlbumDetailHeader from "@/components/library/AlbumDetailHeader";
 import AlbumRail from "@/components/library/AlbumRail";
 import AlbumSongOrderList from "@/components/library/AlbumSongOrderList";
 import ContinueShelf from "@/components/library/ContinueShelf";
+import PracticeResumeCard from "@/components/practice/PracticeResumeCard";
 import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
@@ -602,6 +603,10 @@ const SongCatalogPage = () => {
             onViewCycle={cycleView}
           />
         )}
+
+        {/* Open app → one tap → drive: jump straight back into the last
+            practice session (song or album), exactly where it left off. */}
+        {!selecting && <PracticeResumeCard />}
 
         {!selecting && continueSong && (
           <ContinueShelf

@@ -6,6 +6,7 @@ import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
 import { loadSession, loadLoopMode } from "@/lib/audio/practiceStorage";
+import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import type { PracticeSection } from "@/lib/audio/practiceTypes";
 
 /**
@@ -36,21 +37,30 @@ export default function PracticePlayerPage() {
     // the running session instead of resetting its stats and position.
     if (state.songId === songId && state.status !== "idle") return;
 
-    // Navigation state injected by SongCanvasExperience (or CapturePage)
-    const navState = (window.history.state?.usr ?? {}) as {
-      songTitle?: string;
-      sections?: PracticeSection[];
-    };
+    let cancelled = false;
 
-    const title    = navState.songTitle ?? "Untitled Song";
-    const sections = navState.sections  ?? [];
+    (async () => {
+      // Navigation state injected by SongCanvasExperience (or the Resume card).
+      const navState = (window.history.state?.usr ?? {}) as {
+        songTitle?: string;
+        sections?: PracticeSection[];
+      };
 
-    // Restore persisted session if available
-    const persisted = loadSession(songId);
-    const savedMode = loadLoopMode(songId);
-    if (savedMode) hook.setLoopMode(savedMode);
+      const persisted = loadSession(songId);
+      const title = navState.songTitle ?? persisted?.title ?? "Untitled Song";
 
-    initSession(songId, title, sections, persisted ?? undefined);
+      // Deep-link / resume-from-home has no sections in nav state — self-load
+      // so practice never dead-ends when opened cold.
+      const sections = navState.sections ?? (await loadPracticeSections(songId));
+      if (cancelled) return;
+
+      const savedMode = loadLoopMode(songId);
+      if (savedMode) hook.setLoopMode(savedMode);
+
+      initSession(songId, title, sections, persisted ?? undefined);
+    })();
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId]);
 
