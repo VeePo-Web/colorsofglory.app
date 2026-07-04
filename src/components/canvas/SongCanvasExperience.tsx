@@ -23,6 +23,7 @@ import {
   BookOpen,
   History,
   UserPlus,
+  Inbox,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
@@ -65,6 +66,7 @@ import MergeActionBar from "@/components/canvas/MergeActionBar";
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
 const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
+const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReviewQueueSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +91,8 @@ export interface CanvasCard {
   parentMemoId?: string;
   /** Recording length for stack playback/labels; voice cards only. */
   durationMs?: number;
+  /** Owner has reviewed this contributor idea (kept it in Ideas). Clears it from the review queue. */
+  reviewed?: boolean;
   isDimmedReference?: boolean;
   isProcessing?: boolean;
 }
@@ -716,6 +720,7 @@ const SongCanvasExperience = () => {
   const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
   const [showRecap, setShowRecap] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showReviewQueue, setShowReviewQueue] = useState(false);
   // Real room roster — the same source the People surface reads.
   const songMembers = useSongCollaborators(songId);
   // Viewport pan/zoom API, bridged out of <CanvasViewport> for presence-jump.
@@ -1265,6 +1270,63 @@ const SongCanvasExperience = () => {
         })),
     [cards, currentUserName],
   );
+
+  // Ideas a co-writer added that the owner hasn't acted on yet: still in Ideas,
+  // not a stack layer, not already approved/kept/dimmed. This is the pending
+  // queue (COG Product 11) — the owner keeps control, contributors suggest.
+  const KIND_BY_TYPE: Record<CanvasCardType, string> = useMemo(
+    () => ({
+      voice: "Voice memo", hum: "Voice memo", lyric: "Lyric", chord: "Chord",
+      note: "Idea", scripture: "Theology note", section: "Section",
+    }),
+    [],
+  );
+  const pendingReview = useMemo(
+    () =>
+      cards
+        .filter(
+          (c) =>
+            c.tree === "ideas" &&
+            !c.parentMemoId &&
+            !c.isDimmedReference &&
+            !c.reviewed &&
+            c.status !== "approved" &&
+            c.contributor &&
+            c.contributor !== currentUserName,
+        )
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          body: c.body,
+          section: c.section,
+          contributor: c.contributor,
+          accent: c.accent,
+          kind: KIND_BY_TYPE[c.type] ?? "Idea",
+        })),
+    [cards, currentUserName, KIND_BY_TYPE],
+  );
+
+  // Keep-in-Ideas: mark reviewed so it leaves the queue but stays on the board.
+  const handleKeepInIdeas = useCallback((cardId: string) => {
+    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, reviewed: true } : c)));
+  }, []);
+
+  // Not-this-one: archive from the board, with a calm Undo (never a hard delete).
+  const handleDismissReview = useCallback((cardId: string) => {
+    let removed: CanvasCard | undefined;
+    setCards((prev) => {
+      removed = prev.find((c) => c.id === cardId);
+      return prev.filter((c) => c.id !== cardId);
+    });
+    toast("Idea set aside", {
+      duration: 7000,
+      action: {
+        label: "Undo",
+        onClick: () => { if (removed) setCards((prev) => [removed as CanvasCard, ...prev]); },
+      },
+    });
+  }, []);
+
   const dockActions = useMemo(
     () => [
       {
@@ -1378,6 +1440,23 @@ const SongCanvasExperience = () => {
           >
             <History size={16} strokeWidth={1.9} />
           </button>
+          {!isViewer && pendingReview.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowReviewQueue(true)}
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
+              style={{
+                backgroundColor: "var(--cog-gold)",
+                color: "#FFFFFF",
+                boxShadow: "0 1px 6px rgba(184,149,58,0.30)",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label={`Needs your review: ${pendingReview.length} idea${pendingReview.length === 1 ? "" : "s"} from your co-writers`}
+            >
+              <Inbox size={13} strokeWidth={2.2} />
+              Review {pendingReview.length}
+            </button>
+          )}
         </div>
         {isViewer ? (
           <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
@@ -1667,6 +1746,20 @@ const SongCanvasExperience = () => {
             collaborators={sheetRoster}
             onJumpTo={jumpToCollaborator}
             onClose={() => setShowShareSheet(false)}
+          />
+        </Suspense>
+      )}
+
+      {/* Owner review queue — pending ideas from co-writers, one at a time */}
+      {showReviewQueue && (
+        <Suspense fallback={null}>
+          <OwnerReviewQueueSheet
+            items={pendingReview}
+            onApprove={handleMoveToFinal}
+            onKeep={handleKeepInIdeas}
+            onDismiss={handleDismissReview}
+            onSee={(cardId) => { setShowReviewQueue(false); jumpToCardId(cardId); }}
+            onClose={() => setShowReviewQueue(false)}
           />
         </Suspense>
       )}
