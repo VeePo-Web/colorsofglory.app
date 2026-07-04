@@ -1322,6 +1322,48 @@ const SongCanvasExperience = () => {
     [cards, jumpToCard],
   );
 
+  // Calm remote-card arrival: a co-writer's new idea lands off-screen (ideas
+  // are placed low on the board), so without this it appears silently and the
+  // songwriter never notices. When a genuinely new card from someone else
+  // shows up in real time, offer a gentle "see it" toast that flies there.
+  // Seeded on first load + a short warmup so the initial hydration is silent.
+  const seenCardIdsRef = useRef<Set<string> | null>(null);
+  const arrivalWarmupRef = useRef<number>(0);
+  useEffect(() => {
+    if (seenCardIdsRef.current === null) {
+      seenCardIdsRef.current = new Set(cards.map((c) => c.id));
+      // Give hydration a beat to settle before any arrival is treated as "live".
+      arrivalWarmupRef.current = Date.now() + 3000;
+      return;
+    }
+    const seen = seenCardIdsRef.current;
+    const fresh = cards.filter(
+      (c) =>
+        !seen.has(c.id) &&
+        !c.parentMemoId &&
+        c.contributor &&
+        // Exclude anything I authored — including merges credited "Me & Sarah".
+        !c.contributor.includes(currentUserName),
+    );
+    for (const c of cards) seen.add(c.id);
+    if (fresh.length === 0 || Date.now() < arrivalWarmupRef.current) return;
+
+    if (fresh.length === 1) {
+      const c = fresh[0];
+      const first = c.contributor.split(" ")[0] || c.contributor;
+      toast(`${first} added an idea`, {
+        description: c.title,
+        action: { label: "See it", onClick: () => jumpToCard(c) },
+      });
+    } else {
+      const first = fresh[0];
+      toast(`${fresh.length} new ideas from your co-writers`, {
+        description: "Tap review to step through them.",
+        action: { label: "See", onClick: () => jumpToCard(first) },
+      });
+    }
+  }, [cards, currentUserName, jumpToCard]);
+
   // The recap digest, from the room's real cards: what other hands added,
   // latest first, each row a deep link to its card (COG Product 12).
   const recapItems = useMemo(
