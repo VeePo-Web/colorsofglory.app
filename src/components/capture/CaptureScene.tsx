@@ -428,6 +428,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // is in flight or a sheet is open so it can never interrupt a recording.
   const sceneRef = useRef<HTMLDivElement>(null);
   const goToSongs = useCallback(() => {
+    // The wayfinding hint has done its job the moment they go to Songs —
+    // by swipe OR by tapping the chevron — so retire it for good.
+    try { localStorage.setItem("cog:nav-swipe-hint", "1"); } catch { /* ignore */ }
     setNavDirection("left");
     navigate("/songs");
   }, [navigate]);
@@ -443,12 +446,13 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     preloadOnIdle(() => import("@/pages/SongCatalogPage"));
   }, []);
 
-  // First-visit wayfinding: nudge the Songs affordance once, then never again.
+  // Self-teaching wayfinding: gently nudge the Songs affordance on every
+  // Capture visit UNTIL the songwriter actually goes to Songs once (a single
+  // timed breath is trivially missed while looking at the center mic). It
+  // retires itself the moment the gesture/tap is used — see goToSongs.
   const [hintNudge] = useState(() => {
     try {
-      if (localStorage.getItem("cog:nav-swipe-hint")) return false;
-      localStorage.setItem("cog:nav-swipe-hint", "1");
-      return true;
+      return !localStorage.getItem("cog:nav-swipe-hint");
     } catch {
       return false;
     }
