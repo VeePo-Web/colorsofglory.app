@@ -183,8 +183,8 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
               <select
                 value={sectionKind}
                 onChange={(e) => setSectionKind(e.target.value)}
-                className="rounded-xl border px-3 py-2 text-sm bg-white"
-                style={{ borderColor: "var(--cog-border)" }}
+                className="rounded-xl border px-3 py-2 bg-white"
+                style={{ borderColor: "var(--cog-border)", fontSize: 16 }}
               >
                 {SECTION_KINDS.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -195,6 +195,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
                 placeholder="# (optional)"
                 value={sectionNum}
                 onChange={(e) => setSectionNum(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                style={{ fontSize: 16 }}
               />
             </div>
           )}
@@ -205,7 +206,15 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
             onChange={(e) => setText(e.target.value)}
             placeholder={copy.placeholder}
             rows={action === "lyrics" || action === "scripture" ? 5 : 3}
+            // A lyric / idea / chord line is not prose — no autocorrect or
+            // spellcheck mangling the songwriter's exact words. 16px so iOS Safari
+            // never zooms the sheet the instant this field is focused.
+            autoCapitalize="sentences"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
             className="resize-none"
+            style={{ fontSize: 16 }}
           />
 
           <Button
