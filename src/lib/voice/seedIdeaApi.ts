@@ -70,6 +70,13 @@ export async function saveSeedIdea(params: {
   return record;
 }
 
+/** Rename a captured idea in place (local index only — the blob is untouched). */
+export async function renameSeedIdea(id: string, title: string): Promise<void> {
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  writeIndex(readIndex().map((r) => (r.id === id ? { ...r, title: trimmed } : r)));
+}
+
 /** List unclaimed seed ideas, newest first — the contents of the Seed Ideas shelf. */
 export async function listSeedIdeas(): Promise<SeedIdeaRecord[]> {
   return readIndex()
