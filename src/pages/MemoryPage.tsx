@@ -10,6 +10,7 @@ import { applyHidden, toggleHidden, loadHiddenIds, saveHiddenIds } from "@/lib/m
 import { buildInsights } from "@/lib/memory/insights";
 import { loadMemorySnapshot } from "@/lib/memory/localCache";
 import { freshSongs, loadLastSeen, saveLastSeen } from "@/lib/memory/recency";
+import { resumePathFor } from "@/lib/nav/songResume";
 import type { MemoryCluster } from "@/lib/memory/memoryTypes";
 import MemoryClusterCard from "@/components/memory/MemoryClusterCard";
 import MemorySearchResults from "@/components/memory/MemorySearchResults";
@@ -92,7 +93,10 @@ const MemoryPage = () => {
       people: applyHidden(r.people, hidden),
     };
   }, [graph, data?.bundle, deferredQuery, hidden]);
-  const openSong = (id: string) => navigate(`/songs/${id}/room`);
+  // Open a song capture-first (the app's front door), resuming the last
+  // surface if there is one — the same rule the catalog uses. The module
+  // hub stays a deliberate tap ("Open room"), never a forced landing.
+  const openSong = (id: string) => navigate(resumePathFor(id) ?? `/songs/${id}/brainstorm`);
 
   const persistHidden = (next: string[]) => {
     setHidden(next);

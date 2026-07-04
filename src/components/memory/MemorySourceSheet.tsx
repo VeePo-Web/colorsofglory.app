@@ -3,6 +3,7 @@ import { ArrowRight, EyeOff } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import type { MemoryCluster, MemorySong } from "@/lib/memory/memoryTypes";
 import { CLUSTER_NOUN } from "./clusterIcon";
+import { resumePathFor } from "@/lib/nav/songResume";
 
 interface Props {
   cluster: MemoryCluster | null;
@@ -46,7 +47,8 @@ const MemorySourceSheet = ({ cluster, songs, onClose, onHide }: Props) => {
                     key={song.id}
                     onClick={() => {
                       onClose();
-                      navigate(`/songs/${song.id}/room`);
+                      // Capture-first with resume — same rule as the catalog.
+                      navigate(resumePathFor(song.id) ?? `/songs/${song.id}/brainstorm`);
                     }}
                     className="w-full rounded-xl p-3.5 flex items-center gap-3 text-left transition-all duration-150 active:scale-[0.98]"
                     style={{ backgroundColor: "var(--cog-cream)", border: "1.5px solid var(--cog-border)" }}
