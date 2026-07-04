@@ -380,9 +380,14 @@ const SongCatalogPage = () => {
   const catalogTour = useCoachMark("tour_catalog_seen", !loading && visibleSongs.length > 0);
 
   return (
-    <div ref={pageRef} className={`relative min-h-screen ${enterClass}`} style={{ backgroundColor: "var(--cog-cream)" }}>
+    <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream)" }}>
       {/* Signature warm radial glow — the brand's spiritual warmth, behind the catalog */}
       <div aria-hidden className="cog-glow pointer-events-none fixed inset-0 z-0" />
+
+      {/* Swipe + entrance layer. The pinned chrome (glow above, BottomNav below)
+          stays OUTSIDE this element so the 1:1 finger-drag never reparents a
+          position:fixed child — otherwise the bottom nav jumps mid-swipe. */}
+      <div ref={pageRef} className={enterClass}>
 
       {/* ── DARK HEADER — matches reference image exactly ──────────────── */}
       <div
@@ -686,6 +691,8 @@ const SongCatalogPage = () => {
           onClose={() => setBatchAlbumOpen(false)}
         />
       )}
+
+      </div>{/* /swipe + entrance layer */}
 
       <BottomNav active="songs" />
 
