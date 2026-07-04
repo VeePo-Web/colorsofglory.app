@@ -17,6 +17,8 @@ import {
   clearAllFailedCaptures,
 } from "@/lib/voice/failedCaptureStore";
 import { audioCache } from "@/lib/voice/audioCache";
+import { saveSeedIdea } from "@/lib/voice/seedIdeaApi";
+import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
@@ -129,15 +131,29 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       setStatus("transcribing");
       setSaving(true);
       try {
-        let targetSongId = songId ?? null;
-        let targetSongTitle = songTitle;
-        if (!targetSongId) {
-          const newTitle = formatNewSongTitle();
-          const { song } = await createSong({ title: newTitle });
-          targetSongId = song.id;
-          targetSongTitle = newTitle;
-          toast.message("Started a new song", { description: newTitle });
+        // Global capture (no song context) → the idea lands in your Ideas shelf,
+        // NEVER a new "junk" song. You file it into a song later, from the shelf
+        // (hear / rename / file / discard). This is the "one idea, two homes" model
+        // and the world-class benchmark rule: a global capture goes to Seed Ideas;
+        // the songwriter chooses when to make it a song.
+        if (!songId) {
+          await saveSeedIdea({
+            blob: file,
+            mimeType: file.type || "audio/webm",
+            durationMs: fileDurationMs,
+            title: defaultCaptureName(),
+          });
+          setStatus("ready");
+          setFailedTake(null);
+          void clearAllFailedCaptures();
+          toast.success("Saved to your Ideas", {
+            description: "File it into a song whenever you like.",
+          });
+          return;
         }
+
+        const targetSongId = songId;
+        const targetSongTitle = songTitle;
 
         const intake = await submitSharedAudio({
           file,
