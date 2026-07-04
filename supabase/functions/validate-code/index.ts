@@ -29,6 +29,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ kind: "invalid", reason: "already_attributed" });
     }
 
+    // 1b) Special promo: JAM100 — 100% off Pro forever.
+    if (code === "JAM100") {
+      return jsonResponse({
+        kind: "promo_full",
+        discount_pct: 100,
+        effective_cents: 0,
+        promo_label: "JAM100 — 100% off Pro",
+      });
+    }
+
     // 2) Try as founder code (codes table, kind=founder, owner_founder_id set, active).
     const { data: founderCode } = await admin
       .from("codes")
