@@ -163,7 +163,9 @@ const SongSheetPage = () => {
         style={{ background: "radial-gradient(ellipse 70% 45% at 50% 85%, var(--cog-gold-glow) 0%, transparent 65%)" }}
       />
 
-      <BackHeader to={`/songs/${id}`} label="Song" />
+      {/* Back to wherever you opened the sheet from (the room, the catalog),
+          not a hard jump to a capture screen; safe song home on a cold load. */}
+      <BackHeader label="Song" fallback={`/songs/${id}/brainstorm`} />
 
       <div className="relative flex flex-col flex-1 px-5" style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}>
         <div className="flex justify-center mt-1 mb-3">
