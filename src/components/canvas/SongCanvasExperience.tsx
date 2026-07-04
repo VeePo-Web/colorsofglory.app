@@ -61,6 +61,7 @@ import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import { useSongCollaborators } from "@/lib/invite/useSongCollaborators";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
+import { useSongPresence } from "@/lib/canvas/useSongPresence";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { toast } from "sonner";
@@ -1175,19 +1176,50 @@ const SongCanvasExperience = () => {
   }, [cards]);
 
   // Header presence prefers the real roster; card contributors fill in until it loads.
-  const presenceStack = useMemo(
-    () =>
-      songMembers.length > 0
-        ? songMembers.map((m) => ({
-            userId: m.userId,
-            firstName: m.firstName,
-            lastName: m.lastName,
-            avatarColor: m.avatarColor,
-            avatarInitials: m.avatarInitials,
-          }))
-        : roomCollaborators,
-    [songMembers, roomCollaborators],
+  // Live presence — who is ACTUALLY in the room right now (realtime channel),
+  // not merely who authored a card. Stable identity so we don't re-track every
+  // render; null until the profile resolves so we never join as a ghost.
+  const presenceSelf = useMemo(() => {
+    if (!profile?.user_id) return null;
+    return {
+      userId: profile.user_id,
+      name: currentUserName,
+      color: getCreatorColor(currentUserName).base,
+      initials: getCreatorInitials(currentUserName),
+    };
+  }, [profile?.user_id, currentUserName]);
+  const livePresence = useSongPresence(songId, presenceSelf);
+  const othersHereNow = useMemo(
+    () => livePresence.filter((m) => !m.isSelf).length,
+    [livePresence],
   );
+
+  const presenceStack = useMemo(() => {
+    // Prefer the live "here now" roster; fall back to members, then to the
+    // people already visible on cards, so the stack is never empty in a
+    // populated room even before realtime connects.
+    if (livePresence.length > 0) {
+      return livePresence.map((m) => {
+        const [firstName, ...rest] = m.name.split(" ");
+        return {
+          userId: m.userId,
+          firstName: firstName ?? m.name,
+          lastName: rest.join(" "),
+          avatarColor: m.color,
+          avatarInitials: m.initials,
+        };
+      });
+    }
+    return songMembers.length > 0
+      ? songMembers.map((m) => ({
+          userId: m.userId,
+          firstName: m.firstName,
+          lastName: m.lastName,
+          avatarColor: m.avatarColor,
+          avatarInitials: m.avatarInitials,
+        }))
+      : roomCollaborators;
+  }, [livePresence, songMembers, roomCollaborators]);
 
   // The people layer's roster rows (name + role); demo fallback lives in the layer.
   const peopleLayerCollaborators = useMemo(
@@ -1520,13 +1552,33 @@ const SongCanvasExperience = () => {
               boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
             }}
             aria-label={
-              presenceStack.length > 0
+              othersHereNow > 0
+                ? `${othersHereNow} ${othersHereNow === 1 ? "person is" : "people are"} here now — invite someone`
+                : presenceStack.length > 0
                 ? `In this room: ${presenceStack.length} ${presenceStack.length === 1 ? "person" : "people"} — invite someone`
                 : "Invite someone into this song"
             }
           >
             {presenceStack.length > 0 && (
-              <CollaboratorAvatarStack collaborators={presenceStack} size={26} maxVisible={3} />
+              <span className="relative flex items-center">
+                <CollaboratorAvatarStack collaborators={presenceStack} size={26} maxVisible={3} />
+                {othersHereNow > 0 && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5"
+                    aria-hidden="true"
+                    title="Here now"
+                  >
+                    <span
+                      className="absolute inline-flex h-full w-full rounded-full opacity-60"
+                      style={{ backgroundColor: "#53AB8B", animation: "cog-live-ping 1.8s cubic-bezier(0,0,0.2,1) infinite" }}
+                    />
+                    <span
+                      className="relative inline-flex h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: "#53AB8B", border: "1.5px solid #FAFAF6" }}
+                    />
+                  </span>
+                )}
+              </span>
             )}
             <span
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold"
@@ -1847,6 +1899,13 @@ const SongCanvasExperience = () => {
         @keyframes mic-pulse {
           0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.35); }
           50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.35); }
+        }
+        @keyframes cog-live-ping {
+          0%   { transform: scale(1);   opacity: 0.6; }
+          75%, 100% { transform: scale(2.2); opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="cog-live-ping"] { animation: none !important; }
         }
       `}</style>
     </div>

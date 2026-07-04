@@ -23,6 +23,57 @@ export type SongRoomHandlers = {
   onCaptureChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
 };
 
+/**
+ * Live presence — who is actually in the song room right now (Supabase
+ * Realtime Presence, not postgres). Ephemeral channel state only: nothing is
+ * written to a table, so this stays entirely inside the frontend lane. Each
+ * client tracks a small identity payload; the callback fires with the current
+ * roster whenever anyone joins, leaves, or the channel syncs.
+ */
+export type PresenceIdentity = {
+  userId: string;
+  name: string;
+  color: string;
+  initials: string;
+};
+
+export function subscribeSongPresence(
+  song_id: string,
+  self: PresenceIdentity,
+  onChange: (members: PresenceIdentity[]) => void,
+): () => void {
+  const channel = supabase.channel(`presence:song:${song_id}`, {
+    config: { presence: { key: self.userId } },
+  });
+
+  const emit = () => {
+    const state = channel.presenceState<PresenceIdentity>();
+    // One entry per key; a person open in two tabs collapses to one avatar.
+    const byUser = new Map<string, PresenceIdentity>();
+    for (const metas of Object.values(state)) {
+      const meta = metas[0];
+      if (meta?.userId) byUser.set(meta.userId, meta);
+    }
+    onChange(Array.from(byUser.values()));
+  };
+
+  channel
+    .on("presence", { event: "sync" }, emit)
+    .on("presence", { event: "join" }, emit)
+    .on("presence", { event: "leave" }, emit)
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        // track() must run only after the channel is joined.
+        void channel.track(self);
+      }
+    });
+
+  return () => {
+    void channel.untrack();
+    supabase.removeChannel(channel);
+  };
+}
+
 export function subscribeSongRoom(song_id: string, handlers: SongRoomHandlers): () => void {
   const filter = `song_id=eq.${song_id}`;
   const channel = supabase.channel(`song:${song_id}`);
