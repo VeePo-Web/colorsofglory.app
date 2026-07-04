@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings } from "lucide-react";
 import { setNavDirection } from "@/lib/nav/navDirection";
+import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 
 interface BottomNavProps {
   /** Override active tab for programmatic control */
@@ -17,6 +19,18 @@ interface BottomNavProps {
 const BottomNav = ({ active }: BottomNavProps) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // Make the tab bar as instant as the swipe: warm all three destinations on
+  // idle wherever the nav is shown, so tapping any tab (incl. Settings→Songs or
+  // anywhere→Settings, which no page prefetches) lands with no loading frame.
+  // The current surface's own chunk is already loaded, so that import is a no-op.
+  useEffect(() => {
+    preloadOnIdle(
+      () => import("@/pages/SongCatalogPage"),
+      () => import("@/pages/CapturePage"),
+      () => import("@/pages/settings/SettingsPage"),
+    );
+  }, []);
 
   function isTab(tab: "songs" | "capture" | "settings"): boolean {
     if (active) return active === tab;
