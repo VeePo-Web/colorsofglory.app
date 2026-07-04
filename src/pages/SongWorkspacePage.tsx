@@ -1,6 +1,6 @@
 import type { ElementType } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   FileText,
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
-import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
+import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 
 interface Module {
   id: string;
@@ -62,7 +62,7 @@ const SongWorkspacePage = () => {
   const roomRef = useRef<HTMLDivElement>(null);
   const backToSongs = useCallback(() => navigate("/songs"), [navigate]);
   useSwipeNav(roomRef, { onSwipeRight: backToSongs });
-  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+  const enterClass = useSpatialEntrance(useLocation().pathname);
 
   return (
     <div

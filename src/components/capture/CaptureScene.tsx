@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle } from "lucide-react";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { toast } from "sonner";
@@ -27,7 +27,7 @@ import CommitRibbon from "./CommitRibbon";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
-import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
+import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 
 interface CaptureSceneProps {
@@ -377,7 +377,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     onSwipeRight: goToSongs,
     disabled: phase !== "idle" || review.open || sheetAction !== null,
   });
-  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+  const enterClass = useSpatialEntrance(useLocation().pathname);
 
   // Songs are one swipe to the left — have their chunk warm before the
   // first slide so the neighbor appears instantly, never a loading frame.

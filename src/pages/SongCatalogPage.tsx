@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, Settings, Mic, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
-import { setNavDirection, consumeNavDirection, entranceClass } from "@/lib/nav/navDirection";
+import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 import { resumePathFor } from "@/lib/nav/songResume";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
@@ -264,7 +264,7 @@ const SongCatalogPage = () => {
     },
     disabled: dialogOpen || albumSheet.open || actionsSong !== null,
   });
-  const [enterClass] = useState(() => entranceClass(consumeNavDirection()));
+  const enterClass = useSpatialEntrance(useLocation().pathname);
 
   // Scroll restoration — coming back from a song must land exactly where
   // the songwriter left off (the list never "resets" under them).
