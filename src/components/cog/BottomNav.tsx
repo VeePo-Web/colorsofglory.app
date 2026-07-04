@@ -30,6 +30,19 @@ const BottomNav = ({ active }: BottomNavProps) => {
   const songsActive = isTab("songs");
   const settingsActive = isTab("settings");
 
+  // iOS / Instagram / Twitter pattern: re-tapping the tab you're already on
+  // scrolls that surface to the top — the fastest way back up a long library.
+  // Only navigates when you're actually going somewhere else.
+  const scrollTopOrNavigate = (isActive: boolean, dir: "left" | "right" | null, to: string) => {
+    if (isActive) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+      return;
+    }
+    if (dir) setNavDirection(dir);
+    navigate(to);
+  };
+
   return (
     <nav
       aria-label="Main navigation"
@@ -54,7 +67,7 @@ const BottomNav = ({ active }: BottomNavProps) => {
       {/* ── Songs ── */}
       <button
         type="button"
-        onClick={() => { setNavDirection("left"); navigate("/songs"); }}
+        onClick={() => scrollTopOrNavigate(songsActive, "left", "/songs")}
         aria-label="Songs"
         aria-current={songsActive ? "page" : undefined}
         style={{
@@ -106,7 +119,7 @@ const BottomNav = ({ active }: BottomNavProps) => {
       >
         <button
           type="button"
-          onClick={() => { setNavDirection("right"); navigate("/capture"); }}
+          onClick={() => scrollTopOrNavigate(captureActive, "right", "/capture")}
           aria-label="Capture idea"
           aria-current={captureActive ? "page" : undefined}
           style={{
@@ -166,7 +179,7 @@ const BottomNav = ({ active }: BottomNavProps) => {
       {/* ── Settings ── */}
       <button
         type="button"
-        onClick={() => navigate("/settings")}
+        onClick={() => scrollTopOrNavigate(settingsActive, null, "/settings")}
         aria-label="Settings"
         aria-current={settingsActive ? "page" : undefined}
         style={{
