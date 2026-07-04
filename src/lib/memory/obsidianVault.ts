@@ -575,6 +575,14 @@ function buildInsightsNote(bundle: MemoryRawBundle): VaultFile {
     lines.push("");
   }
 
+  if (insights.cadence) {
+    const { activeMonths, busiest } = insights.cadence;
+    lines.push("## When you write");
+    lines.push(`- Active across ${activeMonths} ${activeMonths === 1 ? "month" : "months"}`);
+    lines.push(`- Most productive: [[${busiest.label}]] — ${busiest.count} ${busiest.count === 1 ? "song" : "songs"} started`);
+    lines.push("");
+  }
+
   return { path: `${INSIGHTS_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 

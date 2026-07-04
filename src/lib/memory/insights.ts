@@ -43,6 +43,26 @@ export interface MemoryInsights {
   keys: LabelCount[];
   /** Tempo fingerprint across songs that have a BPM (null if none do). */
   tempo: { songs: number; min: number; max: number; average: number } | null;
+  /** Writing cadence — active months + the most productive one (null if no dates). */
+  cadence: { activeMonths: number; busiest: { label: string; count: number } } | null;
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** "2026-06-01T..." -> "2026-06" (or null if not a real date). */
+function monthKey(value: string | null): string | null {
+  if (!value) return null;
+  const k = value.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(k) ? k : null;
+}
+
+/** "2026-06" -> "June 2026". */
+function monthLabel(key: string): string {
+  const [year, month] = key.split("-");
+  return `${MONTH_NAMES[Number(month) - 1] ?? month} ${year}`;
 }
 
 // Function words that say nothing about a writer's voice. Deliberately does
@@ -172,6 +192,25 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
       }
     : null;
 
+  // --- writing cadence -------------------------------------------------------
+  const monthCounts = new Map<string, number>();
+  for (const song of bundle.songs) {
+    const key = monthKey(song.createdAt);
+    if (key) monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1);
+  }
+  let busiestKey: string | null = null;
+  let busiestCount = 0;
+  for (const [key, count] of monthCounts) {
+    // Highest count wins; ties break to the more recent month (deterministic).
+    if (count > busiestCount || (count === busiestCount && (busiestKey === null || key > busiestKey))) {
+      busiestKey = key;
+      busiestCount = count;
+    }
+  }
+  const cadence = busiestKey
+    ? { activeMonths: monthCounts.size, busiest: { label: monthLabel(busiestKey), count: busiestCount } }
+    : null;
+
   return {
     totals: {
       songs: bundle.songs.length,
@@ -188,5 +227,6 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
     collaborators,
     keys,
     tempo,
+    cadence,
   };
 }

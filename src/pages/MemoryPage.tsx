@@ -260,7 +260,7 @@ const MemoryPage = () => {
                       </>
                     )}
 
-                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0 || insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo) && (
+                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0 || insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo || insights.cadence) && (
                       <div className="mb-7">
                         <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--cog-warm-gray)" }}>
                           Your writing, by the numbers
@@ -297,7 +297,7 @@ const MemoryPage = () => {
                             ))}
                           </div>
                         )}
-                        {(insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo) && (
+                        {(insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo || insights.cadence) && (
                           <div className="flex flex-col gap-1.5 mt-2">
                             {insights.collaborators.slice(0, 4).map((c) => (
                               <div key={`collab-${c.label}`} className="flex items-baseline justify-between px-1">
@@ -328,6 +328,16 @@ const MemoryPage = () => {
                                   {insights.tempo.min === insights.tempo.max
                                     ? `${insights.tempo.average} BPM`
                                     : `${insights.tempo.min}–${insights.tempo.max} BPM · avg ${insights.tempo.average}`}
+                                </span>
+                              </div>
+                            )}
+                            {insights.cadence && (
+                              <div className="flex items-baseline justify-between px-1">
+                                <span className="text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                  Most productive
+                                </span>
+                                <span className="text-xs ml-3 truncate" style={{ color: "var(--cog-warm-gray)" }}>
+                                  {insights.cadence.busiest.label} · {insights.cadence.busiest.count} {insights.cadence.busiest.count === 1 ? "song" : "songs"}
                                 </span>
                               </div>
                             )}

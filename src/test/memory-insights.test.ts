@@ -107,6 +107,11 @@ describe("buildInsights", () => {
     expect(insights.tempo).toEqual({ songs: 1, min: 72, max: 72, average: 72 }); // only s1 has 72
   });
 
+  it("reports writing cadence — active months and busiest (ties → most recent)", () => {
+    // s1 -> 2026-06, s2 -> 2026-05: two active months, 1 song each, tie -> June.
+    expect(insights.cadence).toEqual({ activeMonths: 2, busiest: { label: "June 2026", count: 1 } });
+  });
+
   it("returns null tempo with no BPMs, and averages a real range", () => {
     const withTempos = (...bpms: (number | null)[]): MemoryRawBundle => ({
       userId: "me",
@@ -118,6 +123,22 @@ describe("buildInsights", () => {
     });
     expect(buildInsights(withTempos(null)).tempo).toBeNull();
     expect(buildInsights(withTempos(68, 140)).tempo).toEqual({ songs: 2, min: 68, max: 140, average: 104 });
+  });
+
+  it("cadence picks the month with the most songs, and is null with no dated songs", () => {
+    const song = (id: string, createdAt: string | null) => ({
+      id, title: id, coverColor: null, status: "draft", keySignature: null,
+      tempoBpm: null, tags: [], createdAt: createdAt ?? "", lastActivityAt: null,
+    });
+    const base = { userId: "me", sections: [], notes: [], ideas: [], people: [], voiceMemos: [], lyrics: [] };
+    const busy = buildInsights({
+      ...base,
+      songs: [song("a", "2026-03-01T00:00:00Z"), song("b", "2026-03-20T00:00:00Z"), song("c", "2026-07-01T00:00:00Z")],
+    });
+    // March has 2, July has 1 -> March wins outright.
+    expect(busy.cadence).toEqual({ activeMonths: 2, busiest: { label: "March 2026", count: 2 } });
+    // No valid createdAt -> null cadence (no crash).
+    expect(buildInsights({ ...base, songs: [song("x", null)] }).cadence).toBeNull();
   });
 
   it("survives an old snapshot bundle with no lyrics field", () => {
@@ -149,6 +170,8 @@ describe("vault Insights note", () => {
     expect(note.content).toContain("- G — 1 song");
     expect(note.content).toContain("## Tempo");
     expect(note.content).toContain("72 BPM");
+    expect(note.content).toContain("## When you write");
+    expect(note.content).toContain("[[June 2026]]");
 
     const home = files.find((f) => f.path === "Your Memory.md")!;
     expect(home.content).toContain("[[Insights]]");
