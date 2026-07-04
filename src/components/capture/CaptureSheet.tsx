@@ -54,6 +54,12 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
   const [sectionNum, setSectionNum] = useState<string>("");
   const [scriptureFallback, setScriptureFallback] = useState(false);
   const [chordsFallback, setChordsFallback] = useState(false);
+  // How many px the on-screen keyboard overlaps the bottom of the viewport. On
+  // iOS Safari the software keyboard covers a bottom-anchored sheet without any
+  // reflow, hiding the Save/Cancel buttons behind it. We track visualViewport
+  // and pad the sheet's scroll area by that inset so the actions always clear
+  // the keyboard — the single most-felt fix for typing lyrics on a phone.
+  const [kbInset, setKbInset] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -69,6 +75,28 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
       }, 80);
     }
   }, [open, action]);
+
+  useEffect(() => {
+    if (!open) {
+      setKbInset(0);
+      return;
+    }
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const update = () => {
+      // Gap between the layout viewport bottom and the visual viewport bottom =
+      // the keyboard (plus any bottom browser chrome). Clamp tiny values to 0.
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKbInset(inset > 24 ? inset : 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [open]);
 
   if (!action) return null;
   const copy = COPY[action];
@@ -118,7 +146,13 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
         style={{
           background: "var(--cog-cream-light, #faf7f2)",
           borderColor: "rgba(184,149,58,0.30)",
-          maxHeight: "82dvh",
+          maxHeight: "88dvh",
+          overflowY: "auto",
+          // The sheet is pinned to the screen bottom, so padding here grows it
+          // UPWARD — lifting Save/Cancel clear of the keyboard. Scrolls if the
+          // lifted content ever exceeds the sheet height.
+          paddingBottom: kbInset ? kbInset + 12 : undefined,
+          transition: "padding-bottom 180ms ease",
         }}
       >
         <SheetHeader className="text-left">
@@ -220,10 +254,12 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
           <Button
             type="button"
             onClick={handleSave}
-            className="w-full h-12 rounded-2xl text-base font-semibold"
+            disabled={action !== "section" && text.trim().length === 0}
+            className="w-full h-12 rounded-2xl text-base font-semibold disabled:cursor-not-allowed"
             style={{
               background: "var(--cog-gold)",
               color: "var(--cog-cream-light, #faf7f2)",
+              opacity: action !== "section" && text.trim().length === 0 ? 0.5 : 1,
             }}
           >
             Save to take
