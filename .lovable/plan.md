@@ -1,59 +1,34 @@
-# Unify Contact Email → people@colorsofglory.com
-
 ## Goal
-Every human-facing "contact us" surface on the site — and every Reply-To on outbound Resend mail — routes to the single Google Workspace inbox **people@colorsofglory.com**. Outbound `From:` addresses stay on the verified `@colorsofglory.app` sending domain for deliverability; only the reply/contact destination changes.
+Add a special promo code `JAM100` that gives 100% off the Pro plan at checkout (free forever, or free first cycle depending on Stripe coupon config).
 
-## Audit Findings (current state)
+## Approach
+Handle this server-side in the existing `validate-code` edge function (the same seam that already handles founder codes and member referrals). This keeps the client honest — the UI can display the discount, but the actual pricing decision lives on the server where `create-checkout` reads it.
 
-User-facing contact links today are split across two addresses:
-- `src/pages/legal/TermsPage.tsx` → `hello@colorsofglory.com`
-- `src/pages/legal/PrivacyPage.tsx` → `hello@colorsofglory.com`
-- `src/pages/pricing/CheckoutSuccessPage.tsx` → `help@colorsofglory.com`
+### 1. Edge function: `supabase/functions/validate-code/index.ts`
+- Add a hard-coded branch checked BEFORE founder/member lookups:
+  - If `code === "JAM100"` and `planKey === "pro"` and the user has no existing `referral_attributions` row, return:
+    ```json
+    {
+      "kind": "promo_full",
+      "discount_pct": 100,
+      "effective_cents": 0,
+      "promo_label": "JAM100 — 100% off Pro"
+    }
+    ```
+  - Preserve existing self/already-attributed guards.
 
-Server-side Reply-To routing in `supabase/functions/_shared/resend.ts`:
-- `hello@…app` → `hello@colorsofglory.com`
-- `security@…app` → `support@colorsofglory.com`
-- `referrals@…app` → `referrals@colorsofglory.com`
+### 2. Edge function: `supabase/functions/create-checkout/index.ts` (needs read)
+- Teach it to recognize `kind: "promo_full"` from validate-code (or re-validate the code itself for safety) and either:
+  - Attach a pre-created Stripe 100% off coupon/promotion code to the checkout session, OR
+  - For `effective_cents === 0`, skip Stripe entirely and directly grant the Pro entitlement (insert into `subscriptions` / `billing_events`) then redirect to the success page.
+- Recommended: use a Stripe **100% off forever coupon** attached via `discounts: [{ coupon: "JAM100_COUPON_ID" }]` so Stripe still records the subscription (needed for later portal/cancel flows). The coupon ID would be stored as a secret (`STRIPE_JAM100_COUPON_ID`) or hard-coded.
 
-Legacy Fly4MEdia file `supabase/functions/_shared/email-templates.ts` still hard-codes `tobyrennick@gmail.com` in `BRAND.email`, used only by the legacy `send-contact` edge function (dead path per project memory, but the address is stale).
+### 3. UI (already wired)
+The existing pricing/upgrade flow that calls `validate-code` and shows the discounted price will automatically render "$0.00 / month — JAM100 applied" once the server returns `effective_cents: 0`. No component changes needed beyond confirming the label displays.
 
-No other `mailto:` or `@colorsofglory.*` contact strings exist in `src/` or `index.html`.
+## Open questions before I build
+1. **Duration of the 100% off**: forever (lifetime free Pro), first month only, or first year? This changes whether we create a `duration: "forever"` vs `"once"` vs `"repeating"` Stripe coupon.
+2. **Usage cap**: unlimited redemptions, or single-use / capped (e.g. first 100 users)?
+3. **Do you already have a Stripe coupon created** for this, or should the edge function create/lookup one automatically on first use?
 
-## Changes
-
-### 1. Frontend contact links → people@colorsofglory.com
-- `src/pages/legal/TermsPage.tsx` — swap `hello@colorsofglory.com` → `people@colorsofglory.com` (link + label).
-- `src/pages/legal/PrivacyPage.tsx` — same swap.
-- `src/pages/pricing/CheckoutSuccessPage.tsx` — swap `help@colorsofglory.com` → `people@colorsofglory.com` (link + label).
-
-### 2. Resend Reply-To routing → single inbox
-Edit `supabase/functions/_shared/resend.ts` `REPLY_TO_DEFAULTS` map so **every** sender lane routes replies to `people@colorsofglory.com`:
-
-```text
-hello@colorsofglory.app      → people@colorsofglory.com
-security@colorsofglory.app   → people@colorsofglory.com
-referrals@colorsofglory.app  → people@colorsofglory.com
-```
-
-Explicit `replyTo` passed by a caller still wins (unchanged behavior).
-
-### 3. Legacy BRAND.email cleanup
-Update `supabase/functions/_shared/email-templates.ts` `BRAND.email` from `tobyrennick@gmail.com` → `people@colorsofglory.com` so any residual Fly4MEdia footer references show the correct inbox. No behavioral change to live COG flows.
-
-### 4. Redeploy affected edge functions
-Deploy the functions that import the shared Resend helper so the new Reply-To routing goes live:
-- `email-otp-start`
-- `notify-referral-event`
-- (any other function importing `_shared/resend.ts` — verified via grep before deploy)
-
-`send-contact` is legacy and untouched beyond the BRAND string.
-
-## Out of Scope (intentionally not changed)
-- Outbound `From:` addresses — remain on the verified `@colorsofglory.app` sending domain.
-- Marketing/docs references to `colorsofglory.app` URLs (canonical, sitemap, share links, WebOTP origin string, synthetic phone auth email) — those are domain identifiers, not contact addresses.
-- Referral link base URLs (`colorsofglory.app/r/…`) — product URLs, not email.
-
-## Verification
-- `rg -n "mailto:|@colorsofglory\.(com|app)" src/ index.html` — confirm only `people@colorsofglory.com` remains for user-facing contact.
-- Trigger a password-reset OTP email in preview; inspect headers to confirm `Reply-To: people@colorsofglory.com`.
-- Send a reply to that message and confirm it lands in the Google Workspace inbox.
+Once you answer these, I'll wire it end-to-end.
