@@ -20,8 +20,10 @@ export interface ReviewCard {
   section: string;
   contributor: string;
   accent: string;
-  /** Plain-language kind, e.g. "Voice memo", "Lyric", "Chord". */
+  /** Plain-language kind, e.g. "Voice memo", "Lyric", "Chord", "Line suggestion". */
   kind: string;
+  /** When present, this item is a Feature 19 line suggestion, reviewed inline. */
+  suggestion?: { originalLine: string; proposedLine: string };
 }
 
 interface OwnerReviewQueueSheetProps {
@@ -29,6 +31,10 @@ interface OwnerReviewQueueSheetProps {
   onApprove: (cardId: string) => void;
   onKeep: (cardId: string) => void;
   onDismiss: (cardId: string) => void;
+  /** Accept a line suggestion (replace the line). id = suggestion item id. */
+  onAcceptLine?: (id: string) => void;
+  /** Keep the original line (dismiss the suggestion). id = suggestion item id. */
+  onKeepLine?: (id: string) => void;
   /** Fly the canvas to a card so the owner can see it in context. */
   onSee?: (cardId: string) => void;
   onClose: () => void;
@@ -41,6 +47,8 @@ const OwnerReviewQueueSheet = ({
   onApprove,
   onKeep,
   onDismiss,
+  onAcceptLine,
+  onKeepLine,
   onSee,
   onClose,
 }: OwnerReviewQueueSheetProps) => {
@@ -195,10 +203,23 @@ const OwnerReviewQueueSheet = ({
                 <p style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700, color: "var(--cog-charcoal)", marginBottom: 6, lineHeight: 1.3 }}>
                   {current.title}
                 </p>
-                {current.body && (
-                  <p style={{ fontSize: 14, color: "var(--cog-warm-gray)", lineHeight: 1.5 }}>{current.body}</p>
+                {current.suggestion ? (
+                  <div style={{ marginTop: 4 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--cog-muted)", marginBottom: 4 }}>Original</p>
+                    <p style={{ fontFamily: "var(--font-display)", fontSize: 14, color: "var(--cog-warm-gray)", lineHeight: 1.5, marginBottom: 12, textDecoration: "line-through", textDecorationColor: "rgba(0,0,0,0.25)" }}>
+                      {current.suggestion.originalLine || "(empty line)"}
+                    </p>
+                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--cog-gold)", marginBottom: 4 }}>Suggested</p>
+                    <p style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--cog-charcoal)", lineHeight: 1.5, fontWeight: 600 }}>
+                      {current.suggestion.proposedLine}
+                    </p>
+                  </div>
+                ) : (
+                  current.body && (
+                    <p style={{ fontSize: 14, color: "var(--cog-warm-gray)", lineHeight: 1.5 }}>{current.body}</p>
+                  )
                 )}
-                {onSee && (
+                {onSee && !current.suggestion && (
                   <button
                     type="button"
                     onClick={() => onSee(current.id)}
@@ -213,42 +234,72 @@ const OwnerReviewQueueSheet = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => act(onApprove, current)}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  width: "100%", minHeight: 56, borderRadius: 16, border: "none",
-                  backgroundColor: "var(--cog-gold)", color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 10,
-                  boxShadow: "0 6px 18px rgba(184,149,58,0.32)",
-                }}
-              >
-                <Check size={18} strokeWidth={2.2} /> Add to Final
-              </button>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => act(onKeep, current)}
-                  style={{
-                    flex: 1, minHeight: 48, borderRadius: 14, cursor: "pointer",
-                    backgroundColor: "#FFFFFF", border: "1.5px solid rgba(0,0,0,0.10)",
-                    color: "var(--cog-charcoal)", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-body)",
-                  }}
-                >
-                  Keep in Ideas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => act(onDismiss, current)}
-                  style={{
-                    flex: 1, minHeight: 48, borderRadius: 14, cursor: "pointer",
-                    backgroundColor: "transparent", border: "1.5px solid rgba(0,0,0,0.08)",
-                    color: "var(--cog-warm-gray)", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-body)",
-                  }}
-                >
-                  Not this one
-                </button>
-              </div>
+              {current.suggestion ? (
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => act((id) => onKeepLine?.(id), current)}
+                    style={{
+                      flex: 1, minHeight: 56, borderRadius: 16, cursor: "pointer",
+                      backgroundColor: "#FFFFFF", border: "1.5px solid rgba(0,0,0,0.10)",
+                      color: "var(--cog-charcoal)", fontSize: 15, fontWeight: 600, fontFamily: "var(--font-body)",
+                    }}
+                  >
+                    Keep original
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => act((id) => onAcceptLine?.(id), current)}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      minHeight: 56, borderRadius: 16, border: "none", cursor: "pointer",
+                      backgroundColor: "var(--cog-gold)", color: "#fff", fontSize: 15, fontWeight: 700,
+                      boxShadow: "0 6px 18px rgba(184,149,58,0.32)", fontFamily: "var(--font-body)",
+                    }}
+                  >
+                    <Check size={17} strokeWidth={2.2} /> Accept line
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => act(onApprove, current)}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      width: "100%", minHeight: 56, borderRadius: 16, border: "none",
+                      backgroundColor: "var(--cog-gold)", color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 10,
+                      boxShadow: "0 6px 18px rgba(184,149,58,0.32)",
+                    }}
+                  >
+                    <Check size={18} strokeWidth={2.2} /> Add to Final
+                  </button>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => act(onKeep, current)}
+                      style={{
+                        flex: 1, minHeight: 48, borderRadius: 14, cursor: "pointer",
+                        backgroundColor: "#FFFFFF", border: "1.5px solid rgba(0,0,0,0.10)",
+                        color: "var(--cog-charcoal)", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-body)",
+                      }}
+                    >
+                      Keep in Ideas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => act(onDismiss, current)}
+                      style={{
+                        flex: 1, minHeight: 48, borderRadius: 14, cursor: "pointer",
+                        backgroundColor: "transparent", border: "1.5px solid rgba(0,0,0,0.08)",
+                        color: "var(--cog-warm-gray)", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-body)",
+                      }}
+                    >
+                      Not this one
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
 

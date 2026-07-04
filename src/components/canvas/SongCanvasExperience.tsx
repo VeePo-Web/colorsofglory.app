@@ -50,6 +50,12 @@ import {
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import {
+  addLineSuggestion,
+  listLineSuggestions,
+  removeLineSuggestion,
+  type PendingLineSuggestion,
+} from "@/lib/canvas/lineSuggestions";
 import StackSheet from "@/components/voice/StackSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
@@ -731,6 +737,10 @@ const SongCanvasExperience = () => {
     originalLine: string;
     sectionLabel: string;
   } | null>(null);
+  // Pending line suggestions from co-writers (Feature 19), owner-reviewed.
+  const [lineSuggestions, setLineSuggestions] = useState<PendingLineSuggestion[]>(
+    () => listLineSuggestions(songId),
+  );
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -1327,6 +1337,43 @@ const SongCanvasExperience = () => {
     });
   }, []);
 
+  // Line suggestions (Feature 19) become their own review items, so a
+  // "replace just this line" flows through the SAME owner accept/keep motion.
+  const suggestionReviewItems = useMemo(
+    () =>
+      lineSuggestions.map((s) => ({
+        id: s.id,
+        title: "Line change",
+        body: "",
+        section: s.section,
+        contributor: s.contributor,
+        accent: getCreatorColor(s.contributor).base,
+        kind: "Line suggestion",
+        suggestion: { originalLine: s.originalLine, proposedLine: s.proposedLine },
+      })),
+    [lineSuggestions],
+  );
+
+  // One unified queue: pending ideas + pending line suggestions.
+  const reviewQueueItems = useMemo(
+    () => [...suggestionReviewItems, ...pendingReview],
+    [suggestionReviewItems, pendingReview],
+  );
+
+  // Accept a line suggestion → replace the target card's body, drop the suggestion.
+  const handleAcceptLine = useCallback((suggestionId: string) => {
+    const s = lineSuggestions.find((x) => x.id === suggestionId);
+    if (!s) return;
+    setCards((prev) => prev.map((c) => (c.id === s.cardId ? { ...c, body: s.proposedLine } : c)));
+    setLineSuggestions(removeLineSuggestion(songId, suggestionId));
+    showSavedMoment("Line updated", "Lyrics", s.section);
+  }, [lineSuggestions, songId, showSavedMoment]);
+
+  // Keep original → drop the suggestion without touching the line.
+  const handleKeepLine = useCallback((suggestionId: string) => {
+    setLineSuggestions(removeLineSuggestion(songId, suggestionId));
+  }, [songId]);
+
   const dockActions = useMemo(
     () => [
       {
@@ -1440,7 +1487,7 @@ const SongCanvasExperience = () => {
           >
             <History size={16} strokeWidth={1.9} />
           </button>
-          {!isViewer && pendingReview.length > 0 && (
+          {!isViewer && reviewQueueItems.length > 0 && (
             <button
               type="button"
               onClick={() => setShowReviewQueue(true)}
@@ -1451,10 +1498,10 @@ const SongCanvasExperience = () => {
                 boxShadow: "0 1px 6px rgba(184,149,58,0.30)",
                 fontFamily: "var(--font-body)",
               }}
-              aria-label={`Needs your review: ${pendingReview.length} idea${pendingReview.length === 1 ? "" : "s"} from your co-writers`}
+              aria-label={`Needs your review: ${reviewQueueItems.length} item${reviewQueueItems.length === 1 ? "" : "s"} from your co-writers`}
             >
               <Inbox size={13} strokeWidth={2.2} />
-              Review {pendingReview.length}
+              Review {reviewQueueItems.length}
             </button>
           )}
         </div>
@@ -1754,10 +1801,12 @@ const SongCanvasExperience = () => {
       {showReviewQueue && (
         <Suspense fallback={null}>
           <OwnerReviewQueueSheet
-            items={pendingReview}
+            items={reviewQueueItems}
             onApprove={handleMoveToFinal}
             onKeep={handleKeepInIdeas}
             onDismiss={handleDismissReview}
+            onAcceptLine={handleAcceptLine}
+            onKeepLine={handleKeepLine}
             onSee={(cardId) => { setShowReviewQueue(false); jumpToCardId(cardId); }}
             onClose={() => setShowReviewQueue(false)}
           />
@@ -1771,13 +1820,22 @@ const SongCanvasExperience = () => {
           originalLine={lineSuggest.originalLine}
           sectionLabel={lineSuggest.sectionLabel}
           onSend={(text) => {
-            void text;
-            toast.success("Suggestion sent");
-            setLineSuggest(null);
-          }}
-          onAccept={() => {
-            toast.success("Line accepted");
-            setLineSuggest(null);
+            if (!lineSuggest) return;
+            // Persist into the owner's review queue instead of vanishing on a
+            // toast. The sheet plays its own "Suggestion sent" confirmation
+            // and then calls onDismiss to unmount — don't unmount here.
+            setLineSuggestions(
+              addLineSuggestion({
+                id: `ls-${Date.now()}`,
+                songId,
+                cardId: lineSuggest.cardId,
+                originalLine: lineSuggest.originalLine,
+                proposedLine: text,
+                contributor: currentUserName,
+                section: lineSuggest.sectionLabel,
+                createdAt: Date.now(),
+              }),
+            );
           }}
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}
