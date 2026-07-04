@@ -1397,6 +1397,19 @@ const SongCanvasExperience = () => {
     viewportApiRef.current?.panTo(columnCenterX, COLUMN_TOP + 40, vw * 0.42, vh * 0.3, 420);
   }, []);
 
+  const closeWorkPanel = useCallback(() => {
+    setShowWorkPanel(false);
+    setActiveLayer("room");
+  }, []);
+
+  // Escape closes the work bottom sheet, like every other sheet in the room.
+  useEffect(() => {
+    if (!showWorkPanel) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeWorkPanel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showWorkPanel, closeWorkPanel]);
+
   // Bring a just-created card into view once it's on the board (add / record).
   useEffect(() => {
     if (!focusCardId) return;
@@ -1970,52 +1983,71 @@ const SongCanvasExperience = () => {
           ))}
         </CanvasViewport>
 
-        {/* Work layer slide-in panel */}
+        {/* Work layer — a mobile bottom sheet (was a desktop right drawer) */}
         {showWorkPanel && (
-          <div
-            className="absolute top-0 right-0 bottom-0 z-40 overflow-y-auto"
-            style={{
-              width: 320,
-              backgroundColor: "#FAFAF6",
-              borderLeft: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => { setShowWorkPanel(false); setActiveLayer("room"); }}
-              className="absolute top-4 right-4 flex items-center justify-center rounded-full"
-              style={{ width: 32, height: 32, backgroundColor: "rgba(0,0,0,0.06)", color: "#666" }}
-              aria-label="Close panel"
+          <>
+            <div
+              onClick={closeWorkPanel}
+              aria-hidden="true"
+              style={{
+                position: "fixed", inset: 0, zIndex: 70,
+                backgroundColor: "rgba(26,26,26,0.5)",
+                animation: "cog-fade-in 220ms ease",
+              }}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${LAYERS.find((l) => l.id === activeLayer)?.label ?? "Song"} panel`}
+              style={{
+                position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 71,
+                backgroundColor: "#FAFAF6",
+                borderRadius: "24px 24px 0 0",
+                borderTop: "1px solid rgba(0,0,0,0.08)",
+                boxShadow: "0 -24px 60px rgba(0,0,0,0.20)",
+                maxWidth: 480, margin: "0 auto",
+                maxHeight: "85dvh", overflowY: "auto",
+                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
+                animation: "cog-sheet-rise 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
             >
-              ×
-            </button>
-            <div className="p-4" style={{ paddingTop: 48 }}>
-              {activeLayer === "voice" ? (
-                <VoiceLayerPanel
-                  songId={songId}
-                  currentUserName={currentUserName}
-                  onRecord={() => { setShowWorkPanel(false); setActiveLayer("room"); void handleStartRecording(); }}
-                />
-              ) : (
-                <>
-                  <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
-                    <SongCanvasWorkLayers activeLayer={activeLayer} />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <SongCanvasCollabLayers
-                      activeLayer={activeLayer}
-                      collaborators={peopleLayerCollaborators}
-                      activity={layerActivity}
-                      onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
-                      onOpenRecap={() => setShowRecap(true)}
-                      onOpenCredits={() => navigate(`/songs/${songId}/credits`)}
-                    />
-                  </Suspense>
-                </>
-              )}
+              <div style={{ width: 40, height: 4, borderRadius: 9999, backgroundColor: "#CCC", margin: "12px auto 8px" }} aria-hidden="true" />
+              <button
+                type="button"
+                onClick={closeWorkPanel}
+                className="flex items-center justify-center rounded-full"
+                style={{ position: "absolute", top: 10, right: 14, width: 44, height: 44, backgroundColor: "rgba(0,0,0,0.06)", color: "#666", border: "none", cursor: "pointer" }}
+                aria-label="Close panel"
+              >
+                ×
+              </button>
+              <div style={{ padding: "4px 16px 8px" }}>
+                {activeLayer === "voice" ? (
+                  <VoiceLayerPanel
+                    songId={songId}
+                    currentUserName={currentUserName}
+                    onRecord={() => { closeWorkPanel(); void handleStartRecording(); }}
+                  />
+                ) : (
+                  <>
+                    <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
+                      <SongCanvasWorkLayers activeLayer={activeLayer} />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                      <SongCanvasCollabLayers
+                        activeLayer={activeLayer}
+                        collaborators={peopleLayerCollaborators}
+                        activity={layerActivity}
+                        onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
+                        onOpenRecap={() => setShowRecap(true)}
+                        onOpenCredits={() => navigate(`/songs/${songId}/credits`)}
+                      />
+                    </Suspense>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -2258,9 +2290,12 @@ const SongCanvasExperience = () => {
           0%   { opacity: 0; transform: scale(0.96) translateY(6px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
+        @keyframes cog-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes cog-sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
           [style*="cog-live-ping"] { animation: none !important; }
           [style*="cog-card-in"]  { animation: none !important; }
+          [style*="cog-sheet-rise"], [style*="cog-fade-in"] { animation: none !important; }
         }
       `}</style>
     </div>
