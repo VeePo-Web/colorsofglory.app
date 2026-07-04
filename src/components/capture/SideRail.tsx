@@ -27,6 +27,9 @@ const CHIPS: Array<{ id: RailAction; label: string; icon: LucideIcon }> = [
  */
 const SideRail = ({ recording, onAction }: SideRailProps) => {
   const [flashed, setFlashed] = useState<RailAction | null>(null);
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   const handleClick = (id: RailAction) => {
     onAction(id);
@@ -81,7 +84,11 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
                 ? "0 4px 14px rgba(184,149,58,0.18), 0 0 0 1px rgba(184,149,58,0.10)"
                 : "0 2px 8px rgba(28,26,23,0.08)",
               transition: "background 200ms ease, color 200ms ease, border-color 200ms ease, transform 120ms ease",
-              animation: `cog-rail-enter 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)) ${idx * 40}ms both`,
+              // Staggered slide-in — suppressed for reduced-motion (chips just
+              // appear, no travel), per the design bible's motion mandate.
+              animation: reduceMotion
+                ? "none"
+                : `cog-rail-enter 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)) ${idx * 40}ms both`,
             }}
             aria-label={
               recording
