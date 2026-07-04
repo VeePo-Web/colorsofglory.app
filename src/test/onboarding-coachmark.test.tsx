@@ -9,7 +9,15 @@ import { TOUR_STEPS } from "@/lib/onboarding/tour";
 // rail, and that every dismissal path fires the right callback — including the
 // "tap anywhere outside" rule that keeps the tour from ever trapping a user.
 
-function Harness({ onGotIt = () => {}, onSkip = () => {} }: { onGotIt?: () => void; onSkip?: () => void }) {
+function Harness({
+  onGotIt = () => {},
+  onSkip = () => {},
+  isFinal = false,
+}: {
+  onGotIt?: () => void;
+  onSkip?: () => void;
+  isFinal?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   return (
     <>
@@ -22,6 +30,7 @@ function Harness({ onGotIt = () => {}, onSkip = () => {} }: { onGotIt?: () => vo
         body="Everything for it lives inside. Tap to enter."
         onGotIt={onGotIt}
         onSkip={onSkip}
+        isFinal={isFinal}
       />
     </>
   );
@@ -75,6 +84,28 @@ describe("CoachMark", () => {
     // A pointer-down on the tooltip's own copy must not count as an outside tap.
     fireEvent.pointerDown(screen.getByText("This is your song's room."));
     expect(onGotIt).not.toHaveBeenCalled();
+  });
+
+  it("on the final beat, Got it shows the completion line then dismisses", () => {
+    vi.useFakeTimers();
+    const onGotIt = vi.fn();
+    render(<Harness onGotIt={onGotIt} isFinal />);
+    fireEvent.click(screen.getByText("Got it"));
+    // A warm close appears, the rail reads complete, and Skip/Got it are gone.
+    expect(screen.getByText(/go write something worth singing/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Tour complete")).toBeInTheDocument();
+    expect(screen.queryByText("Got it")).not.toBeInTheDocument();
+    expect(onGotIt).not.toHaveBeenCalled();
+    // …then it dismisses after the brief pause.
+    act(() => vi.advanceTimersByTime(1700));
+    expect(onGotIt).toHaveBeenCalledTimes(1);
+  });
+
+  it("non-final beats dismiss immediately (no completion pause)", () => {
+    const onGotIt = vi.fn();
+    render(<Harness onGotIt={onGotIt} />);
+    fireEvent.click(screen.getByText("Got it"));
+    expect(onGotIt).toHaveBeenCalledTimes(1);
   });
 
   it("renders into a document.body portal, not the anchor's subtree", () => {

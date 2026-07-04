@@ -22,7 +22,13 @@ interface CoachMarkProps {
   body: string;
   onGotIt: () => void;
   onSkip: () => void;
+  /** The last beat: on "Got it" it briefly shows a warm close before dismissing. */
+  isFinal?: boolean;
 }
+
+// The subtle payoff for finishing the tour — one calm faith-toned line.
+const COMPLETION_LINE = "That's the room — go write something worth singing.";
+const COMPLETION_MS = 1600;
 
 function useReducedMotion(): boolean {
   return (
@@ -32,11 +38,24 @@ function useReducedMotion(): boolean {
   );
 }
 
-const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip }: CoachMarkProps) => {
+const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip, isFinal }: CoachMarkProps) => {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; dotTop: number; dotLeft: number } | null>(null);
+  const [done, setDone] = useState(false);
   const reduceMotion = useReducedMotion();
   const seen = seenCount();
+
+  // On the final beat, "Got it" briefly shows the completion line (rail full)
+  // then dismisses. Reduced-motion (and any earlier beat) dismisses at once.
+  const handleGotIt = () => {
+    if (done) return;
+    if (isFinal && !reduceMotion) {
+      setDone(true);
+      window.setTimeout(onGotIt, COMPLETION_MS);
+      return;
+    }
+    onGotIt();
+  };
 
   // Position below the target (above when near the viewport bottom), clamped
   // to the viewport. Re-measures on resize/scroll so it tracks the anchor.
@@ -70,14 +89,15 @@ const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip }: CoachMarkProps) =
   // trap them). Deferred a tick so the arming tap doesn't instantly dismiss.
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) onGotIt();
+      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) handleGotIt();
     };
     const id = setTimeout(() => document.addEventListener("pointerdown", onPointerDown), 150);
     return () => {
       clearTimeout(id);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [onGotIt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onGotIt, isFinal, done, reduceMotion]);
 
   if (!pos || typeof document === "undefined") return null;
 
@@ -118,13 +138,22 @@ const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip }: CoachMarkProps) =
         }}
       >
         <p style={{ fontSize: "0.9375rem", lineHeight: 1.45, color: "#1A1A1A", marginBottom: 10 }}>
-          {lead && <strong style={{ fontWeight: 600 }}>{lead} </strong>}
-          <span style={{ color: "#555" }}>{body}</span>
+          {done ? (
+            <span style={{ color: "#1A1A1A", fontWeight: 600 }}>{COMPLETION_LINE}</span>
+          ) : (
+            <>
+              {lead && <strong style={{ fontWeight: 600 }}>{lead} </strong>}
+              <span style={{ color: "#555" }}>{body}</span>
+            </>
+          )}
         </p>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Dot rail — the tour's only gamification. Quiet. */}
-          <span aria-label={`Tip ${Math.min(seen + 1, TOUR_STEPS.length)} of ${TOUR_STEPS.length}`} style={{ display: "flex", gap: 4 }}>
+          {/* Dot rail — the tour's only gamification. Fills fully on completion. */}
+          <span
+            aria-label={done ? "Tour complete" : `Tip ${Math.min(seen + 1, TOUR_STEPS.length)} of ${TOUR_STEPS.length}`}
+            style={{ display: "flex", gap: 4 }}
+          >
             {TOUR_STEPS.map((s, i) => (
               <span
                 key={s}
@@ -132,24 +161,28 @@ const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip }: CoachMarkProps) =
                   width: 5,
                   height: 5,
                   borderRadius: 9999,
-                  backgroundColor: i < seen ? GOLD : "rgba(0,0,0,0.12)",
+                  backgroundColor: done || i < seen ? GOLD : "rgba(0,0,0,0.12)",
                 }}
               />
             ))}
           </span>
 
-          <button
-            onClick={onSkip}
-            style={{ marginLeft: "auto", fontSize: "0.75rem", color: "#999", background: "none", border: "none", padding: "8px 4px", cursor: "pointer" }}
-          >
-            Skip tour
-          </button>
-          <button
-            onClick={onGotIt}
-            style={{ fontSize: "0.8125rem", fontWeight: 600, color: GOLD, background: "none", border: "none", padding: "8px 4px", cursor: "pointer" }}
-          >
-            Got it
-          </button>
+          {!done && (
+            <>
+              <button
+                onClick={onSkip}
+                style={{ marginLeft: "auto", fontSize: "0.75rem", color: "#999", background: "none", border: "none", padding: "8px 4px", cursor: "pointer" }}
+              >
+                Skip tour
+              </button>
+              <button
+                onClick={handleGotIt}
+                style={{ fontSize: "0.8125rem", fontWeight: 600, color: GOLD, background: "none", border: "none", padding: "8px 4px", cursor: "pointer" }}
+              >
+                Got it
+              </button>
+            </>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  TOUR_STEPS,
   claimActive,
   isStepPending,
   markSeen,
@@ -69,5 +70,10 @@ export function useCoachMark(step: TourStep, enabled = true) {
     skipTour();
   }, []);
 
-  return { visible, gotIt, skip };
+  // Is this the last registered beat? Computed against TOUR_STEPS so the
+  // completion moment follows whichever beat is currently last — no host
+  // changes when the canvas lane registers more beats.
+  const isFinal = TOUR_STEPS[TOUR_STEPS.length - 1] === step;
+
+  return { visible, gotIt, skip, isFinal };
 }

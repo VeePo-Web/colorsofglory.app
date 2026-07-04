@@ -272,6 +272,7 @@ const BrainstormPage = () => {
             body="One tap records. Your idea is saved the moment you stop."
             onGotIt={captureTour.gotIt}
             onSkip={captureTour.skip}
+            isFinal={captureTour.isFinal}
           />
         )}
 
