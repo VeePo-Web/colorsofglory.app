@@ -2,29 +2,30 @@
  * First-run tour engine — "Show Me Around".
  * See docs/onboarding/first-run-tour-plan.md (Slice 1).
  *
- * Five contextual coach-mark beats on the user's real first song (Logic Pro
+ * A few contextual coach-mark beats on the user's real first song (Logic Pro
  * Quick Help model). This module is the tour's brain: which beats exist,
  * which have been seen, whether the tour was skipped, and the app-wide
  * one-tip-at-a-time lock.
  *
  * Persistence: localStorage (per device). Deliberately NOT wired to
  * profiles.onboarding_step — that column is a monotonic single-step funnel
- * position; these five flags are unordered. When Lovable adds a `tour_steps`
+ * position; these flags are unordered. When Lovable adds a `tour_steps`
  * jsonb column, sync it inside `persist()` below (best-effort, never throw).
  */
 
 /** Kill switch — flip to false to dark-launch the tour system. */
 export const TOUR_ENABLED = true;
 
-// The registry lists exactly the beats that are WIRED to a surface. The dot
-// rail sizes off it, so an unwired beat would leave the rail permanently
-// incomplete (reads as broken) — and safeParse only persists keys listed here.
-// When the canvas lane wires the lyrics + invite beats, register them below so
-// the rail stays honest and the tour still completes.
+// Every registered beat MUST be reliably reachable in a normal first session,
+// or the tour never reaches completion (isTourDone needs them all seen). The
+// spine is therefore the guaranteed path: the catalog on-ramp, then the CANVAS
+// — a song-card tap always opens /songs/:id/canvas, so both canvas beats are
+// certain to be reached. The old brainstorm beats (room/capture) lived on an
+// isolated dead-end surface off this path and stranded the rail, so they were
+// retired; the canvas's own empty-room guide already teaches first capture.
+// The dot rail sizes off this list, and safeParse only persists keys here.
 export const TOUR_STEPS = [
-  "tour_catalog_seen", // SongCatalogPage — the song card
-  "tour_room_seen",    // BrainstormPage — the song header
-  "tour_capture_seen", // BrainstormPage — the record button
+  "tour_catalog_seen", // SongCatalogPage — the song card (on-ramp into the canvas)
   "tour_ideas_seen",   // SongCanvasExperience — the Ideas ⇄ Final nav (two-tree)
   "tour_invite_seen",  // SongCanvasExperience — the Invite button
   // "tour_lyrics_seen", // the sheet editor's lyrics affordance (plan §4)
@@ -75,7 +76,7 @@ function persist(state: TourState): void {
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
-/** Beats seen so far (0–5) — drives the dot rail. */
+/** Beats seen so far — drives the dot rail. */
 export function seenCount(): number {
   return getTourState().seen.length;
 }

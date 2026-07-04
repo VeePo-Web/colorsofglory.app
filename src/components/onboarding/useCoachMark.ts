@@ -15,9 +15,9 @@ const ORIENT_DELAY_MS = 1200;
 /**
  * Wires one tour beat to a surface. Host pages add a target ref + one line:
  *
- *   const capture = useCoachMark("tour_capture_seen");
+ *   const invite = useCoachMark("tour_invite_seen");
  *   ...
- *   {capture.visible && <CoachMark targetRef={recordBtnRef} onGotIt={capture.gotIt} ... />}
+ *   {invite.visible && <CoachMark targetRef={inviteBtnRef} onGotIt={invite.gotIt} ... />}
  *
  * Rules enforced here (see first-run-tour-plan.md):
  *  - arms only after the user has oriented (~1.2s on the surface)
