@@ -89,8 +89,9 @@ const AlbumsShelf = ({
         className="flex gap-3 overflow-x-auto pb-1"
         style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >
-        {/* Ungrouped smart tile — songs not yet filed into any album */}
-        {ungroupedCount > 0 && onSelectUngrouped && (
+        {/* Ungrouped smart tile — only meaningful once at least one album
+            exists (with no albums, every song is "ungrouped" by definition) */}
+        {albums.length > 0 && ungroupedCount > 0 && onSelectUngrouped && (
           <button
             onClick={onSelectUngrouped}
             aria-label={`Ungrouped songs, ${ungroupedCount}`}
@@ -206,6 +207,20 @@ const AlbumsShelf = ({
             New album
           </p>
         </button>
+
+        {/* First-album purpose hint — teach what an album is for at the moment
+            of discovery: grouping the songs of a project you're writing. */}
+        {albums.length === 0 && (
+          <div className="flex h-[88px] max-w-[190px] shrink-0 items-center">
+            <p
+              className="text-[0.8125rem] leading-snug"
+              style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
+            >
+              Group the songs of a project you're writing — a worship EP, a
+              Christmas set.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
