@@ -12,6 +12,12 @@
     <link rel="canonical" href="https://colorsofglory.app/" />
     <meta name="google-site-verification" content="K0npeVAjDFEzl-7SRAbfAdVSBMlpu9-d01QLe5iTjxA" />
 
+    <!-- Warm the Stripe connection ahead of checkout so the embedded payment
+         surface appears without a cold DNS+TLS handshake — instant to checkout.
+         dns-prefetch is the fallback for browsers that ignore preconnect. -->
+    <link rel="preconnect" href="https://js.stripe.com" crossorigin />
+    <link rel="dns-prefetch" href="https://js.stripe.com" />
+
     <meta name="theme-color" content="#F5F0E8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

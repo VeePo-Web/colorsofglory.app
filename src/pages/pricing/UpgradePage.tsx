@@ -6,6 +6,7 @@ import GoldButton from "@/components/cog/GoldButton";
 import BackHeader from "@/components/cog/BackHeader";
 import BottomNav from "@/components/cog/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
+import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 import {
   buildEmbeddedCheckoutReturnUrl,
   createCheckoutSession,
@@ -291,6 +292,14 @@ const UpgradePage = () => {
 
   useEffect(() => {
     setStoredRefCode(sessionStorage.getItem("cog:referral-code"));
+  }, []);
+
+  // Warm the embedded-checkout chunk (Stripe UI) while the songwriter reads the
+  // pricing, so picking a plan opens the payment surface instantly instead of
+  // waiting on a chunk download at the moment of intent. Same import as the
+  // lazy() below — Vite dedupes; paired with the Stripe preconnect in index.html.
+  useEffect(() => {
+    preloadOnIdle(() => import("@/components/pricing/CheckoutModal"));
   }, []);
 
   // Load data
