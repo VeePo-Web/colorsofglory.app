@@ -29,10 +29,13 @@ import type { PendingBlock } from "./CaptureSheet";
 // — the primary "/" surface stays instant. Preloaded on idle (below) so the
 // first side-rail tap is warm.
 const CaptureSheet = lazy(() => import("./CaptureSheet"));
-import ReviewSheet from "./ReviewSheet";
+// ReviewSheet (pulls in the canvas-commit path) and CommitRibbon only appear
+// AFTER a recording stops / commits — never on first paint — so they're split
+// out of the entry chunk too, streamed after mount and warmed on idle.
+const ReviewSheet = lazy(() => import("./ReviewSheet"));
+const CommitRibbon = lazy(() => import("./CommitRibbon"));
 import ImportMemoButton from "./ImportMemoButton";
 import LatestPeekStrip from "./LatestPeekStrip";
-import CommitRibbon from "./CommitRibbon";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
@@ -460,9 +463,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   useEffect(() => {
     preloadOnIdle(
       () => import("@/pages/SongCatalogPage"),
-      // Warm the side-rail sheet chunk while idle so its first tap is instant,
-      // even though it's split out of the entry chunk for a faster first paint.
+      // Warm the split capture surfaces while idle so they're instant when
+      // needed, even though they're out of the entry chunk for a faster first
+      // paint. ReviewSheet especially — it's needed the moment a take stops.
       () => import("./CaptureSheet"),
+      () => import("./ReviewSheet"),
+      () => import("./CommitRibbon"),
     );
   }, []);
 
@@ -717,30 +723,34 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         />
       </Suspense>
 
-      <ReviewSheet
-        open={review.open}
-        takeId={review.takeId}
-        songId={review.songId}
-        songTitle={review.songTitle}
-        storagePath={review.storagePath}
-        durationMs={review.durationMs}
-        pendingBlocks={pendingBlocks}
-        onClose={handleReviewClose}
-        onCommitted={handleReviewCommitted}
-      />
+      <Suspense fallback={null}>
+        <ReviewSheet
+          open={review.open}
+          takeId={review.takeId}
+          songId={review.songId}
+          songTitle={review.songTitle}
+          storagePath={review.storagePath}
+          durationMs={review.durationMs}
+          pendingBlocks={pendingBlocks}
+          onClose={handleReviewClose}
+          onCommitted={handleReviewCommitted}
+        />
+      </Suspense>
 
-      <CommitRibbon
-        open={ribbon.open}
-        blockCount={ribbon.blockCount}
-        songTitle={ribbon.songTitle}
-        onOpenCanvas={() => {
-          if (ribbon.songId) {
-            navigate(`/songs/${ribbon.songId}/canvas?from=capture`);
-          }
-          setRibbon((r) => ({ ...r, open: false }));
-        }}
-        onDismiss={() => setRibbon((r) => ({ ...r, open: false }))}
-      />
+      <Suspense fallback={null}>
+        <CommitRibbon
+          open={ribbon.open}
+          blockCount={ribbon.blockCount}
+          songTitle={ribbon.songTitle}
+          onOpenCanvas={() => {
+            if (ribbon.songId) {
+              navigate(`/songs/${ribbon.songId}/canvas?from=capture`);
+            }
+            setRibbon((r) => ({ ...r, open: false }));
+          }}
+          onDismiss={() => setRibbon((r) => ({ ...r, open: false }))}
+        />
+      </Suspense>
     </div>
   );
 };
