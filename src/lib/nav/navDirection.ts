@@ -58,9 +58,17 @@ function directionBetween(prev: string | null, next: string): NavDirection {
   if (!prev || prev === next) return "none";
   const a = coordFor(prev);
   const b = coordFor(next);
-  // Returning up from a detail surface: the peer resurfaces — keep it gentle,
-  // no sideways lie (there is no clean "from above" entrance).
-  if (b.depth < a.depth) return "none";
+  // Resurfacing from a detail surface (browser/hardware back, iOS edge-back).
+  // If the destination sits in a different horizontal lane — e.g. the library,
+  // which lives to the LEFT — slide it in from that side so hardware back
+  // matches the in-app back (Songs always enters from the left). A pure
+  // depth-decrease with no lane change stays a calm fade: there is no clean
+  // "from above" entrance to fake.
+  if (b.depth < a.depth) {
+    if (b.x < a.x) return "left";
+    if (b.x > a.x) return "right";
+    return "none";
+  }
   // Going deeper is handled by the explicit "up" on forward taps; a bare
   // deepening with no declaration stays calm.
   if (b.depth > a.depth) return "up";
