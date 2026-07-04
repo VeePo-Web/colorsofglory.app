@@ -53,7 +53,11 @@ const RecordingSheet = ({
   return (
     <CaptureSheetShell
       ariaLabel={isDenied ? "Microphone permission required" : "Recording in progress"}
-      onBackdropClick={onCancel}
+      // NEVER let a stray tap on the scrim discard a live take — that would lose
+      // a captured idea, the one thing capture must never do. During recording /
+      // stopping the only exit is the Stop button, which SAVES. Backdrop-cancel is
+      // allowed only in the permission-denied state, where there's nothing to lose.
+      onBackdropClick={isDenied ? onCancel : undefined}
       minHeight={340}
       liveStatus={liveStatus}
     >
