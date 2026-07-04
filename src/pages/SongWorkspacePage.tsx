@@ -60,8 +60,16 @@ const SongWorkspacePage = () => {
 
   // Depth surface: the room rose from the catalog, so paging back is a
   // rightward swipe (mid-screen — the browser keeps its own edge gesture).
+  // Declare "left" so the library slides in FROM THE LEFT — the same entrance
+  // it has coming from Capture. Songs always lives on the left, so it always
+  // enters from the left: one consistent geography, and the right-swipe now
+  // produces rightward motion instead of a dead-stop fade. Covers both the
+  // gesture and the header back-chevron (both call backToSongs).
   const roomRef = useRef<HTMLDivElement>(null);
-  const backToSongs = useCallback(() => navigate("/songs"), [navigate]);
+  const backToSongs = useCallback(() => {
+    setNavDirection("left");
+    navigate("/songs");
+  }, [navigate]);
   useSwipeNav(roomRef, { onSwipeRight: backToSongs });
   const enterClass = useSpatialEntrance(useLocation().pathname);
 
