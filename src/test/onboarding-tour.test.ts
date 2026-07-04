@@ -41,10 +41,10 @@ describe("tour state", () => {
     expect(seenCount()).toBe(1);
   });
 
-  it("completes exactly once, on the fifth beat", () => {
+  it("completes exactly once, on the last registered beat", () => {
     const completions = TOUR_STEPS.map((s) => markSeen(s));
     expect(completions.filter(Boolean)).toHaveLength(1);
-    expect(completions[completions.length - 1]).toBe(true); // the 5th
+    expect(completions[completions.length - 1]).toBe(true); // the final beat
     expect(isTourDone()).toBe(true);
     for (const step of TOUR_STEPS) expect(isStepPending(step)).toBe(false);
   });

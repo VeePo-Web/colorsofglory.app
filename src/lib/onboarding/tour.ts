@@ -16,12 +16,17 @@
 /** Kill switch — flip to false to dark-launch the tour system. */
 export const TOUR_ENABLED = true;
 
+// The registry lists exactly the beats that are WIRED to a surface. The dot
+// rail sizes off it, so an unwired beat would leave the rail permanently
+// incomplete (reads as broken) — and safeParse only persists keys listed here.
+// When the canvas lane wires the lyrics + invite beats, register them below so
+// the rail stays honest and the tour still completes.
 export const TOUR_STEPS = [
-  "tour_catalog_seen",
-  "tour_room_seen",
-  "tour_capture_seen",
-  "tour_lyrics_seen",
-  "tour_invite_seen",
+  "tour_catalog_seen", // SongCatalogPage — the song card
+  "tour_room_seen",    // BrainstormPage — the song header
+  "tour_capture_seen", // BrainstormPage — the record button
+  // "tour_lyrics_seen",  // canvas lane — the lyrics affordance (plan §4)
+  // "tour_invite_seen",  // canvas lane — the invite/People affordance (plan §4)
 ] as const;
 
 export type TourStep = (typeof TOUR_STEPS)[number];

@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import CoachMark from "@/components/onboarding/CoachMark";
+import { TOUR_STEPS } from "@/lib/onboarding/tour";
 
 // The visual/interaction half of the tour engine (the state machine is covered
 // by onboarding-tour.test.ts). Verifies the coach mark renders its copy + dot
@@ -34,8 +35,9 @@ describe("CoachMark", () => {
     render(<Harness />);
     expect(screen.getByText("This is your song's room.")).toBeInTheDocument();
     expect(screen.getByText(/Everything for it lives inside/)).toBeInTheDocument();
-    // Dot rail is the tour's only gamification — 5 beats, none seen yet.
-    expect(screen.getByLabelText("Tip 1 of 5")).toBeInTheDocument();
+    // Dot rail is the tour's only gamification — sized to the live registry,
+    // none seen yet. It must complete, so it tracks TOUR_STEPS, not a constant.
+    expect(screen.getByLabelText(`Tip 1 of ${TOUR_STEPS.length}`)).toBeInTheDocument();
   });
 
   it("fires onGotIt from the Got it button", () => {
