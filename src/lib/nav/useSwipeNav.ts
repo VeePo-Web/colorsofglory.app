@@ -165,6 +165,16 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     el.addEventListener("touchcancel", onTouchCancel, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
+      // If we're torn down mid-drag (disabled flipped, a sheet opened, the
+      // callbacks changed identity), never leave the surface frozen offset —
+      // reset the inline styles we applied. Only when actually locked, so an
+      // idle re-run never clobbers the className entrance animation.
+      if (locked) {
+        el.style.transform = "";
+        el.style.transition = "";
+        el.style.willChange = "";
+        el.style.animation = "";
+      }
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
