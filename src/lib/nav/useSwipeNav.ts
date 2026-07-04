@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from "react";
+import { SWIPE, decideSwipe } from "./swipeDecision";
 
 interface SwipeNavOptions {
   /** Finger moved right (revealing the surface to the LEFT). */
@@ -9,13 +10,9 @@ interface SwipeNavOptions {
   disabled?: boolean;
 }
 
-const EDGE_GUARD_PX = 44;   // leave the screen edges to iOS Safari's own back/forward swipe
-const INTENT_PX = 14;       // horizontal travel before the drag "locks" and starts tracking
-const TRIGGER_PX = 64;      // horizontal travel required to commit on a slow drag
-const MIN_FLICK_PX = 24;    // a fast flick still needs this much travel (vs a tap jitter)
-const FLICK_VELOCITY = 0.4; // px/ms at release that commits a short quick flick (~native)
-const AXIS_RATIO = 1.6;     // horizontal must dominate vertical by this factor
-const RESIST = 0.22;        // damping when dragging toward a direction with no destination
+// Single source of truth for the tuning constants (shared with the tested
+// decision logic in swipeDecision.ts).
+const { EDGE_GUARD_PX, INTENT_PX, TRIGGER_PX, AXIS_RATIO, RESIST } = SWIPE;
 
 /**
  * useSwipeNav — spatial paging gesture between peer surfaces.
@@ -184,20 +181,18 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       const ref = history[0];
       const dt = ref ? now() - ref.t : 0;
       const velocity = ref && dt > 0 && dt < 200 ? (t.clientX - ref.x) / dt : 0;
-      const axisOk = Math.abs(dx) >= Math.abs(dy) * AXIS_RATIO;
-      const farEnough = Math.abs(dx) >= TRIGGER_PX;
-      const flicked = Math.abs(dx) >= MIN_FLICK_PX && Math.abs(velocity) >= FLICK_VELOCITY
-        && Math.sign(velocity) === Math.sign(dx);
-      const valid =
-        (farEnough || flicked) &&
-        axisOk &&
-        (dx > 0 ? !!onSwipeRight : !!onSwipeLeft);
-      releaseVisual(!valid);
-      if (!valid) return;
+      // Commit decision lives in swipeDecision.ts (pure + unit-tested).
+      const dir = decideSwipe({
+        dx, dy, velocity,
+        hasLeft: !!onSwipeLeft,
+        hasRight: !!onSwipeRight,
+      });
+      releaseVisual(dir === null);
+      if (!dir) return;
       // A single soft tick confirms the page turn (Android-only enhancement —
       // iOS has no vibrate API; the visual slide carries the confirmation).
       try { navigator.vibrate?.(8); } catch { /* never let a nicety throw */ }
-      if (dx > 0) onSwipeRight?.();
+      if (dir === "right") onSwipeRight?.();
       else onSwipeLeft?.();
     };
 
