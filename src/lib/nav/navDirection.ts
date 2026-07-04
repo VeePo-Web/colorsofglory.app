@@ -47,14 +47,14 @@ export function entranceClass(dir: NavDirection): string {
 /** Spatial coordinate of a surface: x = left/right lane, depth = detail level. */
 interface Coord { x: number; depth: number }
 
-function coordFor(pathname: string): Coord {
+export function coordFor(pathname: string): Coord {
   if (pathname === "/songs") return { x: -1, depth: 0 };       // library, left of the mic
   if (pathname !== "/songs" && /^\/songs\/[^/]+/.test(pathname)) return { x: 0, depth: 1 }; // a song's surfaces
   return { x: 0, depth: 0 };                                    // Capture (home) and peers
 }
 
 /** Direction to animate the arriving surface, from prev → next coordinates. */
-function directionBetween(prev: string | null, next: string): NavDirection {
+export function directionBetween(prev: string | null, next: string): NavDirection {
   if (!prev || prev === next) return "none";
   const a = coordFor(prev);
   const b = coordFor(next);
