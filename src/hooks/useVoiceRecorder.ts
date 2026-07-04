@@ -163,8 +163,6 @@ export function useVoiceRecorder(
     chunksRef.current = [];
   }, []);
 
-  // Tear down any live capture if the component using this hook unmounts.
-  useEffect(() => cleanup, [cleanup]);
 
   /**
    * Stop the active recorder for a reason the UI did not explicitly request
@@ -188,6 +186,26 @@ export function useVoiceRecorder(
       /* already inactive */
     }
   }, []);
+
+  // Salvage on unmount. If the component using this hook unmounts mid-record —
+  // a client-side route change, an OS back-swipe — the take must NOT be silently
+  // discarded. Route it through the same auto-finalize salvage path used for
+  // interruptions (autoStop → onstop → onAutoFinalize persists it durably, then
+  // releases the mic). Only run the destructive cleanup when there is genuinely
+  // nothing live to save, and never yank chunks/tracks out from under a stop
+  // that is already finalizing.
+  useEffect(() => {
+    return () => {
+      if (resolveStopRef.current) return; // a manual stop owns finalize + cleanup
+      const rec = mediaRecorderRef.current;
+      if (rec) {
+        if (rec.state === "recording") autoStop("interrupted");
+        // else: a stop is already in flight; its onstop owns finalize + cleanup.
+        return;
+      }
+      cleanup(); // no live recorder — release any stray stream / audio context
+    };
+  }, [cleanup, autoStop]);
 
   // Mobile reality: when the tab is hidden or the app is backgrounded, iOS
   // suspends the recorder and the tail is lost. Salvage the take on the way out
