@@ -258,9 +258,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       setStatus("idle");
       return;
     }
-    // Live STT is an enhancement. Let MediaRecorder own the mic first so a
-    // speech-recognition permission/session cannot masquerade as recording.
-    if (live.supported) live.start();
+    // Live STT is a pure enhancement. Let MediaRecorder own the mic first so a
+    // speech-recognition permission/session cannot masquerade as recording — and
+    // never let a SpeechRecognition throw (e.g. "already started") reject this
+    // handler or disturb the recording that just began.
+    if (live.supported) {
+      try {
+        live.start();
+      } catch {
+        /* recognition is optional; the take keeps recording regardless */
+      }
+    }
   }, [phase, recorder, saving, live, handleAudioFile]);
 
   const handleRailAction = useCallback(
