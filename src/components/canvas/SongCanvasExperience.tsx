@@ -1419,7 +1419,7 @@ const SongCanvasExperience = () => {
       >
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/songs")}
           className="flex min-h-11 items-center gap-1.5 rounded-full px-1 text-sm transition-opacity hover:opacity-70 active:scale-[0.97]"
           style={{ color: "var(--cog-warm-gray)", flexShrink: 0 }}
           aria-label="Back to songs"
