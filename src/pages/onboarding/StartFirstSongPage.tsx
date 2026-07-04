@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
@@ -34,8 +34,16 @@ const StartFirstSongPage = () => {
   const [bpm, setBpm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Idempotency guard: reachable from both the button tap and Enter, so a
+  // double-tap (or tap+Enter) in the same tick could otherwise fire two
+  // inserts and create TWO first songs — one silently eating the free-song
+  // limit on the user's very first action. A ref blocks it synchronously
+  // (state wouldn't update in time). Reset only on the retryable paths.
+  const submittingRef = useRef(false);
 
   const handleCreate = async (mode: "create" | "skip") => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     const songTitle = mode === "skip" || !title.trim() ? "Untitled Song" : title.trim();
     setIsSubmitting(true);
     setError(null);
@@ -89,6 +97,7 @@ const StartFirstSongPage = () => {
         console.error("[StartFirstSong] song creation failed:", err);
         setError("We couldn't create your song just now. Please try again.");
         setIsSubmitting(false);
+        submittingRef.current = false; // allow retry
       }
       return;
     }
@@ -97,6 +106,7 @@ const StartFirstSongPage = () => {
     setSong({ id: "1", title: songTitle, key: key || null, bpm: bpm || null });
     sessionStorage.setItem("cog:first-song", JSON.stringify({ id: "1", title: songTitle, key, bpm }));
     setIsSubmitting(false);
+    submittingRef.current = false;
     navigate("/songs/1?first=1");
   };
 

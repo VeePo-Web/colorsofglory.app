@@ -10,6 +10,7 @@ const navigate = vi.fn();
 const getUser = vi.fn();
 const setSong = vi.fn();
 const updateOnboardingStep = vi.fn((_s: string) => Promise.resolve());
+const songsInsert = vi.fn();
 let songResult: { data: { id: string; title: string } | null; error: { message: string } | null };
 
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -21,10 +22,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: { getUser: () => getUser() },
     from: (table: string) => ({
-      insert: (_payload: unknown) =>
-        table === "songs"
-          ? { select: () => ({ single: () => Promise.resolve(songResult) }) }
-          : Promise.resolve({ error: null }),
+      insert: (_payload: unknown) => {
+        if (table === "songs") {
+          songsInsert();
+          return { select: () => ({ single: () => Promise.resolve(songResult) }) };
+        }
+        return Promise.resolve({ error: null });
+      },
       update: () => ({ eq: () => Promise.resolve({ error: null }) }),
     }),
   },
@@ -62,6 +66,33 @@ describe("StartFirstSongPage — first song creation", () => {
     clickCreate();
     expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't create your song/i);
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("creates only ONE song on a rapid double-tap of Create", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    render(<StartFirstSongPage />);
+    typeTitle("My Song");
+    // Same button element, two quick taps — the second must not create a
+    // second song (submittingRef guard + the loading-disabled button).
+    const btn = screen.getByRole("button", { name: /create song/i });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9?first=1"));
+    expect(songsInsert).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire a second insert from Enter after Create was tapped", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+    render(<StartFirstSongPage />);
+    const input = screen.getByLabelText("Song title");
+    fireEvent.change(input, { target: { value: "My Song" } });
+    fireEvent.click(screen.getByRole("button", { name: /create song/i }));
+    // Enter on the title bypasses the disabled button — the ref guard is what
+    // stops it from starting a second creation.
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9?first=1"));
+    expect(songsInsert).toHaveBeenCalledTimes(1);
   });
 
   it("uses the demo fallback only when there is genuinely no session", async () => {
