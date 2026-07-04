@@ -36,6 +36,9 @@ export default function AlbumPracticeExperience() {
 
   useEffect(() => {
     if (!albumId) return;
+    // Re-expanded from the mini-player while this album is already live — keep
+    // the running session (stats, position, loop counts) instead of resetting.
+    if (state.songId === sessionKey && state.status !== "idle") return;
     let cancelled = false;
 
     (async () => {

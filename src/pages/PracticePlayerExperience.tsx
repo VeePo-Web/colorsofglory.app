@@ -32,6 +32,9 @@ export default function PracticePlayerPage() {
   // Init on mount — sections come from navigation state or we derive from route
   useEffect(() => {
     if (!songId) return;
+    // Re-expanded from the mini-player while this song is already live — keep
+    // the running session instead of resetting its stats and position.
+    if (state.songId === songId && state.status !== "idle") return;
 
     // Navigation state injected by SongCanvasExperience (or CapturePage)
     const navState = (window.history.state?.usr ?? {}) as {

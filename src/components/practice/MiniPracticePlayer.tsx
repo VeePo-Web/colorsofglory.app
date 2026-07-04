@@ -21,13 +21,16 @@ export function MiniPracticePlayer() {
   const colors = activeSection ? getSectionColor(activeSection.label) : getSectionColor("");
   const isPlaying = status === "playing";
 
+  // An album session is keyed `album:<id>` — it must reopen on the album route,
+  // not `/songs/album:<id>/practice` (which would dead-end). Song sessions
+  // carry their sections in nav state so expand is instant.
+  const isAlbum = songId.startsWith("album:");
   const handleBarClick = () => {
-    navigate(`/songs/${songId}/practice`, {
-      state: {
-        songTitle,
-        sections,
-      },
-    });
+    if (isAlbum) {
+      navigate(`/albums/${songId.slice("album:".length)}/practice`);
+    } else {
+      navigate(`/songs/${songId}/practice`, { state: { songTitle, sections } });
+    }
   };
 
   return (
@@ -56,20 +59,39 @@ export function MiniPracticePlayer() {
           style={{ width: 8, height: 8, backgroundColor: colors.bg }}
         />
 
-        {/* Section label */}
+        {/* Section label — prefixed with the song in album mode so a driver
+            glancing down always knows which song is looping. */}
         <span
+          className="min-w-0 flex-1"
           style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            color: "var(--cog-charcoal)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
-            flex: 1,
           }}
         >
-          {activeSection?.label ?? "Practice"}
+          {activeSection?.songTitle && (
+            <span
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: "0.875rem",
+                fontWeight: 700,
+                color: "var(--cog-gold)",
+              }}
+            >
+              {activeSection.songTitle}
+              <span style={{ color: "var(--cog-muted)", fontWeight: 500 }}>{"  ·  "}</span>
+            </span>
+          )}
+          <span
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "var(--cog-charcoal)",
+            }}
+          >
+            {activeSection?.label ?? "Practice"}
+          </span>
         </span>
 
         {/* Loop counter */}
