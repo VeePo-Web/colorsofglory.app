@@ -1,4 +1,4 @@
-import { Mic, Pin } from "lucide-react";
+import { Mic, Pin, Check } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import { relativeDate, coverColor } from "@/lib/library/format";
 import { songStatusChip } from "@/lib/library/songStatus";
@@ -14,6 +14,9 @@ interface SongGridCardProps {
   onLongPress?: () => void;
   /** Held at the top of the library (Apple Notes). */
   pinned?: boolean;
+  /** Batch-select mode active (Apple Photos): tap toggles instead of opens. */
+  selecting?: boolean;
+  selected?: boolean;
 }
 
 /**
@@ -21,20 +24,50 @@ interface SongGridCardProps {
  * Two densities: comfortable (2-across) shows the full room; compact
  * (3-across) keeps title + ideas so more of the catalog fits one glance.
  */
-const SongGridCard = ({ song, compact = false, onClick, onLongPress, pinned = false }: SongGridCardProps) => (
+const SongGridCard = ({
+  song,
+  compact = false,
+  onClick,
+  onLongPress,
+  pinned = false,
+  selecting = false,
+  selected = false,
+}: SongGridCardProps) => (
   <button
     onClick={onClick}
-    {...useLongPress(onLongPress)}
-    aria-label={`Open ${song.title}, ${song.voice_memo_count} ${
-      song.voice_memo_count === 1 ? "idea" : "ideas"
-    }, last edited ${relativeDate(song.last_activity_at)}`}
-    className="group text-left w-full select-none rounded-2xl flex flex-col justify-between bg-white border border-[var(--cog-border)] shadow-[0_2px_8px_rgba(28,26,23,0.06)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-1 hover:border-[var(--cog-border-gold)] hover:shadow-[0_16px_32px_-16px_rgba(184,149,58,0.32)] active:scale-[0.97]"
+    {...(selecting ? {} : useLongPress(onLongPress))}
+    aria-label={
+      selecting
+        ? `${selected ? "Deselect" : "Select"} ${song.title}`
+        : `Open ${song.title}, ${song.voice_memo_count} ${
+            song.voice_memo_count === 1 ? "idea" : "ideas"
+          }, last edited ${relativeDate(song.last_activity_at)}`
+    }
+    aria-pressed={selecting ? selected : undefined}
+    className="group relative text-left w-full select-none rounded-2xl flex flex-col justify-between bg-white border border-[var(--cog-border)] shadow-[0_2px_8px_rgba(28,26,23,0.06)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-1 hover:border-[var(--cog-border-gold)] hover:shadow-[0_16px_32px_-16px_rgba(184,149,58,0.32)] active:scale-[0.97]"
     style={{
       minHeight: compact ? 104 : 140,
       padding: compact ? 12 : 16,
       WebkitTouchCallout: "none",
+      // Selected ring overrides the border utility while batch-selecting.
+      ...(selected ? { border: "1.5px solid var(--cog-gold)" } : null),
     }}
   >
+    {selecting && (
+      <span
+        aria-hidden
+        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded-full transition-all duration-150"
+        style={{
+          width: 22,
+          height: 22,
+          backgroundColor: selected ? "var(--cog-gold)" : "rgba(255,255,255,0.9)",
+          border: selected ? "none" : "1.5px solid var(--cog-muted)",
+          boxShadow: "0 1px 3px rgba(28,26,23,0.15)",
+        }}
+      >
+        {selected && <Check size={13} strokeWidth={3} color="white" />}
+      </span>
+    )}
     <div className="w-full">
       {/* Cover swatch + calm status chip (PV11: Active · Collaborating · Draft) */}
       <div className="mb-2.5 flex w-full items-start justify-between">
@@ -48,7 +81,7 @@ const SongGridCard = ({ song, compact = false, onClick, onLongPress, pinned = fa
             border: "1px solid var(--cog-border)",
           }}
         />
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5" style={{ opacity: selecting ? 0 : 1 }}>
           {pinned && (
             <Pin
               size={compact ? 10 : 12}

@@ -16,6 +16,8 @@ import ContinueShelf from "@/components/library/ContinueShelf";
 import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
+import SelectionBar from "@/components/library/SelectionBar";
+import BatchAlbumSheet from "@/components/library/BatchAlbumSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { listAlbums, createAlbum, updateAlbum, deleteAlbum, reorderAlbums, type SongAlbum } from "@/lib/library/albums";
 import { loadPins, togglePin, MAX_PINS } from "@/lib/library/pins";
@@ -74,6 +76,11 @@ const SongCatalogPage = () => {
   const [actionsSong, setActionsSong] = useState<SongRow | null>(null);
   const [pins, setPins] = useState<string[]>(() => loadPins());
   const pinnedIds = useMemo(() => new Set(pins), [pins]);
+
+  // Batch select (Apple Photos): entered from a song's press-and-hold sheet.
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchAlbumOpen, setBatchAlbumOpen] = useState(false);
 
   const updatePrefs = (changes: Partial<LibraryPrefs>) =>
     setPrefs((prev) => {
@@ -220,6 +227,76 @@ const SongCatalogPage = () => {
     Owned: ownedSongs.length,
     Invited: songs.filter((s) => s.my_role !== "owner" && s.status !== "archived").length,
     Archived: songs.filter((s) => s.status === "archived").length,
+  };
+
+  // ── Batch select ────────────────────────────────────────────────────────
+  const enterSelect = (seedId: string) => {
+    setActionsSong(null);
+    setSelectedIds(new Set([seedId]));
+    setSelecting(true);
+  };
+
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelectedIds(new Set());
+    setBatchAlbumOpen(false);
+  };
+
+  const toggleSelect = (song: SongRow) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(song.id)) next.delete(song.id);
+      else next.add(song.id);
+      return next;
+    });
+
+  const allVisibleSelected =
+    visibleSongs.length > 0 && visibleSongs.every((s) => selectedIds.has(s.id));
+
+  const toggleSelectAll = () =>
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleSongs.map((s) => s.id)));
+
+  const batchAddToAlbum = (albumId: string) => {
+    const album = albums.find((a) => a.id === albumId);
+    if (!album) return;
+    const merged = Array.from(new Set([...album.songIds, ...selectedIds]));
+    setAlbums(updateAlbum(albumId, { songIds: merged }));
+    setBatchAlbumOpen(false);
+    toast(`Added ${selectedIds.size} to ${album.name}`);
+    exitSelect();
+  };
+
+  // Archive/restore every selected song at once — optimistic, reversible.
+  const batchSetStatus = async (archived: boolean) => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const prev = songs;
+    const status = (archived ? "archived" : "active") as SongRow["status"];
+    setSongs((s) => s.map((x) => (selectedIds.has(x.id) ? { ...x, status } : x)));
+    exitSelect();
+    try {
+      await Promise.all(ids.map((id) => (archived ? archiveSong(id) : unarchiveSong(id))));
+      toast(
+        archived
+          ? `${ids.length} songs archived — safe in the Archived tab`
+          : `${ids.length} songs restored`,
+        archived
+          ? {
+              duration: 6000,
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  setSongs((s) => s.map((x) => (ids.includes(x.id) ? { ...x, status: "active" as SongRow["status"] } : x)));
+                  void Promise.all(ids.map((id) => unarchiveSong(id).catch(() => {})));
+                },
+              },
+            }
+          : undefined,
+      );
+    } catch {
+      setSongs(prev);
+      toast.error("Some songs couldn't be updated");
+    }
   };
 
   const handleCreateSong = async () => {
@@ -379,24 +456,51 @@ const SongCatalogPage = () => {
           <EmptyLibraryHero onStart={handleCreateSong} checking={isCheckingCreate} />
         ) : (
         <>
-        <LibraryControls
-          query={query}
-          onQueryChange={setQuery}
-          sort={prefs.sort}
-          onSortChange={(sort) => updatePrefs({ sort })}
-          view={prefs.view}
-          density={prefs.density}
-          onViewCycle={cycleView}
-        />
+        {/* Selection header — Apple Photos: count on the left, Select all + Done */}
+        {selecting ? (
+          <div className="mb-4 flex items-center justify-between">
+            <button
+              onClick={toggleSelectAll}
+              className="text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+              style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+            >
+              {allVisibleSelected ? "Deselect all" : "Select all"}
+            </button>
+            <span
+              className="text-[0.9375rem] font-bold"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}
+              aria-live="polite"
+            >
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={exitSelect}
+              className="text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+              style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+          <LibraryControls
+            query={query}
+            onQueryChange={setQuery}
+            sort={prefs.sort}
+            onSortChange={(sort) => updatePrefs({ sort })}
+            view={prefs.view}
+            density={prefs.density}
+            onViewCycle={cycleView}
+          />
+        )}
 
-        {continueSong && (
+        {!selecting && continueSong && (
           <ContinueShelf
             song={continueSong}
             onOpen={() => { setNavDirection("up"); navigate(resumePathFor(continueSong.id) ?? `/songs/${continueSong.id}/brainstorm`); }}
           />
         )}
 
-        {activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
+        {!selecting && activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
           <AlbumsShelf
             albums={albums}
             songs={ownedSongs}
@@ -431,6 +535,9 @@ const SongCatalogPage = () => {
           pinnedIds={pinnedIds}
           monthSections={activeTab === "Archived"}
           onSearchMemory={() => navigate("/memory")}
+          selecting={selecting}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
         </div>
         </>
@@ -448,25 +555,52 @@ const SongCatalogPage = () => {
       </div>
 
       {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
-          raised center capture mic (one action never sits on another). */}
-      <button
-        onClick={handleCreateSong}
-        disabled={isCheckingCreate}
-        aria-busy={isCheckingCreate}
-        className="fixed flex items-center justify-center gap-2 px-5 rounded-full font-semibold text-white bg-[var(--cog-gold)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--cog-gold-light)] active:scale-95 disabled:opacity-80"
-        style={{
-          bottom: 96,
-          right: 16,
-          minHeight: 48,
-          boxShadow: "0 8px 22px -6px rgba(184,149,58,0.5)",
-          fontFamily: "var(--font-body)",
-          fontSize: "0.9375rem",
-          zIndex: 450,
-        }}
-      >
-        <Plus size={17} strokeWidth={2.5} />
-        {isCheckingCreate ? "Checking..." : "New song"}
-      </button>
+          raised center capture mic (one action never sits on another). Hidden
+          while batch-selecting so the selection bar owns the bottom zone. */}
+      {!selecting && (
+        <button
+          onClick={handleCreateSong}
+          disabled={isCheckingCreate}
+          aria-busy={isCheckingCreate}
+          className="fixed flex items-center justify-center gap-2 px-5 rounded-full font-semibold text-white bg-[var(--cog-gold)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--cog-gold-light)] active:scale-95 disabled:opacity-80"
+          style={{
+            bottom: 96,
+            right: 16,
+            minHeight: 48,
+            boxShadow: "0 8px 22px -6px rgba(184,149,58,0.5)",
+            fontFamily: "var(--font-body)",
+            fontSize: "0.9375rem",
+            zIndex: 450,
+          }}
+        >
+          <Plus size={17} strokeWidth={2.5} />
+          {isCheckingCreate ? "Checking..." : "New song"}
+        </button>
+      )}
+
+      {selecting && (
+        <SelectionBar
+          count={selectedIds.size}
+          archivedTab={activeTab === "Archived"}
+          onAddToAlbum={() => setBatchAlbumOpen(true)}
+          onArchive={() => batchSetStatus(true)}
+          onRestore={() => batchSetStatus(false)}
+        />
+      )}
+
+      {batchAlbumOpen && (
+        <BatchAlbumSheet
+          count={selectedIds.size}
+          albums={albums}
+          onPick={batchAddToAlbum}
+          onNewAlbum={() => {
+            setBatchAlbumOpen(false);
+            setAlbumSheet({ open: true, album: null, initialSongIds: [...selectedIds] });
+            exitSelect();
+          }}
+          onClose={() => setBatchAlbumOpen(false)}
+        />
+      )}
 
       <BottomNav active="songs" />
 
@@ -505,6 +639,7 @@ const SongCatalogPage = () => {
           }}
           pinned={pinnedIds.has(actionsSong.id)}
           onTogglePin={() => handleTogglePin(actionsSong.id)}
+          onSelectMode={() => enterSelect(actionsSong.id)}
           onArchive={() => setSongStatus(actionsSong, true)}
           onUnarchive={() => setSongStatus(actionsSong, false)}
           onClose={() => setActionsSong(null)}

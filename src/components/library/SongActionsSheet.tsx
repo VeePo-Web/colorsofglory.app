@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, GitBranch, FileText, Mic, Pin, PinOff } from "lucide-react";
+import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, GitBranch, FileText, Mic, Pin, PinOff, ListChecks } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -14,6 +14,8 @@ interface SongActionsSheetProps {
   onQuickRoute: (surface: "canvas" | "sheet" | "voice") => void;
   pinned: boolean;
   onTogglePin: () => void;
+  /** Enter Apple-Photos batch select, pre-seeded with this song. */
+  onSelectMode: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
   onClose: () => void;
@@ -33,6 +35,7 @@ const SongActionsSheet = ({
   onQuickRoute,
   pinned,
   onTogglePin,
+  onSelectMode,
   onArchive,
   onUnarchive,
   onClose,
@@ -229,8 +232,19 @@ const SongActionsSheet = ({
             </>
           )}
 
-          {/* Archive / Restore — never Delete */}
+          {/* Select many — Apple Photos batch mode, seeded with this song */}
           <div className="mx-3 my-2" style={{ borderTop: "1px solid var(--cog-border)" }} />
+          <button onClick={onSelectMode} className={rowClass} style={{ minHeight: 52 }}>
+            <ListChecks size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
+            <span
+              className="flex-1 text-[0.9375rem]"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+            >
+              Select songs
+            </span>
+          </button>
+
+          {/* Archive / Restore — never Delete */}
           <button onClick={archived ? onUnarchive : onArchive} className={rowClass} style={{ minHeight: 52 }}>
             {archived ? (
               <ArchiveRestore size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />

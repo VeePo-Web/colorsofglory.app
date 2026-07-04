@@ -26,6 +26,10 @@ interface LibrarySongListProps {
   monthSections?: boolean;
   /** Offered when a search finds nothing — jump to the memory graph. */
   onSearchMemory?: () => void;
+  /** Batch-select mode (Apple Photos): tap toggles, checkmarks appear. */
+  selecting?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (song: SongRow) => void;
 }
 
 /**
@@ -80,6 +84,9 @@ const LibrarySongList = ({
   pinnedIds,
   monthSections = false,
   onSearchMemory,
+  selecting = false,
+  selectedIds,
+  onToggleSelect,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -170,13 +177,16 @@ const LibrarySongList = ({
     const row = (
       <SongListRow
         song={song}
-        onClick={() => onOpen(song.id)}
+        onClick={() => (selecting ? onToggleSelect?.(song) : onOpen(song.id))}
         onLongPress={onSongActions ? () => onSongActions(song) : undefined}
         pinned={pinnedIds?.has(song.id)}
+        selecting={selecting}
+        selected={selectedIds?.has(song.id)}
       />
     );
-    // Swipe triage is the owner's gesture — invited rows stay tap-only.
-    if (onSwipeArchive && song.my_role === "owner") {
+    // Swipe triage is the owner's gesture — invited rows stay tap-only, and
+    // swipe is suspended entirely while batch-selecting.
+    if (!selecting && onSwipeArchive && song.my_role === "owner") {
       return (
         <SwipeableRow
           key={song.id}
@@ -254,9 +264,11 @@ const LibrarySongList = ({
       key={song.id}
       song={song}
       compact={density === 3}
-      onClick={() => onOpen(song.id)}
+      onClick={() => (selecting ? onToggleSelect?.(song) : onOpen(song.id))}
       onLongPress={onSongActions ? () => onSongActions(song) : undefined}
       pinned={pinnedIds?.has(song.id)}
+      selecting={selecting}
+      selected={selectedIds?.has(song.id)}
     />
   );
 
