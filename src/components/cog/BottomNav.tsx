@@ -100,8 +100,10 @@ const BottomNav = ({ active }: BottomNavProps) => {
         }}
         onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.90)"; }}
         onMouseUp={(e) => { e.currentTarget.style.transform = ""; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = ""; }}
         onTouchStart={(e) => { e.currentTarget.style.transform = "scale(0.90)"; }}
         onTouchEnd={(e) => { e.currentTarget.style.transform = ""; }}
+        onTouchCancel={(e) => { e.currentTarget.style.transform = ""; }}
       >
         <Home
           size={22}
@@ -156,8 +158,10 @@ const BottomNav = ({ active }: BottomNavProps) => {
           }}
           onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.91)"; }}
           onMouseUp={(e) => { e.currentTarget.style.transform = ""; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ""; }}
           onTouchStart={(e) => { e.currentTarget.style.transform = "scale(0.91)"; }}
           onTouchEnd={(e) => { e.currentTarget.style.transform = ""; }}
+          onTouchCancel={(e) => { e.currentTarget.style.transform = ""; }}
         >
           {/* Mic SVG inline — no external dependency for the hero element */}
           <svg
@@ -211,8 +215,10 @@ const BottomNav = ({ active }: BottomNavProps) => {
         }}
         onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.90)"; }}
         onMouseUp={(e) => { e.currentTarget.style.transform = ""; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = ""; }}
         onTouchStart={(e) => { e.currentTarget.style.transform = "scale(0.90)"; }}
         onTouchEnd={(e) => { e.currentTarget.style.transform = ""; }}
+        onTouchCancel={(e) => { e.currentTarget.style.transform = ""; }}
       >
         <Settings
           size={22}
