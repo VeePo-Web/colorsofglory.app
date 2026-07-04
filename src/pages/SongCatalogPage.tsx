@@ -218,6 +218,26 @@ const SongCatalogPage = () => {
     setAlbums(updateAlbum(albumId, { songIds }));
   };
 
+  // Remove a song from the album you're inside — it stays in your library,
+  // it just leaves this body of work. Reversible; never archives the song.
+  const removeSongFromAlbum = (albumId: string, song: SongRow) => {
+    const album = albums.find((a) => a.id === albumId);
+    if (!album) return;
+    setAlbums(updateAlbum(albumId, { songIds: album.songIds.filter((id) => id !== song.id) }));
+    toast(`Removed from ${album.name}`, {
+      duration: 6000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const cur = listAlbums().find((a) => a.id === albumId);
+          if (cur && !cur.songIds.includes(song.id)) {
+            setAlbums(updateAlbum(albumId, { songIds: [...cur.songIds, song.id] }));
+          }
+        },
+      },
+    });
+  };
+
   // Archive / restore — optimistic, always reversible, never a delete.
   const setSongStatus = async (song: SongRow, archived: boolean) => {
     setActionsSong(null);
@@ -339,6 +359,10 @@ const SongCatalogPage = () => {
     setCreating(true);
     try {
       const { song } = await createSong({ title });
+      // Writing a new song while inside an album → it joins that body of work.
+      if (activeAlbum) {
+        setAlbums(updateAlbum(activeAlbum.id, { songIds: [...activeAlbum.songIds, song.id] }));
+      }
       setDialogOpen(false);
       setNavDirection("up");
       navigate(`/songs/${song.id}/brainstorm`);
@@ -620,7 +644,8 @@ const SongCatalogPage = () => {
             // Organization actions are the owner's — invited songs stay tap-to-open only.
             if (song.my_role === "owner") setActionsSong(song);
           }}
-          onSwipeArchive={(song) => setSongStatus(song, song.status !== "archived")}
+          onSwipeArchive={activeAlbum ? undefined : (song) => setSongStatus(song, song.status !== "archived")}
+          onSwipeRemoveFromAlbum={activeAlbum ? (song) => removeSongFromAlbum(activeAlbum.id, song) : undefined}
           pinnedIds={pinnedIds}
           monthSections={activeTab === "Archived"}
           onSearchMemory={() => navigate("/memory")}
@@ -742,7 +767,11 @@ const SongCatalogPage = () => {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Name this song</DialogTitle>
-            <DialogDescription>You can rename it any time. Skip and we'll call it "New song".</DialogDescription>
+            <DialogDescription>
+              {activeAlbum
+                ? `It'll join ${activeAlbum.name}. You can rename it any time.`
+                : "You can rename it any time. Skip and we'll call it “New song”."}
+            </DialogDescription>
           </DialogHeader>
           <input
             autoFocus

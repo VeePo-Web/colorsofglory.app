@@ -20,6 +20,8 @@ interface LibrarySongListProps {
   onSongActions?: (song: SongRow) => void;
   /** Swipe-left on an owned list row → archive (or restore when archived). */
   onSwipeArchive?: (song: SongRow) => void;
+  /** Inside an album: swipe-left removes the song from the album (not archive). */
+  onSwipeRemoveFromAlbum?: (song: SongRow) => void;
   /** Songs held at the top of the library (Apple Notes pinning). */
   pinnedIds?: Set<string>;
   /** Group by month (Archived tab, recent sort) — Apple Photos rhythm. */
@@ -81,6 +83,7 @@ const LibrarySongList = ({
   onOpen,
   onSongActions,
   onSwipeArchive,
+  onSwipeRemoveFromAlbum,
   pinnedIds,
   monthSections = false,
   onSearchMemory,
@@ -185,13 +188,15 @@ const LibrarySongList = ({
       />
     );
     // Swipe triage is the owner's gesture — invited rows stay tap-only, and
-    // swipe is suspended entirely while batch-selecting.
-    if (!selecting && onSwipeArchive && song.my_role === "owner") {
+    // swipe is suspended entirely while batch-selecting. Inside an album the
+    // swipe removes the song from that album; elsewhere it archives/restores.
+    if (!selecting && song.my_role === "owner" && (onSwipeRemoveFromAlbum || onSwipeArchive)) {
+      const inAlbum = Boolean(onSwipeRemoveFromAlbum);
       return (
         <SwipeableRow
           key={song.id}
-          restore={song.status === "archived"}
-          onSwipe={() => onSwipeArchive(song)}
+          mode={inAlbum ? "remove" : song.status === "archived" ? "restore" : "archive"}
+          onSwipe={() => (inAlbum ? onSwipeRemoveFromAlbum!(song) : onSwipeArchive!(song))}
         >
           {row}
         </SwipeableRow>

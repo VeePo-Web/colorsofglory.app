@@ -1,24 +1,34 @@
 import { useRef, type ReactNode } from "react";
-import { Archive, ArchiveRestore } from "lucide-react";
+import { Archive, ArchiveRestore, MinusCircle } from "lucide-react";
+
+type SwipeMode = "archive" | "restore" | "remove";
 
 interface SwipeableRowProps {
   children: ReactNode;
   /** Fired when the row is swiped left past the commit threshold. */
   onSwipe: () => void;
-  /** Restore mode swaps the icon/label for the Archived tab. */
-  restore?: boolean;
+  /** archive (default) · restore (Archived tab) · remove (inside an album). */
+  mode?: SwipeMode;
 }
 
 const COMMIT_AT = 96;
 
+const REVEAL: Record<SwipeMode, { label: string; Icon: typeof Archive }> = {
+  archive: { label: "Archive", Icon: Archive },
+  restore: { label: "Restore", Icon: ArchiveRestore },
+  remove: { label: "Remove", Icon: MinusCircle },
+};
+
 /**
  * SwipeableRow — Apple Mail's fastest triage gesture, kept calm: swipe a
- * row left past the threshold and release to archive (or restore). The drag
- * runs on DOM refs — zero React re-renders until release. Vertical scrolling
- * stays native (`touch-action: pan-y`); the gesture only engages once the
- * finger's intent is clearly horizontal.
+ * row left past the threshold and release. The action depends on context:
+ * archive/restore in the main library, but "remove from this album" inside
+ * an album (a song leaving an EP is not the same as archiving the song). The
+ * drag runs on DOM refs — zero React re-renders until release. Vertical
+ * scrolling stays native (`touch-action: pan-y`); the gesture only engages
+ * once the finger's intent is clearly horizontal.
  */
-const SwipeableRow = ({ children, onSwipe, restore = false }: SwipeableRowProps) => {
+const SwipeableRow = ({ children, onSwipe, mode = "archive" }: SwipeableRowProps) => {
   const rowRef = useRef<HTMLDivElement>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const engaged = useRef(false);
@@ -80,12 +90,15 @@ const SwipeableRow = ({ children, onSwipe, restore = false }: SwipeableRowProps)
         className="absolute inset-0 flex items-center justify-end gap-2 rounded-2xl pr-5"
         style={{ backgroundColor: "var(--cog-gold-pale)", color: "var(--cog-gold)" }}
       >
-        {restore ? <ArchiveRestore size={18} strokeWidth={2} /> : <Archive size={18} strokeWidth={2} />}
+        {(() => {
+          const { Icon } = REVEAL[mode];
+          return <Icon size={18} strokeWidth={2} />;
+        })()}
         <span
           className="text-[0.8125rem] font-bold"
           style={{ fontFamily: "var(--font-body)" }}
         >
-          {restore ? "Restore" : "Archive"}
+          {REVEAL[mode].label}
         </span>
       </div>
       <div ref={rowRef}>{children}</div>
