@@ -74,6 +74,7 @@ const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkL
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
 const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
 const CardEditSheet = lazy(() => import("@/components/canvas/CardEditSheet"));
+const CardActionsSheet = lazy(() => import("@/components/canvas/CardActionsSheet"));
 const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReviewQueueSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -286,6 +287,8 @@ interface CanvasCardProps {
   onMergeSelect?: () => void;
   mergeSelected?: boolean;
   onEdit?: () => void;
+  /** Opens the overflow action sheet (Compare, Suggest, Listen Path, Merge…). */
+  onMore?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -305,9 +308,19 @@ const CanvasCardEl = ({
   listenIndex,
   onMergeSelect,
   mergeSelected,
+  onMore,
 }: CanvasCardProps) => {
   const Icon = CARD_ICONS[card.type];
   const isVoice = card.type === "voice" || card.type === "hum";
+  // Actions that belong in the overflow sheet, so the card shows at most a
+  // primary + promote + "More" instead of a wall of tiny buttons.
+  const hasMore =
+    Boolean(onMore) &&
+    (Boolean(canCompare && onCompare) ||
+      (card.type === "lyric" && Boolean(onSuggestLine)) ||
+      Boolean(onAddToListenPath) ||
+      (card.tree === "ideas" && !card.isDimmedReference && Boolean(onMergeSelect)) ||
+      (isVoice && Boolean(onOpenStack)));
 
   // Pointer-capture drag: card receives all pointer events even when the cursor
   // leaves its bounds. screenToCanvas from the viewport context converts the
@@ -527,7 +540,8 @@ const CanvasCardEl = ({
         </p>
       )}
 
-      {/* In-place action buttons when selected */}
+      {/* In-place actions when selected — one primary + promote + More.
+          Everything else lives in the overflow sheet so the card stays calm. */}
       {selected && (
         <div
           style={{
@@ -536,65 +550,46 @@ const CanvasCardEl = ({
             marginTop: 10,
             borderTop: "1px solid rgba(0,0,0,0.07)",
             paddingTop: 8,
-            flexWrap: "wrap",
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {onEdit && !isVoice && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onEdit(); }}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: `${card.accent}16`,
-                color: card.accent,
-                fontSize: 11,
-                fontWeight: 700,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-              aria-label="Edit this idea"
-            >
-              Edit ▸
-            </button>
-          )}
-          {isVoice && onOpenStack && (
+          {/* Primary: edit text card / open stack on a voice card */}
+          {isVoice && onOpenStack ? (
             <button
               onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
               style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: `${card.accent}16`,
-                color: card.accent,
-                fontSize: 11,
-                fontWeight: 700,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
+                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
+                backgroundColor: `${card.accent}16`, color: card.accent,
+                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
               }}
               aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
             >
-              {layerCount > 0 ? `Layers ${layerCount} ▸` : "Layers ▸"}
+              {layerCount > 0 ? `Layers ${layerCount}` : "Layers"}
             </button>
-          )}
+          ) : onEdit ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              style={{
+                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
+                backgroundColor: `${card.accent}16`, color: card.accent,
+                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
+              }}
+              aria-label="Edit this idea"
+            >
+              Edit
+            </button>
+          ) : null}
+
+          {/* Promote / return between the trees */}
           {card.tree === "ideas" && !card.isDimmedReference && (
             <button
               onClick={onMoveToFinal}
               style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "var(--cog-gold)",
-                color: "#FFF",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
+                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
+                backgroundColor: "var(--cog-gold)", color: "#FFF",
+                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
               }}
+              aria-label="Move this idea to the Final song"
             >
               → Final
             </button>
@@ -603,92 +598,30 @@ const CanvasCardEl = ({
             <button
               onClick={onMoveToIdeas}
               style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "rgba(0,0,0,0.06)",
-                color: "var(--cog-warm-gray)",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
+                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
+                backgroundColor: "rgba(0,0,0,0.06)", color: "var(--cog-warm-gray)",
+                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
               }}
+              aria-label="Return this to Ideas"
             >
               ← Ideas
             </button>
           )}
-          {canCompare && onCompare && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onCompare(); }}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "rgba(0,0,0,0.06)",
-                color: "var(--cog-warm-gray)",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-              aria-label="Compare versions"
-            >
-              Compare ▸
-            </button>
-          )}
-          {card.type === "lyric" && onSuggestLine && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onSuggestLine(); }}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 8,
-                backgroundColor: "rgba(184,149,58,0.10)",
-                color: "var(--cog-gold)",
-                fontSize: 11,
-                fontWeight: 600,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "var(--font-body)",
-              }}
-              aria-label="Suggest a line change"
-            >
-              Suggest line ▸
-            </button>
-          )}
-          {onAddToListenPath && (
+
+          {/* Overflow — Compare, Suggest a line, Listen Path, Merge… */}
+          {hasMore && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onAddToListenPath(); }}
+              onClick={(e) => { e.stopPropagation(); onMore?.(); }}
               style={{
-                height: 30, padding: "0 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                backgroundColor: listenIndex != null ? "var(--cog-gold, #B8953A)" : "rgba(28,26,23,0.06)",
-                color: listenIndex != null ? "#FFF" : "var(--cog-warm-gray, #6B6459)",
-                fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
-                boxShadow: listenIndex != null ? "0 2px 8px rgba(184,149,58,0.30)" : "none",
+                width: 40, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
+                backgroundColor: "rgba(28,26,23,0.06)", color: "var(--cog-warm-gray)",
+                fontSize: 16, fontWeight: 700, fontFamily: "var(--font-body)",
+                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
               }}
-              aria-label={listenIndex != null ? `Remove from listen path (position ${listenIndex + 1})` : "Add to listen path"}
+              aria-label="More actions"
             >
-              {listenIndex != null ? `Path ${listenIndex + 1} ✕` : "Path ▸"}
-            </button>
-          )}
-          {card.tree === "ideas" && !card.isDimmedReference && onMergeSelect && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMergeSelect(); }}
-              style={{
-                height: 30, padding: "0 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                backgroundColor: mergeSelected ? "rgba(184,149,58,0.18)" : "rgba(28,26,23,0.06)",
-                color: mergeSelected ? "var(--cog-gold, #B8953A)" : "var(--cog-warm-gray, #6B6459)",
-                fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 600,
-                outline: mergeSelected ? "1.5px solid var(--cog-gold, #B8953A)" : "none",
-              }}
-              aria-pressed={mergeSelected}
-              aria-label={mergeSelected ? "Deselect from merge" : "Select to merge"}
-            >
-              Merge ▸
+              ⋯
             </button>
           )}
         </div>
@@ -770,6 +703,8 @@ const SongCanvasExperience = () => {
   // once it exists (new cards land below the fold, so we bring them into view).
   const [editCardId, setEditCardId] = useState<string | null>(null);
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
+  // Card whose overflow action sheet is open (Compare, Suggest, Path, Merge…).
+  const [moreCardId, setMoreCardId] = useState<string | null>(null);
   // Which zone the viewport is showing — drives the Ideas ⇄ Final quick-nav.
   const [viewZone, setViewZone] = useState<"ideas" | "final">("ideas");
   // Real room roster — the same source the People surface reads.
@@ -1925,6 +1860,7 @@ const SongCanvasExperience = () => {
               onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => toggleMergeSelect(card.id) : undefined}
               mergeSelected={mergeSelection.includes(card.id)}
               onEdit={!isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined}
+              onMore={() => setMoreCardId(card.id)}
             />
           ))}
         </CanvasViewport>
@@ -2098,6 +2034,46 @@ const SongCanvasExperience = () => {
               accent={c.accent}
               onSave={(draft) => handleSaveCardEdit(c.id, draft)}
               onClose={() => setEditCardId(null)}
+            />
+          </Suspense>
+        );
+      })()}
+
+      {/* Card overflow actions (Compare / Suggest / Listen Path / Merge) */}
+      {moreCardId && (() => {
+        const c = cards.find((card) => card.id === moreCardId);
+        if (!c) return null;
+        const actions = [] as import("@/components/canvas/CardActionsSheet").CardAction[];
+        if (c.type === "lyric" && !isViewer) {
+          actions.push({
+            id: "suggest",
+            label: "Suggest a line",
+            onClick: () => setLineSuggest({ cardId: c.id, originalLine: c.body, sectionLabel: c.section }),
+          });
+        }
+        const inPath = listenQueue.includes(c.id);
+        actions.push({
+          id: "path",
+          label: inPath ? `Remove from Listen Path (#${listenQueue.indexOf(c.id) + 1})` : "Add to Listen Path",
+          onClick: () => addToListenQueue(c.id),
+          active: inPath,
+        });
+        if (c.tree === "ideas" && !c.isDimmedReference && !isViewer) {
+          const inMerge = mergeSelection.includes(c.id);
+          actions.push({
+            id: "merge",
+            label: inMerge ? "Cancel merge selection" : "Select to merge",
+            onClick: () => toggleMergeSelect(c.id),
+            active: inMerge,
+          });
+        }
+        return (
+          <Suspense fallback={null}>
+            <CardActionsSheet
+              title={c.title}
+              subtitle={c.section}
+              actions={actions}
+              onClose={() => setMoreCardId(null)}
             />
           </Suspense>
         );
