@@ -48,6 +48,7 @@ const SeedIdeasShelf = ({ songs }: SeedIdeasShelfProps) => {
         Your Ideas
       </p>
       <div
+        data-no-swipe-nav
         className="flex gap-3 overflow-x-auto pb-1"
         style={{
           scrollSnapType: "x mandatory",
