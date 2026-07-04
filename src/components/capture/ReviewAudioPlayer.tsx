@@ -108,10 +108,9 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Seek"
           className="cog-scrub"
-          style={{
-            // gold fill up to the playhead, cream track after
-            background: `linear-gradient(to right, var(--cog-gold) ${pct}%, rgba(184,149,58,0.20) ${pct}%)`,
-          }}
+          // The gold-fill position rides a CSS var so the visible track can stay a
+          // thin 4px line while the input itself is a tall, grabbable touch target.
+          style={{ ["--fill" as string]: `${pct}%` }}
         />
         <div className="flex justify-between" style={{ marginTop: 4 }}>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 11, color: "var(--cog-muted)", fontVariantNumeric: "tabular-nums" }}>
@@ -128,20 +127,38 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
           -webkit-appearance: none;
           appearance: none;
           width: 100%;
-          height: 4px;
-          border-radius: 9999px;
+          /* Tall, grabbable touch target for a thumb; the visible track stays thin
+             (drawn on the track pseudo-elements below). */
+          height: 22px;
+          background: transparent;
           outline: none;
           cursor: pointer;
+        }
+        .cog-scrub::-webkit-slider-runnable-track {
+          height: 4px;
+          border-radius: 9999px;
+          background: linear-gradient(to right, var(--cog-gold) var(--fill, 0%), rgba(184,149,58,0.20) var(--fill, 0%));
         }
         .cog-scrub::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
           width: 14px;
           height: 14px;
+          margin-top: -5px; /* centre the 14px thumb on the 4px track */
           border-radius: 50%;
           background: var(--cog-gold);
           box-shadow: 0 1px 4px rgba(184,149,58,0.5);
           cursor: pointer;
+        }
+        .cog-scrub::-moz-range-track {
+          height: 4px;
+          border-radius: 9999px;
+          background: rgba(184,149,58,0.20);
+        }
+        .cog-scrub::-moz-range-progress {
+          height: 4px;
+          border-radius: 9999px;
+          background: var(--cog-gold);
         }
         .cog-scrub::-moz-range-thumb {
           width: 14px;
