@@ -739,11 +739,10 @@ const SongCanvasExperience = () => {
   const [searchParams] = useSearchParams();
   const isViewer = searchParams.get("role") === "viewer";
 
-  // First-run tour, beat 5 — the collaboration beat, anchored on the Invite
-  // button. Only contributors see the button, so only they get the tip.
-  // Ref + hook only; see docs/onboarding/first-run-tour-plan.md.
+  // First-run tour refs — the canvas hooks live below, after showFirstRun is
+  // known, so they can wait for the empty-room first-action guide to finish.
+  const ideasTourRef = useRef<HTMLDivElement>(null);
   const inviteTourRef = useRef<HTMLButtonElement>(null);
-  const inviteTour = useCoachMark("tour_invite_seen", !isViewer);
 
   // Real signed-in identity so contributions + presence carry the actual person,
   // not a hardcoded "You". Falls back gracefully before the profile resolves.
@@ -1203,6 +1202,13 @@ const SongCanvasExperience = () => {
   // flag — so it guides a new song, returns if the room is ever cleared (never
   // a dead-end blank), and never overlays a song that already has ideas.
   const showFirstRun = !isViewer && ideasCards.length === 0 && finalCards.length === 0;
+
+  // Canvas tour beats — armed only once the board isn't empty, so they never
+  // compete with the empty-room first-action guide. Ideas (the two-tree mental
+  // model) is declared first, so it teaches before the Invite beat. Ref + hook
+  // only; see docs/onboarding/first-run-tour-plan.md.
+  const ideasTour = useCoachMark("tour_ideas_seen", !isViewer && !showFirstRun);
+  const inviteTour = useCoachMark("tour_invite_seen", !isViewer && !showFirstRun);
 
   // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
   // Number each Final card by its vertical position so it reads like a set list.
@@ -1817,6 +1823,7 @@ const SongCanvasExperience = () => {
                 aria-label="Jump between Ideas and Final"
               >
                 <div
+                  ref={ideasTourRef}
                   className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
                 >
@@ -2213,6 +2220,17 @@ const SongCanvasExperience = () => {
           }}
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}
+        />
+      )}
+
+      {ideasTour.visible && (
+        <CoachMark
+          targetRef={ideasTourRef}
+          lead="Two spaces, one song."
+          body="Explore ideas on the left. Drag the keepers to Final on the right."
+          onGotIt={ideasTour.gotIt}
+          onSkip={ideasTour.skip}
+          isFinal={ideasTour.isFinal}
         />
       )}
 

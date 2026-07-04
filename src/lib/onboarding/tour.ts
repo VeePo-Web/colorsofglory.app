@@ -25,8 +25,9 @@ export const TOUR_STEPS = [
   "tour_catalog_seen", // SongCatalogPage — the song card
   "tour_room_seen",    // BrainstormPage — the song header
   "tour_capture_seen", // BrainstormPage — the record button
+  "tour_ideas_seen",   // SongCanvasExperience — the Ideas ⇄ Final nav (two-tree)
   "tour_invite_seen",  // SongCanvasExperience — the Invite button
-  // "tour_lyrics_seen", // canvas lane — the lyrics affordance (plan §4)
+  // "tour_lyrics_seen", // the sheet editor's lyrics affordance (plan §4)
 ] as const;
 
 export type TourStep = (typeof TOUR_STEPS)[number];
