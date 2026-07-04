@@ -234,6 +234,46 @@ describe("obsidian vault", () => {
     expect(paths).toContain("Ideas/Bridge.md");
     expect(paths).toContain("Ideas/Bridge (2).md");
   });
+
+  it("never loses a song note when two songs share a title (data-loss guard)", () => {
+    const b = bundle();
+    b.songs = [
+      { id: "s1", title: "Untitled", coverColor: null, status: "draft", keySignature: null, tempoBpm: null, tags: ["grace"], createdAt: "2026-06-01T00:00:00Z", lastActivityAt: null },
+      { id: "s2", title: "Untitled", coverColor: null, status: "draft", keySignature: null, tempoBpm: null, tags: ["grace"], createdAt: "2026-06-02T00:00:00Z", lastActivityAt: null },
+    ];
+    b.sections = [];
+    b.notes = [];
+    b.ideas = [];
+    b.people = [];
+    b.voiceMemos = [];
+    b.lyrics = [];
+    const files = buildVault(buildMemoryGraph(b), b);
+    const songPaths = files.filter((f) => f.path.startsWith("Songs/")).map((f) => f.path);
+    // Both notes survive as distinct files (no silent .zip overwrite).
+    expect(songPaths).toEqual(["Songs/Untitled.md", "Songs/Untitled (2).md"]);
+    // The shared theme still links to BOTH via their unique names.
+    const grace = files.find((f) => f.path === "Themes/Grace.md")!;
+    expect(grace.content).toContain("[[Untitled]]");
+    expect(grace.content).toContain("[[Untitled (2)]]");
+    // No two vault files share a path anywhere.
+    const all = files.map((f) => f.path);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("dedupes cluster paths that sanitize identically (Psalm 23:1 vs Psalm 23 1)", () => {
+    const b = bundle();
+    b.ideas = [
+      { id: "a", songId: "s1", title: null, lyricSnippet: null, scriptureRef: "Psalm 23:1", tags: [] },
+      { id: "c", songId: "s2", title: null, lyricSnippet: null, scriptureRef: "Psalm 23 1", tags: [] },
+    ];
+    const files = buildVault(buildMemoryGraph(b), b);
+    const scripturePaths = files.filter((f) => f.path.startsWith("Scriptures/")).map((f) => f.path);
+    // Two distinct scripture clusters, two surviving notes (one suffixed).
+    expect(scripturePaths).toContain("Scriptures/Psalm 23 1.md");
+    expect(scripturePaths).toContain("Scriptures/Psalm 23 1 (2).md");
+    const all = files.map((f) => f.path);
+    expect(new Set(all).size).toBe(all.length);
+  });
 });
 
 describe("createZip", () => {

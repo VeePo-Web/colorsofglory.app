@@ -81,6 +81,28 @@ function wikilink(label: string): string {
   return `[[${sanitizeFileName(label)}]]`;
 }
 
+/** Deterministically make `base` unique against names already used. */
+function uniqueName(base: string, used: Set<string>): string {
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+  let n = 2;
+  let candidate = `${base} (${n})`;
+  while (used.has(candidate)) candidate = `${base} (${++n})`;
+  used.add(candidate);
+  return candidate;
+}
+
+/** The unique note filename for a song id (falls back to a sanitized title). */
+function songNoteName(songNames: Map<string, string>, songId: string, title: string): string {
+  return songNames.get(songId) ?? sanitizeFileName(title);
+}
+
+function songWikilink(songNames: Map<string, string>, songId: string, title: string): string {
+  return `[[${songNoteName(songNames, songId, title)}]]`;
+}
+
 function isoDate(value: string | null): string | null {
   if (!value) return null;
   return value.slice(0, 10);
@@ -99,18 +121,26 @@ function ideaDisplayName(idea: MemoryIdea): string {
 
 /**
  * Assign a unique, deterministic note filename to every idea. Idea titles can
- * be null or collide; we disambiguate with a stable " (n)" suffix in bundle
- * order so the same vault always generates identically.
+ * be null or collide; a stable " (n)" suffix in bundle order keeps the vault
+ * reproducible and never drops a note to a filename collision.
  */
 function assignIdeaNames(ideas: MemoryIdea[]): Map<string, string> {
-  const counts = new Map<string, number>();
+  const used = new Set<string>();
   const result = new Map<string, string>();
-  for (const idea of ideas) {
-    const base = sanitizeFileName(ideaDisplayName(idea));
-    const n = (counts.get(base) ?? 0) + 1;
-    counts.set(base, n);
-    result.set(idea.id, n === 1 ? base : `${base} (${n})`);
-  }
+  for (const idea of ideas) result.set(idea.id, uniqueName(sanitizeFileName(ideaDisplayName(idea)), used));
+  return result;
+}
+
+/**
+ * Unique, deterministic note filename per song. Two untitled (or same-titled)
+ * songs would otherwise both write Songs/Untitled.md — a duplicate .zip entry
+ * that silently drops one song's note on extract. This makes every song note
+ * survive, and every wikilink target it by its real (unique) filename.
+ */
+function assignSongNames(songs: MemorySong[]): Map<string, string> {
+  const used = new Set<string>();
+  const result = new Map<string, string>();
+  for (const song of songs) result.set(song.id, uniqueName(sanitizeFileName(song.title), used));
   return result;
 }
 
@@ -127,14 +157,19 @@ function ideaThemeLabels(idea: MemoryIdea): string[] {
   return labels;
 }
 
-function buildIdeaNote(idea: MemoryIdea, song: MemorySong | undefined, name: string): VaultFile {
+function buildIdeaNote(
+  idea: MemoryIdea,
+  song: MemorySong | undefined,
+  name: string,
+  songNames: Map<string, string>,
+): VaultFile {
   const scripture = idea.scriptureRef?.trim() || null;
   const themeLabels = ideaThemeLabels(idea);
 
   const fm: string[] = ["---", "type: idea"];
   const tags = ["idea", ...(idea.tags ?? []).map(tagToken)].filter(Boolean);
   fm.push(`tags: [${[...new Set(tags)].join(", ")}]`);
-  if (song) fm.push(`song: ${yamlString(wikilink(song.title))}`);
+  if (song) fm.push(`song: ${yamlString(songWikilink(songNames, song.id, song.title))}`);
   if (scripture) fm.push(`scripture: ${yamlString(wikilink(scripture))}`);
   fm.push("---", "");
 
@@ -147,7 +182,7 @@ function buildIdeaNote(idea: MemoryIdea, song: MemorySong | undefined, name: str
     body.push("");
   }
 
-  if (song) body.push(`**From song:** ${wikilink(song.title)}`);
+  if (song) body.push(`**From song:** ${songWikilink(songNames, song.id, song.title)}`);
   if (scripture) body.push(`**Scripture:** ${wikilink(scripture)}`);
   if (themeLabels.length) body.push(`**Themes:** ${themeLabels.map(wikilink).join(", ")}`);
   body.push("");
@@ -181,6 +216,7 @@ function buildSongNote(
   bundle: MemoryRawBundle,
   song: MemorySong,
   ideaNames: Map<string, string>,
+  songNames: Map<string, string>,
 ): VaultFile {
   const sections = bundle.sections
     .filter((s) => s.songId === song.id)
@@ -259,12 +295,15 @@ function buildSongNote(
     body.push("## Related songs");
     for (const r of related.slice(0, 8)) {
       const reasons = r.reasons.length ? ` — ${r.reasons.join(", ")}` : "";
-      body.push(`- ${wikilink(r.title)}${reasons}`);
+      body.push(`- ${songWikilink(songNames, r.songId, r.title)}${reasons}`);
     }
     body.push("");
   }
 
-  return { path: `Songs/${sanitizeFileName(song.title)}.md`, content: body.join("\n").trimEnd() + "\n" };
+  return {
+    path: `Songs/${songNoteName(songNames, song.id, song.title)}.md`,
+    content: body.join("\n").trimEnd() + "\n",
+  };
 }
 
 function buildClusterNote(
@@ -272,6 +311,7 @@ function buildClusterNote(
   graph: MemoryGraph,
   bundle: MemoryRawBundle,
   ideaNames: Map<string, string>,
+  songNames: Map<string, string>,
   folder: string,
   blurb: string,
 ): VaultFile {
@@ -285,7 +325,7 @@ function buildClusterNote(
   lines.push("## Songs");
   for (const songId of cluster.songIds) {
     const song = graph.songs.find((s) => s.id === songId);
-    if (song) lines.push(`- ${wikilink(song.title)}`);
+    if (song) lines.push(`- ${songWikilink(songNames, song.id, song.title)}`);
   }
   lines.push("");
 
@@ -331,13 +371,18 @@ function buildMocNote(
   return { path: `${title}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
-function buildIdeasMoc(graph: MemoryGraph, bundle: MemoryRawBundle, ideaNames: Map<string, string>): VaultFile {
+function buildIdeasMoc(
+  graph: MemoryGraph,
+  bundle: MemoryRawBundle,
+  ideaNames: Map<string, string>,
+  songNames: Map<string, string>,
+): VaultFile {
   const lines: string[] = ["---", "tags: [moc, ideas]", "---", ""];
   lines.push(`# ${MOC_IDEAS}`, "", "Every captured idea, grouped by the song it lives in.", "");
   for (const song of graph.songs) {
     const ideas = bundle.ideas.filter((i) => i.songId === song.id);
     if (!ideas.length) continue;
-    lines.push(`## ${wikilink(song.title)}`);
+    lines.push(`## ${songWikilink(songNames, song.id, song.title)}`);
     for (const idea of ideas) {
       const name = ideaNames.get(idea.id);
       if (name) lines.push(`- ${wikilink(name)}`);
@@ -349,7 +394,7 @@ function buildIdeasMoc(graph: MemoryGraph, bundle: MemoryRawBundle, ideaNames: M
 }
 
 /** Group songs by the month they began into dated journal notes (the time axis). */
-function buildJournalNotes(graph: MemoryGraph): VaultFile[] {
+function buildJournalNotes(graph: MemoryGraph, songNames: Map<string, string>): VaultFile[] {
   const byMonth = new Map<string, MemorySong[]>();
   for (const song of graph.songs) {
     const key = monthKey(song.createdAt);
@@ -365,7 +410,7 @@ function buildJournalNotes(graph: MemoryGraph): VaultFile[] {
       lines.push(`# ${monthLabel(key)}`, "");
       lines.push(`> Part of [[${MOC_TIMELINE}]].`, "");
       lines.push("## Songs started");
-      for (const s of songs) lines.push(`- ${wikilink(s.title)}`);
+      for (const s of songs) lines.push(`- ${songWikilink(songNames, s.id, s.title)}`);
       lines.push("");
       return { path: `Journal/${key}.md`, content: lines.join("\n").trimEnd() + "\n" };
     });
@@ -428,7 +473,7 @@ function clusterColor(c: MemoryCluster): string {
  * real link. Opens with zero setup — the whole memory as one visual board.
  * Deterministic layout so the same vault always renders identically.
  */
-function buildCanvas(graph: MemoryGraph): VaultFile {
+function buildCanvas(graph: MemoryGraph, songNames: Map<string, string>): VaultFile {
   const W = 300;
   const H = 110;
   const GAP = 150;
@@ -439,7 +484,7 @@ function buildCanvas(graph: MemoryGraph): VaultFile {
     nodes.push({
       id: `song:${song.id}`,
       type: "file",
-      file: `Songs/${sanitizeFileName(song.title)}.md`,
+      file: `Songs/${songNoteName(songNames, song.id, song.title)}.md`,
       x: -540,
       y: i * GAP,
       width: W,
@@ -543,7 +588,7 @@ function buildStartHereNote(graph: MemoryGraph): VaultFile {
   return { path: `${START_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
-function buildIndexNote(graph: MemoryGraph): VaultFile {
+function buildIndexNote(graph: MemoryGraph, songNames: Map<string, string>): VaultFile {
   const lines: string[] = ["---"];
   lines.push(`aliases: ${yamlList(["Colors of Glory Memory"])}`);
   lines.push("tags: [colors-of-glory, memory]");
@@ -571,7 +616,7 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
   );
 
   lines.push("## Songs");
-  for (const song of graph.songs) lines.push(`- ${wikilink(song.title)}`);
+  for (const song of graph.songs) lines.push(`- ${songWikilink(songNames, song.id, song.title)}`);
   lines.push("");
 
   const recurringThemes = graph.themes.filter((t) => t.recurring);
@@ -583,38 +628,63 @@ function buildIndexNote(graph: MemoryGraph): VaultFile {
   return { path: `${INDEX_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
+/**
+ * Hard backstop: no two vault files ever share a path. A duplicate path in a
+ * .zip silently drops a note on extract — so any distinct entities whose
+ * labels sanitize identically (e.g. "Psalm 23:1" and "Psalm 23 1") get a
+ * " (n)" suffix before the extension. Guarantees every note survives export.
+ */
+function dedupeVaultPaths(files: VaultFile[]): VaultFile[] {
+  const used = new Set<string>();
+  return files.map((f) => {
+    if (!used.has(f.path)) {
+      used.add(f.path);
+      return f;
+    }
+    const dot = f.path.lastIndexOf(".");
+    const stem = dot === -1 ? f.path : f.path.slice(0, dot);
+    const ext = dot === -1 ? "" : f.path.slice(dot);
+    let n = 2;
+    let candidate = `${stem} (${n})${ext}`;
+    while (used.has(candidate)) candidate = `${stem} (${++n})${ext}`;
+    used.add(candidate);
+    return { path: candidate, content: f.content };
+  });
+}
+
 /** Build the full vault file set. Deterministic — safe to unit test. */
 export function buildVault(graph: MemoryGraph, bundle: MemoryRawBundle): VaultFile[] {
   const ideaNames = assignIdeaNames(bundle.ideas);
+  const songNames = assignSongNames(graph.songs);
   const songById = new Map(graph.songs.map((s) => [s.id, s]));
 
   const files: VaultFile[] = [
     buildStartHereNote(graph),
-    buildIndexNote(graph),
+    buildIndexNote(graph, songNames),
     buildMocNote(MOC_THEMES, "themes", "Threads that keep coming back across your songs.", graph.themes),
     buildMocNote(MOC_SCRIPTURE, "scripture", "Scripture you have returned to.", graph.scriptures),
     buildMocNote(MOC_PEOPLE, "people", "Everyone you have written with.", graph.people),
-    buildIdeasMoc(graph, bundle, ideaNames),
+    buildIdeasMoc(graph, bundle, ideaNames, songNames),
     buildTimelineMoc(graph),
-    buildCanvas(graph),
+    buildCanvas(graph, songNames),
     buildInsightsNote(bundle),
   ];
 
-  files.push(...buildJournalNotes(graph));
+  files.push(...buildJournalNotes(graph, songNames));
 
-  for (const song of graph.songs) files.push(buildSongNote(graph, bundle, song, ideaNames));
+  for (const song of graph.songs) files.push(buildSongNote(graph, bundle, song, ideaNames, songNames));
 
   for (const idea of bundle.ideas) {
     const name = ideaNames.get(idea.id);
-    if (name) files.push(buildIdeaNote(idea, songById.get(idea.songId), name));
+    if (name) files.push(buildIdeaNote(idea, songById.get(idea.songId), name, songNames));
   }
 
   for (const c of graph.themes)
-    files.push(buildClusterNote(c, graph, bundle, ideaNames, "Themes", "A theme across your songs."));
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, songNames, "Themes", "A theme across your songs."));
   for (const c of graph.scriptures)
-    files.push(buildClusterNote(c, graph, bundle, ideaNames, "Scriptures", "Scripture you have returned to."));
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, songNames, "Scriptures", "Scripture you have returned to."));
   for (const c of graph.people)
-    files.push(buildClusterNote(c, graph, bundle, ideaNames, "People", "Someone you have written with."));
+    files.push(buildClusterNote(c, graph, bundle, ideaNames, songNames, "People", "Someone you have written with."));
 
-  return files;
+  return dedupeVaultPaths(files);
 }
