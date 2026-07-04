@@ -91,6 +91,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       if (springBack) {
         el.style.transition = "transform 250ms var(--cog-ease)";
         el.style.transform = "translateX(0)";
+        el.style.boxShadow = "";
         window.setTimeout(() => {
           el.style.transition = "";
           el.style.transform = "";
@@ -102,6 +103,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.transition = "";
         el.style.transform = "";
         el.style.willChange = "";
+        el.style.boxShadow = "";
       }
     };
 
@@ -135,6 +137,11 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.animation = "none"; // a lingering entrance keyframe must not pin the transform
         el.style.transition = "none";
         el.style.willChange = "transform";
+        // Depth cue: the surface lifts as a card over the room beneath, so the
+        // drag reads as layered paging, not a slide over empty background. The
+        // shadow rides the promoted (will-change) layer with the transform, so
+        // it's composited — no per-frame repaint.
+        el.style.boxShadow = "0 0 44px rgba(28,26,23,0.16)";
       }
       lastDx = dx;
       lastX = t.clientX;
@@ -193,6 +200,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.transition = "";
         el.style.willChange = "";
         el.style.animation = "";
+        el.style.boxShadow = "";
       }
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
