@@ -1,4 +1,4 @@
-import { Plus, Pencil, Disc3 } from "lucide-react";
+import { Plus, Pencil, Disc3, Layers } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -13,6 +13,9 @@ interface AlbumsShelfProps {
   onEdit: (album: SongAlbum) => void;
   /** Hold a card still, then slide — commits the new shelf order. */
   onReorder: (orderedIds: string[]) => void;
+  /** Songs not yet in any album — the leading "Ungrouped" smart tile. */
+  ungroupedCount?: number;
+  onSelectUngrouped?: () => void;
 }
 
 const FALLBACKS = [
@@ -55,7 +58,17 @@ const AlbumCover = ({ colors, empty }: { colors: string[]; empty: boolean }) => 
  * shelf above the catalog. Tap an album to focus the library
  * on it; tap again to release. Selected album grows a quiet edit affordance.
  */
-const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit, onReorder }: AlbumsShelfProps) => {
+const AlbumsShelf = ({
+  albums,
+  songs,
+  activeAlbumId,
+  onSelect,
+  onNew,
+  onEdit,
+  onReorder,
+  ungroupedCount = 0,
+  onSelectUngrouped,
+}: AlbumsShelfProps) => {
   const songById = new Map(songs.map((s) => [s.id, s]));
   const reorder = useShelfReorder(
     albums.map((a) => a.id),
@@ -76,6 +89,35 @@ const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit, on
         className="flex gap-3 overflow-x-auto pb-1"
         style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >
+        {/* Ungrouped smart tile — songs not yet filed into any album */}
+        {ungroupedCount > 0 && onSelectUngrouped && (
+          <button
+            onClick={onSelectUngrouped}
+            aria-label={`Ungrouped songs, ${ungroupedCount}`}
+            className="w-[88px] shrink-0 text-left transition-transform duration-150 active:scale-95"
+          >
+            <div
+              className="flex h-[88px] w-[88px] items-center justify-center rounded-2xl"
+              style={{
+                backgroundColor: "var(--cog-cream-light)",
+                border: "1px solid var(--cog-border)",
+                boxShadow: "0 2px 8px rgba(28,26,23,0.06)",
+              }}
+            >
+              <Layers size={26} strokeWidth={1.5} style={{ color: "var(--cog-warm-gray)" }} />
+            </div>
+            <p
+              className="mt-1.5 truncate text-[0.75rem] font-semibold"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+            >
+              Ungrouped
+            </p>
+            <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+              {ungroupedCount} {ungroupedCount === 1 ? "song" : "songs"}
+            </p>
+          </button>
+        )}
+
         {albums.map((album) => {
           const albumSongs = album.songIds
             .map((id) => songById.get(id))

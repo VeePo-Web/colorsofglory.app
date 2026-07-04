@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Settings, Mic, Sparkles, Disc3 } from "lucide-react";
+import { Plus, Settings, Mic, Sparkles, Disc3, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
@@ -57,6 +57,10 @@ let songsWarmCache: SongRow[] | null = null;
 // whiteboard → back returns them to that album (working an EP song by song),
 // not to "all songs". Survives the page remount that navigation causes.
 let lastActiveAlbumId: string | null = null;
+
+// Sentinel "smart group" — songs not yet placed in any album, so a growing
+// body of work can be filed. Not a real album (no edit/reorder/membership).
+const UNGROUPED = "__ungrouped__";
 
 const SongCatalogPage = () => {
   const navigate = useNavigate();
@@ -124,7 +128,7 @@ const SongCatalogPage = () => {
   // Remember the focused album across navigations; drop the memory if that
   // album was since removed so we never restore into a ghost.
   useEffect(() => {
-    if (activeAlbumId && !albums.some((a) => a.id === activeAlbumId)) {
+    if (activeAlbumId && activeAlbumId !== UNGROUPED && !albums.some((a) => a.id === activeAlbumId)) {
       setActiveAlbumId(null);
       return;
     }
@@ -141,6 +145,14 @@ const SongCatalogPage = () => {
   }, []);
 
   const activeAlbum = albums.find((a) => a.id === activeAlbumId) ?? null;
+  const viewingUngrouped = activeAlbumId === UNGROUPED;
+
+  // Every song id that lives in at least one album.
+  const groupedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of albums) for (const id of a.songIds) s.add(id);
+    return s;
+  }, [albums]);
 
   const visibleSongs = useMemo(() => {
     let list = songs.filter((s) => {
@@ -148,7 +160,9 @@ const SongCatalogPage = () => {
       if (activeTab === "Invited") return s.my_role !== "owner" && s.status !== "archived";
       return s.status === "archived";
     });
-    if (activeTab === "Owned" && activeAlbum) {
+    if (activeTab === "Owned" && viewingUngrouped) {
+      list = list.filter((s) => !groupedIds.has(s.id));
+    } else if (activeTab === "Owned" && activeAlbum) {
       const inAlbum = new Set(activeAlbum.songIds);
       list = list.filter((s) => inAlbum.has(s.id));
     }
@@ -176,11 +190,12 @@ const SongCatalogPage = () => {
       ];
     }
     return sorted;
-  }, [songs, activeTab, activeAlbum, query, prefs.sort, pinnedIds]);
+  }, [songs, activeTab, activeAlbum, viewingUngrouped, groupedIds, query, prefs.sort, pinnedIds]);
 
   // Rooms a captured idea can move into — the songwriter's own active rooms.
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
   const fileableSongs = ownedSongs.map((s) => ({ id: s.id, title: s.title }));
+  const ungroupedCount = ownedSongs.filter((s) => !groupedIds.has(s.id)).length;
 
   // Search reaches album names too (Apple Music scoped search) — surfaced as
   // tappable chips above the song results when the query matches.
@@ -578,6 +593,29 @@ const SongCatalogPage = () => {
             reordering={reorderingAlbum}
             onToggleReorder={() => setReorderingAlbum((v) => !v)}
           />
+        ) : !selecting && activeTab === "Owned" && viewingUngrouped ? (
+          /* Ungrouped smart group — songs not yet filed into any album */
+          <div className="mb-4">
+            <button
+              onClick={() => setActiveAlbumId(null)}
+              className="mb-2 flex items-center gap-1 transition-transform duration-150 active:scale-95"
+              style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+              aria-label="Back to all songs"
+            >
+              <ChevronLeft size={18} strokeWidth={2.2} />
+              <span className="text-[0.875rem] font-semibold">All songs</span>
+            </button>
+            <h2
+              className="text-[1.375rem] font-bold leading-tight"
+              style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
+            >
+              Ungrouped
+            </h2>
+            <p className="mt-0.5 text-[0.8125rem]" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
+              {ungroupedCount} {ungroupedCount === 1 ? "song" : "songs"} not in an album — press and
+              hold a song to file it
+            </p>
+          </div>
         ) : (
           !selecting &&
           activeTab === "Owned" &&
@@ -587,7 +625,9 @@ const SongCatalogPage = () => {
               albums={albums}
               songs={ownedSongs}
               activeAlbumId={activeAlbumId}
+              ungroupedCount={ungroupedCount}
               onSelect={setActiveAlbumId}
+              onSelectUngrouped={() => setActiveAlbumId(UNGROUPED)}
               onNew={() => setAlbumSheet({ open: true, album: null })}
               onEdit={(album) => setAlbumSheet({ open: true, album })}
               onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
@@ -650,7 +690,9 @@ const SongCatalogPage = () => {
           query={query}
           loading={loading}
           emptyCopy={
-            activeAlbum && activeTab === "Owned"
+            viewingUngrouped
+              ? "Every song is filed into an album."
+              : activeAlbum && activeTab === "Owned"
               ? "This album is empty. Tap “Add songs” above to fill it."
               : EMPTY_COPY[activeTab]
           }
