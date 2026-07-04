@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircle, FileText, Mic, Play, Waves } from "lucide-react";
+import { FileText, Mic, Play, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
@@ -81,7 +81,24 @@ const VoiceMemoAddedPage = () => {
             transition: "transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 360ms ease",
           }}
         >
-          <CheckCircle size={34} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
+          {/* The check draws its own stroke just after the badge pops — a small
+              premium "it completes" moment. Reduced-motion shows it drawn. */}
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M5 12.5l4.2 4.2L19 7"
+              stroke="var(--cog-gold)"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                strokeDasharray: 26,
+                strokeDashoffset: reduceMotion ? 0 : shown ? 0 : 26,
+                transition: reduceMotion
+                  ? undefined
+                  : "stroke-dashoffset 420ms cubic-bezier(0.65, 0, 0.35, 1) 200ms",
+              }}
+            />
+          </svg>
         </div>
 
         <h1
@@ -152,6 +169,13 @@ const VoiceMemoAddedPage = () => {
                 style={{
                   height,
                   backgroundColor: index < 8 ? "var(--cog-gold)" : "var(--cog-gold-pale)",
+                  transformOrigin: "bottom",
+                  // Bars rise into place left→right after the badge — "the sound arrives".
+                  transform: reduceMotion || shown ? "scaleY(1)" : "scaleY(0.08)",
+                  opacity: reduceMotion || shown ? 1 : 0,
+                  transition: reduceMotion
+                    ? undefined
+                    : `transform 420ms cubic-bezier(0.22, 1, 0.36, 1) ${260 + index * 26}ms, opacity 280ms ease ${260 + index * 26}ms`,
                 }}
               />
             ))}
