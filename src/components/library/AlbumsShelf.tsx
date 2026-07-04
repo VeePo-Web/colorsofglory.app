@@ -50,8 +50,9 @@ const AlbumCover = ({ colors, empty }: { colors: string[]; empty: boolean }) => 
 );
 
 /**
- * AlbumsShelf — the songwriter's own groupings (an EP, a setlist, a season)
- * as a horizontal shelf above the catalog. Tap an album to focus the library
+ * AlbumsShelf — the songwriter's own groupings of songs-in-progress (a
+ * worship EP, a Christmas collection, a season of writing) as a horizontal
+ * shelf above the catalog. Tap an album to focus the library
  * on it; tap again to release. Selected album grows a quiet edit affordance.
  */
 const AlbumsShelf = ({ albums, songs, activeAlbumId, onSelect, onNew, onEdit, onReorder }: AlbumsShelfProps) => {

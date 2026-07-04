@@ -111,7 +111,7 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
             autoFocus={!album}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Easter set, New EP…"
+            placeholder="e.g. Worship EP, Christmas songs…"
             aria-label="Album name"
             className="w-full rounded-xl border px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-[var(--cog-border-gold)]"
             style={{

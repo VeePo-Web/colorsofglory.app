@@ -9,10 +9,11 @@ interface AlbumSongOrderListProps {
 }
 
 /**
- * AlbumSongOrderList — arrange a setlist. Each row carries a right-side grip;
- * dragging *from the grip* lifts the row and reorders live, so vertical
- * scrolling and tap-to-open are never in conflict (you must grab the handle,
- * the Apple Reminders/Music edit-mode grammar). Numbered like a service order.
+ * AlbumSongOrderList — arrange the tracklist of an album (a body of songs
+ * being written together). Each row carries a right-side grip; dragging *from
+ * the grip* lifts the row and reorders live, so vertical scrolling and
+ * tap-to-open are never in conflict (you must grab the handle, the Apple
+ * Reminders/Music edit-mode grammar). Numbered like an album's track order.
  * Reorder runs on DOM refs; state commits once on release.
  */
 const AlbumSongOrderList = ({ songs, onReorder }: AlbumSongOrderListProps) => {

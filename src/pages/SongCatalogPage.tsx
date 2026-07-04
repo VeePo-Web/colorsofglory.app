@@ -7,7 +7,6 @@ import BottomNav from "@/components/cog/BottomNav";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
-import { resumePathFor } from "@/lib/nav/songResume";
 import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
@@ -141,8 +140,9 @@ const SongCatalogPage = () => {
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
 
-    // Inside an album, the album's own order IS the sort — a setlist has a
-    // service order, not "most recent" (Apple Music plays a playlist in order).
+    // Inside an album, the songwriter's own arrangement IS the order — an
+    // album (a body of songs being written together, like an EP in progress)
+    // keeps its tracklist order, not "most recently edited".
     if (activeTab === "Owned" && activeAlbum && !q) {
       const rank = new Map(activeAlbum.songIds.map((id, i) => [id, i]));
       return [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
@@ -520,7 +520,7 @@ const SongCatalogPage = () => {
         {!selecting && continueSong && (
           <ContinueShelf
             song={continueSong}
-            onOpen={() => { setNavDirection("up"); navigate(resumePathFor(continueSong.id) ?? `/songs/${continueSong.id}/brainstorm`); }}
+            onOpen={() => { setNavDirection("up"); navigate(`/songs/${continueSong.id}/canvas`); }}
           />
         )}
 
@@ -556,7 +556,7 @@ const SongCatalogPage = () => {
           )
         )}
 
-        {/* Search also reaches album names — "Easter" finds the Easter set */}
+        {/* Search also reaches album names — "worship" finds the Worship EP */}
         {!selecting && !activeAlbum && activeTab === "Owned" && albumMatches.length > 0 && (
           <div className="mb-4">
             <p
@@ -615,7 +615,7 @@ const SongCatalogPage = () => {
               ? "This album is empty. Tap “Add songs” above to fill it."
               : EMPTY_COPY[activeTab]
           }
-          onOpen={(id) => { setNavDirection("up"); navigate(resumePathFor(id) ?? `/songs/${id}/brainstorm`); }}
+          onOpen={(id) => { setNavDirection("up"); navigate(`/songs/${id}/canvas`); }}
           onSongActions={(song) => {
             // Organization actions are the owner's — invited songs stay tap-to-open only.
             if (song.my_role === "owner") setActionsSong(song);
@@ -721,7 +721,7 @@ const SongCatalogPage = () => {
             const songId = actionsSong.id;
             setActionsSong(null);
             setNavDirection("up");
-            navigate(`/songs/${songId}/brainstorm`);
+            navigate(`/songs/${songId}/canvas`);
           }}
           onQuickRoute={(surface) => {
             const songId = actionsSong.id;

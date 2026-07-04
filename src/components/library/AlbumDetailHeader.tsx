@@ -9,7 +9,7 @@ interface AlbumDetailHeaderProps {
   onExit: () => void;
   onEdit: () => void;
   onAddSongs: () => void;
-  /** Setlist reorder mode toggle (shown only when 2+ songs). */
+  /** Tracklist arrange-mode toggle (shown only when 2+ songs). */
   reordering?: boolean;
   onToggleReorder?: () => void;
 }

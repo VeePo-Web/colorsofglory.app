@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, GitBranch, FileText, Mic, Pin, PinOff, ListChecks } from "lucide-react";
+import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -154,11 +154,11 @@ const SongActionsSheet = ({
             </button>
           )}
 
-          {/* Straight into any surface of this song — the library as switchboard */}
+          {/* Jump straight to another surface — "Open song" already opens the
+              whiteboard, so these are the alternate rooms of the song. */}
           {!archived &&
             (
               [
-                { surface: "canvas", label: "Open canvas", Icon: GitBranch },
                 { surface: "sheet", label: "Open lyric sheet", Icon: FileText },
                 { surface: "voice", label: "Voice memos", Icon: Mic },
               ] as const
