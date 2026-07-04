@@ -318,6 +318,19 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
+      // The rail's lyric / chord / section / scripture / idea tools all write
+      // into a song's canvas — which the song-less global page has no way to
+      // reach (a block only persists via a take committed to a song). Letting a
+      // songwriter type there was a silent void: "Saved" then gone on reload.
+      // Instead, guide them into a real song where words actually persist. Voice
+      // hums are unaffected — they land in the Ideas shelf.
+      if (!songId) {
+        toast.message("Lyrics, chords & notes live inside a song", {
+          description: "Open or start a song to write — your voice ideas stay right here.",
+          action: { label: "Open songs", onClick: () => navigate("/songs") },
+        });
+        return;
+      }
       // While recording, every rail tap drops a timestamped pin (no modal).
       if (phase === "recording") {
         if (action === "section") {
@@ -351,7 +364,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       // Idle: open the progressive capture sheet.
       setSheetAction(action);
     },
-    [phase, durationMs],
+    [phase, durationMs, songId, navigate],
   );
 
   const handleSheetSave = useCallback((block: PendingBlock) => {
