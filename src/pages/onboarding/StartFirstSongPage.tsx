@@ -166,6 +166,12 @@ const StartFirstSongPage = () => {
             ...fieldStyle(!!title),
             height: 72,
             fontFamily: "var(--font-display)",
+            // The hero title field warms into a soft gold glow the moment a name
+            // is typed — the song "coming to life". fieldStyle's transition
+            // animates it in. Feel-only.
+            ...(title
+              ? { boxShadow: "0 0 0 3px rgba(181,147,90,0.16), 0 8px 26px rgba(181,147,90,0.20)" }
+              : null),
           }}
         />
       </div>
