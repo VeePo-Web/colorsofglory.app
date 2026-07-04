@@ -1701,6 +1701,7 @@ const SongCanvasExperience = () => {
                       collaborators={peopleLayerCollaborators}
                       onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
                       onOpenRecap={() => setShowRecap(true)}
+                      onOpenCredits={() => navigate(`/songs/${songId}/credits`)}
                     />
                   </Suspense>
                 </>

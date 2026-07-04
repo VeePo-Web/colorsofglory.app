@@ -1,5 +1,5 @@
 import { ElementType, ReactNode } from "react";
-import { Activity as ActivityIcon, ChevronRight, UserPlus, Users } from "lucide-react";
+import { Activity as ActivityIcon, Award, ChevronRight, UserPlus, Users } from "lucide-react";
 
 interface Collaborator {
   initials: string;
@@ -24,6 +24,8 @@ interface SongCanvasCollabLayersProps {
   onInvite?: () => void;
   /** Opens the What Changed recap sheet. */
   onOpenRecap?: () => void;
+  /** Navigates to the Credits ledger. */
+  onOpenCredits?: () => void;
 }
 
 const FALLBACK_COLLABORATORS: Collaborator[] = [
@@ -56,12 +58,13 @@ const ACTIVITY: ActivityItem[] = [
   },
 ];
 
-const SongCanvasCollabLayers = ({ activeLayer, collaborators, onInvite, onOpenRecap }: SongCanvasCollabLayersProps) => (
+const SongCanvasCollabLayers = ({ activeLayer, collaborators, onInvite, onOpenRecap, onOpenCredits }: SongCanvasCollabLayersProps) => (
   <section className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
     <PeopleRoomCard
       active={activeLayer === "people" || activeLayer === "room"}
       collaborators={collaborators?.length ? collaborators : FALLBACK_COLLABORATORS}
       onInvite={onInvite}
+      onOpenCredits={onOpenCredits}
     />
     <ActivityRoomCard onOpenRecap={onOpenRecap} />
   </section>
@@ -111,10 +114,12 @@ const PeopleRoomCard = ({
   active,
   collaborators,
   onInvite,
+  onOpenCredits,
 }: {
   active: boolean;
   collaborators: Collaborator[];
   onInvite?: () => void;
+  onOpenCredits?: () => void;
 }) => (
   <RoomCard id="layer-people" active={active}>
     <RoomHeading icon={Users} eyebrow="Collaboration" title="In this room" />
@@ -157,6 +162,22 @@ const PeopleRoomCard = ({
       >
         <UserPlus size={16} strokeWidth={1.8} />
         Invite someone into this song
+      </button>
+    )}
+    {onOpenCredits && (
+      <button
+        type="button"
+        onClick={onOpenCredits}
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold transition-all duration-150 active:scale-[0.97]"
+        style={{
+          minHeight: 44,
+          backgroundColor: "transparent",
+          color: "var(--cog-warm-gray)",
+          fontFamily: "var(--font-body)",
+        }}
+      >
+        <Award size={15} strokeWidth={1.8} />
+        See credits
       </button>
     )}
   </RoomCard>
