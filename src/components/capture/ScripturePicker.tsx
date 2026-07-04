@@ -136,11 +136,11 @@ const ScripturePicker = ({ onPicked, onFallback }: ScripturePickerProps) => {
                 onClick={() => setTranslation(t.value)}
                 className="transition-colors inline-flex items-center justify-center"
                 style={{
-                  padding: "0 12px",
-                  minHeight: 36,
+                  padding: "0 14px",
+                  minHeight: 44,
                   borderRadius: 999,
                   fontFamily: "var(--font-display)",
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 600,
                   letterSpacing: 0.5,
                   background: active ? "var(--cog-gold)" : "transparent",
@@ -173,6 +173,11 @@ const ScripturePicker = ({ onPicked, onFallback }: ScripturePickerProps) => {
           placeholder="Psalm 23  ·  John 3:16-17"
           spellCheck={false}
           autoCapitalize="words"
+          // A book reference is not prose — stop iOS mangling "Ps" / "Phil" /
+          // "Song" into everyday words as the songwriter types.
+          autoCorrect="off"
+          autoComplete="off"
+          enterKeyHint="search"
           style={{
             flex: 1,
             border: "none",
@@ -188,12 +193,16 @@ const ScripturePicker = ({ onPicked, onFallback }: ScripturePickerProps) => {
             type="button"
             onClick={() => setQuery("")}
             aria-label="Clear reference"
+            className="inline-flex items-center justify-center"
             style={{
+              flexShrink: 0,
+              minWidth: 44,
+              minHeight: 44,
+              marginRight: -8,
               background: "transparent",
               border: "none",
               color: "var(--cog-warm-gray)",
               cursor: "pointer",
-              padding: 4,
             }}
           >
             <X size={16} />
@@ -329,15 +338,16 @@ const QuickChip = ({ onClick, children }: { onClick: () => void; children: React
   <button
     type="button"
     onClick={onClick}
-    className="transition-transform active:scale-95"
+    className="inline-flex items-center justify-center transition-transform active:scale-95"
     style={{
-      padding: "6px 12px",
+      minHeight: 44,
+      padding: "0 16px",
       borderRadius: 999,
       background: "transparent",
       border: "1px solid rgba(184,149,58,0.30)",
       color: "var(--cog-charcoal)",
       fontFamily: "var(--font-body)",
-      fontSize: 12,
+      fontSize: 13,
       cursor: "pointer",
     }}
   >
