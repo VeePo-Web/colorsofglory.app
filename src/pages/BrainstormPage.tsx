@@ -214,6 +214,12 @@ const BrainstormPage = () => {
   const roomTourRef = useRef<HTMLElement>(null);
   const roomTour = useCoachMark("tour_room_seen", !loading);
 
+  // Beat 3 — the capture moment, anchored on the record button. Arms when not
+  // mid-record so a tip never interrupts a take. The engine's one-tip lock
+  // shows this after the room beat, as a natural room → record sequence.
+  const captureTourRef = useRef<HTMLButtonElement>(null);
+  const captureTour = useCoachMark("tour_capture_seen", !loading && !recording);
+
   return (
     <div className="relative min-h-screen" style={{ backgroundColor: "var(--cog-cream, #F5F0E8)" }}>
       <div
@@ -259,8 +265,19 @@ const BrainstormPage = () => {
           />
         )}
 
+        {captureTour.visible && (
+          <CoachMark
+            targetRef={captureTourRef}
+            lead="Got a melody? Hum it."
+            body="One tap records. Your idea is saved the moment you stop."
+            onGotIt={captureTour.gotIt}
+            onSkip={captureTour.skip}
+          />
+        )}
+
         <div className="flex flex-col items-center pb-10 pt-6">
           <button
+            ref={captureTourRef}
             onClick={recording ? stopRecording : startRecording}
             disabled={saving}
             aria-label={recording ? "Stop recording" : "Start recording"}
