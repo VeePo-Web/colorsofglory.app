@@ -22,13 +22,23 @@ const OnboardingProgress = ({ step, total, className = "" }: OnboardingProgressP
     aria-valuemax={total}
     aria-label={`Step ${step} of ${total}`}
   >
+    {/* The active pill breathes a soft gold glow — alive, not static.
+        Reduced-motion holds it still (the glow stays, the pulse stops). */}
+    <style>{`
+      @keyframes cogDotBreathe {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(181,147,90,0.28); }
+        50% { box-shadow: 0 0 6px 1.5px rgba(181,147,90,0.30); }
+      }
+      .cog-dot-breathe { animation: cogDotBreathe 2.6s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) { .cog-dot-breathe { animation: none; } }
+    `}</style>
     {Array.from({ length: total }).map((_, i) => {
       const active = i === step - 1;
       const done = i < step - 1;
       return (
         <span
           key={i}
-          className="rounded-full transition-all duration-300"
+          className={`rounded-full transition-all duration-300 ${active ? "cog-dot-breathe" : ""}`}
           style={{
             height: 6,
             width: active ? 22 : 6,
