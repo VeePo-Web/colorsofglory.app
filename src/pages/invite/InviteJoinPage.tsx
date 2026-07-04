@@ -327,6 +327,7 @@ const InviteJoinPage = () => {
                 collaborators={preview.collaborators.slice(0, 4)}
                 size={30}
                 maxVisible={4}
+                stagger
               />
               <p className="text-[0.8125rem] leading-snug" style={{ color: '#666' }}>
                 {formatCollaboratorNames(preview.collaborators.map((c) => c.firstName))}{' '}
