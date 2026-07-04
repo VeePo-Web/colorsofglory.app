@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Play, Pause } from "lucide-react";
+import { ChevronRight, Play, Pause, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { claimSeedIdea, deleteSeedIdea, renameSeedIdea, type SeedIdeaRecord } from "@/lib/voice/seedIdeaApi";
 import { audioCache } from "@/lib/voice/audioCache";
+import { createSong } from "@/integrations/cog/songs";
 
 // Re-use waveform seed pattern from VoiceReviewSheet — here seeded with the
 // idea's id (a seed has no blob at list-render time, only its index record).
@@ -143,6 +144,25 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
     } catch {
       setClaiming(false);
       toast.error("Couldn't file that idea right now — it's still safe and waiting here.");
+    }
+  };
+
+  // "Make it a song" — a brand-new writer with ideas but no songs shouldn't hit a
+  // dead-end. Turn the idea straight into a new song (named after the idea) and
+  // move the capture into it, so the very first tap has a home.
+  const handleStartNewSong = async () => {
+    if (claiming) return;
+    setClaiming(true);
+    try {
+      const songTitle = title.trim() || idea.title;
+      const { song } = await createSong({ title: songTitle });
+      await claimSeedIdea({ seedId: idea.id, songId: song.id });
+      setPickerOpen(false);
+      onClaimed?.();
+      toast.success(`Started “${songTitle}” from your idea`);
+    } catch {
+      setClaiming(false);
+      toast.error("Couldn't start a song right now — your idea is still safe here.");
     }
   };
 
@@ -320,6 +340,7 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
           songs={songs}
           busy={claiming}
           onPick={handlePick}
+          onStartNew={handleStartNewSong}
           onClose={() => {
             if (!claiming) setPickerOpen(false);
           }}
@@ -333,6 +354,7 @@ interface SongPickerSheetProps {
   songs: SeedIdeaCardSong[];
   busy: boolean;
   onPick: (songId: string) => void;
+  onStartNew: () => void;
   onClose: () => void;
 }
 
@@ -342,7 +364,7 @@ interface SongPickerSheetProps {
  * pattern in the app yet, so this stays small and purpose-built: a scrollable
  * tappable list, nothing more.
  */
-const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps) => {
+const SongPickerSheet = ({ songs, busy, onPick, onStartNew, onClose }: SongPickerSheetProps) => {
   const [visible, setVisible] = useState(false);
   const reduceMotion =
     typeof window !== "undefined" &&
@@ -437,19 +459,55 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
         </p>
 
         <div style={{ overflowY: "auto", padding: "0 16px" }}>
-          {songs.length === 0 ? (
+          {/* "Make it a song" — always offered, so a first idea never dead-ends
+              on an empty catalog. It leads because turning an idea into its own
+              song is the most common intent for a brand-new writer. */}
+          <button
+            type="button"
+            onClick={onStartNew}
+            disabled={busy}
+            className="w-full transition-transform duration-150 active:scale-[0.98]"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              textAlign: "center",
+              padding: "16px 14px",
+              marginBottom: songs.length === 0 ? 4 : 14,
+              borderRadius: 14,
+              background: "var(--cog-gold-glow)",
+              border: "1px solid var(--cog-border-gold)",
+              color: "var(--cog-charcoal)",
+              fontFamily: "var(--font-body)",
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            <Plus size={17} style={{ color: "var(--cog-gold)" }} aria-hidden="true" />
+            Start a new song from this idea
+          </button>
+
+          {songs.length > 0 && (
             <p
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: 14,
-                color: "var(--cog-warm-gray)",
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "var(--cog-muted)",
                 textAlign: "center",
-                padding: "20px 12px 28px",
+                margin: "2px 0 12px",
               }}
             >
-              Start a song first — then your captured ideas can move in.
+              or file into a song
             </p>
-          ) : (
+          )}
+
+          {songs.length > 0 &&
             songs.map((song) => (
               <button
                 key={song.id}
@@ -483,8 +541,7 @@ const SongPickerSheet = ({ songs, busy, onPick, onClose }: SongPickerSheetProps)
                 </span>
                 <ChevronRight size={18} style={{ color: "var(--cog-gold)" }} aria-hidden="true" />
               </button>
-            ))
-          )}
+            ))}
         </div>
 
         <button
