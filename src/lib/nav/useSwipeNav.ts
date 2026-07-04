@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { SWIPE, decideSwipe } from "./swipeDecision";
 
 interface SwipeNavOptions {
@@ -32,7 +32,15 @@ const { EDGE_GUARD_PX, INTENT_PX, TRIGGER_PX, AXIS_RATIO, RESIST } = SWIPE;
  * has a visible tap affordance.
  */
 export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions): void {
-  const { onSwipeRight, onSwipeLeft, disabled } = opts;
+  const { disabled } = opts;
+
+  // Latch the latest callbacks in a ref so the touch listeners attach ONCE and
+  // never re-subscribe when a caller passes inline (non-memoized) handlers.
+  // Otherwise a re-render mid-drag (the data-heavy Songs list re-renders on
+  // load / tour / filter) would tear down the listeners and silently drop the
+  // in-flight swipe. Only `disabled` re-runs the effect — it must detach.
+  const cbRef = useRef(opts);
+  cbRef.current = opts;
 
   useEffect(() => {
     const el = ref.current;
@@ -74,8 +82,8 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
 
     const dampen = (dx: number): number => {
       // Full travel only toward a real destination; heavy resistance otherwise.
-      if (dx > 0) return onSwipeRight ? dx : dx * RESIST;
-      return onSwipeLeft ? dx : dx * RESIST;
+      if (dx > 0) return cbRef.current.onSwipeRight ? dx : dx * RESIST;
+      return cbRef.current.onSwipeLeft ? dx : dx * RESIST;
     };
 
     const paint = () => {
@@ -86,7 +94,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       // toward a real destination, the card lifts a little higher (and Android
       // gives one soft tick) so you KNOW letting go will turn the page — the
       // native "armed" cue. Drag back under the line and it relaxes.
-      const canGo = lastDx > 0 ? !!onSwipeRight : !!onSwipeLeft;
+      const canGo = lastDx > 0 ? !!cbRef.current.onSwipeRight : !!cbRef.current.onSwipeLeft;
       const nowArmed = canGo && Math.abs(lastDx) >= TRIGGER_PX;
       if (nowArmed !== armed) {
         armed = nowArmed;
@@ -184,16 +192,16 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       // Commit decision lives in swipeDecision.ts (pure + unit-tested).
       const dir = decideSwipe({
         dx, dy, velocity,
-        hasLeft: !!onSwipeLeft,
-        hasRight: !!onSwipeRight,
+        hasLeft: !!cbRef.current.onSwipeLeft,
+        hasRight: !!cbRef.current.onSwipeRight,
       });
       releaseVisual(dir === null);
       if (!dir) return;
       // A single soft tick confirms the page turn (Android-only enhancement —
       // iOS has no vibrate API; the visual slide carries the confirmation).
       try { navigator.vibrate?.(8); } catch { /* never let a nicety throw */ }
-      if (dir === "right") onSwipeRight?.();
-      else onSwipeLeft?.();
+      if (dir === "right") cbRef.current.onSwipeRight?.();
+      else cbRef.current.onSwipeLeft?.();
     };
 
     const onTouchCancel = () => {
@@ -223,5 +231,5 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchCancel);
     };
-  }, [ref, onSwipeRight, onSwipeLeft, disabled]);
+  }, [ref, disabled]);
 }
