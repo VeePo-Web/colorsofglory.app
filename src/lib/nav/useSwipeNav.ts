@@ -51,8 +51,10 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     let locked = false;     // horizontal intent confirmed — surface follows the finger
     let raf = 0;
     let lastDx = 0;
-    let lastX = 0;          // for release-velocity (flick) detection
-    let lastT = 0;
+    // Rolling ~100ms position history for release-velocity (flick) detection.
+    // Measuring only the last move→lift gap gives a near-zero window and misses
+    // fast flicks; a short window over recent samples captures true flick speed.
+    const history: { x: number; t: number }[] = [];
 
     const now = () =>
       (typeof performance !== "undefined" && performance.now) ? performance.now() : new Date().getTime();
@@ -144,8 +146,9 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
         el.style.boxShadow = "0 0 44px rgba(28,26,23,0.16)";
       }
       lastDx = dx;
-      lastX = t.clientX;
-      lastT = now();
+      const tNow = now();
+      history.push({ x: t.clientX, t: tNow });
+      while (history.length > 1 && tNow - history[0].t > 100) history.shift();
       if (!raf) raf = requestAnimationFrame(paint);
     };
 
@@ -157,12 +160,14 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       if (!t) { releaseVisual(true); return; }
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
-      // Release velocity (px/ms) over the final move → commit a fast flick even
-      // under the distance threshold, the way native pagers do. A finger held
-      // still before release has a stale lastT, so velocity decays to ~0 and we
-      // fall back to pure distance — a deliberate hold never false-commits.
-      const dt = now() - lastT;
-      const velocity = dt > 0 && dt < 120 ? (t.clientX - lastX) / dt : 0;
+      // Release velocity (px/ms) over the last ~100ms of movement → commit a
+      // fast flick even under the distance threshold, the way native pagers do.
+      // A finger held still before release stops adding history, so the oldest
+      // sample ages past the window and velocity decays to ~0 — falling back to
+      // pure distance, so a deliberate hold-and-release never false-commits.
+      const ref = history[0];
+      const dt = ref ? now() - ref.t : 0;
+      const velocity = ref && dt > 0 && dt < 200 ? (t.clientX - ref.x) / dt : 0;
       const axisOk = Math.abs(dx) >= Math.abs(dy) * AXIS_RATIO;
       const farEnough = Math.abs(dx) >= TRIGGER_PX;
       const flicked = Math.abs(dx) >= MIN_FLICK_PX && Math.abs(velocity) >= FLICK_VELOCITY
