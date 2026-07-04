@@ -98,6 +98,13 @@ Deno.serve(async (req) => {
     let ignoredReferrer = false;
     let ignoredCode = false;
     let claimedCodeId: string | null = null;
+    let jam100Applied = false;
+
+    // Hard-coded 100%-off promo. Applies to Pro only; overrides other codes.
+    // Uses a Stripe coupon (created on-demand, idempotent by id) so Stripe
+    // still records the subscription and portal/cancel flows keep working.
+    const JAM100_CODE = "JAM100";
+    const JAM100_COUPON_ID = "cog_jam100_forever";
 
     if (planKey) {
       const { data: tier, error: tierErr } = await supabaseAdmin
@@ -127,7 +134,13 @@ Deno.serve(async (req) => {
       }
 
       // Try founder code first (Pro only)
-      if (tier.allows_founder_code && rawCode) {
+      // JAM100 short-circuits everything else (Pro only).
+      if (rawCode === JAM100_CODE && planKey === "pro") {
+        // Single-code-per-buyer still applies (checked above).
+        jam100Applied = true;
+        // Leave appliedCodeKind = "none" so no referral attribution is written.
+        if (rawReferrerCode) ignoredReferrer = true;
+      } else if (tier.allows_founder_code && rawCode) {
         const { data: founderCode } = await supabaseAdmin
           .from("codes")
           .select("id, owner_founder_id, status, expires_at, max_redemptions, redemption_count")
@@ -177,7 +190,7 @@ Deno.serve(async (req) => {
       }
 
       // If client supplied a code that didn't resolve to anything, reject
-      if (rawCode && appliedCodeKind === "none" && tier.allows_founder_code) {
+      if (rawCode && appliedCodeKind === "none" && !jam100Applied && tier.allows_founder_code) {
         return json({ error: "invalid_code" }, 400);
       }
     }
