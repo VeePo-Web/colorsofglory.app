@@ -73,6 +73,7 @@ import MergeActionBar from "@/components/canvas/MergeActionBar";
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
 const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
+const CardEditSheet = lazy(() => import("@/components/canvas/CardEditSheet"));
 const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReviewQueueSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -270,6 +271,7 @@ interface CanvasCardProps {
   listenIndex?: number;
   onMergeSelect?: () => void;
   mergeSelected?: boolean;
+  onEdit?: () => void;
 }
 
 const CanvasCardEl = ({
@@ -284,6 +286,7 @@ const CanvasCardEl = ({
   canCompare = false,
   onCompare,
   onSuggestLine,
+  onEdit,
   onAddToListenPath,
   listenIndex,
   onMergeSelect,
@@ -519,9 +522,30 @@ const CanvasCardEl = ({
             marginTop: 10,
             borderTop: "1px solid rgba(0,0,0,0.07)",
             paddingTop: 8,
+            flexWrap: "wrap",
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {onEdit && !isVoice && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              style={{
+                flex: 1,
+                height: 30,
+                borderRadius: 8,
+                backgroundColor: `${card.accent}16`,
+                color: card.accent,
+                fontSize: 11,
+                fontWeight: 700,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+              }}
+              aria-label="Edit this idea"
+            >
+              Edit ▸
+            </button>
+          )}
           {isVoice && onOpenStack && (
             <button
               onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
@@ -728,6 +752,10 @@ const SongCanvasExperience = () => {
   const [showRecap, setShowRecap] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showReviewQueue, setShowReviewQueue] = useState(false);
+  // Card being edited (write the idea's words) + a card to fly the canvas to
+  // once it exists (new cards land below the fold, so we bring them into view).
+  const [editCardId, setEditCardId] = useState<string | null>(null);
+  const [focusCardId, setFocusCardId] = useState<string | null>(null);
   // Real room roster — the same source the People surface reads.
   const songMembers = useSongCollaborators(songId);
   // Viewport pan/zoom API, bridged out of <CanvasViewport> for presence-jump.
@@ -1018,8 +1046,12 @@ const SongCanvasExperience = () => {
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
-    showSavedMoment(newCard.title, "Ideas tree", "Note");
-  }, [cards, dismissFirstAction, isViewer, showSavedMoment, currentUserName]);
+    // Fly to the new card (it's placed below the fold) AND open the editor so
+    // the idea gets written right away — capture-then-fill, nothing lost if
+    // they dismiss (the card persists).
+    setFocusCardId(newCard.id);
+    setEditCardId(newCard.id);
+  }, [cards, dismissFirstAction, isViewer, currentUserName]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
@@ -1109,6 +1141,8 @@ const SongCanvasExperience = () => {
       };
       return [newCard, ...prev];
     });
+    // Bring the new memo card into view — it lands below the fold like any idea.
+    if (!parentMemoId) setFocusCardId(pending.id);
 
     await flushCanvasUpload(pending.id);
   }, [pendingRecording, showSavedMoment, songId, currentUserName, flushCanvasUpload]);
@@ -1297,6 +1331,29 @@ const SongCanvasExperience = () => {
     );
     setSelectedId(card.id);
   }, []);
+
+  // Bring a just-created card into view once it's on the board (add / record).
+  useEffect(() => {
+    if (!focusCardId) return;
+    const card = cards.find((c) => c.id === focusCardId);
+    if (card) {
+      jumpToCard(card);
+      setFocusCardId(null);
+    }
+  }, [focusCardId, cards, jumpToCard]);
+
+  // Write the idea's words into a card (title / body / section).
+  const handleSaveCardEdit = useCallback(
+    (cardId: string, draft: { title: string; body: string; section: string }) => {
+      setCards((prev) =>
+        prev.map((c) =>
+          c.id === cardId ? { ...c, title: draft.title, body: draft.body, section: draft.section } : c,
+        ),
+      );
+      setCanvasStatus("Saved to this song.");
+    },
+    [],
+  );
 
   const jumpToCardId = useCallback(
     (cardId: string) => {
@@ -1804,6 +1861,7 @@ const SongCanvasExperience = () => {
               listenIndex={listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined}
               onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => toggleMergeSelect(card.id) : undefined}
               mergeSelected={mergeSelection.includes(card.id)}
+              onEdit={!isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined}
             />
           ))}
         </CanvasViewport>
@@ -1960,6 +2018,27 @@ const SongCanvasExperience = () => {
           />
         </Suspense>
       )}
+
+      {/* Card editor — write the idea's words (opens on create + on Edit) */}
+      {editCardId && (() => {
+        const c = cards.find((card) => card.id === editCardId);
+        if (!c) return null;
+        const kindByType: Record<CanvasCardType, string> = {
+          lyric: "Lyric", voice: "Voice memo", hum: "Voice memo", chord: "Chord",
+          note: "Idea", scripture: "Scripture", section: "Section",
+        };
+        return (
+          <Suspense fallback={null}>
+            <CardEditSheet
+              initial={{ title: c.title, body: c.body, section: c.section }}
+              kind={kindByType[c.type] ?? "Idea"}
+              accent={c.accent}
+              onSave={(draft) => handleSaveCardEdit(c.id, draft)}
+              onClose={() => setEditCardId(null)}
+            />
+          </Suspense>
+        );
+      })()}
 
       {/* Line-level suggestion sheet (F19) */}
       {lineSuggest && (
