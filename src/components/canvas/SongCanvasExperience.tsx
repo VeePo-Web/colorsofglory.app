@@ -455,6 +455,11 @@ const CanvasCardEl = ({
         zIndex: selected ? 20 : 10,
         transform: selected ? "scale(1.03)" : "scale(1)",
         transition: "transform 150ms ease, box-shadow 150ms ease, opacity 200ms ease",
+        // A calm settle the first time this card mounts (add / promote / remote
+        // arrival). `backwards` fill hands transform back to the inline value
+        // afterwards, so selection scale still works. Reduced-motion disables
+        // it via the shared <style> block below.
+        animation: "cog-card-in 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards",
         padding: 14,
         boxSizing: "border-box",
       }}
@@ -2231,8 +2236,13 @@ const SongCanvasExperience = () => {
           0%   { transform: scale(1);   opacity: 0.6; }
           75%, 100% { transform: scale(2.2); opacity: 0; }
         }
+        @keyframes cog-card-in {
+          0%   { opacity: 0; transform: scale(0.96) translateY(6px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
         @media (prefers-reduced-motion: reduce) {
           [style*="cog-live-ping"] { animation: none !important; }
+          [style*="cog-card-in"]  { animation: none !important; }
         }
       `}</style>
     </div>
