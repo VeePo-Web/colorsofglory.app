@@ -169,7 +169,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
                 type="button"
                 onClick={() => setChordsFallback(true)}
                 className="text-xs self-center"
-                style={{ color: "var(--cog-warm-gray)" }}
+                style={{ color: "var(--cog-warm-gray)", minHeight: 44, padding: "0 16px" }}
               >
                 Type freeform instead
               </button>
@@ -234,8 +234,8 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
           <button
             type="button"
             onClick={onClose}
-            className="text-sm py-2"
-            style={{ color: "var(--cog-warm-gray)" }}
+            className="text-sm self-center"
+            style={{ color: "var(--cog-warm-gray)", minHeight: 44, padding: "0 20px" }}
           >
             Cancel
           </button>
