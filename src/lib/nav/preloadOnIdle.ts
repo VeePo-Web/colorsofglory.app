@@ -15,10 +15,12 @@ export function preloadOnIdle(...loaders: Array<() => Promise<unknown>>): void {
     }
   };
   if (typeof window === "undefined") return;
-  if ("requestIdleCallback" in window) {
-    (window as Window & { requestIdleCallback: (cb: () => void, o?: { timeout: number }) => number })
-      .requestIdleCallback(run, { timeout: 2500 });
+  const w = window as Window & {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+  };
+  if (typeof w.requestIdleCallback === "function") {
+    w.requestIdleCallback(run, { timeout: 2500 });
   } else {
-    window.setTimeout(run, 1200);
+    w.setTimeout(run, 1200);
   }
 }
