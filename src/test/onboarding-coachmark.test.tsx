@@ -108,6 +108,34 @@ describe("CoachMark", () => {
     expect(onGotIt).toHaveBeenCalledTimes(1);
   });
 
+  it("reduced-motion users still get the completion line (closure for everyone)", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: true, media: q,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    }));
+    const onGotIt = vi.fn();
+    render(<Harness onGotIt={onGotIt} isFinal />);
+    fireEvent.click(screen.getByText("Got it"));
+    expect(screen.getByText(/go write something worth singing/i)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1700));
+    expect(onGotIt).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("a tap during the completion pause dismisses once, not twice", () => {
+    vi.useFakeTimers();
+    const onGotIt = vi.fn();
+    render(<Harness onGotIt={onGotIt} isFinal />);
+    fireEvent.click(screen.getByText("Got it")); // enter completion state
+    act(() => vi.advanceTimersByTime(200)); // outside-tap listener arms
+    fireEvent.pointerDown(screen.getByTestId("anchor")); // impatient tap
+    expect(onGotIt).toHaveBeenCalledTimes(1);
+    act(() => vi.advanceTimersByTime(1700)); // the auto-timer must not double-fire
+    expect(onGotIt).toHaveBeenCalledTimes(1);
+  });
+
   it("renders into a document.body portal, not the anchor's subtree", () => {
     const { getByTestId } = render(<Harness />);
     const anchor = getByTestId("anchor");

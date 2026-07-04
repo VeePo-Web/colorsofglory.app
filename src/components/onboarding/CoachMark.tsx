@@ -45,13 +45,28 @@ const CoachMark = ({ targetRef, lead, body, onGotIt, onSkip, isFinal }: CoachMar
   const reduceMotion = useReducedMotion();
   const seen = seenCount();
 
-  // On the final beat, "Got it" briefly shows the completion line (rail full)
-  // then dismisses. Reduced-motion (and any earlier beat) dismisses at once.
+  // Fire the real dismiss exactly once — the completion auto-timer and an
+  // impatient tap can both call it.
+  const finishedRef = useRef(false);
+  const finish = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    onGotIt();
+  };
+
+  // On the final beat, "Got it" shows the completion line (rail full) then
+  // dismisses after a brief pause. Reduced-motion still gets the closing line
+  // (a timed content swap, not decorative motion) — it just skips the CSS
+  // animation. A tap during the pause dismisses immediately. Earlier beats
+  // dismiss at once.
   const handleGotIt = () => {
-    if (done) return;
-    if (isFinal && !reduceMotion) {
+    if (done) {
+      finish();
+      return;
+    }
+    if (isFinal) {
       setDone(true);
-      window.setTimeout(onGotIt, COMPLETION_MS);
+      window.setTimeout(finish, COMPLETION_MS);
       return;
     }
     onGotIt();
