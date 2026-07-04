@@ -135,11 +135,16 @@ const SongCatalogPage = () => {
     lastActiveAlbumId = activeAlbumId;
   }, [activeAlbumId, albums]);
 
-  // The mic is one swipe to the right; opening a song is one tap away —
-  // both chunks warm while the songwriter is browsing.
+  // The mic is one swipe to the right; opening a song is one tap away — warm
+  // every neighbor while the songwriter browses. Tapping a song opens the
+  // CANVAS (/songs/:id/canvas), so SongCanvasPage must be warm too — it was the
+  // one cold edge on the app's most common action (a song-open would otherwise
+  // hit a loading frame on the first open of the session). Brainstorm stays
+  // warmed for the new-song create path.
   useEffect(() => {
     preloadOnIdle(
       () => import("@/pages/CapturePage"),
+      () => import("@/pages/SongCanvasPage"),
       () => import("@/pages/BrainstormPage"),
     );
   }, []);
