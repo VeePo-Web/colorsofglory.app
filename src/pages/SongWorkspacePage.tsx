@@ -1,5 +1,5 @@
 import type { ElementType } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
 import CogBrand from "@/components/cog/CogBrand";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
+import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 
 interface Module {
   id: string;
@@ -63,6 +64,15 @@ const SongWorkspacePage = () => {
   const backToSongs = useCallback(() => navigate("/songs"), [navigate]);
   useSwipeNav(roomRef, { onSwipeRight: backToSongs });
   const enterClass = useSpatialEntrance(useLocation().pathname);
+
+  // Completes the "every nav edge is instant" contract: the library is one
+  // swipe/tap back from the room, so warm its chunk on idle. On the normal
+  // journey it's already cached; this closes the cold-start case — a deep link
+  // straight into a room (invite / shared / resume) then paging back to Songs,
+  // which otherwise hit a loading frame. Matches Capture + Songs prefetch.
+  useEffect(() => {
+    preloadOnIdle(() => import("@/pages/SongCatalogPage"));
+  }, []);
 
   return (
     <div
