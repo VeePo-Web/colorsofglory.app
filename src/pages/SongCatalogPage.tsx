@@ -12,6 +12,7 @@ import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
 import AlbumDetailHeader from "@/components/library/AlbumDetailHeader";
+import AlbumRail from "@/components/library/AlbumRail";
 import AlbumSongOrderList from "@/components/library/AlbumSongOrderList";
 import ContinueShelf from "@/components/library/ContinueShelf";
 import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
@@ -533,7 +534,31 @@ const SongCatalogPage = () => {
       </div>
 
       {/* ── LIBRARY ────────────────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:max-w-5xl lg:px-8">
+      <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:flex lg:max-w-5xl lg:gap-8 lg:px-8">
+        {/* Persistent album rail — tablet/desktop only; phones keep the shelf */}
+        {!selecting && activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
+          <AlbumRail
+            albums={albums}
+            activeAlbumId={viewingUngrouped ? null : activeAlbumId}
+            ungroupedActive={viewingUngrouped}
+            ungroupedCount={ungroupedCount}
+            onSelectAll={() => {
+              setActiveAlbumId(null);
+              setReorderingAlbum(false);
+            }}
+            onSelectUngrouped={() => {
+              setActiveAlbumId(UNGROUPED);
+              setReorderingAlbum(false);
+            }}
+            onSelectAlbum={(id) => {
+              setActiveAlbumId(id);
+              setReorderingAlbum(false);
+            }}
+            onNewAlbum={() => setAlbumSheet({ open: true, album: null })}
+          />
+        )}
+
+        <div className="min-w-0 lg:flex-1">
         <SeedIdeasShelf songs={fileableSongs} />
 
         {/* PV11 empty Owned state — an invitation, not controls over nothing */}
@@ -638,17 +663,20 @@ const SongCatalogPage = () => {
           activeTab === "Owned" &&
           !loading &&
           ownedSongs.length > 0 && (
-            <AlbumsShelf
-              albums={albums}
-              songs={ownedSongs}
-              activeAlbumId={activeAlbumId}
-              ungroupedCount={ungroupedCount}
-              onSelect={setActiveAlbumId}
-              onSelectUngrouped={() => setActiveAlbumId(UNGROUPED)}
-              onNew={() => setAlbumSheet({ open: true, album: null })}
-              onEdit={(album) => setAlbumSheet({ open: true, album })}
-              onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
-            />
+            /* Horizontal shelf on phones/portrait tablets; the rail owns lg+ */
+            <div className="lg:hidden">
+              <AlbumsShelf
+                albums={albums}
+                songs={ownedSongs}
+                activeAlbumId={activeAlbumId}
+                ungroupedCount={ungroupedCount}
+                onSelect={setActiveAlbumId}
+                onSelectUngrouped={() => setActiveAlbumId(UNGROUPED)}
+                onNew={() => setAlbumSheet({ open: true, album: null })}
+                onEdit={(album) => setAlbumSheet({ open: true, album })}
+                onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
+              />
+            </div>
           )
         )}
 
@@ -741,6 +769,7 @@ const SongCatalogPage = () => {
             onSkip={catalogTour.skip}
           />
         )}
+        </div>
       </div>
 
       {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
