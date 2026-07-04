@@ -17,7 +17,7 @@ import {
   clearAllFailedCaptures,
 } from "@/lib/voice/failedCaptureStore";
 import { audioCache } from "@/lib/voice/audioCache";
-import { saveSeedIdea } from "@/lib/voice/seedIdeaApi";
+import { saveSeedIdea, listSeedIdeas } from "@/lib/voice/seedIdeaApi";
 import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
@@ -73,6 +73,25 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   >("idle");
   const [saving, setSaving] = useState(false);
   const [prompt] = useState(() => pickPrompt(new Date()));
+
+  // How many unfiled ideas are waiting on the shelf. On the global capture page
+  // (no songId) a hum lands in local Ideas, NOT the DB — so the peek strip can't
+  // see it and, without this, a captured idea leaves zero trace on the page it
+  // was captured from. Surfacing the count on the "Unfiled" pill makes captures
+  // feel kept: the number ticks up the instant you save, so nothing feels lost
+  // between a fading toast and the next idea.
+  const [seedCount, setSeedCount] = useState(0);
+  const refreshSeedCount = useCallback(() => {
+    if (songId) return;
+    listSeedIdeas()
+      .then((records) => setSeedCount(records.length))
+      .catch(() => {
+        /* count is a nicety — never let it break capture */
+      });
+  }, [songId]);
+  useEffect(() => {
+    refreshSeedCount();
+  }, [refreshSeedCount]);
 
   // Side-rail sheet (idle taps)
   const [sheetAction, setSheetAction] = useState<RailAction | null>(null);
@@ -146,6 +165,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           setStatus("ready");
           setFailedTake(null);
           void clearAllFailedCaptures();
+          // Tick the "Unfiled" pill up immediately — the idea visibly landed.
+          refreshSeedCount();
           toast.success("Saved to your Ideas", {
             description: "File it into a song whenever you like.",
             // Close the loop — one tap to go see it on the Ideas shelf.
@@ -206,7 +227,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         setSaving(false);
       }
     },
-    [saving, songId, songTitle],
+    [saving, songId, songTitle, refreshSeedCount],
   );
 
   const retryFailedTake = useCallback(() => {
@@ -479,13 +500,20 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           <button
             type="button"
             onClick={goToSongs}
-            aria-label="View your unfiled ideas"
+            aria-label={
+              seedCount > 0
+                ? `View your ${seedCount} unfiled idea${seedCount === 1 ? "" : "s"}`
+                : "View your unfiled ideas"
+            }
             className="transition-transform active:scale-95"
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
               fontFamily: "var(--font-display)",
               fontSize: 14,
               color: "var(--cog-charcoal)",
-              padding: "6px 14px",
+              padding: seedCount > 0 ? "6px 8px 6px 14px" : "6px 14px",
               borderRadius: 999,
               background: "rgba(184,149,58,0.10)",
               border: "1px solid rgba(184,149,58,0.25)",
@@ -493,6 +521,29 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             }}
           >
             Unfiled
+            {seedCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 20,
+                  height: 20,
+                  padding: "0 6px",
+                  borderRadius: 999,
+                  background: "var(--cog-gold)",
+                  color: "#fff",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {seedCount}
+              </span>
+            )}
           </button>
         )}
 
