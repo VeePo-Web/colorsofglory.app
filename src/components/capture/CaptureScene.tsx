@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle } from "lucide-react";
 import { formatDuration } from "@/lib/voice/audioFormat";
@@ -22,7 +22,13 @@ import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
-import CaptureSheet, { type PendingBlock } from "./CaptureSheet";
+import type { PendingBlock } from "./CaptureSheet";
+// Code-split the heaviest side-rail surface (chord engine + scripture parsing)
+// out of the capture ENTRY chunk. It always renders inside Suspense, so its
+// chunk streams in right after mount instead of blocking the mic's first paint
+// — the primary "/" surface stays instant. Preloaded on idle (below) so the
+// first side-rail tap is warm.
+const CaptureSheet = lazy(() => import("./CaptureSheet"));
 import ReviewSheet from "./ReviewSheet";
 import ImportMemoButton from "./ImportMemoButton";
 import LatestPeekStrip from "./LatestPeekStrip";
@@ -452,7 +458,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // Songs are one swipe to the left — have their chunk warm before the
   // first slide so the neighbor appears instantly, never a loading frame.
   useEffect(() => {
-    preloadOnIdle(() => import("@/pages/SongCatalogPage"));
+    preloadOnIdle(
+      () => import("@/pages/SongCatalogPage"),
+      // Warm the side-rail sheet chunk while idle so its first tap is instant,
+      // even though it's split out of the entry chunk for a faster first paint.
+      () => import("./CaptureSheet"),
+    );
   }, []);
 
   // Self-teaching wayfinding: gently nudge the Songs affordance on every
@@ -697,12 +708,14 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         )}
       </main>
 
-      <CaptureSheet
-        open={sheetAction !== null}
-        action={sheetAction}
-        onClose={() => setSheetAction(null)}
-        onSave={handleSheetSave}
-      />
+      <Suspense fallback={null}>
+        <CaptureSheet
+          open={sheetAction !== null}
+          action={sheetAction}
+          onClose={() => setSheetAction(null)}
+          onSave={handleSheetSave}
+        />
+      </Suspense>
 
       <ReviewSheet
         open={review.open}
