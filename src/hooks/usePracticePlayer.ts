@@ -56,6 +56,7 @@ const buildInitialState = (
   repeatCountThisPosition: 0,
   loopCount: 0,
   currentPositionMs: 0,
+  loopRegion: null,
   playbackSpeed: 1.0,
   gapMs: 500,
   showLyrics: true,
@@ -123,7 +124,18 @@ export function usePracticePlayer() {
     const tick = () => {
       const audio = audioRef.current;
       if (audio) {
-        setState(s => ({ ...s, currentPositionMs: audio.currentTime * 1000 }));
+        const posMs = audio.currentTime * 1000;
+        // A/B loop — wrap the playhead back to the region start the instant it
+        // passes the end, so only the drilled window plays. Bumps the loop
+        // count + haptic just like a full-section loop.
+        const region = stateRef.current.loopRegion;
+        if (region && posMs >= region.endMs && audio.duration) {
+          audio.currentTime = region.startMs / 1000;
+          vibrate(HAPTIC_LOOP_COMPLETE);
+          setState(s => ({ ...s, currentPositionMs: region.startMs, loopCount: s.loopCount + 1 }));
+        } else {
+          setState(s => ({ ...s, currentPositionMs: posMs }));
+        }
       }
       positionRafRef.current = requestAnimationFrame(tick);
     };
@@ -516,7 +528,8 @@ export function usePracticePlayer() {
 
   const goToSection = useCallback((index: number) => {
     vibrate(HAPTIC_SECTION_CHANGE);
-    setState(prev => ({ ...prev, loopCount: 0, sequencePosition: 0, repeatCountThisPosition: 0 }));
+    // A/B loop belongs to the section it was drawn on — clear it on any move.
+    setState(prev => ({ ...prev, loopCount: 0, sequencePosition: 0, repeatCountThisPosition: 0, loopRegion: null }));
     loadAndPlay(index);
   }, [loadAndPlay]);
 
@@ -548,13 +561,24 @@ export function usePracticePlayer() {
 
   const restartCurrentSection = useCallback(() => {
     const audio = audioRef.current;
+    // With an A/B loop set, "restart" means restart the drilled window.
+    const startMs = stateRef.current.loopRegion?.startMs ?? 0;
     if (audio) {
-      audio.currentTime = 0;
+      audio.currentTime = startMs / 1000;
       if (stateRef.current.status === "playing") {
         audio.play().catch(() => {});
       }
     }
-    setState(prev => ({ ...prev, currentPositionMs: 0 }));
+    setState(prev => ({ ...prev, currentPositionMs: startMs }));
+  }, []);
+
+  /** Set or clear the A/B loop window (milliseconds within the current section). */
+  const setLoopRegion = useCallback((region: { startMs: number; endMs: number } | null) => {
+    setState(prev => ({ ...prev, loopRegion: region }));
+    // Jump the playhead to the window start so the drill begins immediately.
+    if (region && audioRef.current) {
+      audioRef.current.currentTime = region.startMs / 1000;
+    }
   }, []);
 
   const setLoopMode = useCallback((mode: LoopMode) => {
@@ -670,6 +694,7 @@ export function usePracticePlayer() {
     goToPrevSection,
     restartCurrentSection,
     setLoopMode,
+    setLoopRegion,
     toggleDriveMode,
     setSequence,
     setPlaybackSpeed,

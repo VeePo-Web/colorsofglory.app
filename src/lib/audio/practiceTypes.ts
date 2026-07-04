@@ -56,6 +56,12 @@ export interface PracticePlayerState {
   repeatCountThisPosition: number;
   loopCount: number;
   currentPositionMs: number;
+  /**
+   * A/B loop — when set, playback loops only this millisecond window of the
+   * current section (drill the one hard phrase, not the whole 40s). Cleared
+   * whenever the active section changes.
+   */
+  loopRegion: { startMs: number; endMs: number } | null;
   playbackSpeed: number;
   gapMs: 0 | 500 | 1000 | 2000;
   showLyrics: boolean;

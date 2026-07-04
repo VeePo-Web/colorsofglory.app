@@ -18,6 +18,7 @@ import { KaraokeLyrics } from "./KaraokeLyrics";
 import { PracticeSettingsTray } from "./PracticeSettingsTray";
 import { SequenceBuilder } from "./SequenceBuilder";
 import { SessionSummaryCard } from "./SessionSummaryCard";
+import { ABLoopBar } from "./ABLoopBar";
 import type { PracticePlayerHook } from "@/hooks/usePracticePlayer";
 
 interface FullPracticePlayerProps {
@@ -29,7 +30,7 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
   const {
     state,
     play, pause, goToSection, goToPrevSection, goToNextSection, restartCurrentSection,
-    setLoopMode, setPlaybackSpeed, setGapMs, setRepeatPerSection, setCountInEnabled,
+    setLoopMode, setLoopRegion, setPlaybackSpeed, setGapMs, setRepeatPerSection, setCountInEnabled,
     setSpeedTrainer, setTimerEndTimeMs, toggleDriveMode, setSequence, setShowLyrics,
     dismissSummary, endSession,
   } = hook;
@@ -44,10 +45,6 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
 
   const isPlaying = status === "playing";
   const isCaching = status === "caching";
-
-  const progressPct = activeSection && activeSection.durationMs > 0
-    ? Math.min((currentPositionMs / activeSection.durationMs) * 100, 100)
-    : 0;
 
   // Handle timer set (convert minutes to end epoch)
   const handleSetTimerMinutes = (minutes: number | null) => {
@@ -197,31 +194,14 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
           ) : null}
         </div>
 
-        {/* Progress bar */}
-        <div className="relative z-10 px-6 pb-4">
-          <div
-            className="rounded-full overflow-hidden"
-            style={{ height: 4, backgroundColor: "rgba(28,26,23,0.10)" }}
-          >
-            <div
-              className="rounded-full"
-              style={{
-                height: "100%",
-                width: `${progressPct}%`,
-                backgroundColor: colors.bg,
-                transition: "width 200ms linear",
-              }}
-            />
-          </div>
-          <div className="flex justify-between mt-1">
-            <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--cog-muted)" }}>
-              {formatMs(currentPositionMs)}
-            </span>
-            <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--cog-muted)" }}>
-              {activeSection ? formatMs(activeSection.durationMs) : "--:--"}
-            </span>
-          </div>
-        </div>
+        {/* Progress bar + A/B loop window */}
+        <ABLoopBar
+          durationMs={activeSection?.durationMs ?? 0}
+          positionMs={currentPositionMs}
+          color={colors.bg}
+          region={state.loopRegion}
+          onRegionChange={setLoopRegion}
+        />
 
         {/* Main transport controls */}
         <div className="relative z-10 flex items-center justify-center gap-6 px-6 pb-4">
@@ -385,12 +365,4 @@ function LoopModeChip({ loopMode, color }: { loopMode: string; color: string }) 
       {labels[loopMode] ?? loopMode}
     </div>
   );
-}
-
-function formatMs(ms: number): string {
-  if (!ms || ms < 0) return "0:00";
-  const totalSec = Math.floor(ms / 1000);
-  const min      = Math.floor(totalSec / 60);
-  const sec      = totalSec % 60;
-  return `${min}:${sec.toString().padStart(2, "0")}`;
 }
