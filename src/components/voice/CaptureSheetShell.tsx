@@ -40,6 +40,33 @@ function usePrefersReducedMotion(): boolean {
 }
 
 /**
+ * How many px the on-screen keyboard overlaps the bottom of the viewport. On iOS
+ * Safari the software keyboard covers a bottom-pinned sheet with no reflow —
+ * hiding Save/Discard/name fields behind it. Every capture sheet composes this
+ * shell, so tracking the inset here fixes the whole lane (record · review ·
+ * global capture · pickers) in one place, the DRY root-cause way.
+ */
+function useKeyboardInset(): number {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const update = () => {
+      const gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setInset(gap > 24 ? gap : 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return inset;
+}
+
+/**
  * CaptureSheetShell — the shared bottom-sheet chrome for every capture surface
  * (record · global capture · review). Owns the frosted charcoal scrim, the
  * rounded cream sheet, the grab handle, the slide-up motion, and the safe-area
@@ -50,6 +77,7 @@ function usePrefersReducedMotion(): boolean {
 const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, children }: CaptureSheetShellProps) => {
   const [visible, setVisible] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
+  const kbInset = useKeyboardInset();
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -98,8 +126,19 @@ const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, 
           borderRadius: "24px 24px 0 0",
           borderTop: "1px solid var(--cog-border)",
           boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+          // The sheet is pinned to the screen bottom, so adding the keyboard
+          // inset to the bottom padding grows it UPWARD — lifting the name field
+          // and Save/Discard clear of the keyboard. When lifted, cap to the
+          // viewport and scroll so nothing at the top ever clips.
+          paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 24px + ${kbInset}px)`,
+          ...(kbInset > 0
+            ? { maxHeight: "calc(100dvh - env(safe-area-inset-top, 0px) - 8px)", overflowY: "auto" as const }
+            : {}),
           ...sheetMotion,
+          // Combine the sheet's own open/close motion with a gentle padding
+          // slide so the keyboard lift eases in (declared AFTER sheetMotion so it
+          // extends, not drops, that transition).
+          transition: `${sheetMotion.transition}, padding-bottom 180ms ease`,
           ...(minHeight ? { minHeight } : {}),
         }}
       >
