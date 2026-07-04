@@ -34,6 +34,21 @@ export function SessionSummaryCard({ state, onDismiss }: SessionSummaryCardProps
   // Sections practiced
   const sectionsPracticed = state.sections.filter(s => s.loopCountThisSession > 0);
 
+  // Album mode — group the recap by song so "Chorus ×14" reads against the
+  // right song instead of blurring sections from four different songs together.
+  const isAlbum = sectionsPracticed.some(s => s.songTitle);
+  const songGroups = (() => {
+    const by = new Map<string, { title: string; sections: typeof sectionsPracticed; loops: number }>();
+    for (const s of sectionsPracticed) {
+      const key = s.songTitle ?? "";
+      let g = by.get(key);
+      if (!g) { g = { title: key, sections: [], loops: 0 }; by.set(key, g); }
+      g.sections.push(s);
+      g.loops += s.loopCountThisSession;
+    }
+    return [...by.values()];
+  })();
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center pb-8 px-4 pointer-events-none"
@@ -83,43 +98,52 @@ export function SessionSummaryCard({ state, onDismiss }: SessionSummaryCardProps
         <div className="flex px-5 py-4 gap-4">
           <StatCell label="Duration" value={durationLabel} />
           <StatCell label="Total loops" value={String(totalLoops)} />
-          {state.stats.fullRunThroughs > 0 && (
+          {isAlbum ? (
+            <StatCell label="Songs" value={String(songGroups.length)} />
+          ) : state.stats.fullRunThroughs > 0 ? (
             <StatCell label="Full runs" value={String(state.stats.fullRunThroughs)} />
-          )}
+          ) : null}
         </div>
 
-        {/* Per-section breakdown */}
+        {/* Breakdown — grouped by song in album mode, flat for a single song */}
         {sectionsPracticed.length > 0 && (
           <div
             className="px-5 pb-5"
-            style={{ borderTop: "1px solid var(--cog-border)", paddingTop: 12 }}
+            style={{ borderTop: "1px solid var(--cog-border)", paddingTop: 12, maxHeight: "42vh", overflowY: "auto" }}
           >
-            {sectionsPracticed.map(section => (
-              <div
-                key={section.id}
-                className="flex items-center justify-between py-1.5"
-              >
-                <span
-                  style={{
-                    fontFamily: "var(--font-body)",
-                    fontSize: "0.875rem",
-                    color: "var(--cog-charcoal)",
-                  }}
-                >
-                  {section.label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-body)",
-                    fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--cog-gold)",
-                  }}
-                >
-                  ×{section.loopCountThisSession}
-                </span>
-              </div>
-            ))}
+            {isAlbum
+              ? songGroups.map((group, gi) => (
+                  <div key={group.title || gi} style={{ marginTop: gi === 0 ? 0 : 12 }}>
+                    <div className="flex items-center justify-between pb-1">
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "0.9375rem",
+                          fontWeight: 700,
+                          color: "var(--cog-charcoal)",
+                        }}
+                      >
+                        {group.title || "Song"}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-body)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          color: "var(--cog-warm-gray)",
+                        }}
+                      >
+                        ×{group.loops}
+                      </span>
+                    </div>
+                    {group.sections.map(section => (
+                      <BreakdownRow key={section.id} label={section.label} loops={section.loopCountThisSession} indent />
+                    ))}
+                  </div>
+                ))
+              : sectionsPracticed.map(section => (
+                  <BreakdownRow key={section.id} label={section.label} loops={section.loopCountThisSession} />
+                ))}
           </div>
         )}
 
@@ -143,6 +167,19 @@ export function SessionSummaryCard({ state, onDismiss }: SessionSummaryCardProps
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+    </div>
+  );
+}
+
+function BreakdownRow({ label, loops, indent }: { label: string; loops: number; indent?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-1.5" style={{ paddingLeft: indent ? 10 : 0 }}>
+      <span style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: indent ? "var(--cog-warm-gray)" : "var(--cog-charcoal)" }}>
+        {label}
+      </span>
+      <span style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", fontWeight: 600, color: "var(--cog-gold)" }}>
+        ×{loops}
+      </span>
     </div>
   );
 }
