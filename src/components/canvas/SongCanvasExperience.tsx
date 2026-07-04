@@ -1246,17 +1246,25 @@ const SongCanvasExperience = () => {
       : roomCollaborators;
   }, [livePresence, songMembers, roomCollaborators]);
 
-  // The people layer's roster rows (name + role); demo fallback lives in the layer.
-  const peopleLayerCollaborators = useMemo(
-    () =>
-      songMembers.map((m) => ({
+  // The people layer's roster rows (name + role). Real members first; if the
+  // member roster hasn't loaded, fall back to whoever is actually on the board
+  // — never fabricated people. Empty for a true solo writer (honest solo state).
+  const peopleLayerCollaborators = useMemo(() => {
+    if (songMembers.length > 0) {
+      return songMembers.map((m) => ({
         initials: m.avatarInitials,
         name: `${m.firstName} ${m.lastName}`.trim(),
         role: m.role,
         color: m.avatarColor,
-      })),
-    [songMembers],
-  );
+      }));
+    }
+    return roomCollaborators.map((c) => ({
+      initials: c.avatarInitials,
+      name: `${c.firstName} ${c.lastName}`.trim() || c.firstName,
+      role: c.firstName === currentUserName ? "You" : "Contributor",
+      color: c.avatarColor,
+    }));
+  }, [songMembers, roomCollaborators, currentUserName]);
 
   // The invite sheet's roster: real members when they exist, otherwise the
   // people already visible on cards — so presence-jump works in every room.
@@ -1376,6 +1384,24 @@ const SongCanvasExperience = () => {
           text: `${c.contributor} added "${c.title}" · ${c.section}`,
           dotColor: c.accent,
           targetCardId: c.id,
+        })),
+    [cards, currentUserName],
+  );
+
+  // Real activity for the People-layer "What changed" card — co-writers' cards,
+  // latest first. Empty for a solo writer, so the layer shows an honest state
+  // instead of fabricated bandmates.
+  const layerActivity = useMemo(
+    () =>
+      cards
+        .filter((c) => !c.parentMemoId && c.contributor && c.contributor !== currentUserName)
+        .slice(0, 4)
+        .map((c) => ({
+          id: `act-${c.id}`,
+          actor: c.contributor.split(" ")[0] || c.contributor,
+          summary: `added "${c.title}"`,
+          context: c.section,
+          color: c.accent,
         })),
     [cards, currentUserName],
   );
@@ -1818,6 +1844,7 @@ const SongCanvasExperience = () => {
                     <SongCanvasCollabLayers
                       activeLayer={activeLayer}
                       collaborators={peopleLayerCollaborators}
+                      activity={layerActivity}
                       onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
                       onOpenRecap={() => setShowRecap(true)}
                       onOpenCredits={() => navigate(`/songs/${songId}/credits`)}

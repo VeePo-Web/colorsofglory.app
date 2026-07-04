@@ -18,8 +18,10 @@ interface ActivityItem {
 
 interface SongCanvasCollabLayersProps {
   activeLayer: string;
-  /** Real room members; falls back to the demo trio until the roster loads. */
+  /** Real room members — honest solo state when empty (no fabricated people). */
   collaborators?: Collaborator[];
+  /** Real recent activity from co-writers — honest empty state when none. */
+  activity?: ActivityItem[];
   /** Opens the copy-link invite sheet. Omitted for viewers. */
   onInvite?: () => void;
   /** Opens the What Changed recap sheet. */
@@ -28,45 +30,15 @@ interface SongCanvasCollabLayersProps {
   onOpenCredits?: () => void;
 }
 
-const FALLBACK_COLLABORATORS: Collaborator[] = [
-  { initials: "PK", name: "Parker", role: "Owner", color: "#B8953A" },
-  { initials: "SM", name: "Sarah M.", role: "Contributor", color: "#53AB8B" },
-  { initials: "CR", name: "Caleb R.", role: "Reviewer", color: "#8070C4" },
-];
-
-const ACTIVITY: ActivityItem[] = [
-  {
-    id: "activity-1",
-    actor: "Sarah",
-    summary: "added a chorus memo",
-    context: "Voice - 1:14 - pending listen",
-    color: "#53AB8B",
-  },
-  {
-    id: "activity-2",
-    actor: "Caleb",
-    summary: "suggested Am instead of Em",
-    context: "Chords - Verse 1 - review",
-    color: "#8070C4",
-  },
-  {
-    id: "activity-3",
-    actor: "Parker",
-    summary: "moved the chorus into Final",
-    context: "Ideas Tree -> Final Tree",
-    color: "#B8953A",
-  },
-];
-
-const SongCanvasCollabLayers = ({ activeLayer, collaborators, onInvite, onOpenRecap, onOpenCredits }: SongCanvasCollabLayersProps) => (
+const SongCanvasCollabLayers = ({ activeLayer, collaborators, activity, onInvite, onOpenRecap, onOpenCredits }: SongCanvasCollabLayersProps) => (
   <section className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
     <PeopleRoomCard
       active={activeLayer === "people" || activeLayer === "room"}
-      collaborators={collaborators?.length ? collaborators : FALLBACK_COLLABORATORS}
+      collaborators={collaborators ?? []}
       onInvite={onInvite}
       onOpenCredits={onOpenCredits}
     />
-    <ActivityRoomCard onOpenRecap={onOpenRecap} />
+    <ActivityRoomCard activity={activity ?? []} onOpenRecap={onOpenRecap} />
   </section>
 );
 
@@ -123,30 +95,36 @@ const PeopleRoomCard = ({
 }) => (
   <RoomCard id="layer-people" active={active}>
     <RoomHeading icon={Users} eyebrow="Collaboration" title="In this room" />
-    <div className="grid gap-2 sm:grid-cols-3">
-      {collaborators.map((person) => (
-        <article
-          key={person.name}
-          className="flex items-center gap-3 rounded-2xl p-3"
-          style={{ backgroundColor: "rgba(250,247,242,0.72)", border: "1px solid rgba(28,26,23,0.08)" }}
-        >
-          <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-            style={{ backgroundColor: `${person.color}22`, color: person.color }}
+    {collaborators.length > 0 ? (
+      <div className="grid gap-2 sm:grid-cols-3">
+        {collaborators.map((person) => (
+          <article
+            key={person.name}
+            className="flex items-center gap-3 rounded-2xl p-3"
+            style={{ backgroundColor: "rgba(250,247,242,0.72)", border: "1px solid rgba(28,26,23,0.08)" }}
           >
-            {person.initials}
-          </span>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)" }}>
-              {person.name}
-            </p>
-            <p className="text-xs" style={{ color: "var(--cog-muted)" }}>
-              {person.role}
-            </p>
-          </div>
-        </article>
-      ))}
-    </div>
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+              style={{ backgroundColor: `${person.color}22`, color: person.color }}
+            >
+              {person.initials}
+            </span>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)" }}>
+                {person.name}
+              </p>
+              <p className="text-xs" style={{ color: "var(--cog-muted)" }}>
+                {person.role}
+              </p>
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", lineHeight: 1.5 }}>
+        It's just you in here right now. Invite a co-writer and their work will show up here.
+      </p>
+    )}
     {onInvite && (
       <button
         type="button"
@@ -183,30 +161,36 @@ const PeopleRoomCard = ({
   </RoomCard>
 );
 
-const ActivityRoomCard = ({ onOpenRecap }: { onOpenRecap?: () => void }) => (
+const ActivityRoomCard = ({ activity, onOpenRecap }: { activity: ActivityItem[]; onOpenRecap?: () => void }) => (
   <RoomCard>
     <RoomHeading icon={ActivityIcon} eyebrow="Remember changes" title="What changed" />
-    <div className="space-y-2">
-      {ACTIVITY.map((item) => (
-        <article
-          key={item.id}
-          className="rounded-2xl p-3"
-          style={{
-            backgroundColor: "rgba(250,247,242,0.72)",
-            border: "1px solid rgba(28,26,23,0.08)",
-            borderLeft: `3px solid ${item.color}`,
-          }}
-        >
-          <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)" }}>
-            {item.actor} {item.summary}
-          </p>
-          <p className="text-xs" style={{ color: "var(--cog-muted)" }}>
-            {item.context}
-          </p>
-        </article>
-      ))}
-    </div>
-    {onOpenRecap && (
+    {activity.length > 0 ? (
+      <div className="space-y-2">
+        {activity.map((item) => (
+          <article
+            key={item.id}
+            className="rounded-2xl p-3"
+            style={{
+              backgroundColor: "rgba(250,247,242,0.72)",
+              border: "1px solid rgba(28,26,23,0.08)",
+              borderLeft: `3px solid ${item.color}`,
+            }}
+          >
+            <p className="text-sm font-semibold" style={{ color: "var(--cog-charcoal)" }}>
+              {item.actor} {item.summary}
+            </p>
+            <p className="text-xs" style={{ color: "var(--cog-muted)" }}>
+              {item.context}
+            </p>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", lineHeight: 1.5 }}>
+        Nothing new yet. When your co-writers add ideas, changes show up here.
+      </p>
+    )}
+    {activity.length > 0 && onOpenRecap && (
       <button
         type="button"
         onClick={onOpenRecap}

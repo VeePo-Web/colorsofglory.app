@@ -76,10 +76,15 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
     window.setTimeout(onDismiss, 320);
   };
 
-  const items = phase === "ready" ? (providedItems?.length ? providedItems : DEMO_ITEMS) : [];
+  // Respect the real digest when the caller passes one (even empty → honest
+  // empty state). DEMO_ITEMS only render when no items prop is supplied at all.
+  const items = phase === "ready" ? (providedItems ?? DEMO_ITEMS) : [];
+  const isEmpty = phase === "ready" && items.length === 0;
   const subtitle =
     phase === "loading"
       ? "Checking what changed…"
+      : isEmpty
+      ? "You're all caught up"
       : `${items.length} update${items.length !== 1 ? "s" : ""} since you were last here`;
 
   return (
@@ -250,42 +255,61 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
             </div>
           )}
 
-          {/* ── Primary CTA ───────────────────────────────────────────── */}
-          <button
-            ref={ctaRef}
-            onClick={handleReview}
-            style={{
-              display: "block",
-              width: "100%",
-              minHeight: 60,
-              borderRadius: 16,
-              border: "none",
-              backgroundColor: "var(--cog-gold)",
-              color: "#fff",
-              fontSize: 17,
-              fontWeight: 650,
-              letterSpacing: "0.01em",
-              cursor: "pointer",
-              marginBottom: 12,
-              transition: "transform 130ms ease, opacity 130ms ease",
-            }}
-            onPointerDown={(e) => {
-              e.currentTarget.style.transform = "scale(0.983)";
-              e.currentTarget.style.opacity = "0.9";
-            }}
-            onPointerUp={(e) => {
-              e.currentTarget.style.transform = "";
-              e.currentTarget.style.opacity = "";
-            }}
-            onPointerLeave={(e) => {
-              e.currentTarget.style.transform = "";
-              e.currentTarget.style.opacity = "";
-            }}
-          >
-            {ctaLabel}
-          </button>
+          {/* ── Honest empty state (no fabricated activity) ────────────── */}
+          {isEmpty && (
+            <div
+              style={{
+                borderRadius: 18, padding: "22px 18px", marginBottom: 24, textAlign: "center",
+                backgroundColor: "var(--cog-cream-light)", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+              }}
+            >
+              <p style={{ fontSize: 15, fontWeight: 500, color: "var(--cog-charcoal)", marginBottom: 4 }}>
+                Nothing new since you were last here.
+              </p>
+              <p style={{ fontSize: 13, color: "var(--cog-warm-gray)", lineHeight: 1.45 }}>
+                When your co-writers add ideas, their changes will show up here.
+              </p>
+            </div>
+          )}
 
-          {/* Secondary — skip the recap, go straight to the song */}
+          {/* ── Primary CTA (only when there's something to review) ─────── */}
+          {!isEmpty && (
+            <button
+              ref={ctaRef}
+              onClick={handleReview}
+              style={{
+                display: "block",
+                width: "100%",
+                minHeight: 60,
+                borderRadius: 16,
+                border: "none",
+                backgroundColor: "var(--cog-gold)",
+                color: "#fff",
+                fontSize: 17,
+                fontWeight: 650,
+                letterSpacing: "0.01em",
+                cursor: "pointer",
+                marginBottom: 12,
+                transition: "transform 130ms ease, opacity 130ms ease",
+              }}
+              onPointerDown={(e) => {
+                e.currentTarget.style.transform = "scale(0.983)";
+                e.currentTarget.style.opacity = "0.9";
+              }}
+              onPointerUp={(e) => {
+                e.currentTarget.style.transform = "";
+                e.currentTarget.style.opacity = "";
+              }}
+              onPointerLeave={(e) => {
+                e.currentTarget.style.transform = "";
+                e.currentTarget.style.opacity = "";
+              }}
+            >
+              {ctaLabel}
+            </button>
+          )}
+
+          {/* Secondary — go to the song (primary action when caught up) */}
           <button
             onClick={onDismiss}
             style={{
