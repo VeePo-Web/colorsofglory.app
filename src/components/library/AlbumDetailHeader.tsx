@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, Disc3, Plus } from "lucide-react";
+import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -9,6 +9,9 @@ interface AlbumDetailHeaderProps {
   onExit: () => void;
   onEdit: () => void;
   onAddSongs: () => void;
+  /** Setlist reorder mode toggle (shown only when 2+ songs). */
+  reordering?: boolean;
+  onToggleReorder?: () => void;
 }
 
 const FALLBACKS = [
@@ -25,23 +28,44 @@ const FALLBACKS = [
  * to all songs in one tap, and can act on the album as a whole. Removes the
  * "which album am I in / how do I leave" friction of a scroll-away shelf.
  */
-const AlbumDetailHeader = ({ album, songs, onExit, onEdit, onAddSongs }: AlbumDetailHeaderProps) => {
+const AlbumDetailHeader = ({
+  album,
+  songs,
+  onExit,
+  onEdit,
+  onAddSongs,
+  reordering = false,
+  onToggleReorder,
+}: AlbumDetailHeaderProps) => {
   const covers = songs.slice(0, 4).map((s) => coverColor(s.cover_color));
   const ideas = songs.reduce((n, s) => n + s.voice_memo_count, 0);
   const empty = songs.length === 0;
 
   return (
     <div className="mb-4">
-      {/* Back to all songs */}
-      <button
-        onClick={onExit}
-        className="mb-3 flex items-center gap-1 transition-transform duration-150 active:scale-95"
-        style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
-        aria-label="Back to all songs"
-      >
-        <ChevronLeft size={18} strokeWidth={2.2} />
-        <span className="text-[0.875rem] font-semibold">All songs</span>
-      </button>
+      {/* Back to all songs · Reorder toggle (Apple "Edit" affordance) */}
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          onClick={onExit}
+          className="flex items-center gap-1 transition-transform duration-150 active:scale-95"
+          style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+          aria-label="Back to all songs"
+        >
+          <ChevronLeft size={18} strokeWidth={2.2} />
+          <span className="text-[0.875rem] font-semibold">All songs</span>
+        </button>
+        {songs.length > 1 && onToggleReorder && (
+          <button
+            onClick={onToggleReorder}
+            className="flex items-center gap-1.5 transition-transform duration-150 active:scale-95"
+            style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
+            aria-pressed={reordering}
+          >
+            {reordering ? <Check size={16} strokeWidth={2.4} /> : <ArrowUpDown size={15} strokeWidth={2.2} />}
+            <span className="text-[0.875rem] font-semibold">{reordering ? "Done" : "Reorder"}</span>
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-4">
         {/* Mosaic cover */}

@@ -13,6 +13,7 @@ import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
 import AlbumDetailHeader from "@/components/library/AlbumDetailHeader";
+import AlbumSongOrderList from "@/components/library/AlbumSongOrderList";
 import ContinueShelf from "@/components/library/ContinueShelf";
 import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
@@ -82,6 +83,7 @@ const SongCatalogPage = () => {
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchAlbumOpen, setBatchAlbumOpen] = useState(false);
+  const [reorderingAlbum, setReorderingAlbum] = useState(false);
 
   const updatePrefs = (changes: Partial<LibraryPrefs>) =>
     setPrefs((prev) => {
@@ -138,6 +140,13 @@ const SongCatalogPage = () => {
     }
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
+
+    // Inside an album, the album's own order IS the sort — a setlist has a
+    // service order, not "most recent" (Apple Music plays a playlist in order).
+    if (activeTab === "Owned" && activeAlbum && !q) {
+      const rank = new Map(activeAlbum.songIds.map((id, i) => [id, i]));
+      return [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    }
 
     const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
     const sorted = [...list];
@@ -426,6 +435,7 @@ const SongCatalogPage = () => {
                 onClick={() => {
                   setActiveTab(tab);
                   setActiveAlbumId(null);
+                  setReorderingAlbum(false);
                 }}
                 className={`mr-6 pb-3 text-[0.9375rem] font-medium relative transition-colors duration-150 flex items-end justify-center gap-1.5 ${
                   activeTab === tab ? "text-white" : "text-white/40 hover:text-white/70"
@@ -490,7 +500,7 @@ const SongCatalogPage = () => {
               Done
             </button>
           </div>
-        ) : (
+        ) : reorderingAlbum ? null : (
           <LibraryControls
             query={query}
             onQueryChange={setQuery}
@@ -515,9 +525,14 @@ const SongCatalogPage = () => {
           <AlbumDetailHeader
             album={activeAlbum}
             songs={ownedSongs.filter((s) => activeAlbum.songIds.includes(s.id))}
-            onExit={() => setActiveAlbumId(null)}
+            onExit={() => {
+              setActiveAlbumId(null);
+              setReorderingAlbum(false);
+            }}
             onEdit={() => setAlbumSheet({ open: true, album: activeAlbum })}
             onAddSongs={() => setAlbumSheet({ open: true, album: activeAlbum })}
+            reordering={reorderingAlbum}
+            onToggleReorder={() => setReorderingAlbum((v) => !v)}
           />
         ) : (
           !selecting &&
@@ -576,6 +591,12 @@ const SongCatalogPage = () => {
         )}
 
         <div ref={catalogTourRef}>
+        {reorderingAlbum && activeAlbum ? (
+          <AlbumSongOrderList
+            songs={visibleSongs}
+            onReorder={(orderedIds) => setAlbums(updateAlbum(activeAlbum.id, { songIds: orderedIds }))}
+          />
+        ) : (
         <LibrarySongList
           songs={visibleSongs}
           view={prefs.view}
@@ -602,6 +623,7 @@ const SongCatalogPage = () => {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
         />
+        )}
         </div>
         </>
         )}
