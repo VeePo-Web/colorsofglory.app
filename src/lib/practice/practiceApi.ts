@@ -206,3 +206,35 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
 
   return result;
 }
+
+/**
+ * Loads a whole album's worth of practice sections — every playable section
+ * of every song in the album, flattened into one continuous list, in album
+ * (tracklist) order. Each section is tagged with its song so the player can
+ * show a "which song" eyebrow while looping in the car.
+ *
+ * Section ids are namespaced by song id so two songs that share a section id
+ * (e.g. both have a "chorus" row) never collide in the player or in mastery
+ * history. Songs with no playable memos are simply skipped. Loads run in
+ * parallel; a song that fails to load is dropped rather than failing the album.
+ */
+export async function loadAlbumPracticeSections(
+  songs: { id: string; title: string }[],
+): Promise<PracticeSection[]> {
+  const perSong = await Promise.all(
+    songs.map(async (song) => {
+      try {
+        const sections = await loadPracticeSections(song.id);
+        return sections.map((s) => ({
+          ...s,
+          id: `${song.id}::${s.id}`,
+          songId: song.id,
+          songTitle: song.title,
+        }));
+      } catch {
+        return [] as PracticeSection[];
+      }
+    }),
+  );
+  return perSong.flat();
+}

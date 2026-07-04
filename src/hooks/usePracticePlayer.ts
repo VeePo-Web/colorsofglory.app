@@ -236,7 +236,7 @@ export function usePracticePlayer() {
       updateMediaSession({
         sectionLabel: section.label,
         loopCount: 0,
-        songTitle: st.songTitle,
+        songTitle: section.songTitle ?? st.songTitle,
         durationMs: section.durationMs,
         positionMs: 0,
         playbackRate: currentSpeed,
@@ -317,7 +317,7 @@ export function usePracticePlayer() {
     updateMediaSession({
       sectionLabel: section.label,
       loopCount: newLoopCount,
-      songTitle: s.songTitle,
+      songTitle: section.songTitle ?? s.songTitle,
       durationMs: section.durationMs,
       positionMs: 0,
       playbackRate: s.speedTrainer.enabled ? newSpeedTrainer.currentSpeed : s.playbackSpeed,

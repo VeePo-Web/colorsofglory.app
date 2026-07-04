@@ -590,6 +590,16 @@ const SongCatalogPage = () => {
             }}
             onEdit={() => setAlbumSheet({ open: true, album: activeAlbum })}
             onAddSongs={() => setAlbumSheet({ open: true, album: activeAlbum })}
+            onPractice={() => {
+              // Resolve songs in the album's own tracklist order, tagged with
+              // titles so the player never re-fetches the song list.
+              const byId = new Map(ownedSongs.map((s) => [s.id, s.title]));
+              const songs = activeAlbum.songIds
+                .filter((id) => byId.has(id))
+                .map((id) => ({ id, title: byId.get(id) ?? "Untitled Song" }));
+              setNavDirection("up");
+              navigate(`/albums/${activeAlbum.id}/practice`, { state: { songs } });
+            }}
             reordering={reorderingAlbum}
             onToggleReorder={() => setReorderingAlbum((v) => !v)}
           />

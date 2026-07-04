@@ -43,6 +43,7 @@ const ReturningHomePage  = lazy(() => import("./pages/ReturningHomePage"));
 
 const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
 const PracticePlayerPage = lazy(() => import("./pages/PracticePlayerPage"));
+const AlbumPracticeExperience = lazy(() => import("./pages/AlbumPracticeExperience"));
 const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
@@ -188,6 +189,7 @@ const App = () => {
             <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
             <Route path="/songs/:id/sheet" element={<SongSheetPage />} />
             <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
+            <Route path="/albums/:albumId/practice" element={<AlbumPracticeExperience />} />
             <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
             <Route path="/songs/:id/notes" element={<CanvasLayerRedirect layer="notes" />} />
             <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />

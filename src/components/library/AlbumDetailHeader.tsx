@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check } from "lucide-react";
+import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check, Repeat } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -9,6 +9,8 @@ interface AlbumDetailHeaderProps {
   onExit: () => void;
   onEdit: () => void;
   onAddSongs: () => void;
+  /** Loop the whole album in the car. Shown only when a song has an idea to play. */
+  onPractice?: () => void;
   /** Tracklist arrange-mode toggle (shown only when 2+ songs). */
   reordering?: boolean;
   onToggleReorder?: () => void;
@@ -34,6 +36,7 @@ const AlbumDetailHeader = ({
   onExit,
   onEdit,
   onAddSongs,
+  onPractice,
   reordering = false,
   onToggleReorder,
 }: AlbumDetailHeaderProps) => {
@@ -137,6 +140,28 @@ const AlbumDetailHeader = ({
           </div>
         </div>
       </div>
+
+      {/* Practice the whole album — loop every idea, hands-free, in the car */}
+      {onPractice && ideas > 0 && (
+        <button
+          onClick={onPractice}
+          className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl transition-transform duration-150 active:scale-[0.98]"
+          style={{
+            minHeight: 52,
+            backgroundColor: "var(--cog-gold)",
+            color: "#fff",
+            fontFamily: "var(--font-body)",
+            fontSize: "0.9375rem",
+            fontWeight: 700,
+            border: "none",
+            boxShadow: "0 10px 24px -12px rgba(184,149,58,0.65)",
+          }}
+          aria-label={`Practice ${album.name} — loop every idea`}
+        >
+          <Repeat size={17} strokeWidth={2.4} />
+          Practice album
+        </button>
+      )}
     </div>
   );
 };

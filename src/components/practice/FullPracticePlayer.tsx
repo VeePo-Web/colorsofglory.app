@@ -135,6 +135,20 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
 
         {/* Active section label + loop counter */}
         <div className="relative z-10 flex flex-col items-center px-6 pt-6 pb-2 gap-1">
+          {activeSection?.songTitle && (
+            <div
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--cog-gold)",
+              }}
+            >
+              {activeSection.songTitle}
+            </div>
+          )}
           <div
             style={{
               fontFamily: "var(--font-display)",

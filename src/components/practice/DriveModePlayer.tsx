@@ -75,6 +75,23 @@ export function DriveModePlayer({ hook }: DriveModePlayerProps) {
 
       {/* Section label — very large */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+        {activeSection?.songTitle && (
+          <div
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "1rem",
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: colors.text,
+              opacity: 0.72,
+              textAlign: "center",
+              marginBottom: "-0.75rem",
+            }}
+          >
+            {activeSection.songTitle}
+          </div>
+        )}
         <div
           style={{
             fontFamily: "var(--font-display)",

@@ -19,6 +19,14 @@ export interface PracticeSection {
   cacheStatus: CacheStatus;
   masteryLevel: MasteryLevel;
   loopCountThisSession: number;
+  /**
+   * Album mode only: the song this section belongs to. Undefined in a
+   * single-song session (every section shares one song). When set, the player
+   * shows a song eyebrow so a driver hearing sections from several in-progress
+   * songs always knows which song is playing.
+   */
+  songTitle?: string;
+  songId?: string;
 }
 
 export interface SpeedTrainerConfig {
