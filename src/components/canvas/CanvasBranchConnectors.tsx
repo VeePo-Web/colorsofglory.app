@@ -29,8 +29,8 @@ const ROOT_W = 420;
 const ROOT_H = 132;
 
 // Idea card geometry — must mirror CanvasCardEl
-const CARD_W = 200;
-const CARD_H = 130;
+const CARD_W = 208;
+const CARD_H = 132;
 
 // Root anchor points
 const ROOT_BOTTOM_CX = ROOT_L + ROOT_W / 2; // 290
@@ -67,25 +67,14 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
         const ey = card.y;
         // Cubic bezier: depart downward from root, arrive from above at card
         const path = `M ${ROOT_BOTTOM_CX} ${ROOT_BOTTOM_CY} C ${ROOT_BOTTOM_CX} ${ROOT_BOTTOM_CY + VERT_SLACK} ${ex} ${ey - VERT_SLACK} ${ex} ${ey}`;
-        const opacity = card.isDimmedReference ? 0.11 : 0.28;
+        const opacity = card.isDimmedReference ? 0.10 : 0.32;
         return (
           <g key={`ci-${card.id}`}>
-            <path
-              d={path}
-              stroke={card.accent}
-              strokeWidth={1.5}
-              strokeLinecap="round"
-              fill="none"
-              opacity={opacity}
-            />
+            {/* Soft glow underlay for depth */}
+            <path d={path} stroke={card.accent} strokeWidth={5} strokeLinecap="round" fill="none" opacity={opacity * 0.32} />
+            <path d={path} stroke={card.accent} strokeWidth={2} strokeLinecap="round" fill="none" opacity={opacity} />
             {/* Arrival dot at card top-center */}
-            <circle
-              cx={ex}
-              cy={ey}
-              r={3.5}
-              fill={card.accent}
-              opacity={Math.min(opacity + 0.14, 0.50)}
-            />
+            <circle cx={ex} cy={ey} r={4} fill={card.accent} opacity={Math.min(opacity + 0.16, 0.55)} />
           </g>
         );
       })}
@@ -97,25 +86,13 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
         // S-curve cubic: depart horizontally from root, arrive horizontally at card
         const midX = (ROOT_RIGHT_CX + ex) / 2;
         const path = `M ${ROOT_RIGHT_CX} ${ROOT_RIGHT_CY} C ${midX} ${ROOT_RIGHT_CY} ${midX} ${ey} ${ex} ${ey}`;
-        const opacity = card.isDimmedReference ? 0.11 : 0.28;
+        const opacity = card.isDimmedReference ? 0.10 : 0.32;
         return (
           <g key={`cf-${card.id}`}>
-            <path
-              d={path}
-              stroke={card.accent}
-              strokeWidth={1.5}
-              strokeLinecap="round"
-              fill="none"
-              opacity={opacity}
-            />
+            <path d={path} stroke={card.accent} strokeWidth={5} strokeLinecap="round" fill="none" opacity={opacity * 0.32} />
+            <path d={path} stroke={card.accent} strokeWidth={2} strokeLinecap="round" fill="none" opacity={opacity} />
             {/* Arrival dot at card left-center */}
-            <circle
-              cx={ex}
-              cy={ey}
-              r={3.5}
-              fill={card.accent}
-              opacity={Math.min(opacity + 0.14, 0.50)}
-            />
+            <circle cx={ex} cy={ey} r={4} fill={card.accent} opacity={Math.min(opacity + 0.16, 0.55)} />
           </g>
         );
       })}

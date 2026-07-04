@@ -1,7 +1,15 @@
+import { Sparkles } from "lucide-react";
+
 interface SongRootCardProps {
   title: string;
 }
 
+/**
+ * The root song card — the anchor at the top-left of the Ideas zone that every
+ * idea branches from. Treated as the special centre of the room: warm gradient
+ * surface, a gold glow, a gold gradient crown bar, and the song title in
+ * display serif.
+ */
 const SongRootCard = ({ title }: SongRootCardProps) => (
   <section
     aria-label="Root song card"
@@ -11,34 +19,58 @@ const SongRootCard = ({ title }: SongRootCardProps) => (
       top: 48,
       width: 420,
       minHeight: 132,
-      borderRadius: 18,
-      backgroundColor: "#FFFFFF",
-      border: "1.5px solid rgba(181,147,90,0.36)",
-      boxShadow: "0 10px 28px rgba(28,26,23,0.10)",
-      padding: 18,
+      borderRadius: 20,
+      background: "linear-gradient(150deg, #FFFFFF 0%, #FFFBF2 100%)",
+      border: "1.5px solid rgba(184,149,58,0.34)",
+      boxShadow: "0 14px 44px rgba(184,149,58,0.16), 0 2px 8px rgba(28,26,23,0.07)",
+      padding: "18px 20px 18px 20px",
       boxSizing: "border-box",
       color: "#1A1A1A",
+      overflow: "hidden",
     }}
   >
-    <p
+    {/* Gold crown bar along the top edge */}
+    <div
+      aria-hidden="true"
       style={{
-        margin: 0,
-        fontFamily: "var(--font-body)",
-        fontSize: 10,
-        fontWeight: 800,
-        letterSpacing: "0.16em",
-        textTransform: "uppercase",
-        color: "#B5935A",
+        position: "absolute", top: 0, left: 0, right: 0, height: 4,
+        background: "linear-gradient(90deg, #D4AE5C, #B8953A 55%, rgba(184,149,58,0.2))",
       }}
-    >
-      Root song
-    </p>
+    />
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+          background: "linear-gradient(140deg, rgba(212,174,92,0.22), rgba(184,149,58,0.12))",
+          border: "1px solid rgba(184,149,58,0.35)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <Sparkles size={15} strokeWidth={1.9} style={{ color: "#B5935A" }} />
+      </span>
+      <p
+        style={{
+          margin: 0,
+          fontFamily: "var(--font-body)",
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "#B5935A",
+        }}
+      >
+        Root song
+      </p>
+    </div>
     <p
       style={{
-        margin: "8px 0 6px",
+        margin: "0 0 6px",
         fontFamily: "var(--font-display)",
-        fontSize: 24,
-        lineHeight: 1.1,
+        fontSize: 25,
+        fontWeight: 700,
+        lineHeight: 1.08,
+        color: "#1A1A1A",
       }}
     >
       {title}
