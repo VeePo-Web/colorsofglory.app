@@ -476,8 +476,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             {songTitle ?? "Open room"}
           </button>
         ) : (
-          <div
-            aria-label="Capture destination"
+          <button
+            type="button"
+            onClick={goToSongs}
+            aria-label="View your unfiled ideas"
+            className="transition-transform active:scale-95"
             style={{
               fontFamily: "var(--font-display)",
               fontSize: 14,
@@ -486,10 +489,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
               borderRadius: 999,
               background: "rgba(184,149,58,0.10)",
               border: "1px solid rgba(184,149,58,0.25)",
+              cursor: "pointer",
             }}
           >
             Unfiled
-          </div>
+          </button>
         )}
 
         <button
