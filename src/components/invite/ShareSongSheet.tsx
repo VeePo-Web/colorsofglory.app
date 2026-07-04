@@ -152,10 +152,10 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
         aria-label={`Invite into ${songTitle}`}
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
-          backgroundColor: "#FAFAF6",
+          backgroundColor: "var(--cog-cream-light)",
           borderRadius: "24px 24px 0 0",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 -24px 60px rgba(0,0,0,0.20)",
+          borderTop: "1px solid var(--cog-border)",
+          boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",
           padding: "0 20px",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
           maxHeight: "85dvh", overflowY: "auto",
@@ -164,14 +164,14 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
           maxWidth: 480, margin: "0 auto",
         }}
       >
-        <div style={{ width: 40, height: 4, borderRadius: 9999, backgroundColor: "#CCC", margin: "12px auto 14px" }} aria-hidden="true" />
+        <div style={{ width: 40, height: 4, borderRadius: 9999, backgroundColor: "var(--cog-border)", margin: "12px auto 14px" }} aria-hidden="true" />
         <button
           type="button"
           onClick={onClose}
           style={{
             position: "absolute", top: 8, right: 16, width: 44, height: 44, borderRadius: "50%",
-            backgroundColor: "rgba(0,0,0,0.05)", border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", color: "#666",
+            backgroundColor: "var(--cog-cream-dark)", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", color: "var(--cog-warm-gray)",
           }}
           aria-label="Close invite sheet"
         >
@@ -198,8 +198,8 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
                 onClick={() => { setRole(r); setCopied(false); setError(null); void ensureInvite(r).catch(() => {}); }}
                 style={{
                   flex: 1, minHeight: 48, borderRadius: 14, cursor: "pointer",
-                  backgroundColor: active ? "rgba(184,149,58,0.08)" : "#FFFFFF",
-                  border: active ? "1.5px solid var(--cog-gold)" : "1.5px solid rgba(0,0,0,0.08)",
+                  backgroundColor: active ? "var(--cog-gold-glow)" : "#FFFFFF",
+                  border: active ? "1.5px solid var(--cog-gold)" : "1.5px solid var(--cog-border)",
                   color: active ? "var(--cog-gold)" : "var(--cog-warm-gray)",
                   fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
                   transition: "all 150ms ease",
@@ -239,7 +239,7 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
             onClick={handleShare}
             style={{
               width: "100%", minHeight: 48, borderRadius: 16, marginTop: 10, cursor: "pointer",
-              backgroundColor: "#FFFFFF", border: "1.5px solid rgba(0,0,0,0.10)", color: "var(--cog-charcoal)",
+              backgroundColor: "#FFFFFF", border: "1.5px solid var(--cog-border)", color: "var(--cog-charcoal)",
               fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}
@@ -248,19 +248,30 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
           </button>
         )}
 
-        {/* The link itself — visible so it can always be long-press copied */}
-        <div
+        {/* The link itself — tap the whole row to copy (Figma/Notion pattern),
+            and it stays selectable for a manual long-press copy too. */}
+        <button
+          type="button"
+          onClick={readyInvite ? handleCopy : undefined}
+          disabled={!readyInvite}
+          aria-label={readyInvite ? "Copy invite link" : "Creating your link"}
           style={{
-            marginTop: 12, borderRadius: 12, padding: "10px 12px",
-            backgroundColor: "#F1EDE4", border: "1px solid rgba(0,0,0,0.06)",
-            display: "flex", alignItems: "center", gap: 8,
+            width: "100%", marginTop: 12, borderRadius: 12, padding: "10px 12px",
+            backgroundColor: "var(--cog-cream-dark)", border: "1px solid var(--cog-border)",
+            display: "flex", alignItems: "center", gap: 8, textAlign: "left",
+            cursor: readyInvite ? "pointer" : "default",
           }}
         >
           <Link2 size={14} strokeWidth={1.8} style={{ color: "var(--cog-muted)", flexShrink: 0 }} aria-hidden="true" />
-          <p style={{ flex: 1, fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "monospace", overflowWrap: "anywhere", userSelect: "all" }}>
+          <span style={{ flex: 1, fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "monospace", overflowWrap: "anywhere", userSelect: "all", minWidth: 0 }}>
             {readyInvite ? readyInvite.inviteUrl : "Creating your link…"}
-          </p>
-        </div>
+          </span>
+          {readyInvite && (
+            copied
+              ? <Check size={14} strokeWidth={2.2} style={{ color: "var(--cog-gold)", flexShrink: 0 }} aria-hidden="true" />
+              : <Copy size={14} strokeWidth={1.8} style={{ color: "var(--cog-muted)", flexShrink: 0 }} aria-hidden="true" />
+          )}
+        </button>
 
         {error && (
           <p role="alert" style={{ fontSize: 13, color: "#B4543F", fontFamily: "var(--font-body)", marginTop: 10, textAlign: "center" }}>
@@ -318,13 +329,13 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, onJumpTo, p
                   style={{
                     display: "flex", alignItems: "center", gap: 10, width: "100%",
                     minHeight: 48, padding: "6px 0", background: "none", border: "none",
-                    borderBottom: "1px solid rgba(0,0,0,0.05)", cursor: "pointer",
+                    borderBottom: "1px solid var(--cog-border)", cursor: "pointer",
                   }}
                 >
                   {row}
                 </button>
               ) : (
-                <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+                <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--cog-border)" }}>
                   {row}
                 </div>
               );
