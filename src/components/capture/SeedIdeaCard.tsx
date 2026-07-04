@@ -177,6 +177,10 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
           borderRadius: 16,
           background: "var(--cog-cream-light)",
           border: "1px solid var(--cog-border)",
+          // A single soft elevation so a captured hum reads as a tactile object
+          // held on the shelf — not a flat list row. Restrained (COG uses one
+          // gentle shadow for cards, never shadow-on-everything).
+          boxShadow: "0 2px 10px rgba(28,26,23,0.05)",
           scrollSnapAlign: "start",
         }}
       >
@@ -305,7 +309,9 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
               background: "none",
               border: "none",
               padding: "6px 0",
-              minHeight: 32,
+              minHeight: 44,
+              display: "flex",
+              alignItems: "center",
               cursor: "pointer",
             }}
           >
@@ -325,7 +331,9 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
               background: "none",
               border: "none",
               padding: "6px 4px",
-              minHeight: 32,
+              minHeight: 44,
+              display: "flex",
+              alignItems: "center",
               cursor: "pointer",
               whiteSpace: "nowrap",
             }}
