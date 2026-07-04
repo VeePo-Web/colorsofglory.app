@@ -219,15 +219,22 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       locked = false;
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       try { navigator.vibrate?.(8); } catch { /* never let a nicety throw */ }
+      // Velocity-responsive timing: a fast flick snaps through quickly (feels
+      // instant), a slow deliberate drag gets the fuller, calmer fly-out — the
+      // way native pagers behave. The faster the flick, the sooner the route
+      // changes and the quicker the surface clears.
+      const fast = Math.abs(velocity) >= SWIPE.FLICK_VELOCITY;
+      const flyMs = fast ? 150 : 220;
+      const navMs = fast ? 90 : 150;
       const outX = Math.round(window.innerWidth * (dir === "right" ? 0.5 : -0.5));
-      el.style.transition = "transform 220ms cubic-bezier(0.4,0,1,1), opacity 200ms ease-out";
+      el.style.transition = `transform ${flyMs}ms cubic-bezier(0.4,0,1,1), opacity ${flyMs - 20}ms ease-out`;
       el.style.transform = `translateX(${outX}px)`;
       el.style.opacity = "0";
       commitTimer = window.setTimeout(() => {
         commitTimer = 0;
         if (dir === "right") cbRef.current.onSwipeRight?.();
         else cbRef.current.onSwipeLeft?.();
-      }, 150);
+      }, navMs);
     };
 
     const onTouchCancel = () => {
