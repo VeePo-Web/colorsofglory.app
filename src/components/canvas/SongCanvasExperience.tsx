@@ -271,6 +271,19 @@ const SongCanvasSemanticSummary = () => (
   </section>
 );
 
+// A calm decorative waveform so a voice card reads as audio at a glance.
+const WAVE_BARS = [7, 13, 20, 11, 24, 15, 9, 22, 13, 18, 10, 16, 8, 12, 19, 10, 14];
+const MiniWaveform = ({ accent }: { accent: string }) => (
+  <div aria-hidden="true" style={{ display: "flex", alignItems: "center", gap: 2.5, height: 26, marginTop: 4, marginBottom: 2 }}>
+    {WAVE_BARS.map((h, i) => (
+      <div
+        key={i}
+        style={{ width: 2.5, height: h, borderRadius: 2, backgroundColor: i < 6 ? accent : `${accent}55` }}
+      />
+    ))}
+  </div>
+);
+
 // ─── Canvas card component ─────────────────────────────────────────────────────
 
 interface CanvasCardProps {
@@ -431,36 +444,36 @@ const CanvasCardEl = ({
         position: "absolute",
         left: card.x,
         top: card.y,
-        width: 200,
-        minHeight: 130,
-        borderRadius: 16,
-        backgroundColor: "var(--cog-cream-light)",
+        width: 208,
+        minHeight: 132,
+        borderRadius: 18,
+        backgroundColor: "#FFFCF7",
         border: mergeSelected
           ? "2px solid var(--cog-gold, #B8953A)"
           : selected
           ? `2px solid ${card.accent}`
           : card.isDimmedReference
-          ? `1.5px dashed ${card.accent}60`
-          : `2px solid ${card.accent}40`,
+          ? `1.5px dashed ${card.accent}55`
+          : `1.5px solid ${card.accent}2E`,
         boxShadow: mergeSelected
-          ? "0 0 0 3px rgba(184,149,58,0.25), 0 4px 14px rgba(0,0,0,0.09)"
+          ? `0 0 0 4px rgba(184,149,58,0.20), 0 10px 28px rgba(28,26,23,0.12)`
           : selected
-          ? `0 8px 28px ${card.accent}30`
+          ? `0 0 0 4px ${card.accent}22, 0 16px 36px ${card.accent}30, 0 2px 6px rgba(28,26,23,0.08)`
           : isVoice && layerCount > 0
-          ? `0 4px 14px rgba(0,0,0,0.09), 5px 5px 0 0 ${card.accent}25, 10px 10px 0 0 ${card.accent}12`
-          : "0 4px 14px rgba(0,0,0,0.09)",
-        opacity: card.isDimmedReference ? 0.42 : 1,
+          ? `0 6px 20px rgba(28,26,23,0.08), 5px 6px 0 0 ${card.accent}22, 11px 12px 0 0 ${card.accent}10`
+          : `0 6px 20px rgba(28,26,23,0.08), 0 1px 3px rgba(28,26,23,0.06)`,
+        opacity: card.isDimmedReference ? 0.5 : 1,
         cursor: dragState.current ? "grabbing" : "grab",
         userSelect: "none",
         zIndex: selected ? 20 : 10,
         transform: selected ? "scale(1.03)" : "scale(1)",
-        transition: "transform 150ms ease, box-shadow 150ms ease, opacity 200ms ease",
+        transition: "transform 150ms ease, box-shadow 220ms ease, border-color 200ms ease, opacity 200ms ease",
         // A calm settle the first time this card mounts (add / promote / remote
         // arrival). `backwards` fill hands transform back to the inline value
         // afterwards, so selection scale still works. Reduced-motion disables
         // it via the shared <style> block below.
         animation: "cog-card-in 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards",
-        padding: 14,
+        padding: "13px 14px 12px 18px",
         boxSizing: "border-box",
       }}
       onClick={() => {
@@ -476,6 +489,14 @@ const CanvasCardEl = ({
       aria-pressed={selected}
       aria-label={finalOrder != null ? `${card.type} card: ${card.title}, arrangement position ${finalOrder}` : `${card.type} card: ${card.title}`}
     >
+      {/* Contributor identity stripe — the writer's colour down the left edge */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute", left: 7, top: 13, bottom: 13, width: 4, borderRadius: 4,
+          background: `linear-gradient(180deg, ${card.accent}, ${card.accent}66)`,
+        }}
+      />
       {/* Final arrangement position — the song's set-list number */}
       {finalOrder != null && (
         <div
@@ -492,27 +513,29 @@ const CanvasCardEl = ({
           {finalOrder}
         </div>
       )}
-      {/* Creator dot — top right */}
+      {/* Contributor avatar — top right, with a soft ring */}
       <div
         style={{
           position: "absolute",
-          top: 10,
-          right: 10,
-          width: 22,
-          height: 22,
+          top: 11,
+          right: 11,
+          width: 24,
+          height: 24,
           borderRadius: "50%",
           backgroundColor: card.accent,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 8,
-          fontWeight: 700,
+          fontSize: 9,
+          fontWeight: 800,
           color: "#FFFFFF",
           letterSpacing: 0,
+          border: "2px solid #FFFCF7",
+          boxShadow: `0 2px 6px ${card.accent}40`,
         }}
         title={card.contributor}
       >
-        {card.contributor.slice(0, 2).toUpperCase()}
+        {getCreatorInitials(card.contributor)}
       </div>
 
       {/* Icon + section */}
@@ -583,21 +606,42 @@ const CanvasCardEl = ({
         {card.title}
       </p>
 
-      {/* Body */}
-      <p
-        style={{
-          fontSize: 12,
-          color: "var(--cog-warm-gray)",
-          lineHeight: 1.5,
-          fontFamily: "var(--font-body)",
-          overflow: "hidden",
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-        }}
-      >
-        {card.body}
-      </p>
+      {/* Body — a waveform for voice, the words for everything else */}
+      {isVoice ? (
+        <MiniWaveform accent={card.accent} />
+      ) : card.body ? (
+        <p
+          style={{
+            fontSize: 12,
+            color: "var(--cog-warm-gray)",
+            lineHeight: 1.5,
+            fontFamily: "var(--font-body)",
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+          }}
+        >
+          {card.body}
+        </p>
+      ) : (
+        <p style={{ fontSize: 12, color: "var(--cog-muted)", fontStyle: "italic", fontFamily: "var(--font-body)" }}>
+          Tap to write the idea…
+        </p>
+      )}
+
+      {/* Who wrote it — collaboration made visible */}
+      {!card.isDimmedReference && (
+        <p
+          style={{
+            marginTop: 8, fontSize: 10.5, fontWeight: 700, color: card.accent,
+            fontFamily: "var(--font-body)", letterSpacing: "0.01em",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}
+        >
+          {card.contributor}
+        </p>
+      )}
 
       {/* "Used in Final" label for dimmed references */}
       {card.isDimmedReference && (
