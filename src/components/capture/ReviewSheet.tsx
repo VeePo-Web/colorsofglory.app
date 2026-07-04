@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +15,7 @@ import {
 import { getTakeSignedUrl } from "@/integrations/cog/takes";
 import { commitTakeToCanvas } from "@/integrations/cog/canvas";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { audioCache } from "@/lib/voice/audioCache";
 import ReviewAudioPlayer from "./ReviewAudioPlayer";
 import type { PendingBlock } from "./CaptureSheet";
 
@@ -69,6 +70,7 @@ const ReviewSheet = ({
   const [blocks, setBlocks] = useState<EditableBlock[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
 
   // Merge pending side-rail blocks into the editable list as soon as the sheet opens.
   const seedBlocks = useMemo<EditableBlock[]>(
@@ -94,8 +96,17 @@ const ReviewSheet = ({
     setBlocks(seedBlocks);
 
     (async () => {
-      // Signed URL for the audio scrubber (best-effort).
-      if (storagePath) {
+      // Play from the LOCAL blob first — the take was just recorded and cached
+      // under its id, so review starts with listening instantly, offline, with no
+      // cloud round-trip. Fall back to a cloud signed URL only if there's no local
+      // copy (e.g. a reopened take from a prior session).
+      const localBlob = await audioCache.get(takeId);
+      if (localBlob && !cancelled) {
+        const localUrl = URL.createObjectURL(localBlob);
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = localUrl;
+        setAudioUrl(localUrl);
+      } else if (storagePath) {
         try {
           const url = await getTakeSignedUrl(storagePath);
           if (!cancelled) setAudioUrl(url);
@@ -162,6 +173,10 @@ const ReviewSheet = ({
 
     return () => {
       cancelled = true;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
     };
   }, [open, takeId, storagePath, seedBlocks]);
 

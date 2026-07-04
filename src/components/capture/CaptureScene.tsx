@@ -16,6 +16,7 @@ import {
   getFailedCaptureFile,
   clearAllFailedCaptures,
 } from "@/lib/voice/failedCaptureStore";
+import { audioCache } from "@/lib/voice/audioCache";
 import BigMic from "./BigMic";
 import SideRail, { type RailAction } from "./SideRail";
 import LiveTranscript from "./LiveTranscript";
@@ -146,6 +147,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
         const takeId = await getPrimaryTakeIdForMemo(intake.voice_memo_id);
         if (!takeId) throw new Error("Take was created but could not be located.");
+
+        // Cache the just-recorded blob under the take id so Review can play it
+        // back INSTANTLY from the device — no cloud signed URL, no network wait,
+        // works offline. Benchmark: review starts with listening, never on AI/cloud.
+        void audioCache.set(takeId, file);
 
         const { data: takeRow } = await supabase
           .from("takes")
