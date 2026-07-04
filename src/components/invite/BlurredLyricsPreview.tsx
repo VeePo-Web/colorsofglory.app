@@ -26,6 +26,26 @@ const BlurredLyricsPreview = ({ snippet, maxLines = 3 }: BlurredLyricsPreviewPro
         ))}
       </div>
 
+      {/* A slow gold sheen sweeps across the blur — the "something is here"
+          pull feels alive and tantalizing, not a static frosted block.
+          Reduced-motion hides it (no sweep). GPU-only, decorative. */}
+      <style>{`
+        @keyframes cogLyricShimmer {
+          0% { transform: translateX(-120%); }
+          55%, 100% { transform: translateX(120%); }
+        }
+        .cog-lyric-shimmer { animation: cogLyricShimmer 3.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .cog-lyric-shimmer { animation: none; opacity: 0; } }
+      `}</style>
+      <div
+        className="cog-lyric-shimmer absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(105deg, transparent 42%, rgba(232,213,160,0.45) 50%, transparent 58%)',
+          pointerEvents: 'none',
+        }}
+      />
+
       {/* Frosted bottom fade — hides the blur edge cleanly */}
       <div
         className="absolute bottom-0 left-0 right-0"
