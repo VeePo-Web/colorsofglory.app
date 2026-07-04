@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Settings, Mic, Sparkles } from "lucide-react";
+import { Plus, Settings, Mic, Sparkles, Disc3 } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
@@ -12,6 +12,7 @@ import SeedIdeasShelf from "@/components/capture/SeedIdeasShelf";
 import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
+import AlbumDetailHeader from "@/components/library/AlbumDetailHeader";
 import ContinueShelf from "@/components/library/ContinueShelf";
 import EmptyLibraryHero from "@/components/library/EmptyLibraryHero";
 import AlbumEditSheet from "@/components/library/AlbumEditSheet";
@@ -156,6 +157,14 @@ const SongCatalogPage = () => {
   // Rooms a captured idea can move into — the songwriter's own active rooms.
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
   const fileableSongs = ownedSongs.map((s) => ({ id: s.id, title: s.title }));
+
+  // Search reaches album names too (Apple Music scoped search) — surfaced as
+  // tappable chips above the song results when the query matches.
+  const albumMatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return albums.filter((a) => a.name.toLowerCase().includes(q));
+  }, [albums, query]);
 
   // "Pick up where you left off" — PV11: prioritize the last active song for
   // returning users. Hidden while searching, album-focused, or trivially small.
@@ -500,16 +509,70 @@ const SongCatalogPage = () => {
           />
         )}
 
-        {!selecting && activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
-          <AlbumsShelf
-            albums={albums}
-            songs={ownedSongs}
-            activeAlbumId={activeAlbumId}
-            onSelect={setActiveAlbumId}
-            onNew={() => setAlbumSheet({ open: true, album: null })}
-            onEdit={(album) => setAlbumSheet({ open: true, album })}
-            onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
+        {/* Inside an album: the Apple Music playlist header keeps the title,
+            cover and counts on screen and gives a one-tap way back. */}
+        {!selecting && activeTab === "Owned" && activeAlbum ? (
+          <AlbumDetailHeader
+            album={activeAlbum}
+            songs={ownedSongs.filter((s) => activeAlbum.songIds.includes(s.id))}
+            onExit={() => setActiveAlbumId(null)}
+            onEdit={() => setAlbumSheet({ open: true, album: activeAlbum })}
+            onAddSongs={() => setAlbumSheet({ open: true, album: activeAlbum })}
           />
+        ) : (
+          !selecting &&
+          activeTab === "Owned" &&
+          !loading &&
+          ownedSongs.length > 0 && (
+            <AlbumsShelf
+              albums={albums}
+              songs={ownedSongs}
+              activeAlbumId={activeAlbumId}
+              onSelect={setActiveAlbumId}
+              onNew={() => setAlbumSheet({ open: true, album: null })}
+              onEdit={(album) => setAlbumSheet({ open: true, album })}
+              onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
+            />
+          )
+        )}
+
+        {/* Search also reaches album names — "Easter" finds the Easter set */}
+        {!selecting && !activeAlbum && activeTab === "Owned" && albumMatches.length > 0 && (
+          <div className="mb-4">
+            <p
+              className="mb-2 px-1 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
+              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+            >
+              Albums
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {albumMatches.map((album) => (
+                <button
+                  key={album.id}
+                  onClick={() => {
+                    setActiveAlbumId(album.id);
+                    setQuery("");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3.5 transition-transform duration-150 active:scale-95"
+                  style={{
+                    minHeight: 40,
+                    backgroundColor: "var(--cog-gold-pale)",
+                    color: "var(--cog-gold)",
+                    fontFamily: "var(--font-body)",
+                    fontSize: "0.8125rem",
+                    fontWeight: 700,
+                  }}
+                  aria-label={`Open album ${album.name}, ${album.songIds.length} songs`}
+                >
+                  <Disc3 size={14} strokeWidth={1.9} />
+                  {album.name}
+                  <span style={{ color: "var(--cog-warm-gray)", fontWeight: 500 }}>
+                    {album.songIds.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <div ref={catalogTourRef}>
@@ -523,7 +586,7 @@ const SongCatalogPage = () => {
           loading={loading}
           emptyCopy={
             activeAlbum && activeTab === "Owned"
-              ? "This album is empty. Tap the pencil on it to add songs."
+              ? "This album is empty. Tap “Add songs” above to fill it."
               : EMPTY_COPY[activeTab]
           }
           onOpen={(id) => { setNavDirection("up"); navigate(resumePathFor(id) ?? `/songs/${id}/brainstorm`); }}
