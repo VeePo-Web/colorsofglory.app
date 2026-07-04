@@ -51,6 +51,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     let locked = false;     // horizontal intent confirmed — surface follows the finger
     let raf = 0;
     let lastDx = 0;
+    let armed = false;      // drag has passed the commit threshold this gesture
     // Rolling ~100ms position history for release-velocity (flick) detection.
     // Measuring only the last move→lift gap gives a near-zero window and misses
     // fast flicks; a short window over recent samples captures true flick speed.
@@ -84,6 +85,19 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       raf = 0;
       if (!locked) return;
       el.style.transform = `translateX(${dampen(lastDx)}px)`;
+      // Commit-point feedback: the moment the drag passes the release threshold
+      // toward a real destination, the card lifts a little higher (and Android
+      // gives one soft tick) so you KNOW letting go will turn the page — the
+      // native "armed" cue. Drag back under the line and it relaxes.
+      const canGo = lastDx > 0 ? !!onSwipeRight : !!onSwipeLeft;
+      const nowArmed = canGo && Math.abs(lastDx) >= TRIGGER_PX;
+      if (nowArmed !== armed) {
+        armed = nowArmed;
+        el.style.boxShadow = armed
+          ? "0 0 64px rgba(28,26,23,0.26)"
+          : "0 0 44px rgba(28,26,23,0.16)";
+        if (armed) { try { navigator.vibrate?.(5); } catch { /* never let a nicety throw */ } }
+      }
     };
 
     const releaseVisual = (springBack: boolean) => {
@@ -120,6 +134,8 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       tracking = true;
       locked = false;
       lastDx = 0;
+      armed = false;
+      history.length = 0;
     };
 
     const onTouchMove = (e: TouchEvent) => {
