@@ -148,6 +148,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           void clearAllFailedCaptures();
           toast.success("Saved to your Ideas", {
             description: "File it into a song whenever you like.",
+            // Close the loop — one tap to go see it on the Ideas shelf.
+            action: { label: "View", onClick: () => navigate("/songs") },
           });
           return;
         }
