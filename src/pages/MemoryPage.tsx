@@ -260,7 +260,7 @@ const MemoryPage = () => {
                       </>
                     )}
 
-                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0 || insights.collaborators.length > 0 || insights.keys.length > 0) && (
+                    {insights && (insights.topWords.length > 0 || insights.scriptures.length > 0 || insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo) && (
                       <div className="mb-7">
                         <h2 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--cog-warm-gray)" }}>
                           Your writing, by the numbers
@@ -297,7 +297,7 @@ const MemoryPage = () => {
                             ))}
                           </div>
                         )}
-                        {(insights.collaborators.length > 0 || insights.keys.length > 0) && (
+                        {(insights.collaborators.length > 0 || insights.keys.length > 0 || insights.tempo) && (
                           <div className="flex flex-col gap-1.5 mt-2">
                             {insights.collaborators.slice(0, 4).map((c) => (
                               <div key={`collab-${c.label}`} className="flex items-baseline justify-between px-1">
@@ -316,6 +316,18 @@ const MemoryPage = () => {
                                 </span>
                                 <span className="text-xs truncate ml-3" style={{ color: "var(--cog-warm-gray)" }}>
                                   {insights.keys.map((k) => k.label).join(" · ")}
+                                </span>
+                              </div>
+                            )}
+                            {insights.tempo && (
+                              <div className="flex items-baseline justify-between px-1">
+                                <span className="text-sm" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
+                                  Tempo
+                                </span>
+                                <span className="text-xs ml-3" style={{ color: "var(--cog-warm-gray)" }}>
+                                  {insights.tempo.min === insights.tempo.max
+                                    ? `${insights.tempo.average} BPM`
+                                    : `${insights.tempo.min}–${insights.tempo.max} BPM · avg ${insights.tempo.average}`}
                                 </span>
                               </div>
                             )}

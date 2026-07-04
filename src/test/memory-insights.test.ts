@@ -103,6 +103,23 @@ describe("buildInsights", () => {
     expect(insights.keys).toHaveLength(1);
   });
 
+  it("summarises tempo across songs that have a BPM", () => {
+    expect(insights.tempo).toEqual({ songs: 1, min: 72, max: 72, average: 72 }); // only s1 has 72
+  });
+
+  it("returns null tempo with no BPMs, and averages a real range", () => {
+    const withTempos = (...bpms: (number | null)[]): MemoryRawBundle => ({
+      userId: "me",
+      songs: bpms.map((tempoBpm, i) => ({
+        id: `s${i}`, title: `S${i}`, coverColor: null, status: "draft",
+        keySignature: null, tempoBpm, tags: [], createdAt: "2026-06-01T00:00:00Z", lastActivityAt: null,
+      })),
+      sections: [], notes: [], ideas: [], people: [], voiceMemos: [], lyrics: [],
+    });
+    expect(buildInsights(withTempos(null)).tempo).toBeNull();
+    expect(buildInsights(withTempos(68, 140)).tempo).toEqual({ songs: 2, min: 68, max: 140, average: 104 });
+  });
+
   it("survives an old snapshot bundle with no lyrics field", () => {
     const old = bundle();
     delete (old as Partial<MemoryRawBundle>).lyrics;
@@ -130,6 +147,8 @@ describe("vault Insights note", () => {
     expect(note.content).toContain("[[Sarah]] — 2 songs");
     expect(note.content).toContain("## Keys you write in");
     expect(note.content).toContain("- G — 1 song");
+    expect(note.content).toContain("## Tempo");
+    expect(note.content).toContain("72 BPM");
 
     const home = files.find((f) => f.path === "Your Memory.md")!;
     expect(home.content).toContain("[[Insights]]");

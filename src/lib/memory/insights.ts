@@ -41,6 +41,8 @@ export interface MemoryInsights {
   collaborators: LabelCount[];
   /** Key signatures by number of songs written in them. */
   keys: LabelCount[];
+  /** Tempo fingerprint across songs that have a BPM (null if none do). */
+  tempo: { songs: number; min: number; max: number; average: number } | null;
 }
 
 // Function words that say nothing about a writer's voice. Deliberately does
@@ -157,6 +159,19 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
   }
   const keys: LabelCount[] = [...keyCounts.values()].sort(sortCounts((k) => k.label));
 
+  // --- tempo fingerprint -----------------------------------------------------
+  const bpms = bundle.songs
+    .map((s) => s.tempoBpm)
+    .filter((b): b is number => typeof b === "number" && b > 0);
+  const tempo = bpms.length
+    ? {
+        songs: bpms.length,
+        min: Math.min(...bpms),
+        max: Math.max(...bpms),
+        average: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
+      }
+    : null;
+
   return {
     totals: {
       songs: bundle.songs.length,
@@ -172,5 +187,6 @@ export function buildInsights(bundle: MemoryRawBundle, topN = 20): MemoryInsight
     themes,
     collaborators,
     keys,
+    tempo,
   };
 }

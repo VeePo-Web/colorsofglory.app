@@ -568,6 +568,13 @@ function buildInsightsNote(bundle: MemoryRawBundle): VaultFile {
     lines.push("");
   }
 
+  if (insights.tempo) {
+    const { min, max, average } = insights.tempo;
+    lines.push("## Tempo");
+    lines.push(min === max ? `- ${average} BPM` : `- ${min}–${max} BPM · averages ${average} BPM`);
+    lines.push("");
+  }
+
   return { path: `${INSIGHTS_NOTE}.md`, content: lines.join("\n").trimEnd() + "\n" };
 }
 
