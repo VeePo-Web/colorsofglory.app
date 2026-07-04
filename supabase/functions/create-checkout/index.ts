@@ -98,6 +98,13 @@ Deno.serve(async (req) => {
     let ignoredReferrer = false;
     let ignoredCode = false;
     let claimedCodeId: string | null = null;
+    let jam100Applied = false;
+
+    // Hard-coded 100%-off promo. Applies to Pro only; overrides other codes.
+    // Uses a Stripe coupon (created on-demand, idempotent by id) so Stripe
+    // still records the subscription and portal/cancel flows keep working.
+    const JAM100_CODE = "JAM100";
+    const JAM100_COUPON_ID = "cog_jam100_forever";
 
     if (planKey) {
       const { data: tier, error: tierErr } = await supabaseAdmin
@@ -127,7 +134,13 @@ Deno.serve(async (req) => {
       }
 
       // Try founder code first (Pro only)
-      if (tier.allows_founder_code && rawCode) {
+      // JAM100 short-circuits everything else (Pro only).
+      if (rawCode === JAM100_CODE && planKey === "pro") {
+        // Single-code-per-buyer still applies (checked above).
+        jam100Applied = true;
+        // Leave appliedCodeKind = "none" so no referral attribution is written.
+        if (rawReferrerCode) ignoredReferrer = true;
+      } else if (tier.allows_founder_code && rawCode) {
         const { data: founderCode } = await supabaseAdmin
           .from("codes")
           .select("id, owner_founder_id, status, expires_at, max_redemptions, redemption_count")
@@ -177,7 +190,7 @@ Deno.serve(async (req) => {
       }
 
       // If client supplied a code that didn't resolve to anything, reject
-      if (rawCode && appliedCodeKind === "none" && tier.allows_founder_code) {
+      if (rawCode && appliedCodeKind === "none" && !jam100Applied && tier.allows_founder_code) {
         return json({ error: "invalid_code" }, 400);
       }
     }
@@ -225,6 +238,22 @@ Deno.serve(async (req) => {
         productDescription = product?.name;
       }
 
+      // Ensure the JAM100 coupon exists in Stripe (idempotent create).
+      let jam100CouponId: string | null = null;
+      if (jam100Applied) {
+        try {
+          await stripe.coupons.retrieve(JAM100_COUPON_ID);
+        } catch (_e) {
+          await stripe.coupons.create({
+            id: JAM100_COUPON_ID,
+            percent_off: 100,
+            duration: "forever",
+            name: "JAM100 — 100% off",
+          }).catch(() => {});
+        }
+        jam100CouponId = JAM100_COUPON_ID;
+      }
+
     const sessionMetadata: Record<string, string> = {
       userId: user.id,
       lookup_key: priceId,
@@ -235,6 +264,10 @@ Deno.serve(async (req) => {
     if (attributionFounderId) sessionMetadata.attribution_founder_id = attributionFounderId;
     if (attributionCodeId) sessionMetadata.attribution_code_id = attributionCodeId;
     if (attributionReferrerUserId) sessionMetadata.attribution_referrer_user_id = attributionReferrerUserId;
+    if (jam100Applied) {
+      sessionMetadata.promo_code = JAM100_CODE;
+      sessionMetadata.managed_payments = "false";
+    }
 
     const subscriptionMetadata: Record<string, string> = { ...sessionMetadata };
 
@@ -244,7 +277,9 @@ Deno.serve(async (req) => {
       ui_mode: "embedded",
       return_url: returnUrl,
       customer: customerId,
-      managed_payments: { enabled: true },
+      // managed_payments conflicts with `discounts`; disable it for JAM100.
+      ...(!jam100Applied && { managed_payments: { enabled: true } }),
+      ...(jam100CouponId && { discounts: [{ coupon: jam100CouponId }] }),
       metadata: sessionMetadata,
       ...(isRecurring && {
         subscription_data: { metadata: subscriptionMetadata },
@@ -252,7 +287,7 @@ Deno.serve(async (req) => {
       ...(!isRecurring && productDescription && {
         payment_intent_data: { description: productDescription },
       }),
-    });
+    } as any);
     } catch (stripeErr) {
       if (claimedCodeId) {
         await supabaseAdmin.rpc("release_founder_code_redemption", { _code_id: claimedCodeId }).catch(() => {});
