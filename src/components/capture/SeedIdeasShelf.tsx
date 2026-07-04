@@ -35,7 +35,7 @@ const SeedIdeasShelf = ({ songs }: SeedIdeasShelfProps) => {
   if (!ideas || ideas.length === 0) return null;
 
   return (
-    <section aria-label="Seed ideas waiting to be filed into a song" className="mb-5">
+    <section aria-label="Your captured ideas, waiting to be filed into a song" className="mb-5">
       <p
         className="font-semibold uppercase mb-3"
         style={{
@@ -45,7 +45,7 @@ const SeedIdeasShelf = ({ songs }: SeedIdeasShelfProps) => {
           color: "var(--cog-warm-gray)",
         }}
       >
-        Seed Ideas
+        Your Ideas
       </p>
       <div
         className="flex gap-3 overflow-x-auto pb-1"
