@@ -453,12 +453,23 @@ export function useVoiceRecorder(
         track.onended = () => autoStop("interrupted");
       }
 
-      // No timeslice: iOS Safari is unreliable with small timeslices (empty or
-      // never-flushed chunks → unplayable blob). A single flush on stop() is the
-      // most robust path across browsers.
+      // Chunk-delivery strategy, per container — the fix for "records but saves
+      // an empty blob":
+      //   • webm/ogg (Chrome · Firefox · Android · most desktop): start WITH a
+      //     periodic timeslice so ondataavailable fires throughout the take and
+      //     chunks accumulate continuously. This does NOT depend on the fragile
+      //     requestData()-then-stop() final flush, which on several engines drops
+      //     the last (and only) chunk and yields a 0-byte blob even though the mic
+      //     and meter were live. webm/ogg concatenate cleanly from many chunks.
+      //   • mp4/m4a (iOS Safari): NO timeslice. iOS is unreliable with timeslices
+      //     and mp4 is not safely concatenable, so a single flush on stop() is the
+      //     only guaranteed-playable path (flushBeforeStop leaves it alone).
+      const startMime = (recorder.mimeType || mimeType || "").toLowerCase();
+      const concatSafe = startMime.includes("webm") || startMime.includes("ogg");
       mediaRecorderRef.current = recorder;
       try {
-        recorder.start();
+        if (concatSafe) recorder.start(1000);
+        else recorder.start();
       } catch {
         cleanup();
         setState({
