@@ -255,8 +255,18 @@ const ReviewSheet = ({
       if (raw.includes("song_limit_reached") || raw.includes("402")) {
         toast.error("Free plan limit reached", { description: "Upgrade to add more songs." });
         navigate("/upgrade");
+      } else if (raw.includes("forbidden")) {
+        toast.error("You don't have access to this song", {
+          description: "Ask the owner to invite you as a collaborator, or file this idea into a song you own.",
+        });
+      } else if (raw.includes("take_not_found")) {
+        toast.error("This take couldn't be found", {
+          description: "It may still be uploading — try again in a moment.",
+        });
+      } else if (raw.includes("unauthorized") || raw.includes("401")) {
+        toast.error("Please sign in again", { description: "Your session expired." });
       } else {
-        toast.error("Could not save to canvas", { description: raw.slice(0, 140) });
+        toast.error("Could not save to canvas", { description: raw.slice(0, 140) || "Please try again." });
       }
     } finally {
       setCommitting(false);

@@ -90,7 +90,23 @@ export async function promoteCapture(input: PromoteCaptureInput): Promise<Promot
   const { data, error } = await supabase.functions.invoke<PromoteCaptureResult>("promote-capture", {
     body: input,
   });
-  if (error) throw error;
+  if (error) {
+    // Surface the real server error code — the edge function returns
+    // `{ error: "<code>", detail?: ... }` on non-2xx. supabase-js otherwise
+    // hides the body behind a generic "non-2xx status code" message.
+    const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+    let code: string | undefined;
+    if (ctx?.json) {
+      try {
+        const body = (await ctx.json()) as { error?: string; code?: string; message?: string };
+        code = body?.error ?? body?.code ?? body?.message;
+      } catch {
+        /* ignore */
+      }
+    }
+    console.error("[promote-capture]", { code, error });
+    throw new Error(code ?? (error as Error).message ?? "promote_capture_failed");
+  }
   if (!data) throw new Error("promote-capture returned no data");
   return data;
 }
