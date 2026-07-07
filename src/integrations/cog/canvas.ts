@@ -41,9 +41,33 @@ export type CommitTakeInput = {
   blocks: Pick<TranscriptBlock, "kind" | "section_kind" | "label" | "text" | "start_ms" | "end_ms">[];
 };
 
+/**
+ * Invoke `commit-take` and surface the server's real error code/message
+ * (e.g. "forbidden", "song_limit_reached", "take_not_found") instead of the
+ * generic supabase-js "Edge Function returned a non-2xx status code" string.
+ * The edge function responds with `{ error: "<code>" }` on failure; we read
+ * it off `FunctionsHttpError.context` and throw a real Error whose `.message`
+ * IS that code, so callers can pattern-match on `raw.includes("forbidden")`.
+ */
 export async function commitTakeToCanvas(input: CommitTakeInput): Promise<CommitTakeResult> {
   const { data, error } = await supabase.functions.invoke("commit-take", { body: input });
-  if (error) throw error;
+  if (error) {
+    const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+    let code: string | undefined;
+    if (ctx?.json) {
+      try {
+        const body = (await ctx.json()) as { error?: string; code?: string; message?: string };
+        code = body?.error ?? body?.code ?? body?.message;
+      } catch {
+        /* fall through */
+      }
+    }
+    const msg = code ?? (error as Error).message ?? "commit_take_failed";
+    // Log the full context to the console so future regressions are searchable
+    // even when the toast only shows the friendly copy.
+    console.error("[commit-take]", { code, error });
+    throw new Error(msg);
+  }
   return data as CommitTakeResult;
 }
 
