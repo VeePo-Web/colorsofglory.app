@@ -38,7 +38,9 @@ const BottomNav = ({ active }: BottomNavProps) => {
 
   function isTab(tab: "songs" | "capture" | "settings"): boolean {
     if (active) return active === tab;
-    if (tab === "songs") return pathname === "/songs";
+    // Songs owns the catalog AND the song interior (/songs/:id*), so the tab
+    // stays lit while you're inside a song — the capture landing included.
+    if (tab === "songs") return pathname === "/songs" || pathname.startsWith("/songs/");
     if (tab === "capture") return pathname === "/" || pathname === "/capture";
     if (tab === "settings") return pathname.startsWith("/settings");
     return false;
