@@ -1,4 +1,5 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas/canvasConstants";
+import { CARD_MIN_HEIGHT, CARD_WIDTH } from "@/lib/canvas/canvasGeometry";
 
 /**
  * CanvasBranchConnectors — soft curved SVG lines that connect the root song
@@ -28,9 +29,9 @@ const ROOT_T = 48;
 const ROOT_W = 420;
 const ROOT_H = 132;
 
-// Idea card geometry — must mirror CanvasCardEl
-const CARD_W = 208;
-const CARD_H = 132;
+// Idea card geometry — shared with CanvasStage's card via canvasGeometry
+const CARD_W = CARD_WIDTH;
+const CARD_H = CARD_MIN_HEIGHT;
 
 // Root anchor points
 const ROOT_BOTTOM_CX = ROOT_L + ROOT_W / 2; // 290

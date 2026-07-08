@@ -16,7 +16,6 @@ import {
   Mic,
   Music,
   Plus,
-  Sparkles,
   StickyNote,
   Users,
   GitBranch,
@@ -31,13 +30,11 @@ import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
 import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
-import CanvasViewport, { useCanvasViewport, type ViewportCtx } from "@/components/canvas/CanvasViewport";
-import CanvasDivider from "@/components/canvas/CanvasDivider";
-import ZoneLabels from "@/components/canvas/ZoneLabel";
+import type { ViewportCtx } from "@/components/canvas/CanvasViewport";
+import CanvasStage, { type CanvasCardInteractions } from "@/components/canvas/CanvasStage";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
-import SongRootCard from "@/components/canvas/SongRootCard";
-import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
+import { COLUMN_TOP, ideaColumnSlot, finalColumnSlot } from "@/lib/canvas/canvasGeometry";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
@@ -116,16 +113,6 @@ const toStackView = (c: CanvasCard): StackMemoView => ({
 });
 
 type RecordingFlow = "idle" | "recording" | "reviewing";
-
-const CARD_ICONS: Record<CanvasCardType, ElementType> = {
-  lyric: FileText,
-  voice: Mic,
-  hum: Mic,
-  chord: Music,
-  note: StickyNote,
-  scripture: StickyNote,
-  section: GitBranch,
-};
 
 const LAYERS: Array<{ id: LayerId; label: string; icon: ElementType }> = [
   { id: "room",   label: "Canvas",  icon: GitBranch },
@@ -227,16 +214,6 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
 };
 const SHOW_LEGACY_CANVAS_FABS = false;
 
-// New cards flow into a single tidy vertical column per zone, under the labels,
-// so the board reads like a scrollable feed of ideas instead of a 2D scatter.
-const COLUMN_TOP = 272;
-const COLUMN_GAP = 156;
-// A card only starts moving once the finger travels past this (screen px), so a
-// tap or a small wiggle selects instead of nudging the card.
-const DRAG_THRESHOLD_PX = 7;
-const ideaColumnSlot = (index: number) => ({ x: 80, y: COLUMN_TOP + index * COLUMN_GAP });
-const finalColumnSlot = (index: number) => ({ x: DIVIDER_X + 80, y: COLUMN_TOP + index * COLUMN_GAP });
-
 const getStoredCards = (songId: string): CanvasCard[] => {
   try {
     const stored = localStorage.getItem(CARDS_KEY(songId));
@@ -280,507 +257,6 @@ const SongCanvasSemanticSummary = () => (
     <h2>What changed</h2>
   </section>
 );
-
-// A calm decorative waveform so a voice card reads as audio at a glance.
-const WAVE_BARS = [7, 13, 20, 11, 24, 15, 9, 22, 13, 18, 10, 16, 8, 12, 19, 10, 14];
-const MiniWaveform = ({ accent }: { accent: string }) => (
-  <div aria-hidden="true" style={{ display: "flex", alignItems: "center", gap: 2.5, height: 26, marginTop: 4, marginBottom: 2 }}>
-    {WAVE_BARS.map((h, i) => (
-      <div
-        key={i}
-        style={{ width: 2.5, height: h, borderRadius: 2, backgroundColor: i < 6 ? accent : `${accent}55` }}
-      />
-    ))}
-  </div>
-);
-
-// ─── Canvas card component ─────────────────────────────────────────────────────
-
-interface CanvasCardProps {
-  card: CanvasCard;
-  selected: boolean;
-  onSelect: () => void;
-  onMoveToFinal: () => void;
-  onMoveToIdeas: () => void;
-  /** Called continuously during drag with the new canvas-space position */
-  onMove: (id: string, x: number, y: number) => void;
-  layerCount?: number;
-  onOpenStack?: () => void;
-  canCompare?: boolean;
-  onCompare?: () => void;
-  onSuggestLine?: () => void;
-  onAddToListenPath?: () => void;
-  listenIndex?: number;
-  onMergeSelect?: () => void;
-  mergeSelected?: boolean;
-  onEdit?: () => void;
-  /** Opens the overflow action sheet (Compare, Suggest, Listen Path, Merge…). */
-  onMore?: () => void;
-  /** 1-based position in the Final arrangement (Final cards only). */
-  finalOrder?: number;
-}
-
-const CanvasCardEl = ({
-  card,
-  selected,
-  onSelect,
-  onMoveToFinal,
-  onMoveToIdeas,
-  onMove,
-  layerCount = 0,
-  onOpenStack,
-  canCompare = false,
-  onCompare,
-  onSuggestLine,
-  onEdit,
-  onAddToListenPath,
-  listenIndex,
-  onMergeSelect,
-  mergeSelected,
-  onMore,
-  finalOrder,
-}: CanvasCardProps) => {
-  const Icon = CARD_ICONS[card.type];
-  const isVoice = card.type === "voice" || card.type === "hum";
-  // Actions that belong in the overflow sheet, so the card shows at most a
-  // primary + promote + "More" instead of a wall of tiny buttons.
-  const hasMore =
-    Boolean(onMore) &&
-    (Boolean(canCompare && onCompare) ||
-      (card.type === "lyric" && Boolean(onSuggestLine)) ||
-      Boolean(onAddToListenPath) ||
-      (card.tree === "ideas" && !card.isDimmedReference && Boolean(onMergeSelect)) ||
-      (isVoice && Boolean(onOpenStack)));
-
-  // Pointer-capture drag: card receives all pointer events even when the cursor
-  // leaves its bounds. screenToCanvas from the viewport context converts the
-  // pointer position to canvas coords so the card follows correctly even at
-  // non-1x zoom. This is intentionally separate from the canvas pan gesture.
-  const { screenToCanvas } = useCanvasViewport();
-  const cardElRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{
-    pointerId: number;
-    startScreen: { x: number; y: number };
-    startCard: { x: number; y: number };
-    lastX: number;
-    lastY: number;
-    /** True once the pointer crosses the threshold — only then does it move. */
-    moved: boolean;
-  } | null>(null);
-  // Suppresses the click that fires after a real drag, so dropping a card never
-  // also toggles its selection.
-  const justDraggedRef = useRef(false);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only primary button (left-click / single touch)
-    if (e.button !== 0 && e.pointerType === "mouse") return;
-    e.stopPropagation(); // prevent canvas pan from starting
-    // Clear any stale suppress flag (in case a click never fired after a drag).
-    justDraggedRef.current = false;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragState.current = {
-      pointerId: e.pointerId,
-      startScreen: { x: e.clientX, y: e.clientY },
-      startCard: { x: card.x, y: card.y },
-      lastX: card.x,
-      lastY: card.y,
-      moved: false,
-    };
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const st = dragState.current;
-    if (!st) return;
-    // A tap must never nudge the card. Hold position until the finger crosses a
-    // small threshold; below it, the gesture is still a tap, not a drag.
-    if (!st.moved) {
-      const dx = e.clientX - st.startScreen.x;
-      const dy = e.clientY - st.startScreen.y;
-      if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
-      st.moved = true;
-      const el = cardElRef.current;
-      if (el) {
-        // Physical "lift" the moment a real drag begins (CapCut/Apple feel).
-        el.style.transform = "scale(1.05)";
-        el.style.zIndex = "40";
-        el.style.boxShadow = `0 14px 34px ${card.accent}45`;
-        el.style.cursor = "grabbing";
-      }
-    }
-    // Convert both the start and current screen positions to canvas coords so
-    // the delta is expressed in canvas space (respects zoom level).
-    const startCanvas = screenToCanvas(st.startScreen.x, st.startScreen.y);
-    const currCanvas = screenToCanvas(e.clientX, e.clientY);
-    const newX = st.startCard.x + (currCanvas.x - startCanvas.x);
-    const newY = st.startCard.y + (currCanvas.y - startCanvas.y);
-    st.lastX = newX;
-    st.lastY = newY;
-    // Write the new position straight to THIS card's element — no setState per
-    // frame, so dragging one card never re-renders the whole board (the single
-    // biggest source of drag jank on a busy mobile canvas). React state is
-    // reconciled once, on pointer-up.
-    const el = cardElRef.current;
-    if (el) {
-      el.style.left = `${newX}px`;
-      el.style.top = `${newY}px`;
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const st = dragState.current;
-    if (!st) return;
-    e.currentTarget.releasePointerCapture(st.pointerId);
-    dragState.current = null;
-    const el = cardElRef.current;
-    if (el) {
-      // Hand transform/shadow/z back to React's style prop.
-      el.style.transform = "";
-      el.style.zIndex = "";
-      el.style.boxShadow = "";
-      el.style.cursor = "";
-    }
-    if (st.moved) {
-      justDraggedRef.current = true;
-      // Commit the final position to React state exactly once.
-      onMove(card.id, st.lastX, st.lastY);
-    }
-    // A pointer that never crossed the threshold is a tap → onClick selects it.
-  };
-
-  return (
-    <div
-      ref={cardElRef}
-      style={{
-        position: "absolute",
-        left: card.x,
-        top: card.y,
-        width: 208,
-        minHeight: 132,
-        borderRadius: 18,
-        backgroundColor: "#FFFCF7",
-        border: mergeSelected
-          ? "2px solid var(--cog-gold, #B8953A)"
-          : selected
-          ? `2px solid ${card.accent}`
-          : card.isDimmedReference
-          ? `1.5px dashed ${card.accent}55`
-          : `1.5px solid ${card.accent}2E`,
-        boxShadow: mergeSelected
-          ? `0 0 0 4px rgba(184,149,58,0.20), 0 10px 28px rgba(28,26,23,0.12)`
-          : selected
-          ? `0 0 0 4px ${card.accent}22, 0 16px 36px ${card.accent}30, 0 2px 6px rgba(28,26,23,0.08)`
-          : isVoice && layerCount > 0
-          ? `0 6px 20px rgba(28,26,23,0.08), 5px 6px 0 0 ${card.accent}22, 11px 12px 0 0 ${card.accent}10`
-          : `0 6px 20px rgba(28,26,23,0.08), 0 1px 3px rgba(28,26,23,0.06)`,
-        opacity: card.isDimmedReference ? 0.5 : 1,
-        cursor: dragState.current ? "grabbing" : "grab",
-        userSelect: "none",
-        zIndex: selected ? 20 : 10,
-        transform: selected ? "scale(1.03)" : "scale(1)",
-        transition: "transform 150ms ease, box-shadow 220ms ease, border-color 200ms ease, opacity 200ms ease",
-        // A calm settle the first time this card mounts (add / promote / remote
-        // arrival). `backwards` fill hands transform back to the inline value
-        // afterwards, so selection scale still works. Reduced-motion disables
-        // it via the shared <style> block below.
-        animation: "cog-card-in 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards",
-        padding: "13px 14px 12px 18px",
-        boxSizing: "border-box",
-      }}
-      onClick={() => {
-        // Ignore the click synthesised at the end of a real drag.
-        if (justDraggedRef.current) { justDraggedRef.current = false; return; }
-        onSelect();
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      role="button"
-      aria-pressed={selected}
-      aria-label={finalOrder != null ? `${card.type} card: ${card.title}, arrangement position ${finalOrder}` : `${card.type} card: ${card.title}`}
-    >
-      {/* Contributor identity stripe — the writer's colour down the left edge */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute", left: 7, top: 13, bottom: 13, width: 4, borderRadius: 4,
-          background: `linear-gradient(180deg, ${card.accent}, ${card.accent}66)`,
-        }}
-      />
-      {/* Final arrangement position — the song's set-list number */}
-      {finalOrder != null && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute", top: -10, left: -10,
-            minWidth: 24, height: 24, padding: "0 6px", borderRadius: 12,
-            backgroundColor: "#53AB8B", color: "#FFF", fontSize: 12, fontWeight: 800,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(83,171,139,0.40)", border: "2px solid #FAFAF6",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          {finalOrder}
-        </div>
-      )}
-      {/* Contributor avatar — top right, with a soft ring */}
-      <div
-        style={{
-          position: "absolute",
-          top: 11,
-          right: 11,
-          width: 24,
-          height: 24,
-          borderRadius: "50%",
-          backgroundColor: card.accent,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 9,
-          fontWeight: 800,
-          color: "#FFFFFF",
-          letterSpacing: 0,
-          border: "2px solid #FFFCF7",
-          boxShadow: `0 2px 6px ${card.accent}40`,
-        }}
-        title={card.contributor}
-      >
-        {getCreatorInitials(card.contributor)}
-      </div>
-
-      {/* Icon + section */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            backgroundColor: `${card.accent}18`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <Icon size={14} strokeWidth={1.8} style={{ color: card.accent }} />
-        </div>
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: "var(--cog-muted)",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          {card.section}
-        </span>
-        {isVoice && layerCount > 0 && onOpenStack && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
-            style={{
-              marginLeft: "auto",
-              fontSize: 9,
-              fontWeight: 700,
-              color: card.accent,
-              backgroundColor: `${card.accent}1A`,
-              borderRadius: 9999,
-              padding: "6px 10px",
-              minHeight: 44,
-              fontFamily: "var(--font-body)",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              lineHeight: 1,
-            }}
-            aria-label={`${layerCount} layer${layerCount > 1 ? "s" : ""} — tap to open stack`}
-          >
-            {layerCount} layer{layerCount > 1 ? "s" : ""}
-          </button>
-        )}
-      </div>
-
-      {/* Title */}
-      <p
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: "var(--cog-charcoal)",
-          fontFamily: "var(--font-display)",
-          marginBottom: 6,
-          lineHeight: 1.3,
-        }}
-      >
-        {card.title}
-      </p>
-
-      {/* Body — a waveform for voice, the words for everything else */}
-      {isVoice ? (
-        <MiniWaveform accent={card.accent} />
-      ) : card.body ? (
-        <p
-          style={{
-            fontSize: 12,
-            color: "var(--cog-warm-gray)",
-            lineHeight: 1.5,
-            fontFamily: "var(--font-body)",
-            overflow: "hidden",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-          }}
-        >
-          {card.body}
-        </p>
-      ) : (
-        <p style={{ fontSize: 12, color: "var(--cog-muted)", fontStyle: "italic", fontFamily: "var(--font-body)" }}>
-          Tap to write the idea…
-        </p>
-      )}
-
-      {/* Who wrote it — collaboration made visible */}
-      {!card.isDimmedReference && (
-        <p
-          style={{
-            marginTop: 8, fontSize: 10.5, fontWeight: 700, color: card.accent,
-            fontFamily: "var(--font-body)", letterSpacing: "0.01em",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}
-        >
-          {card.contributor}
-        </p>
-      )}
-
-      {/* Kept-reference label for dimmed cards — nothing is ever deleted */}
-      {card.isDimmedReference && (
-        <p style={{ fontSize: 10, color: card.accent, marginTop: 8, fontWeight: 600 }}>
-          {card.dimReason === "merged"
-            ? "↳ Merged into section"
-            : card.dimReason === "compare_kept"
-            ? "↳ Kept for reference"
-            : "↳ Used in Final"}
-        </p>
-      )}
-
-      {/* In-place actions when selected — one primary + promote + More.
-          Everything else lives in the overflow sheet so the card stays calm. */}
-      {selected && (
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            marginTop: 10,
-            borderTop: "1px solid rgba(0,0,0,0.07)",
-            paddingTop: 8,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Primary: edit text card / open stack on a voice card */}
-          {isVoice && onOpenStack ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenStack(); }}
-              style={{
-                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: `${card.accent}16`, color: card.accent,
-                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-              }}
-              aria-label={layerCount > 0 ? `Open stack — ${layerCount} layers` : "Open stack — record over this"}
-            >
-              {layerCount > 0 ? `Layers ${layerCount}` : "Layers"}
-            </button>
-          ) : onEdit ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onEdit(); }}
-              style={{
-                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: `${card.accent}16`, color: card.accent,
-                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-              }}
-              aria-label="Edit this idea"
-            >
-              Edit
-            </button>
-          ) : null}
-
-          {/* Promote / return between the trees */}
-          {card.tree === "ideas" && !card.isDimmedReference && (
-            <button
-              onClick={onMoveToFinal}
-              style={{
-                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: "var(--cog-gold)", color: "#FFF",
-                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-              }}
-              aria-label="Move this idea to the Final song"
-            >
-              → Final
-            </button>
-          )}
-          {card.tree === "final" && (
-            <button
-              onClick={onMoveToIdeas}
-              style={{
-                flex: 1, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: "rgba(0,0,0,0.06)", color: "var(--cog-warm-gray)",
-                fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-              }}
-              aria-label="Return this to Ideas"
-            >
-              ← Ideas
-            </button>
-          )}
-
-          {/* Overflow — Compare, Suggest a line, Listen Path, Merge… */}
-          {hasMore && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMore?.(); }}
-              style={{
-                width: 40, height: 34, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: "rgba(28,26,23,0.06)", color: "var(--cog-warm-gray)",
-                fontSize: 16, fontWeight: 700, fontFamily: "var(--font-body)",
-                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
-              }}
-              aria-label="More actions"
-            >
-              ⋯
-            </button>
-          )}
-        </div>
-      )}
-      {listenIndex != null && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute", bottom: 8, left: 8,
-            width: 22, height: 22, borderRadius: "50%",
-            backgroundColor: "var(--cog-gold, #B8953A)", color: "#FFF",
-            fontSize: 10, fontWeight: 800,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(184,149,58,0.40)",
-            fontFamily: "var(--font-body)",
-          }}
-        >
-          {listenIndex + 1}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Viewport bridge ─────────────────────────────────────────────────────────
-
-/**
- * Exposes the viewport's pan/zoom API to the page shell (header, sheets) that
- * lives OUTSIDE <CanvasViewport>. Renders nothing; just forwards the context.
- */
-const CanvasViewportBridge = ({ apiRef }: { apiRef: React.MutableRefObject<ViewportCtx | null> }) => {
-  const ctx = useCanvasViewport();
-  apiRef.current = ctx;
-  return null;
-};
 
 // ─── isLayerId guard ──────────────────────────────────────────────────────────
 
@@ -996,7 +472,7 @@ const SongCanvasExperience = () => {
   });
   const metronome = useCanvasMetronome(songId);
 
-  // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
+  // Card drag position updates flow up through the onMove prop; see CanvasStage.
 
   useEffect(() => {
     const layer = searchParams.get("layer");
@@ -1064,7 +540,7 @@ const SongCanvasExperience = () => {
 
   // ── Card manipulation ──────────────────────────────────────────────────────
 
-  /** Called by CanvasCardEl's pointer-capture drag with the new canvas-space position. */
+  /** Called by CanvasStage's pointer-capture card drag with the new canvas-space position. */
   const handleCardMove = useCallback((id: string, x: number, y: number) => {
     setCards((prev) => prev.map((c) => c.id === id ? { ...c, x, y } : c));
   }, []);
@@ -1307,6 +783,37 @@ const SongCanvasExperience = () => {
     }
     return counts;
   }, [cards]);
+
+  // Per-card wiring for CanvasStage's render loop — the exact closures the old
+  // inline loop built, handed across the D1 boundary as a selector. CanvasStage
+  // renders the pixels; what each callback DOES stays here with the D2 hooks.
+  // Deliberately not memoized: the stage's cards aren't memoized either, so
+  // fresh closures per render match the previous behavior exactly.
+  const getCardInteractions = (card: CanvasCard): CanvasCardInteractions => ({
+    onSelect: () => setSelectedId((prev) => (prev === card.id ? null : card.id)),
+    onMoveToFinal: () => arrangement.moveToFinal(card.id),
+    onMoveToIdeas: () => arrangement.moveToIdeas(card.id),
+    onMove: handleCardMove,
+    layerCount: layerCountByBase[card.id] ?? 0,
+    onOpenStack:
+      card.type === "voice" || card.type === "hum"
+        ? () => setStackBaseId(card.id)
+        : undefined,
+    onSuggestLine:
+      card.type === "lyric" && !isViewer
+        ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
+        : undefined,
+    onAddToListenPath: () => listenPath.toggleCard(card.id),
+    listenIndex: listenPath.queue.includes(card.id) ? listenPath.queue.indexOf(card.id) : undefined,
+    onMergeSelect:
+      !isViewer && card.tree === "ideas" && !card.isDimmedReference
+        ? () => merge.toggleSelect(card.id)
+        : undefined,
+    mergeSelected: merge.selection.includes(card.id),
+    onEdit: !isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined,
+    onMore: () => setMoreCardId(card.id),
+    finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
+  });
 
   // Everyone whose hand is on this song — derived from who contributed cards.
   // Stable color/initials per person so the room reads as collaborative at a glance.
@@ -1885,11 +1392,18 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
-      {/* ── Canvas viewport ──────────────────────────────────────────────── */}
+      {/* ── Canvas stage — D1's render surface (viewport, trees, cards) ──── */}
       <div ref={canvasAreaRef} className="relative flex-1 min-h-0">
-        <CanvasViewport
+        <CanvasStage
           className="w-full h-full"
           initialZoom={0.8}
+          songTitle={songTitle}
+          ideasCards={ideasCards}
+          finalCards={finalCards}
+          selectedId={selectedId}
+          isDropActive={isDragOver}
+          getCardInteractions={getCardInteractions}
+          viewportApiRef={viewportApiRef}
           overlay={
             <>
               {/* Ideas ⇄ Final quick-nav — the phone can't show both zones at
@@ -2008,45 +1522,7 @@ const SongCanvasExperience = () => {
               )}
             </>
           }
-        >
-          {/* Canvas content — all positioned absolutely */}
-          <CanvasViewportBridge apiRef={viewportApiRef} />
-          <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
-          <SongRootCard title={songTitle} />
-          <ZoneLabels />
-          <CanvasDivider isDropActive={isDragOver} />
-
-          {/* Render all cards */}
-          {[...ideasCards, ...finalCards].map((card) => (
-            <CanvasCardEl
-              key={card.id}
-              card={card}
-              selected={selectedId === card.id}
-              onSelect={() => setSelectedId(selectedId === card.id ? null : card.id)}
-              onMoveToFinal={() => arrangement.moveToFinal(card.id)}
-              onMoveToIdeas={() => arrangement.moveToIdeas(card.id)}
-              onMove={handleCardMove}
-              layerCount={layerCountByBase[card.id] ?? 0}
-              onOpenStack={
-                card.type === "voice" || card.type === "hum"
-                  ? () => setStackBaseId(card.id)
-                  : undefined
-              }
-              onSuggestLine={
-                card.type === "lyric" && !isViewer
-                  ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
-                  : undefined
-              }
-              onAddToListenPath={() => listenPath.toggleCard(card.id)}
-              listenIndex={listenPath.queue.includes(card.id) ? listenPath.queue.indexOf(card.id) : undefined}
-              onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => merge.toggleSelect(card.id) : undefined}
-              mergeSelected={merge.selection.includes(card.id)}
-              onEdit={!isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined}
-              onMore={() => setMoreCardId(card.id)}
-              finalOrder={card.tree === "final" ? finalOrder[card.id] : undefined}
-            />
-          ))}
-        </CanvasViewport>
+        />
 
         {/* Work layer — a mobile bottom sheet (was a desktop right drawer) */}
         {showWorkPanel && (
@@ -2406,15 +1882,10 @@ const SongCanvasExperience = () => {
           0%   { transform: scale(1);   opacity: 0.6; }
           75%, 100% { transform: scale(2.2); opacity: 0; }
         }
-        @keyframes cog-card-in {
-          0%   { opacity: 0; transform: scale(0.96) translateY(6px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
-        }
         @keyframes cog-fade-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes cog-sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
           [style*="cog-live-ping"] { animation: none !important; }
-          [style*="cog-card-in"]  { animation: none !important; }
           [style*="cog-sheet-rise"], [style*="cog-fade-in"] { animation: none !important; }
         }
       `}</style>
