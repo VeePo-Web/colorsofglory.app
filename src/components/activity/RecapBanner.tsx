@@ -6,7 +6,7 @@
  */
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles } from "lucide-react";
-import { cardEntrance } from "@/lib/motion";
+import { cardEntrance } from "./motion";
 
 const RecapBanner = ({ text }: { text: string }) => {
   const reduceMotion = useReducedMotion();

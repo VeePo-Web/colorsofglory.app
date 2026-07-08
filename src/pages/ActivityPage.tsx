@@ -18,7 +18,7 @@ import ActivityCard from "@/components/activity/ActivityCard";
 import RecapBanner from "@/components/activity/RecapBanner";
 import { activityHref } from "@/components/activity/activityCopy";
 import { useActivityFeed, type ActivityGroup } from "@/components/activity/useActivityFeed";
-import { stagger } from "@/lib/motion";
+import { stagger } from "@/components/activity/motion";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <h2

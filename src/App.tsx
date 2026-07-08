@@ -183,10 +183,13 @@ const App = () => {
             <Route path="/songs/:id/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
             <Route path="/songs/:id/capture-onboarding" element={<CaptureFirstIdeaPage />} />
             <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
-            <Route path="/songs/:id/lyrics" element={<CanvasLayerRedirect layer="lyrics" />} />
-            <Route path="/songs/:id/chords" element={<CanvasLayerRedirect layer="chords" />} />
+            {/* Lyrics + Chords resolve to the structured Lyric & Chord Sheet editor (C3).
+                The canvas ideation layer stays reachable via the canvas's own layer
+                switcher; /sheet stays as an alias so existing links keep working. */}
+            <Route path="/songs/:id/lyrics" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
+            <Route path="/songs/:id/chords" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
             <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
-            <Route path="/songs/:id/sheet" element={<SongSheetPage />} />
+            <Route path="/songs/:id/sheet" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
             <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
             <Route path="/albums/:albumId/practice" element={<AlbumPracticeExperience />} />
             <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />

@@ -1,5 +1,22 @@
 # E2 · Activity Feed Agent — Progress
 
+## 2026-07-08 — Re-landed after a parallel-session working-tree wipe; pushed
+
+A concurrent session restored tracked files to HEAD and removed the modular
+`src/routes/` refactor, which reverted E2's two tracked-file edits
+(`ActivityPage.tsx` back to the mock; the songRoutes.tsx route gone). The
+untracked E2 files (components/activity/, tests, docs) survived. Re-landed:
+- `ActivityPage.tsx` rewrite restored verbatim.
+- The route re-applied in **`src/App.tsx`** (the live inline tree):
+  lazy `ActivityPage`, `RequireAuth`-guarded, replacing `CanvasLayerRedirect`.
+- The test's route guard now asserts the App.tsx source contract (the
+  songRoutes module it previously imported no longer exists).
+- E1 has since shipped `src/lib/permissions/useCapabilities` — E2 still gates
+  on `my_role` (the swap point stands); adopt in a follow-up so this push
+  doesn't depend on E1's uncommitted lane.
+Verified again post-restore: 11/11 activity tests, `tsc --noEmit` clean.
+Committed with `git commit --only` on E2 paths (shared-worktree convention).
+
 ## 2026-07-07 — Steps 1–10 landed in one pass (launch-ready pending live-auth spot-check)
 
 ### What changed

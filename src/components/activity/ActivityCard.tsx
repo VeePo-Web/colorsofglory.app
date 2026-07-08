@@ -6,7 +6,7 @@
  */
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
-import { cardEntrance } from "@/lib/motion";
+import { cardEntrance } from "./motion";
 import { relativeTime } from "@/lib/notes/relativeTime";
 import { activitySentence, copyForKind, UNKNOWN_ACTOR } from "./activityCopy";
 import type { ActivityGroup } from "./useActivityFeed";
