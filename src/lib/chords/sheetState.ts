@@ -23,8 +23,11 @@ import {
 import { type Mode } from "./keys";
 import {
   type SheetLine,
+  type SheetSection,
   type ChordAnchor,
   shiftAnchorsForEdit,
+  parseChordPro,
+  lineToChordPro,
 } from "./sheet";
 
 // ─── Document shape ──────────────────────────────────────────────────────────
@@ -123,6 +126,67 @@ export function createDoc(params: {
     display: params.display ?? "letters",
     sections: [],
   };
+}
+
+// ─── Ids + ChordPro ↔ doc bridges ────────────────────────────────────────────
+
+/** Stable id for sections/lines. UUID when available; time-random fallback. */
+export function newSheetId(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return `sh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Wrap parsed ChordPro sections in a SheetDoc, minting fresh ids. */
+export function docFromSections(
+  params: { songId: string; key: string; mode?: Mode; bpm?: number; display?: "letters" | "numbers" },
+  sections: SheetSection[],
+): SheetDoc {
+  const doc = createDoc(params);
+  return {
+    ...doc,
+    sections: sections.map((s) => ({
+      id: newSheetId(),
+      label: s.label ?? "",
+      lines: s.lines.map((l) => ({ id: newSheetId(), text: l.text, anchors: l.anchors })),
+    })),
+  };
+}
+
+/**
+ * Parse a raw ChordPro document into a SheetDoc. Line/section ids are freshly
+ * minted — an import replaces line identity, which is why the textarea is an
+ * import affordance, not the primary editing path.
+ */
+export function docFromChordPro(
+  params: { songId: string; key: string; mode?: Mode; bpm?: number; display?: "letters" | "numbers" },
+  source: string,
+): SheetDoc {
+  return docFromSections(params, parseChordPro(source, params.key, params.mode ?? "major"));
+}
+
+/** View a SheetDoc as plain sections (for renderers built on SheetSection). */
+export function docToSections(doc: SheetDoc): SheetSection[] {
+  return doc.sections.map((s) => ({ label: s.label || undefined, lines: s.lines }));
+}
+
+/**
+ * Serialize the doc to ChordPro in the given render key (defaults to doc.key).
+ * Uses explicit {start_of_verse}/{end_of_verse} directives (not {comment}) so
+ * parseChordPro round-trips section BOUNDARIES losslessly — a bare comment
+ * after a previous section would merge into it instead of starting a new one.
+ */
+export function docToChordPro(doc: SheetDoc, tonic?: string, mode?: Mode): string {
+  const t = tonic ?? doc.key;
+  const m = mode ?? doc.mode;
+  const out: string[] = [];
+  for (const s of doc.sections) {
+    if (s.label) out.push(`{start_of_verse: ${s.label}}`);
+    else out.push("{end_of_verse}"); // break any open section; lines below start an unlabeled one
+    for (const line of s.lines) out.push(lineToChordPro(line, t, m));
+    out.push("");
+  }
+  return out.join("\n").trimEnd();
 }
 
 // ─── Section ops ─────────────────────────────────────────────────────────────

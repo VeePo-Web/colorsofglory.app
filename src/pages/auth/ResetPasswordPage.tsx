@@ -23,7 +23,6 @@ const ResetPasswordPage = () => {
 
   useEffect(() => {
     let mounted = true;
-    let timer: number | undefined;
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (!mounted) return;
@@ -40,7 +39,7 @@ const ResetPasswordPage = () => {
       if (!mounted) return;
       if (data.session) setReady(true);
     });
-    timer = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (!mounted) return;
       setReady((r) => {
         if (!r) setInvalid(true);
@@ -112,7 +111,7 @@ const ResetPasswordPage = () => {
 
         {invalid && !ready ? (
           <div className="mt-10 flex flex-col items-center gap-4">
-            <p className="text-center text-[0.9375rem]" style={{ color: "#9B2E2E" }}>
+            <p className="text-center text-[0.9375rem]" style={{ color: "var(--cog-record-red)" }}>
               This reset link is invalid or has expired.
             </p>
             <GoldButton onClick={() => navigate("/auth/login", { replace: true })}>
@@ -158,7 +157,7 @@ const ResetPasswordPage = () => {
             </div>
 
             {error && (
-              <p role="alert" className="text-center text-[0.875rem]" style={{ color: "#9B2E2E" }}>
+              <p role="alert" className="text-center text-[0.875rem]" style={{ color: "var(--cog-record-red)" }}>
                 {error}
               </p>
             )}

@@ -69,6 +69,58 @@ export interface CanvasEdge {
   relationType: "branch" | "reference" | "suggestion" | "moved_to_final";
 }
 
+// ─── Whiteboard render/feature card ──────────────────────────────────────────
+// The shape the canvas board + D2 feature bars/hooks consume. Canonical home is
+// here so no component imports it from SongCanvasExperience. Filed for A2's
+// @/types barrel in docs/CANVAS-FEATURES-CONTRACT.md.
+
+export type CanvasBoardTree = "ideas" | "final";
+
+export type CanvasBoardCardType =
+  | "lyric"
+  | "voice"
+  | "hum"
+  | "chord"
+  | "note"
+  | "scripture"
+  | "section";
+
+export type CanvasBoardCardStatus =
+  | "raw"
+  | "shortlisted"
+  | "approved"
+  | "meaning"
+  | "review";
+
+/** Why a card is rendered dimmed — always kept, never deleted. */
+export type CanvasBoardDimReason = "moved_to_final" | "merged" | "compare_kept";
+
+export interface CanvasBoardCard {
+  id: string;
+  tree: CanvasBoardTree;
+  type: CanvasBoardCardType;
+  title: string;
+  body: string;
+  meta: string;
+  section: string;
+  contributor: string;
+  status: CanvasBoardCardStatus;
+  accent: string;
+  x: number;
+  y: number;
+  /** Set when this voice memo is a layer recorded over a base ("Record over this"). */
+  parentMemoId?: string;
+  /** Recording length for stack playback/labels; voice cards only. */
+  durationMs?: number;
+  /** Owner has reviewed this contributor idea (kept it in Ideas). Clears it from the review queue. */
+  reviewed?: boolean;
+  isDimmedReference?: boolean;
+  dimReason?: CanvasBoardDimReason;
+  isProcessing?: boolean;
+  /** Provenance: the two idea cards this section was merged from (F22). */
+  mergedFrom?: [string, string];
+}
+
 export interface SongCanvasState {
   song: {
     id: string;

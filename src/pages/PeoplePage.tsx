@@ -50,13 +50,6 @@ interface Collab {
   avatarInitials: string;
 }
 
-// Mock collaborators — Lovable replaces with live Supabase query
-const MOCK_COLLABS: Collab[] = [
-  { userId: "u1", firstName: "Parker", lastName: "Kim",    role: "Owner",       isOwner: true,  avatarColor: "#D4AE5C", avatarInitials: "PK" },
-  { userId: "u2", firstName: "Sarah",  lastName: "Miller", role: "Contributor", isOwner: false, avatarColor: "#53AB8B", avatarInitials: "SM" },
-  { userId: "u3", firstName: "Caleb",  lastName: "Rivera", role: "Viewer",      isOwner: false, avatarColor: "#8070C4", avatarInitials: "CR" },
-];
-
 // ─── Role selection card ─────────────────────────────────────────────────────
 
 const RoleCard = ({
@@ -292,8 +285,10 @@ const PeoplePage = () => {
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState<{ channel: "sms" | "email"; to: string } | null>(null);
 
-  // Load real collaborators from Supabase
-  const [collabs, setCollabs] = useState<Collab[]>(MOCK_COLLABS);
+  // Load real collaborators from Supabase — NO mock ships. Starts empty and
+  // fills from the live song_members query; on error stays empty (never a
+  // fabricated Parker/Sarah/Caleb) so what an owner sees is always true.
+  const [collabs, setCollabs] = useState<Collab[]>([]);
   useEffect(() => {
     let active = true;
 
@@ -325,7 +320,7 @@ const PeoplePage = () => {
           })
         );
       } catch {
-        // Keep mock collaborators on error.
+        // Real data only — leave the list empty on error, never mock.
       }
     };
 

@@ -71,14 +71,17 @@ const SongTabBar = forwardRef<HTMLElement, SongTabBarProps>(({ activeTab }, ref)
           <button
             key={tab.id}
             onClick={() => {
-              // Lyrics + Chords open the structured Lyric & Chord Sheet;
-              // the remaining sections live as canvas layers.
+              // Lyrics + Chords open the structured Lyric & Chord Sheet; People
+              // opens the dedicated collaboration page (members + invite composer
+              // — the growth-loop entry point); the rest live as canvas layers.
               const destination =
                 tab.id === "lyrics" || tab.id === "chords"
                   ? `/songs/${songId}/sheet`
-                  : tab.id === "canvas"
-                    ? `/songs/${songId}/canvas`
-                    : `/songs/${songId}/canvas?layer=${tab.segment}`;
+                  : tab.id === "people"
+                    ? `/songs/${songId}/people`
+                    : tab.id === "canvas"
+                      ? `/songs/${songId}/canvas`
+                      : `/songs/${songId}/canvas?layer=${tab.segment}`;
               navigate(destination);
             }}
             aria-label={tab.label}

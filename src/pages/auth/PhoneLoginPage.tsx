@@ -17,6 +17,9 @@ function formatDisplay(digits: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+// Launch scope: US & Canada (NANP). Both share the +1 country code and the same
+// 10-digit format, so a single +1 path serves both correctly. International
+// numbers are out of scope for launch — see the scope note under the field.
 function toE164(digits: string): string {
   return `+1${digits}`;
 }
@@ -27,7 +30,7 @@ function toFriendlyError(err: unknown): string {
   if (err instanceof AuthError) return err.message;
   const raw = err instanceof Error ? err.message : String(err);
   const msg = raw.toLowerCase();
-  if (msg.includes("invalid phone")) return "Enter a valid US phone number.";
+  if (msg.includes("invalid phone")) return "Enter a valid US or Canada phone number.";
   if (msg.includes("network") || msg.includes("fetch")) return "We could not send the code. Check your connection and try again.";
   return "We could not send the code. Please try again.";
 }
@@ -115,23 +118,25 @@ const PhoneLoginPage = () => {
           style={{
             height: 64,
             backgroundColor: "#FFFFFF",
-            border: error
-              ? "1.5px solid #E05440"
-              : isValid
-              ? "1.5px solid #B5935A"
+            // Calm-error contract: the field stays neutral; the error is carried
+            // by the inline text below, never a red border. A valid number gets a
+            // soft gold ring; otherwise the resting hairline border.
+            border: isValid
+              ? "1.5px solid var(--cog-gold)"
               : "1.5px solid rgba(0,0,0,0.12)",
-            boxShadow: isValid && !error
+            boxShadow: isValid
               ? "0 0 0 3px rgba(181,147,90,0.10)"
               : "0 1px 4px rgba(0,0,0,0.06)",
           }}
         >
-          {/* Flag */}
+          {/* Flag — US & Canada share the +1 (NANP) dialing code at launch. */}
           <span className="text-xl leading-none" aria-hidden="true">🇺🇸</span>
 
           {/* Country code */}
           <span
             className="text-base font-medium"
             style={{ color: "#666", fontFamily: "var(--font-body)", flexShrink: 0 }}
+            aria-label="Country code plus one, United States and Canada"
           >
             +1
           </span>
@@ -153,7 +158,7 @@ const PhoneLoginPage = () => {
             onChange={handleChange}
             placeholder="(555) 555-5555"
             aria-label="Phone number"
-            aria-describedby="phone-hint phone-error"
+            aria-describedby={error ? "phone-hint phone-error" : "phone-hint"}
             className="flex-1 bg-transparent outline-none text-base"
             style={{
               color: "#1A1A1A",
@@ -170,6 +175,24 @@ const PhoneLoginPage = () => {
           style={{ color: "#999" }}
         >
           We'll send a secure one-time code. No password needed.
+          <br />
+          <span style={{ color: "#B0A695" }}>US &amp; Canada numbers · </span>
+          <button
+            type="button"
+            onClick={() => navigate("/auth/email")}
+            className="underline transition-opacity hover:opacity-70"
+            style={{ color: "var(--cog-gold)" }}
+          >
+            elsewhere, use email
+          </button>
+        </p>
+
+        {/* Quiet trust line — reassures before asking for a phone number. */}
+        <p
+          className="text-[12px] text-center mb-4"
+          style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
+        >
+          Your number is used to verify access, not shown inside song rooms.
         </p>
 
         {/* Inline error */}

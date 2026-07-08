@@ -1,10 +1,14 @@
-import { Suspense, lazy, useState } from "react";
+﻿import { Suspense, lazy, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { PracticePlayerProvider } from "@/components/practice/PracticePlayerContext";
+import { queryClient } from "@/lib/queryClient";
+import { AuthProvider } from "@/lib/auth/AuthContext";
+import { OutboxProvider } from "@/lib/outbox/OutboxContext";
+import { isPreviewUnlocked } from "@/lib/preview/previewUnlock";
 
 const PasswordGate = lazy(() => import("@/components/PasswordGate"));
 const GlobalCaptureFlow = lazy(() => import("@/components/capture/GlobalCaptureFlow"));
@@ -26,7 +30,7 @@ const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstI
 const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
 // Legacy /invite/:token links (and the post-auth pending-invite resume) funnel
 // into the one real, frictionless join flow at /join/:token. The old preview page
-// was a mock that dumped users onto the wrong song with no auth — never route to it.
+// was a mock that dumped users onto the wrong song with no auth â€” never route to it.
 const InviteTokenRedirect = () => {
   const { token } = useParams<{ token: string }>();
   return <Navigate to={`/join/${token ?? ""}`} replace />;
@@ -49,6 +53,8 @@ const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
+const ActivityPage = lazy(() => import("./pages/ActivityPage"));
+const NotesPage = lazy(() => import("./pages/NotesPage"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage"));
 const SongMemoryPage = lazy(() => import("./pages/SongMemoryPage"));
 const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
@@ -66,7 +72,7 @@ const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedire
 const UpgradePage = lazy(() => import("./pages/UpgradePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-// Legal (public) — linked from the auth + invite trust lines
+// Legal (public) â€” linked from the auth + invite trust lines
 const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
 
@@ -78,19 +84,10 @@ const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPag
 const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
 const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
 const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
-// Admin (internal-only) — all admin routing lives in src/routes/AdminRoutes.tsx
+// Admin (internal-only) â€” all admin routing lives in src/routes/AdminRoutes.tsx
 import { adminRoutes } from "@/routes/AdminRoutes";
 import SongSurfaceTracker from "@/components/nav/SongSurfaceTracker";
 import RouteAnnouncer from "@/components/nav/RouteAnnouncer";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      retry: 1,
-    },
-  },
-});
 
 const RouteFallback = () => (
   <div className="relative min-h-screen bg-[var(--cog-cream)]">
@@ -119,7 +116,7 @@ const CanvasLayerRedirect = ({ layer }: { layer: string }) => {
 
 const App = () => {
   const [unlocked, setUnlocked] = useState<boolean>(
-    () => typeof window !== "undefined" && sessionStorage.getItem("site_unlocked") === "true"
+    () => typeof window !== "undefined" && isPreviewUnlocked()
   );
 
   if (!unlocked) {
@@ -132,6 +129,8 @@ const App = () => {
 
   return (
   <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+    <OutboxProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -141,7 +140,7 @@ const App = () => {
         <RouteAnnouncer />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            {/* Auth — phone-first front door (Twilio SMS OTP); email is the fallback */}
+            {/* Auth â€” phone-first front door (Twilio SMS OTP); email is the fallback */}
             <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
             <Route path="/auth/login" element={<PhoneLoginPage />} />
             <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
@@ -158,7 +157,7 @@ const App = () => {
             <Route path="/onboarding/founder-code" element={<FounderCodePage />} />
             <Route path="/onboarding/earn" element={<EarnPage />} />
 
-            {/* Legacy invite link → redirect into the real frictionless join flow */}
+            {/* Legacy invite link â†’ redirect into the real frictionless join flow */}
             <Route path="/invite/:token" element={<InviteTokenRedirect />} />
 
             {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
@@ -179,7 +178,7 @@ const App = () => {
             {/* Mic-first capture is the song's default landing.
                 Workspace hub is one tap away at /songs/:id/room. */}
             <Route path="/songs/:id" element={<RequireAuth><CapturePage /></RequireAuth>} />
-            <Route path="/songs/:id/room" element={<SongWorkspacePage />} />
+            <Route path="/songs/:id/room" element={<RequireAuth><SongWorkspacePage /></RequireAuth>} />
             <Route path="/songs/:id/brainstorm" element={<RequireAuth><BrainstormPage /></RequireAuth>} />
             <Route path="/songs/:id/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
             <Route path="/songs/:id/capture-onboarding" element={<CaptureFirstIdeaPage />} />
@@ -191,9 +190,13 @@ const App = () => {
             <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
             <Route path="/albums/:albumId/practice" element={<AlbumPracticeExperience />} />
             <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
-            <Route path="/songs/:id/notes" element={<CanvasLayerRedirect layer="notes" />} />
+            {/* Notes pad (C5) is the real Notes front door â€” the standalone
+                song-level pad, NOT the canvas ?layer=notes summary (D-group). */}
+            <Route path="/songs/:id/notes" element={<RequireAuth><NotesPage /></RequireAuth>} />
             <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
-            <Route path="/songs/:id/activity" element={<CanvasLayerRedirect layer="room" />} />
+            {/* Activity (E2): the calm "what changed since you left" feed â€”
+                a real page, not a canvas redirect. Members-only data underneath. */}
+            <Route path="/songs/:id/activity" element={<RequireAuth><ActivityPage /></RequireAuth>} />
             <Route path="/songs/:id/credits" element={<RequireAuth><CreditsPage /></RequireAuth>} />
             <Route path="/songs/:id/memory" element={<RequireAuth><SongMemoryPage /></RequireAuth>} />
 
@@ -222,7 +225,7 @@ const App = () => {
             <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
             <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
             <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
-            {/* Admin (internal) — routes defined in src/routes/AdminRoutes.tsx */}
+            {/* Admin (internal) â€” routes defined in src/routes/AdminRoutes.tsx */}
             {adminRoutes}
 
             {/* Legal (public) */}
@@ -242,6 +245,8 @@ const App = () => {
         </PracticePlayerProvider>
       </BrowserRouter>
     </TooltipProvider>
+    </OutboxProvider>
+    </AuthProvider>
   </QueryClientProvider>
   );
 };

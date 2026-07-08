@@ -12,15 +12,18 @@ import {
   AuthError,
 } from "@/integrations/cog/auth";
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
+import { reconcileInviteToken } from "./inviteHandoff";
 
 type Step = "email" | "code" | "password";
 
 const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email").max(255);
 const passwordSchema = z.string().min(8, "At least 8 characters").max(72);
 
+// Only AuthError carries calm, user-facing copy. Anything else (a raw network or
+// runtime Error) must never leak its technical message to the UI.
 function friendly(err: unknown): string {
   if (err instanceof AuthError) return err.message;
-  return err instanceof Error ? err.message : "Something didn't work. Please try again.";
+  return "Something didn't work. Please try again.";
 }
 
 const ForgotPasswordPage = () => {
@@ -108,6 +111,7 @@ const ForgotPasswordPage = () => {
     try {
       await verifyEmailOtp({ email, code: code.trim(), purpose: "reset", password });
       await signInWithPassword({ email, password });
+      reconcileInviteToken();
       await routeAfterAuth(navigate);
     } catch (err) {
       if (err instanceof AuthError && err.code === "INVALID_OTP") {
@@ -167,7 +171,7 @@ const ForgotPasswordPage = () => {
                 style={{ color: "#1C1A17" }}
               />
             </div>
-            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "#9B2E2E" }}>{error}</p>}
+            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "var(--cog-record-red)" }}>{error}</p>}
             {info && <p role="status" className="text-center text-[0.875rem]" style={{ color: "#6B6459" }}>{info}</p>}
             <GoldButton type="submit" loading={submitting} loadingText="Sending…">
               Send code
@@ -196,7 +200,7 @@ const ForgotPasswordPage = () => {
                 style={{ color: "#1C1A17", fontFamily: "'SF Mono', Menlo, monospace" }}
               />
             </div>
-            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "#9B2E2E" }}>{error}</p>}
+            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "var(--cog-record-red)" }}>{error}</p>}
             {info && !error && <p role="status" className="text-center text-[0.875rem]" style={{ color: "#6B6459" }}>{info}</p>}
             <GoldButton type="submit" disabled={code.length !== 6}>
               Continue
@@ -269,7 +273,7 @@ const ForgotPasswordPage = () => {
                 Caps Lock is on.
               </p>
             )}
-            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "#9B2E2E" }}>{error}</p>}
+            {error && <p role="alert" className="text-center text-[0.875rem]" style={{ color: "var(--cog-record-red)" }}>{error}</p>}
             <GoldButton type="submit" loading={submitting} loadingText="Updating…">
               Update password & sign in
             </GoldButton>

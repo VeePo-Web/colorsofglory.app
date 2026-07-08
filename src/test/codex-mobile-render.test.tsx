@@ -1,6 +1,33 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// The workspace hub loads its real song via getSong — stub it with a live-looking detail.
+vi.mock("@/integrations/cog/songs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/integrations/cog/songs")>();
+  return {
+    ...actual,
+    getSong: vi.fn().mockResolvedValue({
+      id: "1",
+      owner_user_id: "u1",
+      title: "River of Mercy",
+      status: "active",
+      key_signature: "G",
+      tempo_bpm: 72,
+      time_signature: null,
+      tags: null,
+      cover_color: null,
+      is_locked: false,
+      last_activity_at: null,
+      created_at: "",
+      updated_at: "",
+      lyrics_snippet: null,
+      my_role: "owner",
+      counts: { sections: 2, lyrics_filled: 3, voice_memos: 1, notes: 1, collaborators: 2, pending_suggestions: 0 },
+    }),
+  };
+});
 import SongCatalogPage from "@/pages/SongCatalogPage";
 import SongWorkspacePage from "@/pages/SongWorkspacePage";
 import CaptureFirstIdeaPage from "@/pages/onboarding/CaptureFirstIdeaPage";
@@ -20,11 +47,13 @@ const setMobileViewport = () => {
 
 const renderRoute = (initialPath: string, routePath: string, element: React.ReactElement) =>
   render(
-    <MemoryRouter initialEntries={[initialPath]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <Routes>
-        <Route path={routePath} element={element} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={[initialPath]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <Routes>
+          <Route path={routePath} element={element} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 describe("Codex 390px mobile render smoke", () => {
@@ -40,13 +69,13 @@ describe("Codex 390px mobile render smoke", () => {
     expect(screen.getByRole("button", { name: /new song/i })).toBeInTheDocument();
   });
 
-  it("renders the song workspace at the primary mobile width", () => {
-    renderRoute("/songs/1?first=1", "/songs/:id", <SongWorkspacePage />);
+  it("renders the song workspace at the primary mobile width", async () => {
+    renderRoute("/songs/1/room", "/songs/:id/room", <SongWorkspacePage />);
 
-    expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /river of mercy/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /record/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /write/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /invite/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /invite/i }).length).toBeGreaterThan(0);
   });
 
   it("renders the guided capture and saved memo states at the primary mobile width", () => {

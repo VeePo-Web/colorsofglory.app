@@ -1,0 +1,25 @@
+// vitest.config.ts
+import { defineConfig } from "file:///C:/Users/Business/Desktop/Claude%20Code/colorsofglory.app/node_modules/vitest/dist/config.js";
+import react from "file:///C:/Users/Business/Desktop/Claude%20Code/colorsofglory.app/node_modules/@vitejs/plugin-react-swc/index.js";
+import path from "path";
+var __vite_injected_original_dirname = "C:\\Users\\Business\\Desktop\\Claude Code\\colorsofglory.app";
+var vitest_config_default = defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Heavier render tests (e.g. the canvas suite) can exceed the 5s default
+    // under full-suite CPU contention; give them headroom so CI is deterministic.
+    testTimeout: 2e4,
+    hookTimeout: 2e4
+  },
+  resolve: {
+    alias: { "@": path.resolve(__vite_injected_original_dirname, "./src") }
+  }
+});
+export {
+  vitest_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidml0ZXN0LmNvbmZpZy50cyJdLAogICJzb3VyY2VzQ29udGVudCI6IFsiY29uc3QgX192aXRlX2luamVjdGVkX29yaWdpbmFsX2Rpcm5hbWUgPSBcIkM6XFxcXFVzZXJzXFxcXEJ1c2luZXNzXFxcXERlc2t0b3BcXFxcQ2xhdWRlIENvZGVcXFxcY29sb3Jzb2ZnbG9yeS5hcHBcIjtjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfZmlsZW5hbWUgPSBcIkM6XFxcXFVzZXJzXFxcXEJ1c2luZXNzXFxcXERlc2t0b3BcXFxcQ2xhdWRlIENvZGVcXFxcY29sb3Jzb2ZnbG9yeS5hcHBcXFxcdml0ZXN0LmNvbmZpZy50c1wiO2NvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9pbXBvcnRfbWV0YV91cmwgPSBcImZpbGU6Ly8vQzovVXNlcnMvQnVzaW5lc3MvRGVza3RvcC9DbGF1ZGUlMjBDb2RlL2NvbG9yc29mZ2xvcnkuYXBwL3ZpdGVzdC5jb25maWcudHNcIjtpbXBvcnQgeyBkZWZpbmVDb25maWcgfSBmcm9tIFwidml0ZXN0L2NvbmZpZ1wiO1xyXG5pbXBvcnQgcmVhY3QgZnJvbSBcIkB2aXRlanMvcGx1Z2luLXJlYWN0LXN3Y1wiO1xyXG5pbXBvcnQgcGF0aCBmcm9tIFwicGF0aFwiO1xyXG5cclxuZXhwb3J0IGRlZmF1bHQgZGVmaW5lQ29uZmlnKHtcclxuICBwbHVnaW5zOiBbcmVhY3QoKV0sXHJcbiAgdGVzdDoge1xyXG4gICAgZW52aXJvbm1lbnQ6IFwianNkb21cIixcclxuICAgIGdsb2JhbHM6IHRydWUsXHJcbiAgICBzZXR1cEZpbGVzOiBbXCIuL3NyYy90ZXN0L3NldHVwLnRzXCJdLFxyXG4gICAgaW5jbHVkZTogW1wic3JjLyoqLyoue3Rlc3Qsc3BlY30ue3RzLHRzeH1cIl0sXHJcbiAgICAvLyBIZWF2aWVyIHJlbmRlciB0ZXN0cyAoZS5nLiB0aGUgY2FudmFzIHN1aXRlKSBjYW4gZXhjZWVkIHRoZSA1cyBkZWZhdWx0XHJcbiAgICAvLyB1bmRlciBmdWxsLXN1aXRlIENQVSBjb250ZW50aW9uOyBnaXZlIHRoZW0gaGVhZHJvb20gc28gQ0kgaXMgZGV0ZXJtaW5pc3RpYy5cclxuICAgIHRlc3RUaW1lb3V0OiAyMDAwMCxcclxuICAgIGhvb2tUaW1lb3V0OiAyMDAwMCxcclxuICB9LFxyXG4gIHJlc29sdmU6IHtcclxuICAgIGFsaWFzOiB7IFwiQFwiOiBwYXRoLnJlc29sdmUoX19kaXJuYW1lLCBcIi4vc3JjXCIpIH0sXHJcbiAgfSxcclxufSk7XHJcbiJdLAogICJtYXBwaW5ncyI6ICI7QUFBeVcsU0FBUyxvQkFBb0I7QUFDdFksT0FBTyxXQUFXO0FBQ2xCLE9BQU8sVUFBVTtBQUZqQixJQUFNLG1DQUFtQztBQUl6QyxJQUFPLHdCQUFRLGFBQWE7QUFBQSxFQUMxQixTQUFTLENBQUMsTUFBTSxDQUFDO0FBQUEsRUFDakIsTUFBTTtBQUFBLElBQ0osYUFBYTtBQUFBLElBQ2IsU0FBUztBQUFBLElBQ1QsWUFBWSxDQUFDLHFCQUFxQjtBQUFBLElBQ2xDLFNBQVMsQ0FBQywrQkFBK0I7QUFBQTtBQUFBO0FBQUEsSUFHekMsYUFBYTtBQUFBLElBQ2IsYUFBYTtBQUFBLEVBQ2Y7QUFBQSxFQUNBLFNBQVM7QUFBQSxJQUNQLE9BQU8sRUFBRSxLQUFLLEtBQUssUUFBUSxrQ0FBVyxPQUFPLEVBQUU7QUFBQSxFQUNqRDtBQUNGLENBQUM7IiwKICAibmFtZXMiOiBbXQp9Cg==

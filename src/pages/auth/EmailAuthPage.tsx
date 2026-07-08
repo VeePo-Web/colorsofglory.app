@@ -11,6 +11,7 @@ import {
   AuthError,
 } from "@/integrations/cog/auth";
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
+import { reconcileInviteToken } from "./inviteHandoff";
 import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 type Mode = "signin" | "signup";
@@ -21,9 +22,11 @@ const passwordSchema = z
   .min(8, "At least 8 characters")
   .max(72, "Keep it under 72 characters");
 
+// Only AuthError carries calm, user-facing copy. Anything else (a raw network or
+// runtime Error) must never leak its technical message to the UI.
 function friendly(err: unknown): string {
   if (err instanceof AuthError) return err.message;
-  return err instanceof Error ? err.message : "Something didn't work. Please try again.";
+  return "Something didn't work. Please try again.";
 }
 
 const EmailAuthPage = () => {
@@ -73,6 +76,7 @@ const EmailAuthPage = () => {
     try {
       if (mode === "signin") {
         await signInWithPassword({ email: emailParsed.data, password });
+        reconcileInviteToken();
         await routeAfterAuth(navigate);
       } else {
         const { needsConfirmation } = await signUpWithPassword({
@@ -85,6 +89,7 @@ const EmailAuthPage = () => {
           setPassword("");
           setConfirmPassword("");
         } else {
+          reconcileInviteToken();
           await routeAfterAuth(navigate);
         }
       }
@@ -234,7 +239,7 @@ const EmailAuthPage = () => {
             <p
               role="alert"
               className="text-center text-[0.875rem]"
-              style={{ color: "#9B2E2E" }}
+              style={{ color: "var(--cog-record-red)" }}
             >
               {error}
             </p>

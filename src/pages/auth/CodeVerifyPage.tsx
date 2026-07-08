@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendPhoneOtp, verifyPhoneOtp, AuthError } from "@/integrations/cog/auth";
 import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
+import { reconcileInviteToken } from "./inviteHandoff";
 import { useWebOtpAutofill } from "@/lib/auth/useWebOtpAutofill";
 import { useTurnstile } from "@/lib/auth/useTurnstile";
 import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
@@ -71,7 +72,9 @@ const CodeVerifyPage = () => {
       const reduce = typeof window !== "undefined" && !!window.matchMedia &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
-      // The centralized router decides where they land (invite / onboarding / home).
+      // Ensure a deep-link invite survives auth (flat token ← context blob), then
+      // let the centralized router decide (invite / onboarding / home).
+      reconcileInviteToken();
       await routeAfterAuth(navigate);
     } catch (err) {
       setError(toFriendlyError(err));

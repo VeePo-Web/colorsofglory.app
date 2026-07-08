@@ -4,25 +4,17 @@ import { FileText, Mic, Play, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
+import { getSong } from "@/lib/songContext";
 
 const WAVEFORM = [18, 32, 24, 42, 28, 52, 36, 26, 46, 34, 22, 38, 30, 48, 26, 36, 20, 30];
-
-const readSongTitle = () => {
-  try {
-    const stored = JSON.parse(sessionStorage.getItem("cog:first-song") ?? "{}") as {
-      title?: string;
-    };
-    return stored.title || "Grace in the Waiting";
-  } catch {
-    return "Grace in the Waiting";
-  }
-};
 
 const VoiceMemoAddedPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const songId = id ?? "1";
-  const songTitle = useMemo(readSongTitle, []);
+  // Real title from the active-song bridge; empty while unknown so we never
+  // render a stranger's song name.
+  const songTitle = useMemo(() => getSong(songId)?.title ?? "", [songId]);
 
   // The aha moment reached — the song now has memory.
   useEffect(() => {
@@ -113,7 +105,7 @@ const VoiceMemoAddedPage = () => {
         </h1>
 
         <p className="text-base text-center mb-8" style={{ color: "var(--cog-warm-gray)" }}>
-          Your first idea is saved inside {songTitle}.
+          Your first idea is saved inside {songTitle || "your song"}.
         </p>
 
         <section

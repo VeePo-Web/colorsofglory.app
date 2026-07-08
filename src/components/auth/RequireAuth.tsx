@@ -1,8 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-
-type Status = "loading" | "authed" | "anon";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 const Fallback = () => (
   <div className="relative min-h-screen" style={{ backgroundColor: "#FAFAF6" }}>
@@ -31,41 +29,17 @@ const Fallback = () => (
 );
 
 /**
- * TEMP — AUTH WALL DISABLED FOR PREVIEW TESTING.
- * The PasswordGate still protects the preview; this lets us walk the full
- * songwriting golden path on mobile without a seeded account. RLS remains the
- * real trust boundary on the backend.
- * 🔒 RE-ENABLE BEFORE LAUNCH: set BYPASS_AUTH = false.
- */
-const BYPASS_AUTH = false;
-
-/**
  * Lightweight client-side gate. RLS is the real trust boundary; this just
  * keeps anonymous users from staring at empty screens.
+ *
+ * Auth state comes from the single app-wide subscription in AuthContext — this
+ * component no longer opens its own onAuthStateChange (that duplicate caused the
+ * anon↔authed flash) and no longer ships a bypass flag. While auth is still
+ * resolving it renders the calm skeleton and waits; it never guesses.
  */
 const RequireAuth = ({ children }: { children: ReactNode }) => {
-  const [status, setStatus] = useState<Status>(BYPASS_AUTH ? "authed" : "loading");
+  const { status } = useAuth();
   const location = useLocation();
-
-  useEffect(() => {
-    if (BYPASS_AUTH) return;
-    let mounted = true;
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setStatus(session?.user ? "authed" : "anon");
-    });
-
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setStatus(data.session?.user ? "authed" : "anon");
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
 
   if (status === "loading") return <Fallback />;
   if (status === "anon") {
