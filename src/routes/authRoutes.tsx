@@ -10,6 +10,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 const PhoneLoginPage = lazy(() => import("@/pages/auth/PhoneLoginPage"));
 const CodeVerifyPage = lazy(() => import("@/pages/auth/CodeVerifyPage"));
 const EmailAuthPage = lazy(() => import("@/pages/auth/EmailAuthPage"));
+const EmailCodeVerifyPage = lazy(() => import("@/pages/auth/EmailCodeVerifyPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 
