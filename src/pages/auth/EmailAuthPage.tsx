@@ -79,19 +79,14 @@ const EmailAuthPage = () => {
         reconcileInviteToken();
         await routeAfterAuth(navigate);
       } else {
-        const { needsConfirmation } = await signUpWithPassword({
-          email: emailParsed.data,
-          password,
-        });
-        if (needsConfirmation) {
-          setInfo("Check your inbox to confirm your email, then sign in.");
-          setMode("signin");
-          setPassword("");
-          setConfirmPassword("");
-        } else {
-          reconcileInviteToken();
-          await routeAfterAuth(navigate);
-        }
+        // Starts the branded 6-digit email OTP (Resend). The verify screen
+        // consumes email+password from sessionStorage and calls
+        // completeEmailSignup → signInWithPassword on success.
+        await signUpWithPassword({ email: emailParsed.data, password });
+        sessionStorage.setItem("cog:email-address", emailParsed.data);
+        sessionStorage.setItem("cog:email-purpose", "signup");
+        sessionStorage.setItem("cog:email-password", password);
+        navigate("/auth/email/verify");
       }
     } catch (err) {
       console.error("[auth]", (err as { code?: string } | null)?.code ?? "unknown");
