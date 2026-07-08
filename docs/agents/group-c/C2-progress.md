@@ -29,3 +29,15 @@
 **Seam notes:** `intake-voice-memo` does not yet accept the outbox's stable idempotency key, so a retry after a lost success *response* could double-create a memo (upload itself never duplicates thanks to the outbox's in-flight guard). Filed for A3/Lovable in the backend-seams doc (Step 4). `resolveTakeId` deliberately never re-uploads when the take row lags — it toasts "It'll appear in Latest."
 
 **Next:** Step 3 — the record moment (header fade during recording, reduced-motion guards, stale JSDoc).
+
+## Step 3 of 10 — The record moment (2026-07-08)
+
+**Outcome:** "the waveform IS the screen" is now real — the header fades to nothing (opacity-only, `aria-hidden`, pointer-events off) while a take is live or stopping, on top of the parallel session's `navLocked` disabling; the only visible controls during recording are the timer, the waveform ring, Stop, and the side rail (a core capture tool, kept by design, as is the live transcript). Reduced-motion guards added to CommitRibbon's rise (SideRail's cascade guard had just been added by the parallel session — verified, not duplicated). The stale Phase-1 JSDoc (hold-to-hum / idea_captures) was replaced with the real current loop. Confirmed held: tap-only (hold props remain deprecated no-ops), commitment-only Stop, gold/charcoal live state (the red-vs-gold Visual-Brief discrepancy stays documented in the punch-list §4 — not reverted), BigMic ripple/ring already reduced-motion-safe, mic label steers splitting.
+
+## Step 4 of 10 — Live transcription + spoken-section splitting (2026-07-08)
+
+**Outcome:** the splitting brain is now spec-locked by unit tests, and the backend seams are formally filed. `src/test/capture/sectionKeywords.test.ts` (twin session started it; C2 added the missing load-bearing case) now covers: empty input, single keyword, spoken ordinals, two-token "pre chorus" beating "chorus", ordinal backfill, manual-pin-wins-±400ms, the implicit Idea head block, marker-word stripping, and **leading-filler absorption** ("okay this is the chorus" → marker owns the fillers, body starts after the trigger, no filler leaks into any block). Verified no code path fabricates transcript text: no-STT → ListeningPulse + server transcript; explicit failure → manual editing with calm copy. Published [`C2-BACKEND-SEAMS.md`](./C2-BACKEND-SEAMS.md) filing to A3/Lovable: singing-tuned STT + real word timestamps + per-word confidence (flag, never guess), F13 `cog/analysis` (editable-never-authoritative prefills), `intake-voice-memo` idempotency key (closes the double-create-on-lost-response window opened by retries), song-level key/BPM persistence target, optional `seed_ideas` sync.
+
+**Verified:** 14/14 green (sectionKeywords ×9, CaptureScene ×4 incl. Step-3 header fade, lifecycle guard ×1).
+
+**Next:** Step 5 — ReviewSheet timeout dead-end.

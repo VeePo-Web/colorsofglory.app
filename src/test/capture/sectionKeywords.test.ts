@@ -49,6 +49,31 @@ describe("detectSectionMarkers", () => {
     expect(markers.map((m) => m.label)).toEqual(["Verse 1", "Verse 2"]);
   });
 
+  it("absorbs leading fillers ('okay this is the chorus') into the marker, never the body", () => {
+    const stream = [
+      w("okay", 1000),
+      w("this", 1300),
+      w("is", 1600),
+      w("the", 1900),
+      w("chorus", 2200),
+      w("lifted", 3000),
+      w("high", 3300),
+    ];
+    const markers = detectSectionMarkers(stream);
+    expect(markers).toHaveLength(1);
+    // The marker owns the whole spoken phrase, back through the fillers…
+    expect(markers[0].atMs).toBe(1000);
+    // …and the lyric body starts only after the trigger word ends.
+    expect(markers[0].contentStartMs).toBe(2400);
+
+    const blocks = buildTranscriptBlocks(stream, markers);
+    const chorus = blocks.find((b) => b.marker.kind === "chorus");
+    expect(chorus?.text).toBe("lifted high");
+    for (const block of blocks) {
+      expect(block.text).not.toMatch(/\b(okay|this|is|the)\b/);
+    }
+  });
+
   it("lets manual markers win near-conflicts", () => {
     const markers = detectSectionMarkers(
       [w("Chorus", 1000), w("oh", 1200)],

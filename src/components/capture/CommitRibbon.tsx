@@ -34,6 +34,10 @@ const CommitRibbon = ({
 
   if (!open) return null;
 
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
   return (
     <button
       type="button"
@@ -57,7 +61,10 @@ const CommitRibbon = ({
         fontFamily: "var(--font-body)",
         fontSize: 14,
         fontWeight: 600,
-        animation: "cog-ribbon-rise 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1))",
+        // Reduced motion: the ribbon simply appears in place — no rise travel.
+        animation: reduceMotion
+          ? "none"
+          : "cog-ribbon-rise 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1))",
         maxWidth: "calc(100vw - 32px)",
       }}
     >

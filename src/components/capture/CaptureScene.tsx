@@ -48,19 +48,17 @@ interface CaptureSceneProps {
 }
 
 /**
- * Adobe-Podcast-inspired Capture Scene.
+ * Adobe-Podcast-inspired Capture Scene — the product's front door.
  *
- * Phase 1 ships:
- *  - Big gold mic (tap-to-record / hold-to-hum) wired to the existing recorder.
- *  - Always-labeled action rail (Lyrics, Chords, Section, Scripture, Idea).
- *  - Section-marker pins inserted by the rail at the current timestamp.
- *  - Optimistic transcript placeholder while the take uploads.
- *  - Upload to voice_memos + idea_captures via the existing SDK.
- *
- * Phase 1.5 (Claude handoff, see docs/claude-handoffs/2026-06-08-capture-scene.md):
- *  - Live streaming STT through Lovable AI Gateway.
- *  - Review sheet with rename/merge/split + destination picker.
- *  - Canvas commit that turns each block into a section zone of cards.
+ * The live loop: tap the big gold mic (tap-to-start / tap-to-stop — hold
+ * gestures are deliberately NOT used here, they race the tap and orphan
+ * recordings) → real MediaRecorder via useVoiceRecorder + optional on-device
+ * live STT via useLiveTranscript → spoken ("verse", "chorus") and rail-pinned
+ * section markers split the stream into blocks → Stop enqueues the take
+ * through the durable Capture Outbox ("intake" pipeline; blob is on-device
+ * BEFORE any network call) → the Review Sheet opens already split → commit
+ * hands the blocks to D-group's canvas. Unfiled (no songId) voice ideas land
+ * on the device-local Seed Ideas shelf instead — never a junk song.
  */
 const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const navigate = useNavigate();
@@ -547,10 +545,20 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     <div ref={sceneRef} className={`relative min-h-[100dvh] w-full ${enterClass}`} style={{ background: "var(--cog-cream)" }}>
       <div aria-hidden className="pointer-events-none fixed inset-0 cog-glow" />
 
-      {/* Header */}
+      {/* Header — fades out while a take is live: "the waveform IS the screen"
+          (no header, no nav — just the timer, the waveform, and Stop). The
+          buttons are already disabled via navLocked; this removes them
+          visually too. Opacity-only, so it stays calm under reduced motion. */}
       <header
+        aria-hidden={navLocked}
         className="relative flex items-center justify-between"
-        style={{ padding: "12px 16px", paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}
+        style={{
+          padding: "12px 16px",
+          paddingTop: "calc(env(safe-area-inset-top) + 12px)",
+          opacity: navLocked ? 0 : 1,
+          pointerEvents: navLocked ? "none" : "auto",
+          transition: "opacity 400ms var(--cog-ease, cubic-bezier(0.25,0.46,0.45,0.94))",
+        }}
       >
         <button
           type="button"
