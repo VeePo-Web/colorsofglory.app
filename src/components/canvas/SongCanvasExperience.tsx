@@ -884,80 +884,113 @@ const SongCanvasExperience = () => {
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
 
-  // ── F20 Listen Path ──────────────────────────────────────────────────────────
-  const [listenQueue, setListenQueue] = useState<string[]>([]);
-  const addToListenQueue = useCallback((id: string) => {
-    setListenQueue((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }, []);
-  const saveListenArrangement = useCallback(() => {
-    toast("Listen path saved", { description: `${listenQueue.length} cards in order` });
-  }, [listenQueue]);
+  // ── Canvas feature store (interim A4 seam) ─────────────────────────────────
+  // The D2 hooks (src/lib/canvas/features/) own the interaction state machines
+  // for Listen Path (F20), Compare (F21), Merge (F22), Final Arrangement (F23)
+  // and the metronome (F14). They write ONLY through this CanvasFeatureMutations
+  // surface. Today it is implemented over this component's card state; A4's
+  // useCanvasStore replaces this object without touching any hook.
+  // Contract: docs/CANVAS-FEATURES-CONTRACT.md.
+  const [featureMeta, setFeatureMeta] = useState<CanvasFeatureMeta>(() =>
+    getStoredFeatureMeta(songId),
+  );
+  useEffect(() => {
+    localStorage.setItem(FEATURES_KEY(songId), JSON.stringify(featureMeta));
+  }, [featureMeta, songId]);
 
-  // ── F22 Merge/Splice ─────────────────────────────────────────────────────
-  const [mergeSelection, setMergeSelection] = useState<string[]>([]);
-  const toggleMergeSelect = useCallback((id: string) => {
-    setMergeSelection((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 2) return prev;
-      return [...prev, id];
-    });
-  }, []);
-  const executeMerge = useCallback(() => {
-    if (isViewer || mergeSelection.length !== 2) return;
-    const [idA, idB] = mergeSelection;
-    setCards((prev) => {
-      const cardA = prev.find((c) => c.id === idA);
-      const cardB = prev.find((c) => c.id === idB);
-      if (!cardA || !cardB) return prev;
-      const mergedId = `merged-${idA}-${idB}-${Date.now()}`;
-      const contributors =
-        cardA.contributor === cardB.contributor
-          ? cardA.contributor
-          : `${cardA.contributor} & ${cardB.contributor}`;
-      const mergedCard: CanvasCard = {
-        id: mergedId,
-        tree: "ideas",
-        type: "section",
-        title: `${cardA.title} + ${cardB.title}`,
-        body: [cardA.body, cardB.body].filter(Boolean).join("\n\n"),
-        meta: `Merged from ${cardA.title} and ${cardB.title}`,
-        section: cardA.section || cardB.section || "Merged section",
-        contributor: contributors,
-        status: "raw",
-        accent: cardA.accent,
-        x: Math.round((cardA.x + cardB.x) / 2),
-        y: Math.round((cardA.y + cardB.y) / 2) + 60,
-      };
-      return prev
-        .map((c) =>
-          c.id === idA || c.id === idB ? { ...c, isDimmedReference: true } : c
-        )
-        .concat(mergedCard);
-    });
-    setMergeSelection([]);
-    setSelectedId(null);
-    showSavedMoment("Ideas merged", "Ideas tree", "New section created");
-    toast("Ideas merged into a new section", {
-      duration: 7000,
-      action: {
-        label: "Undo",
-        onClick: () => {
-          setCards((prev) => {
-            const filtered = prev.filter(
-              (c) => !c.id.startsWith(`merged-${idA}-${idB}`)
-            );
-            return filtered.map((c) =>
+  const featureMutations = useMemo<CanvasFeatureMutations>(
+    () => ({
+      applyMerge: (idA, idB, merged) => {
+        setCards((prev) =>
+          prev
+            .map((c) =>
               c.id === idA || c.id === idB
-                ? { ...c, isDimmedReference: false }
-                : c
-            );
-          });
-        },
+                ? { ...c, isDimmedReference: true, dimReason: "merged" as const }
+                : c,
+            )
+            .concat(merged),
+        );
+        setSelectedId(null);
       },
-    });
-  }, [isViewer, mergeSelection, showSavedMoment]);
+      revertMerge: (mergedId, idA, idB) => {
+        setCards((prev) =>
+          prev
+            .filter((c) => c.id !== mergedId)
+            .map((c) =>
+              c.id === idA || c.id === idB
+                ? { ...c, isDimmedReference: false, dimReason: undefined }
+                : c,
+            ),
+        );
+      },
+      promoteToFinal: (sourceId, finalCopy) => {
+        setCards((prev) =>
+          prev
+            .map((c) =>
+              c.id === sourceId
+                ? { ...c, isDimmedReference: true, dimReason: "moved_to_final" as const }
+                : c,
+            )
+            .concat(finalCopy),
+        );
+        setSelectedId(null);
+        setIsDragOver(false);
+        setCanvasStatus("Moved. Undo?");
+      },
+      returnToIdeas: (finalCardId, sourceId) => {
+        setCards((prev) =>
+          prev
+            .filter((c) => c.id !== finalCardId)
+            .map((c) =>
+              sourceId && c.id === sourceId
+                ? { ...c, isDimmedReference: false, dimReason: undefined }
+                : c,
+            ),
+        );
+        setSelectedId(null);
+        setCanvasStatus("Moved. Undo?");
+      },
+      patchCards: (patches) => {
+        setCards((prev) =>
+          prev.map((c) => {
+            const found = patches.find((p) => p.id === c.id);
+            return found ? { ...c, ...found.patch } : c;
+          }),
+        );
+      },
+      saveListenPath: (orderedCardIds) => {
+        setFeatureMeta((m) => ({ ...m, listenPath: orderedCardIds }));
+      },
+    }),
+    [],
+  );
+
+  // ── D2 feature hooks — the canvas verbs ─────────────────────────────────────
+  const listenPath = useListenPath({
+    cards,
+    mutations: featureMutations,
+    initialQueue: featureMeta.listenPath,
+  });
+  const compare = useCompareMode({
+    cards,
+    isViewer,
+    mutations: featureMutations,
+    onMoment: showSavedMoment,
+  });
+  const merge = useMergeSplice({
+    cards,
+    isViewer,
+    mutations: featureMutations,
+    onMoment: showSavedMoment,
+  });
+  const arrangement = useFinalArrangement({
+    cards,
+    isViewer,
+    mutations: featureMutations,
+    finalSlot: finalColumnSlot,
+    onMoment: showSavedMoment,
+  });
+  const metronome = useCanvasMetronome(songId);
 
   // Card drag position updates flow up through the onMove prop; see CanvasCardEl.
 
@@ -1032,59 +1065,7 @@ const SongCanvasExperience = () => {
     setCards((prev) => prev.map((c) => c.id === id ? { ...c, x, y } : c));
   }, []);
 
-  const handleMoveToFinal = useCallback((cardId: string) => {
-    if (isViewer) return;
-    setCards((prev) =>
-      prev.map((c) => {
-        if (c.id !== cardId) return c;
-        // Original stays as dimmed reference
-        return { ...c, isDimmedReference: true };
-      }).concat((() => {
-        const finalIndex = prev.filter((c) => c.tree === "final" && !c.parentMemoId).length;
-        return {
-          ...prev.find((c) => c.id === cardId)!,
-          id: `${cardId}-final`,
-          tree: "final" as const,
-          isDimmedReference: false,
-          ...finalColumnSlot(finalIndex),
-          status: "approved" as const,
-        };
-      })())
-    );
-    setSelectedId(null);
-    setIsDragOver(false);
-    setCanvasStatus("Moved. Undo?");
-    showSavedMoment("Approved idea", "Final tree", "Arrangement");
-    toast("Idea moved to Final", {
-      duration: 7000,
-      action: {
-        label: "Undo",
-        onClick: () => {
-          setCards((prev) =>
-            prev
-              .filter((c) => c.id !== `${cardId}-final`)
-              .map((c) => c.id === cardId ? { ...c, isDimmedReference: false } : c)
-          );
-        },
-      },
-    });
-  }, [isViewer, showSavedMoment]);
-
-  const handleMoveToIdeas = useCallback((cardId: string) => {
-    if (isViewer) return;
-    setCards((prev) => prev.filter((c) => c.id !== cardId));
-    // Restore the original dimmed reference
-    setCards((prev) =>
-      prev.map((c) =>
-        c.id === cardId.replace("-final", "")
-          ? { ...c, isDimmedReference: false }
-          : c
-      )
-    );
-    setSelectedId(null);
-    setCanvasStatus("Moved. Undo?");
-    showSavedMoment("Returned idea", "Ideas tree", "Arrangement");
-  }, [isViewer, showSavedMoment]);
+  // Move-to-Final / return-to-Ideas mechanics live in useFinalArrangement (D2).
 
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
@@ -1313,23 +1294,7 @@ const SongCanvasExperience = () => {
     return map;
   }, [finalCards]);
 
-  // Reorder a Final card by swapping column slots with its neighbour — keeps the
-  // arrangement tidy and the numbers correct without free-hand dragging.
-  const moveFinalCard = useCallback((cardId: string, dir: -1 | 1) => {
-    setCards((prev) => {
-      const finals = prev
-        .filter((c) => c.tree === "final" && !c.parentMemoId)
-        .sort((a, b) => a.y - b.y);
-      const idx = finals.findIndex((c) => c.id === cardId);
-      const swapIdx = idx + dir;
-      if (idx < 0 || swapIdx < 0 || swapIdx >= finals.length) return prev;
-      const a = finals[idx];
-      const b = finals[swapIdx];
-      return prev.map((c) =>
-        c.id === a.id ? { ...c, x: b.x, y: b.y } : c.id === b.id ? { ...c, x: a.x, y: a.y } : c,
-      );
-    });
-  }, []);
+  // Slot-swap reordering lives in useFinalArrangement (D2): arrangement.moveBy.
 
   const layerCountByBase = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -2052,8 +2017,8 @@ const SongCanvasExperience = () => {
               card={card}
               selected={selectedId === card.id}
               onSelect={() => setSelectedId(selectedId === card.id ? null : card.id)}
-              onMoveToFinal={() => handleMoveToFinal(card.id)}
-              onMoveToIdeas={() => handleMoveToIdeas(card.id)}
+              onMoveToFinal={() => arrangement.moveToFinal(card.id)}
+              onMoveToIdeas={() => arrangement.moveToIdeas(card.id)}
               onMove={handleCardMove}
               layerCount={layerCountByBase[card.id] ?? 0}
               onOpenStack={
@@ -2066,10 +2031,10 @@ const SongCanvasExperience = () => {
                   ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
                   : undefined
               }
-              onAddToListenPath={() => addToListenQueue(card.id)}
-              listenIndex={listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined}
-              onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => toggleMergeSelect(card.id) : undefined}
-              mergeSelected={mergeSelection.includes(card.id)}
+              onAddToListenPath={() => listenPath.toggleCard(card.id)}
+              listenIndex={listenPath.queue.includes(card.id) ? listenPath.queue.indexOf(card.id) : undefined}
+              onMergeSelect={!isViewer && card.tree === "ideas" && !card.isDimmedReference ? () => merge.toggleSelect(card.id) : undefined}
+              mergeSelected={merge.selection.includes(card.id)}
               onEdit={!isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined}
               onMore={() => setMoreCardId(card.id)}
               finalOrder={card.tree === "final" ? finalOrder[card.id] : undefined}
@@ -2146,19 +2111,44 @@ const SongCanvasExperience = () => {
       </div>
 
       <MergeActionBar
-        selection={mergeSelection}
+        selection={merge.selection}
         cards={[...ideasCards, ...finalCards]}
-        onRemove={(id) => setMergeSelection((prev) => prev.filter((x) => x !== id))}
-        onMerge={executeMerge}
-        onClear={() => setMergeSelection([])}
+        onRemove={merge.removeFromSelection}
+        onMerge={merge.executeMerge}
+        onClear={merge.clearSelection}
       />
       <ListenPathBar
-        queue={listenQueue}
+        queue={listenPath.queue}
         cards={[...ideasCards, ...finalCards]}
-        onRemove={(id) => setListenQueue((prev) => prev.filter((x) => x !== id))}
-        onClear={() => setListenQueue([])}
-        onSave={saveListenArrangement}
+        step={listenPath.step}
+        playing={listenPath.playing}
+        onPlayPause={listenPath.playPause}
+        onPrev={listenPath.prev}
+        onNext={listenPath.next}
+        onStepTo={listenPath.goTo}
+        onRemove={listenPath.removeCard}
+        onClear={listenPath.clear}
+        onSave={listenPath.save}
       />
+      <FinalArrangementBar
+        arranging={arrangement.arranging}
+        canArrange={arrangement.canArrange}
+        orderedCards={arrangement.orderedFinalCards}
+        onBegin={arrangement.begin}
+        onMove={arrangement.moveBy}
+        onSave={arrangement.save}
+        onCancel={arrangement.cancel}
+      />
+      {compare.pair && (
+        <CompareModeSheet
+          cards={compare.pair}
+          playingId={compare.playingId}
+          onTogglePlay={compare.togglePlay}
+          onChoose={compare.choose}
+          onKeepBoth={compare.keepBoth}
+          onClose={compare.close}
+        />
+      )}
       <SongTabBar activeTab="canvas" ref={featuresTourRef} />
       <SongRoomSaveToast
         moment={saveMoment}
