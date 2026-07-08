@@ -1,35 +1,100 @@
+/* ============================================================
+   COG self-hosted fonts — offline / PWA / CSP-safe, NO CDN.
+   woff2 binaries live in /public/fonts (copied from @fontsource).
+   Playfair Display = serif titles; Inter (variable) = body/UI.
+   ============================================================ */
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/playfair-display-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/playfair-display-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900; /* variable weight axis */
+  font-display: swap;
+  src: url('/fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+
 :root {
-  --cog-cream: #F5F0E8;
-  --cog-cream-light: #FAF7F2;
-  --cog-cream-dark: #EDE7DA;
-  --cog-charcoal: #1C1A17;
-  --cog-warm-gray: #6B6459;
-  --cog-muted: #A09689;
-  --cog-gold: #B8953A;
-  --cog-gold-alt: #B77722;
-  --cog-gold-light: #D4AE5C;
-  --cog-gold-pale: #E8D5A0;
-  --cog-gold-glow: rgba(184, 149, 58, 0.15);
-  --cog-gold-glow-18: rgba(184, 149, 58, 0.18);
-  --cog-border: rgba(28, 26, 23, 0.10);
-  --cog-border-light: #DED4C6;
-  --cog-border-gold: rgba(184, 149, 58, 0.40);
-  --cog-shadow-card: 0 16px 40px rgba(48, 33, 18, 0.10);
-  --cog-shadow-sm: 0 2px 8px rgba(28, 26, 23, 0.08);
-  --cog-shadow-fab: 0 4px 16px rgba(184, 149, 58, 0.30);
-  --font-display: 'Playfair Display', 'Georgia', serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
-  --t-body: 1rem;
-  --t-eyebrow: 0.75rem;
-  --radius-card: 16px;
-  --cog-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  --cog-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-instant: 90ms;
-  --dur-fast: 150ms;
-  --dur-base: 250ms;
-  --dur-slow: 400ms;
-  --dur-modal: 600ms;
-  --max-w-app: 430px;
+  /* ---- Backgrounds ---- */
+  --cog-cream: #F5F0E8;            /* primary background — warm off-white */
+  --cog-cream-light: #FAF7F2;     /* elevated card / surface background */
+  --cog-cream-dark: #EDE7DA;      /* subtle section dividers */
+
+  /* ---- Text ---- */
+  --cog-charcoal: #1C1A17;        /* primary text — warm near-black */
+  --cog-warm-gray: #6B6459;       /* secondary text, labels, metadata */
+  --cog-muted: #A09689;           /* placeholder / disabled text */
+
+  /* ---- Brand accent — gold (earned: CTAs, active, links, crown) ---- */
+  --cog-gold: #B8953A;            /* primary CTA, active states, accents */
+  --cog-gold-alt: #B77722;        /* deeper gold for gradients */
+  --cog-gold-light: #D4AE5C;      /* gold hover state */
+  --cog-gold-pale: #E8D5A0;       /* light gold tint — chord chips */
+  --cog-gold-glow: rgba(184, 149, 58, 0.15);    /* radial glow base */
+  --cog-gold-glow-18: rgba(184, 149, 58, 0.18); /* signature glow opacity */
+
+  /* ---- Gold tint alpha ladder — use instead of raw rgba(184,149,58,x) ---- */
+  --cog-gold-a04: rgba(184, 149, 58, 0.04); /* faintest wash */
+  --cog-gold-a10: rgba(184, 149, 58, 0.10); /* subtle fill */
+  --cog-gold-a12: rgba(184, 149, 58, 0.12); /* focus-ring fill */
+  --cog-gold-a15: rgba(184, 149, 58, 0.15); /* tinted surface */
+  --cog-gold-a25: rgba(184, 149, 58, 0.25); /* tinted border */
+  --cog-gold-a30: rgba(184, 149, 58, 0.30); /* strong tinted border / fab shadow */
+  --cog-gold-a45: rgba(184, 149, 58, 0.45); /* active/selected border */
+
+  /* ---- Recording — the one sanctioned warm-red (hold-to-record, live) ---- */
+  --cog-record-red: #E05440;      /* recording active state only — never a CTA */
+
+  /* ---- Aurora identity colors — per-collaborator presence / avatars ---- */
+  --cog-aurora-teal: #53AB8B;     /* collaborator identity 1 */
+  --cog-aurora-gold: #D4AE5C;     /* collaborator identity 2 */
+  --cog-aurora-purple: #8070C4;   /* collaborator identity 3 */
+  --cog-aurora-rose: #C26A95;     /* collaborator identity 4 */
+
+  /* ---- Borders ---- */
+  --cog-border: rgba(28, 26, 23, 0.10);         /* default card border */
+  --cog-border-light: #DED4C6;                  /* opaque light border */
+  --cog-border-gold: rgba(184, 149, 58, 0.40);  /* selected / active border */
+
+  /* ---- Elevation ladder ---- */
+  --cog-shadow-card: 0 16px 40px rgba(48, 33, 18, 0.10); /* resting card */
+  --cog-shadow-sm: 0 2px 8px rgba(28, 26, 23, 0.08);     /* small surfaces */
+  --cog-shadow-fab: 0 4px 16px rgba(184, 149, 58, 0.30); /* gold FAB glow */
+
+  /* ---- Typography ---- */
+  --font-display: 'Playfair Display', 'Georgia', serif;      /* serif titles */
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif; /* body / UI */
+  --t-body: 1rem;      /* body text, lyrics */
+  --t-eyebrow: 0.75rem; /* uppercase category tags */
+
+  /* ---- Radius ---- */
+  --radius-card: 16px;      /* default COG card corner */
+  --radius-card-lg: 20px;   /* large surfaces / bottom sheets */
+  --radius-chip: 9999px;    /* chord chips — full pill */
+  --radius-pill: 9999px;    /* primary CTAs — full pill */
+
+  /* ---- Motion (canonical scale — CLAUDE.md §2.5) ---- */
+  --cog-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);   /* standard UI easing */
+  --cog-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);  /* content entrance */
+  --dur-instant: 90ms;  /* haptic-tap feedback */
+  --dur-fast: 150ms;    /* button press */
+  --dur-base: 250ms;    /* standard transition */
+  --dur-slow: 400ms;    /* card entrance */
+  --dur-modal: 600ms;   /* modal / sheet reveal */
+
+  /* ---- Layout frame ---- */
+  --max-w-app: 430px;   /* mobile frame cap (390px design baseline) */
 }
 
 *,

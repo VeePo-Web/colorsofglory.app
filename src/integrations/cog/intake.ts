@@ -24,6 +24,13 @@ export type IntakeResult = {
   song_id: string;
 };
 
+/**
+ * SEAM (C2 ← C4): CaptureScene currently calls this DIRECTLY, which bypasses
+ * the durable Capture Outbox — a dropped connection mid-intake can strand the
+ * take. C2: route capture saves through `saveMemoDurable` (lib/voice/saveMemo)
+ * or `enqueueCaptureUpload` with a registered "intake" uploader so the blob is
+ * cached to IndexedDB before any network call and retries on reconnect.
+ */
 export async function submitSharedAudio(input: SharedAudioInput): Promise<IntakeResult> {
   const form = new FormData();
   form.append("audio", input.file, (input.file as File).name ?? "shared.webm");

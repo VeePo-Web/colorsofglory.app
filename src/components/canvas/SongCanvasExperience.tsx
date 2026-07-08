@@ -72,6 +72,19 @@ import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
+import CompareModeSheet from "@/components/canvas/CompareModeSheet";
+import FinalArrangementBar from "@/components/canvas/FinalArrangementBar";
+import CanvasMetronomeToggle from "@/components/canvas/CanvasMetronomeToggle";
+import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
+import {
+  useListenPath,
+  useCompareMode,
+  useMergeSplice,
+  useFinalArrangement,
+  useCanvasMetronome,
+  type CanvasFeatureMutations,
+  type CanvasFeatureMeta,
+} from "@/lib/canvas/features";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -83,32 +96,14 @@ const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReview
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type CanvasTree = "ideas" | "final";
-type CanvasCardType = "lyric" | "voice" | "hum" | "chord" | "note" | "scripture" | "section";
+type CanvasCardType = CanvasBoardCardType;
 type LayerId = "room" | "lyrics" | "voice" | "chords" | "notes" | "ideas" | "people";
 
-export interface CanvasCard {
-  id: string;
-  tree: CanvasTree;
-  type: CanvasCardType;
-  title: string;
-  body: string;
-  meta: string;
-  section: string;
-  contributor: string;
-  status: "raw" | "shortlisted" | "approved" | "meaning" | "review";
-  accent: string;
-  x: number;
-  y: number;
-  /** Set when this voice memo is a layer recorded over a base ("Record over this"). */
-  parentMemoId?: string;
-  /** Recording length for stack playback/labels; voice cards only. */
-  durationMs?: number;
-  /** Owner has reviewed this contributor idea (kept it in Ideas). Clears it from the review queue. */
-  reviewed?: boolean;
-  isDimmedReference?: boolean;
-  isProcessing?: boolean;
-}
+/**
+ * Canonical shape lives in @/lib/canvas/canvasTypes (CanvasBoardCard).
+ * Re-exported here only for back-compat with older imports.
+ */
+export type CanvasCard = CanvasBoardCard;
 
 /** Canvas card → the shape the stack engine + sheet consume. */
 const toStackView = (c: CanvasCard): StackMemoView => ({
@@ -217,6 +212,19 @@ const INITIAL_CARDS: CanvasCard[] = [
 ];
 
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
+// Interim store persistence for non-card feature state (saved listen path).
+// This key + the CanvasFeatureMutations impl below ARE the A4 replacement
+// seam — see docs/CANVAS-FEATURES-CONTRACT.md.
+const FEATURES_KEY = (songId: string) => `cog:canvas-features-${songId}`;
+
+const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
+  try {
+    const stored = localStorage.getItem(FEATURES_KEY(songId));
+    return stored ? (JSON.parse(stored) as CanvasFeatureMeta) : {};
+  } catch {
+    return {};
+  }
+};
 const SHOW_LEGACY_CANVAS_FABS = false;
 
 // New cards flow into a single tidy vertical column per zone, under the labels,

@@ -3,6 +3,7 @@ import { Mic } from "lucide-react";
 import CardShell, { type CardInteractionState } from "./CardShell";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { generateWaveform, HUM_BAR_COUNT, HUM_MAX_BAR_HEIGHT, BAR_WIDTH, BAR_GAP } from "@/lib/canvas/waveformSeed";
+import { resamplePeaks } from "@/lib/audio/waveformPeaks";
 
 export interface HumCardData {
   id: string;
@@ -11,6 +12,8 @@ export interface HumCardData {
   title: string;
   duration: string;
   contributor: string;
+  /** Real persisted peaks; downsampled to the hum's raw 8 bars. Absent → seed fallback. */
+  waveformPeaks?: number[] | null;
   isDimmedReference?: boolean;
 }
 
@@ -33,7 +36,15 @@ interface HumCardProps {
 const HumCard = memo(({ card, selected, isDragging = false, isNew = false, onSelect, onPointerDown, onMoveToFinal }: HumCardProps) => {
   const color = getCreatorColor(card.contributor);
   const initials = getCreatorInitials(card.contributor);
-  const barHeights = useMemo(() => generateWaveform(card.id, HUM_BAR_COUNT), [card.id]);
+  // Real persisted peaks when present, downsampled to the hum's few raw bars
+  // (max-pooling keeps the jagged feel). Seed fallback for legacy rows only.
+  const barHeights = useMemo(
+    () =>
+      card.waveformPeaks?.length
+        ? resamplePeaks(card.waveformPeaks, HUM_BAR_COUNT)
+        : generateWaveform(card.id, HUM_BAR_COUNT),
+    [card.id, card.waveformPeaks],
+  );
 
   const state: CardInteractionState = card.isDimmedReference ? "dimmed" : isDragging ? "dragging" : selected ? "selected" : "default";
   const totalBarsPx = HUM_BAR_COUNT * BAR_WIDTH + (HUM_BAR_COUNT - 1) * (BAR_GAP + 2); // wider gaps for raw feel

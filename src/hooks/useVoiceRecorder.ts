@@ -1,6 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBestMimeType } from "@/lib/voice/audioFormat";
 
+/**
+ * useVoiceRecorder — THE shared recorder engine (C4). Every recording surface
+ * (Capture/C2, Voice page/C4, Canvas record-over/D3, hold-to-hum/F9) consumes
+ * this hook; none forks it or hand-rolls MediaRecorder.
+ *
+ * CONTRACT
+ *   const { state, startRecording, stopRecording, cancelRecording } =
+ *     useVoiceRecorder({ maxDurationMs?, onAutoFinalize? })
+ *   - startRecording(): Promise<boolean> — MUST be called from a user tap.
+ *     Creates + resume()s the AudioContext synchronously inside the gesture
+ *     window BEFORE awaiting getUserMedia (iOS), so the live waveform meter is
+ *     ready on the first tap. Returns false on denial/error (state carries a
+ *     recovery message; never leave the user at a dead end).
+ *   - stopRecording(): Promise<RecordingResult | null> — awaitable manual stop.
+ *     null means a 0-byte capture (known iOS failure) — do NOT open a review.
+ *   - onAutoFinalize(result) fires when a recording ends WITHOUT an awaited
+ *     stop: interruption (call/Siri/Bluetooth → track.onended), the
+ *     max-duration ceiling, or page-hide/background. The salvaged take is
+ *     SAVED, never discarded — this is the "nothing is ever lost" spine.
+ *   - cancelRecording() is the only discard path, and only for explicit
+ *     user intent.
+ *
+ * LOCKED DECISIONS (do not "fix" these):
+ *   - Tap-to-start / tap-to-stop is the primary mic gesture. A press-and-hold
+ *     on the same target races the tap and orphans recordings — hold-to-hum
+ *     (F9) is a separate Canvas gesture that consumes this hook.
+ *   - The recording state renders GOLD (RecordingWaveform.goldWaveColor), never
+ *     coral/red — an active recording reads as reverent, not alarming.
+ */
+
 export type RecorderPhase =
   | "idle"
   | "requesting-permission"

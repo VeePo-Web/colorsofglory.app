@@ -4,6 +4,7 @@ import { useStackPlayer } from "@/hooks/useStackPlayer";
 import { stackPlayOrder, type MemoStackGroup } from "@/lib/voice/stackModel";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
+import { resamplePeaks } from "@/lib/audio/waveformPeaks";
 import { formatDuration } from "@/lib/voice/audioFormat";
 
 /**
@@ -21,6 +22,8 @@ export interface StackMemoView {
   durationMs: number;
   section?: string;
   createdAt?: string;
+  /** Real persisted peaks (0–1); null on legacy rows → seed fallback. */
+  waveformPeaks?: number[] | null;
 }
 
 interface MemoStackProps {
@@ -44,7 +47,10 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
   useEffect(() => { void prepare(); }, [prepare]);
 
   const baseColor = getCreatorColor(base.contributor);
-  const bars = generateWaveform(base.id, STACK_BARS);
+  // Real persisted peaks when present; ID-seeded shape only for legacy rows.
+  const bars = base.waveformPeaks?.length
+    ? resamplePeaks(base.waveformPeaks, STACK_BARS)
+    : generateWaveform(base.id, STACK_BARS);
   const layerCount = layers.length;
 
   return (

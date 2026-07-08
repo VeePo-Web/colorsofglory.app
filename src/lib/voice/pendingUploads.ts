@@ -2,6 +2,16 @@ import { audioCache } from "./audioCache";
 import { uploadVoiceMemo } from "./voiceApi";
 
 /**
+ * @deprecated LEGACY save path — superseded by the Capture Outbox.
+ * Every C4 voice surface now saves through `saveMemoDurable` (saveMemo.ts) →
+ * `captureOutbox`, which adds auto-retry on reconnect/heartbeat/reload and
+ * serializable uploader pipelines. The ONLY remaining consumer is the canvas
+ * "record over this" orchestration in `SongCanvasExperience` (D3's lane).
+ * D3: migrate that save to `saveMemoDurable({ parentMemoId, ... })`, then
+ * DELETE this module and its test. Do not add new callers.
+ */
+
+/**
  * A take that has been captured inside a song and is on its way to the server.
  * The blob lives in IndexedDB (audioCache) under `id`; this row is the index
  * entry that lets us find it again after a failed upload, a backgrounded tab,

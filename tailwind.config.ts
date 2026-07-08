@@ -14,7 +14,10 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Helvetica Neue", "sans-serif"],
-        display: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Serif titles render in Playfair Display (self-hosted). `display` and
+        // `serif` both resolve to Playfair — the app's heading typeface.
+        serif: ["Playfair Display", "Georgia", "Cambria", "Times New Roman", "serif"],
+        display: ["Playfair Display", "Georgia", "Cambria", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -58,6 +61,16 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) + 2px)",
         sm: "calc(var(--radius) + 4px)",
+        // COG surface radii — drive cards/CTAs/chips off tokens, not magic numbers.
+        card: "var(--radius-card)",
+        "card-lg": "var(--radius-card-lg)",
+        chip: "var(--radius-chip)",
+        pill: "var(--radius-pill)",
+      },
+      boxShadow: {
+        "cog-card": "var(--cog-shadow-card)",
+        "cog-sm": "var(--cog-shadow-sm)",
+        "cog-fab": "var(--cog-shadow-fab)",
       },
       keyframes: {
         "accordion-down": {

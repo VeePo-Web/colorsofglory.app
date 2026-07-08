@@ -423,7 +423,7 @@ const CompareModeSheet = ({
             label={labelB}
             isPlaying={playingId === cards[1].id}
             isSelected={selectedId === cards[1].id}
-            onTogglePlay={() => togglePlay(cards[1].id)}
+            onTogglePlay={() => onTogglePlay(cards[1].id)}
             onSelect={() =>
               setSelectedId((prev) => (prev === cards[1].id ? null : cards[1].id))
             }

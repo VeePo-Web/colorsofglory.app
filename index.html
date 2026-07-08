@@ -18,6 +18,12 @@
     <link rel="preconnect" href="https://js.stripe.com" crossorigin />
     <link rel="dns-prefetch" href="https://js.stripe.com" />
 
+    <!-- Preload the two above-the-fold faces (song-title serif + body sans) so
+         the first paint is branded, not a Georgia/system fallback flash.
+         Self-hosted woff2 — no CDN. font-display:swap handles the rest. -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/playfair-display-latin-700-normal.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin-wght-normal.woff2" crossorigin />
+
     <meta name="theme-color" content="#F5F0E8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

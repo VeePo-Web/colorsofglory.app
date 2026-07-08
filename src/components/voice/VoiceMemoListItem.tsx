@@ -32,9 +32,6 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
-  // Suppress unused import
-  void VOICE_BAR_COUNT; void MAX_BAR_HEIGHT; void BAR_WIDTH; void BAR_GAP;
-
   const togglePlay = useCallback(async () => {
     if (isPlaying) {
       audioRef.current?.pause();

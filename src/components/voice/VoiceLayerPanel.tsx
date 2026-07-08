@@ -4,7 +4,8 @@ import UploadDropZone from "./UploadDropZone";
 import VoiceMemoListItem from "./VoiceMemoListItem";
 import type { VoiceMemoRecord } from "@/lib/voice/voiceApi";
 import { listVoiceMemos, deleteMemo } from "@/lib/voice/voiceApi";
-import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
+import { saveMemoDurable } from "@/lib/voice/saveMemo";
+import { subscribeOutbox } from "@/lib/voice/captureOutbox";
 import {
   getAudioFileDuration,
   getBestMimeType,
@@ -91,10 +92,12 @@ const VoiceLayerPanel = ({
       const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${memoCount}`;
       const fileName = `${title.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.${ext}`;
 
-      // Cache-first + auto-retry: the import is durable before any network call,
-      // so a dropped connection never strands it. The outbox subscription below
-      // swaps the optimistic card for the real record once it syncs.
-      const { outboxId } = await enqueueCaptureUpload({
+      // Canonical save (cache-first + auto-retry + real peaks): the import is
+      // durable before any network call, so a dropped connection never strands
+      // it. The outbox subscription below swaps the optimistic card for the
+      // real record once it syncs. Imported and recorded memos are
+      // indistinguishable downstream (F11).
+      const { optimistic } = await saveMemoDurable({
         blob: file,
         songId,
         title,
@@ -102,23 +105,11 @@ const VoiceLayerPanel = ({
         durationMs,
         sectionLabel: "Raw idea",
         fileName,
+        createdBy: currentUserName,
       });
 
-      const optimisticMemo: VoiceMemoRecord = {
-        id: outboxId,
-        song_id: songId,
-        title,
-        duration_ms: durationMs,
-        section_label: "Raw idea",
-        storage_path: "",
-        created_at: new Date().toISOString(),
-        created_by: currentUserName,
-        is_processing: true,
-        status: "uploading",
-      };
-
-      setMemos((prev) => [optimisticMemo, ...prev]);
-      onMemoAdded?.(optimisticMemo);
+      setMemos((prev) => [optimistic, ...prev]);
+      onMemoAdded?.(optimistic);
     } catch {
       setUploadError("Couldn't read that file — please try another.");
     } finally {

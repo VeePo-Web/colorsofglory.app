@@ -9,6 +9,7 @@ import {
   BAR_GAP,
   VOICE_BAR_COUNT,
 } from "@/lib/canvas/waveformSeed";
+import { resamplePeaks } from "@/lib/audio/waveformPeaks";
 
 export interface VoiceMemoCardData {
   id: string;
@@ -19,6 +20,8 @@ export interface VoiceMemoCardData {
   duration: string;
   contributor: string;
   audioUrl?: string;
+  /** Real persisted peaks from C4's pipeline; absent → seed fallback (legacy rows). */
+  waveformPeaks?: number[] | null;
   age?: string;
   isDimmedReference?: boolean;
   hasBeenPlayed?: boolean;
@@ -59,7 +62,15 @@ const VoiceMemoCard = memo(({
 }: VoiceMemoCardProps) => {
   const color = getCreatorColor(card.contributor);
   const initials = getCreatorInitials(card.contributor);
-  const barHeights = useMemo(() => generateWaveform(card.id, VOICE_BAR_COUNT), [card.id]);
+  // Real persisted peaks whenever the memo carries them; the ID-seeded shape
+  // is a fallback for legacy rows only (Law 3: real audio, never fake).
+  const barHeights = useMemo(
+    () =>
+      card.waveformPeaks?.length
+        ? resamplePeaks(card.waveformPeaks, VOICE_BAR_COUNT)
+        : generateWaveform(card.id, VOICE_BAR_COUNT),
+    [card.id, card.waveformPeaks],
+  );
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(
@@ -81,22 +92,19 @@ const VoiceMemoCard = memo(({
       }
     }
 
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      } else {
-        audioRef.current.play().catch(() => {});
-        setIsPlaying(true);
-        if (!hasPlayed) {
-          setHasPlayed(true);
-          localStorage.setItem(LS_PLAYED_KEY(card.id), "1");
-        }
-      }
+    // No demo path: without real audio there is nothing to play, and the card
+    // must never pretend otherwise (Law 3). The unplayed dot stays honest.
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
     } else {
-      // No audio URL — still mark as played for demo
-      setHasPlayed(true);
-      localStorage.setItem(LS_PLAYED_KEY(card.id), "1");
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
+      if (!hasPlayed) {
+        setHasPlayed(true);
+        localStorage.setItem(LS_PLAYED_KEY(card.id), "1");
+      }
     }
   }, [card.audioUrl, card.id, isPlaying, hasPlayed]);
 
