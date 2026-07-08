@@ -41,3 +41,27 @@
 **Verified:** 14/14 green (sectionKeywords ×9, CaptureScene ×4 incl. Step-3 header fade, lifecycle guard ×1).
 
 **Next:** Step 5 — ReviewSheet timeout dead-end.
+
+## Step 5 of 10 — Review → commit, never a dead end (2026-07-08)
+
+**Outcome:** the timeout dead-end is closed. When the transcript poll ends NON-terminal (still processing / row unreadable), the sheet now seeds the same guaranteed manual Idea block the failed path uses, with a calm "Transcription is taking longer than usual — write the idea out now" toast; the misleading "tap a side-rail tool" empty-state copy (the rail sits BEHIND the sheet) is replaced. Verified intact: AI+pending merge sorted by start_ms, edit/reorder/merge/delete, local-blob-first playback (twin session's addition), 402/429 calm handling, `song_limit_reached` → /upgrade, commit → `commitTakeToCanvas` payload → CommitRibbon → `canvas?from=capture` (D-seam respected — payload only). New `ReviewSheet.test.tsx`: (1) non-terminal poll seeds an editable block, no error state; (2) the commit sends the EXACT payload shape (`take_id`/`song_id`/blocks) and fires `onCommitted`.
+
+## Step 6 of 10 — Quick capture (2026-07-08)
+
+**Outcome:** typed fragments are now reload-proof — `pendingBlocks` are sessionStorage-backed per song context (`cog-capture-pending:<songId|unfiled>`), restored on mount, cleared when they flow into a review; song-context switches load the right stash instead of cross-writing. Verified: 5-verb sheet copy intact; scripture picker degrades calmly ("Couldn't find that passage" as a quiet status line) with the typed fallback; chords picker has the freeform fallback; mid-record rail taps pin without a modal. Fleet re-scopes honored, not fought: RhymeSchemer removed repo-wide (lyrics verb keeps the syllable mirror); rail text tools on unfiled `/` now guide into a real song (text can't persist without one). Text-only commit still requires a take (`commitTakeToCanvas` contract) — softened by persistence, filed as a product call in C2-CAPTURE-PATHS.md.
+
+## Step 7 of 10 — Chord entry + the metronome seam (2026-07-08)
+
+**Outcome:** verification + filing (no code needed). ChordPicker manual entry fully verified (record in C2-CAPTURE-PATHS.md); the fleet moved the one-tap metronome to the canvas lane where `useCanvasMetronome` CONSUMES C4's engine — no fork anywhere in the repo (grep-verified); ChordPicker keeps TapTempo. F13 detection ("editable, never silently authoritative", "low confidence — tap to confirm") and song-level key/BPM persistence were filed in C2-BACKEND-SEAMS.md at Step 4.
+
+## Step 8 of 10 — Routing + unfiled ideas (2026-07-08)
+
+**Outcome:** published [`C2-CAPTURE-PATHS.md`](./C2-CAPTURE-PATHS.md) — the canonical reconcile. Two live paths (in-song outbox→take→canvas; unfiled Seed Ideas, device-local, claim-into-song already built + 9/9 tested) + one dead one (`idea_captures` client fns, zero UI callers — retirement recommended to A3). The fleet's locked product model honored: a global capture NEVER auto-creates a junk song. **`?first=1` decided:** no special-casing in capture — no producer exists in src; onboarding lands on bare `/`; any future first-run overlay is B2's, single-owner.
+
+## Step 9 of 10 — Foundation + real-at-launch (2026-07-08)
+
+**Outcome:** the capture screens are raw-supabase-FREE (grep: zero `supabase.` outside a comment). Evictions: CapturePage → `useSongTitle` (A3's cached-first hook); CaptureScene's resume-peek → `getTakeWithTranscript` + the strip now passes the song title through (`onResume(memoId, songId, songTitle)`); LatestPeekStrip → new `listMyRecentMemos()` added additively to `cog/memos.ts` (A3 owns the shape — annotated); the storage-path read was already evicted in Step 2. Token sweep deliberately left to A1 (three sessions are rewriting these files; a cosmetic sweep war helps no one — inline `rgba(184,149,58,…)` stragglers noted for A1's next pass). Real-at-launch re-confirmed: real MediaRecorder, real STT (no fabricated text path), real chords, real memo data.
+
+**Verified (Steps 5–9):** capture-lane 13 files / **71/71 tests green**; `tsc` clean for every C2-touched file (remaining repo errors are other lanes' in-flight `@/types` migration: roles/permissions, activity, version-history, founder-code tests — not capture).
+
+**Next:** Step 10 — launch-ready proof.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { listMyRecentMemos } from "@/integrations/cog/memos";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { listSeedIdeas } from "@/lib/voice/seedIdeaApi";
 
@@ -32,7 +32,7 @@ interface PeekItem {
 const LatestPeekStrip = ({
   onResume,
 }: {
-  onResume?: (memoId: string, songId: string) => void;
+  onResume?: (memoId: string, songId: string, songTitle?: string) => void;
 }) => {
   const navigate = useNavigate();
   const [items, setItems] = useState<PeekItem[] | null>(null);
@@ -59,33 +59,22 @@ const LatestPeekStrip = ({
         /* local ideas are a bonus — never block the strip on them */
       }
 
-      const { data: userRes } = await supabase.auth.getUser();
-      const uid = userRes?.user?.id;
+      // Song-bound memos — through A3's cog layer (no raw table reads here).
       let memoItems: PeekItem[] = [];
-      if (uid) {
-        const { data, error } = await supabase
-          .from("voice_memos")
-          .select("id, song_id, title, duration_ms, created_at, songs(title), takes(transcript_json)")
-          .eq("author_user_id", uid)
-          .order("created_at", { ascending: false })
-          .limit(3);
-        if (!error && data) {
-          memoItems = data.map((row) => {
-            const blocks =
-              (row.takes as Array<{ transcript_json?: { blocks?: unknown[] } }> | null)?.[0]
-                ?.transcript_json?.blocks ?? [];
-            return {
-              memo_id: row.id as string,
-              source: "memo" as const,
-              song_id: row.song_id as string,
-              song_title: (row.songs as { title?: string } | null)?.title ?? "Untitled",
-              title: (row.title as string | null) ?? null,
-              duration_ms: (row.duration_ms as number | null) ?? null,
-              section_count: Array.isArray(blocks) ? blocks.length : 0,
-              created_at: row.created_at as string,
-            };
-          });
-        }
+      try {
+        const memos = await listMyRecentMemos(3);
+        memoItems = memos.map((m) => ({
+          memo_id: m.memo_id,
+          source: "memo" as const,
+          song_id: m.song_id,
+          song_title: m.song_title,
+          title: m.title,
+          duration_ms: m.duration_ms,
+          section_count: m.section_count,
+          created_at: m.created_at,
+        }));
+      } catch {
+        /* signed-out or offline — local ideas above still render */
       }
 
       if (cancelled) return;
@@ -137,7 +126,7 @@ const LatestPeekStrip = ({
             onClick={() => {
               // An Unfiled idea lives on the shelf — go there to hear / file it.
               if (it.source === "idea") { navigate("/songs"); return; }
-              if (onResume && it.song_id) { onResume(it.memo_id, it.song_id); return; }
+              if (onResume && it.song_id) { onResume(it.memo_id, it.song_id, it.song_title); return; }
               if (it.song_id) navigate(`/songs/${it.song_id}/canvas`);
             }}
             className="text-left transition-transform active:scale-[0.98]"

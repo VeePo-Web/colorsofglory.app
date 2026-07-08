@@ -8,7 +8,6 @@ import { useVoiceRecorder, type RecordingResult } from "@/hooks/useVoiceRecorder
 import { useLiveTranscript } from "@/hooks/useLiveTranscript";
 import { getPrimaryTakeIdForMemo, getTakeWithTranscript } from "@/integrations/cog/transcript";
 import { enqueueCaptureUpload, retryOutboxJob, subscribeOutbox } from "@/lib/voice/captureOutbox";
-import { supabase } from "@/integrations/supabase/client";
 import {
   saveFailedCapture,
   listFailedCaptures,
@@ -106,7 +105,24 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   // Side-rail sheet (idle taps)
   const [sheetAction, setSheetAction] = useState<RailAction | null>(null);
-  const [pendingBlocks, setPendingBlocks] = useState<PendingBlock[]>([]);
+  // Typed fragments (sheet saves + mid-record pins) are sessionStorage-backed
+  // so a reload can't eat a lyric the writer already typed — they only clear
+  // when they flow into a review (commit/close). Keyed per song context.
+  const pendingKey = `cog-capture-pending:${songId ?? "unfiled"}`;
+  const [pendingBlocks, setPendingBlocks] = useState<PendingBlock[]>(() =>
+    readPendingBlocks(pendingKey),
+  );
+  const pendingKeyRef = useRef(pendingKey);
+  useEffect(() => {
+    if (pendingKeyRef.current !== pendingKey) {
+      // Song context changed under the same mounted scene — load that song's
+      // stash instead of writing the old song's blocks into the new key.
+      pendingKeyRef.current = pendingKey;
+      setPendingBlocks(readPendingBlocks(pendingKey));
+      return;
+    }
+    writePendingBlocks(pendingKey, pendingBlocks);
+  }, [pendingKey, pendingBlocks]);
 
   // Review sheet (auto-opens after stop)
   const [review, setReview] = useState<{
@@ -473,25 +489,23 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   );
 
   const handleResumePeek = useCallback(
-    async (memoId: string, _songId: string) => {
+    async (memoId: string, peekSongId: string, peekSongTitle?: string) => {
       const takeId = await getPrimaryTakeIdForMemo(memoId).catch(() => null);
       if (!takeId) {
         toast.message("Take is still uploading", { description: "Try again in a moment." });
         return;
       }
-      const { data: takeRow } = await supabase
-        .from("takes")
-        .select("storage_path, song_id, duration_ms, songs(title)")
-        .eq("id", takeId)
-        .maybeSingle();
+      // Through A3's cog layer — the strip already knows the song title, so no
+      // extra embedded read is needed here.
+      const takeRow = await getTakeWithTranscript(takeId).catch(() => null);
       if (!takeRow) return;
       setReview({
         open: true,
         takeId,
-        songId: (takeRow.song_id as string) ?? _songId,
-        songTitle: (takeRow.songs as { title?: string } | null)?.title ?? songTitle,
-        storagePath: (takeRow.storage_path as string | undefined) ?? null,
-        durationMs: (takeRow.duration_ms as number | null) ?? 0,
+        songId: takeRow.song_id ?? peekSongId,
+        songTitle: peekSongTitle ?? songTitle,
+        storagePath: takeRow.storage_path ?? null,
+        durationMs: takeRow.duration_ms ?? 0,
       });
     },
     [songTitle],
@@ -834,6 +848,27 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 };
 
 export default CaptureScene;
+
+/** sessionStorage-backed stash for typed fragments — reload-proof, per song. */
+function readPendingBlocks(key: string): PendingBlock[] {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as PendingBlock[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingBlocks(key: string, blocks: PendingBlock[]): void {
+  try {
+    if (blocks.length === 0) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, JSON.stringify(blocks));
+  } catch {
+    // Storage blocked/full — the pins still live in memory for this session.
+  }
+}
 
 /** Resolve the primary take for a fresh memo, tolerating brief creation lag. */
 async function resolveTakeId(memoId: string): Promise<string | null> {

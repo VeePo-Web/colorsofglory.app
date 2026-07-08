@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useSongTitle } from "@/lib/songContext";
 
 const CaptureScene = lazy(() => import("@/components/capture/CaptureScene"));
 
@@ -23,26 +23,10 @@ const CapturePageFallback = () => (
 const CapturePage = () => {
   const params = useParams<{ id?: string }>();
   const songId = params.id;
-  const [songTitle, setSongTitle] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (!songId) {
-      setSongTitle(undefined);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("songs")
-        .select("title")
-        .eq("id", songId)
-        .maybeSingle();
-      if (!cancelled) setSongTitle(data?.title ?? undefined);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [songId]);
+  // A3's cached-first title hook (live query + session cache, "" while loading)
+  // — replaces the page's old raw supabase.from("songs") read.
+  const title = useSongTitle(songId);
+  const songTitle = title || undefined;
 
   return (
     <Suspense fallback={<CapturePageFallback />}>

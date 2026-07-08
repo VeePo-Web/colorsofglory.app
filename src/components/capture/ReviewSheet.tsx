@@ -53,6 +53,19 @@ const KIND_LABELS: Record<EditableBlock["kind"], string> = {
   idea: "Idea",
 };
 
+/** The guaranteed-editable fallback block — review must never be a dead end. */
+function manualIdeaBlock(): EditableBlock {
+  return {
+    id: `manual-${Date.now()}`,
+    kind: "idea",
+    section_kind: null,
+    label: "Idea",
+    text: "",
+    start_ms: 0,
+    end_ms: 0,
+  };
+}
+
 const ReviewSheet = ({
   open,
   takeId,
@@ -154,20 +167,20 @@ const ReviewSheet = ({
         setStatus("failed");
         if (seedBlocks.length === 0) {
           // Always give the user at least one editable block so they can save manually.
-          setBlocks([
-            {
-              id: `manual-${Date.now()}`,
-              kind: "idea",
-              section_kind: null,
-              label: "Idea",
-              text: "",
-              start_ms: 0,
-              end_ms: 0,
-            },
-          ]);
+          setBlocks([manualIdeaBlock()]);
         }
       } else {
+        // Timed out / still processing / row unreadable — NEVER a dead end.
+        // The side rail sits BEHIND this sheet, so "tap a rail tool" is not an
+        // option here: seed the same manual block the failed path guarantees,
+        // and let the writer type while the audio stays saved with the take.
         setStatus("ready");
+        if (seedBlocks.length === 0) {
+          setBlocks([manualIdeaBlock()]);
+          toast.message("Transcription is taking longer than usual", {
+            description: "Write the idea out now — your audio is already saved with this take.",
+          });
+        }
       }
     })();
 
@@ -331,7 +344,7 @@ const ReviewSheet = ({
               className="text-center text-sm py-8"
               style={{ color: "var(--cog-muted)" }}
             >
-              No transcript blocks yet. Tap a side-rail tool to add one.
+              No blocks left — your audio is still saved with this take.
             </p>
           )}
 
