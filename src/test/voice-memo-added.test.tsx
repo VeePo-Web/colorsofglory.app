@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // first_voice_memo_added step when a real memo actually exists.
 
 const listMemosForSong = vi.fn();
-const getPlaybackUrl = vi.fn(() => Promise.resolve("https://example.com/a.webm"));
+const getPlaybackUrl = vi.fn((_id: string) => Promise.resolve("https://example.com/a.webm"));
 const updateOnboardingStep = vi.fn((_s: string) => Promise.resolve());
 
 vi.mock("@/integrations/cog/memos", () => ({
