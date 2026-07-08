@@ -17,3 +17,15 @@
 **Note for every later step:** other agent sessions were actively editing the repo during this audit (A1/A2/A3/A5/C4 sweeps, ~140 dirty files). Re-read files before editing; re-run the capture-lane suites before and after each change.
 
 **Next:** Step 2 — complete the sacred promise (route every capture save through the outbox). First action should be (or be preceded by) the P0-1 one-liner fix, since no take survives the tap flow until the cleanup effect is unmount-only.
+
+## Step 2 of 10 — The sacred promise: every save through the outbox (2026-07-08)
+
+**Outcome:** the main capture save path is durable-FIRST. `CaptureScene.handleAudioFile` no longer calls `submitSharedAudio` directly — it enqueues through `enqueueCaptureUpload` with a new registered `"intake"` uploader (same `intake-voice-memo` edge fn, so zero backend change), then settles on that job's outbox event: success → resolve primary take (`getPrimaryTakeIdForMemo` with lag tolerance) → Review Sheet; failure → a calm gold "Saved on this device" card (`QueuedTakeNotice`, `role=status`, never red) with "Sync now", auto-retry continuing underneath — and if a background retry succeeds while the scene is open, the take graduates straight into review. `ImportMemoButton` flows through the same path. The raw `takes.select("storage_path")` read was replaced with A3's `getTakeWithTranscript` (one Step-9 eviction done early). Belt-and-braces kept: recorder auto-finalize, the in-memory `FailedTakeNotice` + durable `failedCaptureStore` (now only guarding pre-enqueue failures), and the unfiled Seed-Ideas path (already durable-first).
+
+**Notes on concurrent work:** P0-1 (the recording-killing cleanup) was already fixed by a parallel session before Step 2 began (unmount-only teardown ref) — I added the missing regression coverage instead: `CaptureScene.lifecycle.test.tsx` mounts the scene with the REAL hooks (browser APIs shimmed) and proves a live recording survives re-renders; this is the one suite where real identity churn meets the component, so the old bug can't ship silently again. The parallel session also rerouted unfiled captures to Seed Ideas (superseding the auto-create-song behavior in the charter) — preserved as-is.
+
+**Verified:** 18/18 green — `CaptureScene.test.tsx` (mic-start ordering ×2, outbox routing asserts `uploaderKey: "intake"` + `submitSharedAudio` never called directly, failed-attempt → queued card → background-sync graduation), `CaptureScene.lifecycle.test.tsx` (P0 regression), `captureUploaders.test.ts` (memos + new intake pipeline), `captureOutbox.test.ts` (all 10, untouched and green — retain-on-fail/offline/orphan/idempotency).
+
+**Seam notes:** `intake-voice-memo` does not yet accept the outbox's stable idempotency key, so a retry after a lost success *response* could double-create a memo (upload itself never duplicates thanks to the outbox's in-flight guard). Filed for A3/Lovable in the backend-seams doc (Step 4). `resolveTakeId` deliberately never re-uploads when the take row lags — it toasts "It'll appear in Latest."
+
+**Next:** Step 3 — the record moment (header fade during recording, reduced-motion guards, stale JSDoc).

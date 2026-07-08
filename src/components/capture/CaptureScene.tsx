@@ -827,11 +827,114 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
 export default CaptureScene;
 
-function formatNewSongTitle(): string {
-  const now = new Date();
-  const day = now.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `New idea · ${day} · ${time}`;
+/** Resolve the primary take for a fresh memo, tolerating brief creation lag. */
+async function resolveTakeId(memoId: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const takeId = await getPrimaryTakeIdForMemo(memoId).catch(() => null);
+    if (takeId) return takeId;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  return null;
+}
+
+/**
+ * Settle on ONE outbox job's first terminal event (success or failed).
+ * Subscribing right after `enqueueCaptureUpload` resolves is race-free: the
+ * outbox's first attempt cannot emit before this listener exists, because its
+ * earliest await (the IndexedDB blob read) resolves on a macrotask — strictly
+ * after the current microtask chain has subscribed.
+ */
+function waitForOutboxResult(
+  outboxId: string,
+): Promise<{ ok: true; memoId: string } | { ok: false; willRetry: boolean }> {
+  return new Promise((resolve) => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.type === "success" && event.outboxId === outboxId) {
+        unsubscribe();
+        resolve({ ok: true, memoId: event.memoId });
+      } else if (event.type === "failed" && event.outboxId === outboxId) {
+        unsubscribe();
+        resolve({ ok: false, willRetry: event.willRetry });
+      }
+    });
+  });
+}
+
+/**
+ * QueuedTakeNotice — the take is DURABLY saved (IndexedDB blob + retry job)
+ * and the outbox auto-retries on reconnect / heartbeat / app load. Deliberately
+ * gold and calm: this is reassurance the songwriter can walk away from, not an
+ * error demanding rescue.
+ */
+function QueuedTakeNotice({
+  durationMs,
+  onSyncNow,
+}: {
+  durationMs: number;
+  onSyncNow: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      style={{
+        width: "100%",
+        maxWidth: 360,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: "16px 18px",
+        borderRadius: 18,
+        background: "var(--cog-cream-light)",
+        border: "1px solid rgba(184,149,58,0.30)",
+        boxShadow: "0 8px 28px rgba(28,26,23,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          aria-hidden
+          style={{
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: "50%",
+            background: "rgba(184,149,58,0.12)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--cog-gold)",
+          }}
+        >
+          <CloudOff size={18} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "var(--cog-charcoal)", margin: 0 }}>
+            Saved on this device
+          </p>
+          <p style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-warm-gray)", margin: "2px 0 0" }}>
+            Your {formatDuration(durationMs)} take is safe — it'll sync on its own when you're back online.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onSyncNow}
+        className="transition-transform active:scale-95"
+        style={{
+          height: 44,
+          borderRadius: 12,
+          background: "transparent",
+          color: "var(--cog-gold)",
+          border: "1px solid rgba(184,149,58,0.40)",
+          cursor: "pointer",
+          fontFamily: "var(--font-body)",
+          fontSize: 14,
+          fontWeight: 700,
+        }}
+      >
+        Sync now
+      </button>
+    </div>
+  );
 }
 
 /** Best-effort deep link to OS/browser mic settings, with a guiding toast. */
