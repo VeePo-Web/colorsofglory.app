@@ -18,8 +18,9 @@ function toFriendlyError(err: unknown): string {
   // verifyPhoneOtp / sendPhoneOtp already throw AuthError with calm, honest copy.
   if (err instanceof AuthError) return err.message;
   const raw = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string } | null)?.code ?? "";
   const msg = raw.toLowerCase();
-  if (msg.includes("expired"))
+  if (code === "otp_expired" || msg.includes("expired"))
     return "That code expired. Tap resend to get a new one.";
   if (msg.includes("invalid") || msg.includes("incorrect") || msg.includes("token"))
     return "That code didn't work. Check it and try again.";
@@ -69,6 +70,8 @@ const CodeVerifyPage = () => {
       // Subtle "you're in" beat — flash the cells gold for a moment, then route.
       // Reduced-motion users skip the pause. Keep the form locked through it.
       setSuccess(true);
+      // Tasteful success confirmation (Android only; iOS has no vibrate API).
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(12);
       const reduce = typeof window !== "undefined" && !!window.matchMedia &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       await new Promise((r) => setTimeout(r, reduce ? 0 : 500));

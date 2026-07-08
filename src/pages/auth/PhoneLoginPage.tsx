@@ -29,7 +29,14 @@ function toFriendlyError(err: unknown): string {
   // (It no longer dead-ends unrelated errors on a "contact support" message.)
   if (err instanceof AuthError) return err.message;
   const raw = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string } | null)?.code ?? "";
   const msg = raw.toLowerCase();
+  if (code === "phone_provider_disabled" || msg.includes("unsupported phone provider")) {
+    return "SMS sign-in isn't available yet. Please try again shortly.";
+  }
+  if (code === "over_sms_send_rate_limit" || msg.includes("rate")) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
   if (msg.includes("invalid phone")) return "Enter a valid US or Canada phone number.";
   if (msg.includes("network") || msg.includes("fetch")) return "We could not send the code. Check your connection and try again.";
   return "We could not send the code. Please try again.";
