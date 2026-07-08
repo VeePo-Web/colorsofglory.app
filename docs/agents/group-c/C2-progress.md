@@ -65,3 +65,14 @@
 **Verified (Steps 5–9):** capture-lane 13 files / **71/71 tests green**; `tsc` clean for every C2-touched file (remaining repo errors are other lanes' in-flight `@/types` migration: roles/permissions, activity, version-history, founder-code tests — not capture).
 
 **Next:** Step 10 — launch-ready proof.
+
+## Step 10 of 10 — Launch-ready (2026-07-08) · CLOSING ENTRY
+
+**Outcome: capture is launch-ready on the frontend.** Full record in [`C2-CAPTURE-LAUNCH-READY.md`](./C2-CAPTURE-LAUNCH-READY.md).
+
+- **Capture lane: 13 test files, 71/71 green** — the sacred promise (durable-first, retain+retry offline, idempotent jobs, background-sync graduation into review), the P0 lifecycle guard with the REAL hooks, section splitting (fillers/ordinals/manual-wins), review never-a-dead-end, the exact `commitTakeToCanvas` payload, seed-idea claim/file. tsc + eslint clean on every C2-touched file.
+- **Full repo suite 464/481** — all 17 failures are other lanes' in-flight work (same families as the Step-1 baseline; none touch capture).
+- **qa:codex:** build green (62 route chunks; capture chunks within budget — the entry-chunk code-split held), production-preview smoke **26/26 routes passing incl. `/songs/1/capture`**. The gate's hard failures are all other lanes': CSS + 6 route chunks over budget (Activity/Memory/Catalog/Sheet/Versions/VoiceMemos), a11y + instant-feel misses in `App.tsx` (A5) and `SongCatalogPage` (F1). The repo-wide gate is the fleet's shared finish line; capture's slice is green.
+- **Remaining human step (5 min, on a phone — CI has no real mic/STT):** the timed ~20s golden moment, airplane-mode sync, kill-tab recovery, interruption salvage, unfiled→file, reduced-motion — checklist in the launch-ready doc.
+
+**C2 charter complete: Steps 1–10 done.** Commits: `0312ebb` (Step 1 audit), `d6711e6` (Step 2), `eec9e51` (Steps 3–4), `e77a840` (Steps 5–9), plus this closing commit. Cross-lane handoffs live in `C2-BACKEND-SEAMS.md` (A3/Lovable) and `C2-CAPTURE-PATHS.md` (A3 retirement, B2 first-run, product calls).
