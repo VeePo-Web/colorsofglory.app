@@ -2,7 +2,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PenLine } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
-import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 /**
  * Guided "Capture the first idea" framing screen.
@@ -21,8 +20,6 @@ const CaptureFirstIdeaPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const songId = id ?? "1";
-  // The mic hands off to the song's real workspace/recorder — prefetch it idle.
-  useIdlePrefetch(() => import("@/pages/CapturePage"));
 
   // Hand off to the song's real recorder — the capture itself is C2's.
   const handleRecord = () => navigate(`/songs/${songId}`);

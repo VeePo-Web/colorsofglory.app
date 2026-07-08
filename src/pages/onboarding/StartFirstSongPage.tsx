@@ -9,7 +9,6 @@ import { setSong } from "@/lib/songContext";
 import { supabase } from "@/integrations/supabase/client";
 import { createSong } from "@/integrations/cog/songs";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
-import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -32,7 +31,6 @@ const StartFirstSongPage = () => {
   const [bpm, setBpm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useIdlePrefetch(() => import("@/pages/CapturePage"));
 
   const handleCreate = async (mode: "create" | "skip") => {
     const songTitle = mode === "skip" || !title.trim() ? "Untitled Song" : title.trim();

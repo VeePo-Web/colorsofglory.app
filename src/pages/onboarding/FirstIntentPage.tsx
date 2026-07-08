@@ -4,7 +4,6 @@ import CogBrand from "@/components/cog/CogBrand";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
-import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
 interface IntentCardProps {
   icon: React.ElementType;
@@ -56,7 +55,6 @@ const IntentCard = ({ icon: Icon, title, description, onClick, accent }: IntentC
 
 const FirstIntentPage = () => {
   const navigate = useNavigate();
-  useIdlePrefetch(() => import("@/pages/onboarding/StartFirstSongPage"));
 
   return (
     <OnboardingShell>
