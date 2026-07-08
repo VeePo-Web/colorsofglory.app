@@ -62,6 +62,22 @@ export const createSong = (input: {
   tags?: string[];
 }) => call<{ song: Song }>("create-song", input);
 
+/**
+ * Point the signed-in user's profile at their first song so post-auth routing
+ * (`routeAfterAuth`) can resume inside it. Fire-and-forget from onboarding;
+ * `createSong` handles ownership + membership, this only sets the pointer.
+ * No-ops when signed out.
+ */
+export const setFirstSong = async (song_id: string): Promise<void> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ first_song_id: song_id, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id);
+  if (error) throw toCogError(error);
+};
+
 export const deleteSong = (song_id: string) => call<{ ok: true }>("song-delete", { song_id });
 export const leaveSong = (song_id: string) => call<void>("song-leave", { song_id });
 export const transferOwner = (song_id: string, new_owner_user_id: string) =>

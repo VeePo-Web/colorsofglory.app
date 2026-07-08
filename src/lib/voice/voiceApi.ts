@@ -1,13 +1,18 @@
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import {
+  getSignedPlaybackUrl,
+  deleteMemo as deleteMemoSeam,
+  transcribeMemo as transcribeMemoSeam,
+  uploadVoiceMemo as uploadVoiceMemoCore,
+  listMemoRowsWithSection,
+  type VoiceMemo,
+  type VoiceMemoWithSection,
+} from "@/integrations/cog/memos";
 
-type VoiceMemoRow = Database["public"]["Tables"]["voice_memos"]["Row"];
-
-export interface UploadUrlResult {
-  uploadUrl: string;
-  memoId: string;
-  storagePath: string;
-}
+// ─── In-song voice pipeline (shim) ──────────────────────────────────────────
+// Every backend call routes through the cog/memos seam — this module no longer
+// touches the Supabase client directly. It keeps the richer, display-oriented
+// `VoiceMemoRecord` shape (resolved section label + peak fallback) that the
+// in-song voice UI reads, mapping seam rows into it.
 
 export interface VoiceMemoRecord {
   id: string;
@@ -27,22 +32,17 @@ export interface VoiceMemoRecord {
   /**
    * `"queued"` is a client-only optimistic status used while a freshly captured
    * take is held in the Capture Outbox (cached locally, waiting to sync). It is
-   * never written to the DB — the server uses the narrower `VoiceMemoRow` union.
+   * never written to the DB — the server uses the narrower `VoiceMemo` union.
    */
-  status?: VoiceMemoRow["status"] | "queued";
+  status?: VoiceMemo["status"] | "queued";
 }
 
-const PROCESSING_STATUSES = new Set<VoiceMemoRow["status"]>([
+const PROCESSING_STATUSES = new Set<VoiceMemo["status"]>([
   "uploading",
   "uploaded",
 ]);
 
-/** Row shape when the memo list embeds its linked section (for the real name). */
-type VoiceMemoRowWithSection = VoiceMemoRow & {
-  song_sections?: { label: string | null } | null;
-};
-
-function toVoiceMemoRecord(row: VoiceMemoRowWithSection): VoiceMemoRecord {
+function toVoiceMemoRecord(row: VoiceMemoWithSection): VoiceMemoRecord {
   return {
     id: row.id,
     song_id: row.song_id,
@@ -65,111 +65,43 @@ function toVoiceMemoRecord(row: VoiceMemoRowWithSection): VoiceMemoRecord {
   };
 }
 
-/** Step 1 of upload: get a signed URL to PUT audio to Supabase Storage */
-export async function getUploadUrl(params: {
-  songId: string;
-  mimeType: string;
-  byteSize: number;
-  durationMs: number;
-  fileName?: string;
-  /**
-   * When set, this memo is a layer recorded over the given base memo
-   * ("Record over this"). The edge function persists it as a child once the
-   * `voice_memos.parent_memo_id` column exists; until then it is ignored
-   * server-side and the relationship is held on the client.
-   */
-  parentMemoId?: string;
-  /** Dedupes a double-tapped "Save layer" so it never creates two memos. */
-  idempotencyKey?: string;
-  /** Real lyric section this memo is attached to (PV-05). */
-  sectionId?: string | null;
-}): Promise<UploadUrlResult> {
-  const { data, error } = await supabase.functions.invoke("voice-memo-upload-url", {
-    body: {
-      song_id: params.songId,
-      mime_type: params.mimeType,
-      byte_size: params.byteSize,
-      duration_ms: params.durationMs,
-      file_name: params.fileName,
-      parent_memo_id: params.parentMemoId,
-      idempotency_key: params.idempotencyKey,
-      section_id: params.sectionId ?? null,
-    },
-  });
-  if (error) throw new Error(error.message);
-  return {
-    uploadUrl: data.upload_url ?? data.uploadUrl,
-    memoId: data.memo_id ?? data.memoId,
-    storagePath: data.storage_path ?? data.storagePath,
-  };
-}
-
-/** Step 2 of upload: PUT the blob to Supabase Storage using the signed URL */
-export async function uploadBlob(signedUrl: string, blob: Blob, mimeType: string): Promise<void> {
-  const res = await fetch(signedUrl, {
-    method: "PUT",
-    body: blob,
-    headers: { "Content-Type": mimeType },
-  });
-  if (!res.ok) throw new Error(`Upload failed: ${res.status} ${res.statusText}`);
-}
-
-/** Step 3 of upload: finalize — creates the DB record, optionally triggers transcription */
-export async function finalizeMemo(params: {
-  memoId: string;
-  byteSize: number;
-  durationMs: number;
-  /** Real-audio peaks computed at capture — persisted for every card/player. */
-  waveformPeaks?: number[] | null;
-}): Promise<void> {
-  const { error } = await supabase.functions.invoke("voice-memo-finalize", {
-    body: {
-      memo_id: params.memoId,
-      actual_byte_size: params.byteSize,
-      duration_ms: params.durationMs,
-      waveform_peaks: params.waveformPeaks ?? undefined,
-    },
-  });
-  if (error) throw new Error(error.message);
-}
+// The signed-URL → PUT → finalize steps were removed in A3 · Step 7's "three
+// uploaders → one" collapse: `uploadVoiceMemo` (below) now delegates to the
+// single upload core in `cog/memos`, so there is exactly one PUT-and-finalize
+// implementation in the tree. No surface imported these step helpers directly.
 
 /** Get a time-limited signed URL for playback */
 export async function getSignedUrl(memoId: string): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("voice-memo-signed-url", {
-    body: { memo_id: memoId },
-  });
-  if (error) throw new Error(error.message);
-  return data.signed_url ?? data.signedUrl;
+  return getSignedPlaybackUrl(memoId);
 }
 
 /** Delete a voice memo and its storage file */
 export async function deleteMemo(memoId: string): Promise<void> {
-  const { error } = await supabase.functions.invoke("voice-memo-delete", {
-    body: { memo_id: memoId },
-  });
-  if (error) throw new Error(error.message);
+  await deleteMemoSeam(memoId);
 }
 
 /** Trigger Whisper transcription on an already-uploaded memo */
 export async function transcribeMemo(memoId: string): Promise<void> {
-  const { error } = await supabase.functions.invoke("voice-memo-transcribe", {
-    body: { memo_id: memoId },
-  });
-  if (error) throw new Error(error.message);
+  await transcribeMemoSeam(memoId);
 }
 
 /** Fetch all voice memos for a song from the DB */
 export async function listVoiceMemos(songId: string): Promise<VoiceMemoRecord[]> {
-  const { data, error } = await supabase
-    .from("voice_memos")
-    .select("*, song_sections(label)")
-    .eq("song_id", songId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as VoiceMemoRowWithSection[]).map(toVoiceMemoRecord);
+  const rows = await listMemoRowsWithSection(songId);
+  return rows.map(toVoiceMemoRecord);
 }
 
-/** Complete upload: getUploadUrl + upload blob + finalize in sequence */
+/**
+ * Complete in-song upload — signed URL → PUT → finalize.
+ *
+ * DELEGATES to the single upload core in `cog/memos` (A3 · Step 7 "three
+ * uploaders → one"): this is no longer a parallel re-implementation of the three
+ * steps, it maps the in-song params (section id, layer parent, real peaks) onto
+ * the one seam function that every pipeline shares. `sectionLabel` / `transcribe`
+ * are display / server-triggered concerns and are intentionally not forwarded —
+ * the section is carried by the real `sectionId`, and finalize triggers
+ * transcription server-side.
+ */
 export async function uploadVoiceMemo(params: {
   songId: string;
   blob: Blob;
@@ -188,27 +120,16 @@ export async function uploadVoiceMemo(params: {
   /** Real-audio peaks computed at capture (waveformPeaks module). */
   waveformPeaks?: number[] | null;
 }): Promise<string> {
-  const byteSize = params.blob.size;
-
-  const { uploadUrl, memoId } = await getUploadUrl({
+  return uploadVoiceMemoCore({
     songId: params.songId,
+    sectionId: params.sectionId ?? null,
+    blob: params.blob,
     mimeType: params.mimeType,
-    byteSize,
     durationMs: params.durationMs,
-    fileName: params.fileName,
+    title: params.title,
+    waveformPeaks: params.waveformPeaks ?? undefined,
     parentMemoId: params.parentMemoId,
     idempotencyKey: params.idempotencyKey,
-    sectionId: params.sectionId,
+    fileName: params.fileName,
   });
-
-  await uploadBlob(uploadUrl, params.blob, params.mimeType);
-
-  await finalizeMemo({
-    memoId,
-    byteSize,
-    durationMs: params.durationMs,
-    waveformPeaks: params.waveformPeaks,
-  });
-
-  return memoId;
 }

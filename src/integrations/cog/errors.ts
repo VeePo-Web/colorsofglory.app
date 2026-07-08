@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 /** Canonical error codes. UI switches on these — never on free-text messages. */
 export type CogErrorCode =
   | "INTERNAL"
+  | "OFFLINE"
   | "INVALID_INPUT"
   | "UNAUTHENTICATED"
   | "FORBIDDEN"
@@ -187,7 +188,65 @@ export function toCogError(err: unknown): CogError {
     return new CogError("UNAUTHENTICATED", message);
   }
 
+  // Network unreachable — the device is offline, or a fetch dropped / timed out.
+  // A read that hits this keeps its last cached data (React Query retains the
+  // previous value on error) and the UI shows a calm OFFLINE signal; the Capture
+  // Outbox retries any pending WRITE once connectivity returns.
+  if (
+    isOffline() ||
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("network request failed") ||
+    lower.includes("load failed") ||
+    lower.includes("fetch failed") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
+    return new CogError("OFFLINE", message || "You appear to be offline.");
+  }
+
   return new CogError("INTERNAL", message || "Something went wrong.");
+}
+
+// ── Connectivity + read-timeout policy ──────────────────────────────────────
+
+/** Default read timeout — long enough for a slow mobile network, short enough
+ *  that a dead connection falls back to cache quickly instead of hanging. */
+export const READ_TIMEOUT_MS = 12_000;
+
+/**
+ * True when the browser reports no connectivity. The ONE shared offline signal
+ * so the read layer and the Capture Outbox agree on what "offline" means.
+ */
+export function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/**
+ * Race a read against a timeout so a stalled request can't hang a screen. If the
+ * device is already offline it rejects immediately; otherwise it rejects on the
+ * timer. Either way the rejection is a `CogError("OFFLINE")`, so React Query
+ * keeps the last cached data and the UI shows a calm offline signal instead of
+ * an infinite spinner. Reads only — never wrap a WRITE in this (a timed-out
+ * write may still land server-side; writes go through the idempotent outbox).
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number = READ_TIMEOUT_MS,
+): Promise<T> {
+  if (isOffline()) throw new CogError("OFFLINE", "You appear to be offline.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new CogError("OFFLINE", "The request timed out.")),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ── Edge-function wrapper ───────────────────────────────────────────────────

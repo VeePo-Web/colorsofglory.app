@@ -9,20 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { adminDeactivateCode, adminFounderSummary } from "@/integrations/cog/admin";
+import { adminDeactivateCode, adminFounderSummary, adminListFounderCodes, type AdminFounderCodeRow } from "@/integrations/cog/admin";
 import { buildReferralShareUrl } from "@/integrations/cog/referrals";
-import { supabase } from "@/integrations/supabase/client";
+import { qk } from "@/hooks/queryKeys";
 
-type CodeRow = {
-  id: string;
-  value: string;
-  status: string;
-  owner_founder_id: string | null;
-  redemption_count: number | null;
-  max_redemptions: number | null;
-  expires_at: string | null;
-  created_at: string;
-};
+type CodeRow = AdminFounderCodeRow;
 
 type SortKey = "created" | "usage" | "expires";
 
@@ -33,21 +24,13 @@ export default function CodesPage() {
   const [sort, setSort] = useState<SortKey>("created");
 
   const { data: codes = [], isLoading } = useQuery<CodeRow[]>({
-    queryKey: ["admin", "all-codes-full"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("codes")
-        .select("id, value, status, owner_founder_id, redemption_count, max_redemptions, expires_at, created_at")
-        .eq("kind", "founder")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as CodeRow[];
-    },
+    queryKey: qk.admin.allCodesFull(),
+    queryFn: adminListFounderCodes,
     staleTime: 30_000,
   });
 
   const { data: founders = [] } = useQuery({
-    queryKey: ["admin", "founder-summary"],
+    queryKey: qk.admin.founderSummary(),
     queryFn: adminFounderSummary,
     staleTime: 30_000,
   });
@@ -92,7 +75,7 @@ export default function CodesPage() {
     mutationFn: (id: string) => adminDeactivateCode(id),
     onSuccess: () => {
       toast.success("Code deactivated");
-      qc.invalidateQueries({ queryKey: ["admin"] });
+      qc.invalidateQueries({ queryKey: qk.admin.root() });
     },
     onError: (e: Error) => toast.error(e.message),
   });

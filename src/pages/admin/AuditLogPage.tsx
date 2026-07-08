@@ -5,6 +5,7 @@ import { TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { searchAuditLogs, type AuditSearchFilters, type AuditLogRow } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const PAGE = 50;
 
@@ -14,7 +15,7 @@ export default function AuditLogPage() {
   const [offset, setOffset] = useState(0);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["admin", "audit", filters, offset],
+    queryKey: qk.admin.audit(filters, offset),
     queryFn: () => searchAuditLogs({ ...filters, limit: PAGE, offset }),
     staleTime: 15_000,
   });

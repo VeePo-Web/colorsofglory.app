@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { adminFounderSummary, adminReferralsRecent } from "@/integrations/cog/admin";
-import { supabase } from "@/integrations/supabase/client";
+import { adminFounderSummary, adminListFounderCodes, adminReferralsRecent } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 type SortKey = "name" | "referrals" | "payable" | "codes";
 
@@ -20,28 +20,21 @@ export default function FoundersPage() {
   const [sort, setSort] = useState<SortKey>("payable");
 
   const { data: founders = [], isLoading } = useQuery({
-    queryKey: ["admin", "founder-summary"],
+    queryKey: qk.admin.founderSummary(),
     queryFn: adminFounderSummary,
     staleTime: 30_000,
   });
 
   // Pull all codes for search-by-code-value
   const { data: codes = [] } = useQuery({
-    queryKey: ["admin", "all-founder-codes"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("codes")
-        .select("id, value, owner_founder_id, status")
-        .eq("kind", "founder");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryKey: qk.admin.allFounderCodes(),
+    queryFn: adminListFounderCodes,
     staleTime: 30_000,
   });
 
   // Pull recent referrals (last 500) to enable founder lookup by referred user id
   const { data: recent = [] } = useQuery({
-    queryKey: ["admin", "recent", 500],
+    queryKey: qk.admin.recent(500),
     queryFn: () => adminReferralsRecent(500),
     staleTime: 30_000,
   });

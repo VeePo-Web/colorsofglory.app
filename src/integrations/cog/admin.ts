@@ -69,6 +69,31 @@ export async function adminFounderSummary() {
   return data ?? [];
 }
 
+export type AdminFounderCodeRow = {
+  id: string;
+  value: string;
+  status: string;
+  owner_founder_id: string | null;
+  redemption_count: number | null;
+  max_redemptions: number | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
+/**
+ * All founder codes (admin console) — newest first. Backs both the Founders
+ * search-by-code index and the Codes table; RLS restricts reads to admins.
+ */
+export async function adminListFounderCodes(): Promise<AdminFounderCodeRow[]> {
+  const { data, error } = await supabase
+    .from("codes")
+    .select("id, value, status, owner_founder_id, redemption_count, max_redemptions, expires_at, created_at")
+    .eq("kind", "founder")
+    .order("created_at", { ascending: false });
+  if (error) throw toCogError(error);
+  return (data ?? []) as AdminFounderCodeRow[];
+}
+
 export async function adminFounderDetail(founder_id: string) {
   const { data, error } = await supabase.rpc("admin_founder_detail", { _founder_id: founder_id });
   if (error) throw toCogError(error);

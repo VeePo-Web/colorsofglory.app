@@ -29,6 +29,12 @@ export interface CreateUploadUrlInput {
   byteSize: number;
   durationMs?: number;
   title?: string;
+  /** Base memo this take layers over ("Record over this"). */
+  parentMemoId?: string;
+  /** Stable per-attempt key so a double-tapped save never creates two memos. */
+  idempotencyKey?: string;
+  /** Original file name when importing existing audio. */
+  fileName?: string;
 }
 
 export interface CreateUploadUrlResult {
@@ -48,6 +54,9 @@ export async function createUploadUrl(input: CreateUploadUrlInput): Promise<Crea
     byte_size: input.byteSize,
     duration_ms: input.durationMs,
     title: input.title,
+    parent_memo_id: input.parentMemoId,
+    idempotency_key: input.idempotencyKey,
+    file_name: input.fileName,
   });
 }
 
@@ -70,6 +79,25 @@ export async function finalizeUpload(input: FinalizeUploadInput) {
 export async function getPlaybackUrl(memoId: string): Promise<string> {
   const data = await call<{ url: string }>("voice-memo-signed-url", { memo_id: memoId });
   return data.url;
+}
+
+/**
+ * Signed playback URL variant that tolerates the edge function's `signed_url`
+ * response field (the shape the in-song player pipeline reads). Kept alongside
+ * `getPlaybackUrl` so the voice/voiceApi shim can route through the seam
+ * without changing which field it consumes.
+ */
+export async function getSignedPlaybackUrl(memoId: string): Promise<string> {
+  const data = await call<{ signed_url?: string; signedUrl?: string; url?: string }>(
+    "voice-memo-signed-url",
+    { memo_id: memoId },
+  );
+  return data.signed_url ?? data.signedUrl ?? data.url ?? "";
+}
+
+/** Trigger Whisper transcription on an already-uploaded memo. */
+export async function transcribeMemo(memoId: string): Promise<void> {
+  await call<unknown>("voice-memo-transcribe", { memo_id: memoId });
 }
 
 export async function listMemosForSong(songId: string): Promise<VoiceMemo[]> {
@@ -154,8 +182,29 @@ export async function getTranscript(memoId: string): Promise<VoiceMemoTranscript
 }
 
 export async function deleteMemo(memoId: string): Promise<void> {
-  const { error } = await supabase.from("voice_memos").delete().eq("id", memoId);
+  // Routed through the edge function so the storage object is removed too, not
+  // just the row (matches `songs.deleteVoiceMemo`).
+  await call<{ ok: true }>("voice-memo-delete", { memo_id: memoId });
+}
+
+/** Row shape when the memo list embeds its linked section (for the real name). */
+export type VoiceMemoWithSection = VoiceMemo & {
+  song_sections?: { label: string | null } | null;
+};
+
+/**
+ * List every memo for a song with its linked section label embedded. Unlike
+ * `listMemosForSong` this does NOT filter out `deleted` rows — it mirrors the
+ * in-song voiceApi list exactly (the shim maps rows to its display record).
+ */
+export async function listMemoRowsWithSection(songId: string): Promise<VoiceMemoWithSection[]> {
+  const { data, error } = await supabase
+    .from("voice_memos")
+    .select("*, song_sections(label)")
+    .eq("song_id", songId)
+    .order("created_at", { ascending: false });
   if (error) throw toCogError(error);
+  return (data ?? []) as VoiceMemoWithSection[];
 }
 
 /** Reset attempt count and re-queue transcription for a failed memo. */
@@ -193,8 +242,18 @@ export function subscribeMemos(
 }
 
 /**
- * High-level helper: uploads a Blob and finalizes the memo.
- * Returns the memo id once ready.
+ * THE single upload core (A3 · Step 7 "three uploaders → one").
+ *
+ * Every memo-save in the app converges here: signed URL → PUT → finalize. The
+ * in-song pipeline (`lib/voice/voiceApi.uploadVoiceMemo`) now DELEGATES to this
+ * function rather than re-implementing the three steps, and the brainstorm
+ * outbox uploader already called it — so there is exactly one place that puts a
+ * take on the wire. Callers do NOT invoke this directly from the UI: every take
+ * routes through `saveMemoDurable` → the Capture Outbox → a registered uploader
+ * → this core, so a dropped connection or a QUOTA_EXCEEDED_STORAGE keeps the
+ * take safe and retryable ("Saved · will sync").
+ *
+ * Returns the memo id once the row is finalized.
  */
 export async function uploadVoiceMemo(opts: {
   songId: string;
@@ -204,6 +263,12 @@ export async function uploadVoiceMemo(opts: {
   durationMs?: number;
   title?: string;
   waveformPeaks?: number[];
+  /** Base memo this take layers over ("Record over this", F16). */
+  parentMemoId?: string;
+  /** Stable per-attempt key so a retried take never double-creates a memo. */
+  idempotencyKey?: string;
+  /** Original file name when importing existing audio. */
+  fileName?: string;
 }): Promise<string> {
   const mimeType = opts.mimeType ?? opts.blob.type ?? "audio/webm";
   const byteSize = opts.blob.size;
@@ -215,6 +280,9 @@ export async function uploadVoiceMemo(opts: {
     byteSize,
     durationMs: opts.durationMs,
     title: opts.title,
+    parentMemoId: opts.parentMemoId,
+    idempotencyKey: opts.idempotencyKey,
+    fileName: opts.fileName,
   });
 
   // Use signed-upload PUT

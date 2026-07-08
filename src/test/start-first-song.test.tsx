@@ -29,6 +29,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/integrations/cog/songs", () => ({
   createSong: (input: unknown) => createSong(input),
+  setFirstSong: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@/lib/songContext", () => ({ setSong: (s: unknown) => setSong(s) }));

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
@@ -26,11 +27,13 @@ import VoiceMemoAddedPage from "@/pages/onboarding/VoiceMemoAddedPage";
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={["/songs/s1/voice-added"]}>
-      <Routes>
-        <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={["/songs/s1/voice-added"]}>
+        <Routes>
+          <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 describe("VoiceMemoAddedPage — real memo celebration", () => {

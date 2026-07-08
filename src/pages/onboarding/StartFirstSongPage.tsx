@@ -6,8 +6,8 @@ import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import OnboardingProgress from "@/components/cog/OnboardingProgress";
 import { setSong } from "@/lib/songContext";
-import { supabase } from "@/integrations/supabase/client";
-import { createSong } from "@/integrations/cog/songs";
+import { getSessionUser } from "@/integrations/cog/auth";
+import { createSong, setFirstSong } from "@/integrations/cog/songs";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
@@ -43,8 +43,7 @@ const StartFirstSongPage = () => {
     // treated as "no session" so the demo/preview path still works offline.
     let user: { id: string } | null = null;
     try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
+      user = await getSessionUser();
     } catch {
       user = null;
     }
@@ -63,11 +62,8 @@ const StartFirstSongPage = () => {
         });
 
         // First-song pointer lets routeAfterAuth resume INSIDE this song.
-        // (createSong doesn't set it — profile writes stay client-side.)
-        await supabase.from("profiles").update({
-          first_song_id: song.id,
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", user.id).then(() => {}, () => {});
+        // (createSong doesn't set it — the seam owns the profile write.)
+        setFirstSong(song.id).catch(() => {});
 
         updateOnboardingStep("first_song_created").catch(() => {});
 

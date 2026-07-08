@@ -5,7 +5,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BackHeader from "@/components/cog/BackHeader";
 import BottomNav from "@/components/cog/BottomNav";
-import { supabase } from "@/integrations/supabase/client";
+import { getSessionUser } from "@/integrations/cog/auth";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
 import {
   buildEmbeddedCheckoutReturnUrl,
@@ -333,8 +333,8 @@ const UpgradePage = () => {
     try { intent = JSON.parse(raw); } catch { /* ignore */ }
     if (!intent?.tierKey) return;
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return;
+    getSessionUser().then((user) => {
+      if (!user) return;
       sessionStorage.removeItem("cog:pending-checkout");
       const tier = tiers.find((t) => t.key === intent!.tierKey);
       if (!tier) return;
@@ -377,7 +377,7 @@ const UpgradePage = () => {
 
     try {
       // Auth gate — embedded checkout requires a signed-in user JWT.
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) {
         const intent = {
           tierKey: tier.key,

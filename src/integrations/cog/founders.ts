@@ -48,6 +48,20 @@ export async function getMyFounderStats(): Promise<FounderStats> {
   return data as FounderStats;
 }
 
+/**
+ * Redeem a founder code the current user already validated (via `validateCode`).
+ * The SECURITY DEFINER RPC enforces the redemption cap / single-use grant and
+ * returns whether the founder grant actually landed. Throws a CogError on a
+ * transport/RLS failure so callers switch on `.code`, never a raw string.
+ */
+export async function claimFounderCodeRedemption(codeId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("claim_founder_code_redemption", {
+    _code_id: codeId,
+  });
+  if (error) throw toCogError(error);
+  return data === true;
+}
+
 export async function getMyFounderProfile() {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return null;

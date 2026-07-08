@@ -11,6 +11,7 @@ import {
   adminResolveFraudFlag,
   type FraudFlag,
 } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const SEVERITY_TONE: Record<string, string> = {
   high: "text-[#b3261e]",
@@ -27,12 +28,12 @@ export default function FraudPage() {
   const [severity, setSeverity] = useState("low");
 
   const { data: rows = [], isLoading } = useQuery<FraudFlag[]>({
-    queryKey: ["admin", "fraud-flags", onlyOpen],
+    queryKey: qk.admin.fraudFlags(onlyOpen),
     queryFn: () => adminFraudFlags(onlyOpen, 200),
     staleTime: 15_000,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "fraud-flags"] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.admin.fraudFlags() });
 
   const create = useMutation({
     mutationFn: () => adminCreateFraudFlag({ subject_type: subjectType, subject_id: subjectId.trim(), reason: reason.trim(), severity }),

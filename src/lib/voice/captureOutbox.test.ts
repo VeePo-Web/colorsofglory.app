@@ -179,6 +179,51 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
     });
   });
 
+  describe("storage full — retain and retry, exactly like offline", () => {
+    it("keeps the take QUEUED without burning an attempt, and signals quota_storage so the UI can prompt 'Add storage'", async () => {
+      const events: OutboxEvent[] = [];
+      subscribeOutbox((e) => events.push(e));
+      // The seam throws a CogError-shaped object with the storage-quota code.
+      mockUpload.mockRejectedValue(
+        Object.assign(new Error("QUOTA_EXCEEDED_STORAGE"), { code: "QUOTA_EXCEEDED_STORAGE" }),
+      );
+
+      const { outboxId } = await enqueueCaptureUpload(baseParams());
+      await processOutbox();
+
+      const job = readRawIndex().find((j) => j.id === outboxId);
+      // The idea is SAFE: retained, blob never deleted...
+      expect(job).toBeDefined();
+      expect(mockAudioCache.delete).not.toHaveBeenCalledWith(outboxId);
+      expect(pendingCount()).toBe(1);
+      // ...and — unlike a normal upload failure — it stays QUEUED and does NOT
+      // burn an attempt toward parking (storage-full isn't a transient error).
+      expect(job!.status).toBe("queued");
+      expect(job!.attempts).toBe(0);
+      // The failed event carries the quota reason + willRetry, so the surface can
+      // show "Saved · will sync" and an "Add storage" prompt instead of an alarm.
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "failed", outboxId, willRetry: true, reason: "quota_storage" }),
+      );
+    });
+
+    it("syncs the retained take automatically once storage is added (no data loss, no manual re-record)", async () => {
+      mockUpload.mockRejectedValueOnce(
+        Object.assign(new Error("storage_limit_reached"), { code: "QUOTA_EXCEEDED_STORAGE" }),
+      );
+      const { outboxId } = await enqueueCaptureUpload(baseParams());
+      await processOutbox(); // storage full → retained, queued
+      expect(readRawIndex().find((j) => j.id === outboxId)!.status).toBe("queued");
+
+      // User frees/adds storage; the next heartbeat/online sweep succeeds.
+      mockUpload.mockResolvedValueOnce("memo-after-storage");
+      await processOutbox();
+
+      expect(readRawIndex().some((j) => j.id === outboxId)).toBe(false);
+      expect(mockUpload).toHaveBeenLastCalledWith(expect.objectContaining({ songId: "song-1" }));
+    });
+  });
+
   describe("offline at save time", () => {
     it("keeps the take queued without attempting an upload, and never loses it", async () => {
       setOnline(false);

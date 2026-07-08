@@ -5,6 +5,7 @@ import AdminShell from "@/components/admin/AdminShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { adminOtpStats, adminSetAppSetting, type OtpStats } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 function num(settings: Record<string, unknown>, key: string, fallback: number): number {
   const v = settings?.[key];
@@ -14,7 +15,7 @@ function num(settings: Record<string, unknown>, key: string, fallback: number): 
 export default function AuthSecurityPage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery<OtpStats>({
-    queryKey: ["admin", "otp-stats"],
+    queryKey: qk.admin.otpStats(),
     queryFn: adminOtpStats,
     staleTime: 15_000,
   });
@@ -58,11 +59,11 @@ export default function AuthSecurityPage() {
           {/* Tunable limits */}
           <h2 className="text-sm uppercase tracking-wider text-[var(--cog-warm-gray)] mb-3">Limits</h2>
           <div className="grid gap-4 md:grid-cols-2 mb-8">
-            <AllowlistEditor settings={s} onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "otp-stats"] })} />
-            <NumberEditor label="Daily global ceiling" k="otp_daily_global_ceiling" value={ceiling} onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "otp-stats"] })} />
-            <NumberEditor label="Max per phone · 15 min" k="otp_max_per_phone_15m" value={num(s, "otp_max_per_phone_15m", 3)} onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "otp-stats"] })} />
-            <NumberEditor label="Max per phone · 24h" k="otp_max_per_phone_day" value={num(s, "otp_max_per_phone_day", 6)} onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "otp-stats"] })} />
-            <NumberEditor label="Max per IP · 1h" k="otp_max_per_ip_hour" value={num(s, "otp_max_per_ip_hour", 8)} onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "otp-stats"] })} />
+            <AllowlistEditor settings={s} onSaved={() => qc.invalidateQueries({ queryKey: qk.admin.otpStats() })} />
+            <NumberEditor label="Daily global ceiling" k="otp_daily_global_ceiling" value={ceiling} onSaved={() => qc.invalidateQueries({ queryKey: qk.admin.otpStats() })} />
+            <NumberEditor label="Max per phone · 15 min" k="otp_max_per_phone_15m" value={num(s, "otp_max_per_phone_15m", 3)} onSaved={() => qc.invalidateQueries({ queryKey: qk.admin.otpStats() })} />
+            <NumberEditor label="Max per phone · 24h" k="otp_max_per_phone_day" value={num(s, "otp_max_per_phone_day", 6)} onSaved={() => qc.invalidateQueries({ queryKey: qk.admin.otpStats() })} />
+            <NumberEditor label="Max per IP · 1h" k="otp_max_per_ip_hour" value={num(s, "otp_max_per_ip_hour", 8)} onSaved={() => qc.invalidateQueries({ queryKey: qk.admin.otpStats() })} />
           </div>
 
           {/* Top phones */}

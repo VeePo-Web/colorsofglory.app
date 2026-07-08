@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminCreateFounder } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 export default function CreateFounderDialog({ trigger }: { trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -27,7 +28,7 @@ export default function CreateFounderDialog({ trigger }: { trigger?: React.React
       }),
     onSuccess: () => {
       toast.success("Founder created");
-      qc.invalidateQueries({ queryKey: ["admin"] });
+      qc.invalidateQueries({ queryKey: qk.admin.root() });
       setOpen(false);
       setDisplayName(""); setSlug(""); setNotes("");
     },

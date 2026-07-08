@@ -6,6 +6,7 @@ import { money, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { adminMonthlyPayouts } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 function monthInputToISO(m: string) {
   // m = "2026-06" -> "2026-06-01"
@@ -19,7 +20,7 @@ export default function PayoutsPage() {
   const [q, setQ] = useState("");
 
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["admin", "payouts", month],
+    queryKey: qk.admin.payouts(month),
     queryFn: () => adminMonthlyPayouts(monthInputToISO(month)),
     staleTime: 30_000,
   });

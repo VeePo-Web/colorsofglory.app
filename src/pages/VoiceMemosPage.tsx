@@ -32,7 +32,7 @@ import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
 import { resamplePeaks } from "@/lib/audio/waveformPeaks";
 import TakeMiniPlayer from "@/components/voice/TakeMiniPlayer";
-import { supabase } from "@/integrations/supabase/client";
+import { getSessionUser } from "@/integrations/cog/auth";
 
 // ─── Playable memo card ───────────────────────────────────────────────────────
 
@@ -491,6 +491,11 @@ const VoiceMemosPage = () => {
         setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
         void loadMemos();
         setUploadError(null);
+      } else if (event.reason === "quota_storage") {
+        // Storage is full — the take is SAFE on the device and will sync the
+        // moment there's room. Keep the optimistic card as-is (it reads
+        // "Saved on device · syncing") and prompt the one action that unblocks it.
+        setUploadError("Saved on your device — we'll sync it once there's room. Add storage to finish.");
       } else if (!event.willRetry) {
         setMemos((prev) =>
           prev.map((m) =>
@@ -535,8 +540,8 @@ const VoiceMemosPage = () => {
   // Wire current user name to memos
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserId(data.user?.id ?? null);
+    getSessionUser().then((user) => {
+      setCurrentUserId(user?.id ?? null);
     });
   }, []);
 

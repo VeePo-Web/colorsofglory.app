@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminCreateFounderCode, adminFounderSummary } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const CODE_RE = /^[A-Z0-9-]{4,32}$/;
 
@@ -26,7 +27,7 @@ export default function CreateCodeDialog({
   const qc = useQueryClient();
 
   const { data: founders } = useQuery({
-    queryKey: ["admin", "founder-summary"],
+    queryKey: qk.admin.founderSummary(),
     queryFn: adminFounderSummary,
     enabled: open && !defaultFounderId,
   });
@@ -45,7 +46,7 @@ export default function CreateCodeDialog({
       }),
     onSuccess: () => {
       toast.success("Code created");
-      qc.invalidateQueries({ queryKey: ["admin"] });
+      qc.invalidateQueries({ queryKey: qk.admin.root() });
       setOpen(false);
       setCode(""); setLabel(""); setMaxRedemptions(""); setExpiresAt("");
     },

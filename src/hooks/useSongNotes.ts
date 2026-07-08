@@ -12,6 +12,7 @@
 
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { qk } from "@/hooks/queryKeys";
 import {
   addNote as addNoteApi,
   listSongNotes,
@@ -23,15 +24,15 @@ import {
 /** The signed-in user's id (React-layer), via the same getUser() query pattern the app uses. */
 export function useCurrentUserId(): string | undefined {
   const { data } = useQuery({
-    queryKey: ["auth-user"],
+    queryKey: qk.authUser(),
     queryFn: async () => (await supabase.auth.getUser()).data.user,
     staleTime: 5 * 60 * 1000,
   });
   return data?.id;
 }
 
-/** Canonical cache key for a song's notes. */
-export const songNotesKey = (songId: string) => ["song-notes", songId] as const;
+/** Canonical cache key for a song's notes (delegates to the shared `qk` factory). */
+export const songNotesKey = (songId: string) => qk.notes(songId);
 
 export function useSongNotes(songId: string) {
   return useQuery({

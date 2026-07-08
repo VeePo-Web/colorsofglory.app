@@ -6,7 +6,7 @@ import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import { validateCode } from "@/lib/pricing/pricingApi";
-import { supabase } from "@/integrations/supabase/client";
+import { claimFounderCodeRedemption } from "@/integrations/cog/founders";
 
 const normalizeCode = (raw: string) =>
   raw.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
@@ -44,11 +44,13 @@ const FounderCodePage = () => {
           setError(friendlyReason(result.reason));
           return;
         }
-        const { data: redeemed, error: rpcError } = await supabase.rpc(
-          "claim_founder_code_redemption",
-          { _code_id: result.codeId },
-        );
-        if (rpcError || redeemed !== true) {
+        let redeemed = false;
+        try {
+          redeemed = await claimFounderCodeRedemption(result.codeId);
+        } catch {
+          redeemed = false;
+        }
+        if (!redeemed) {
           setError("That founder code couldn't be redeemed — it may already be used.");
           return;
         }

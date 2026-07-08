@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, HardDrive } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
-import { getStorageUsage } from "@/integrations/cog/storage";
+import { useStorageUsage } from "@/hooks/useAppQueries";
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes < 0) return "0 MB";
@@ -17,25 +16,18 @@ type LoadState = "loading" | "ready" | "unavailable";
 
 const StoragePage = () => {
   const navigate = useNavigate();
-  const [state, setState] = useState<LoadState>("loading");
-  const [usedBytes, setUsedBytes] = useState(0);
-  const [limitBytes, setLimitBytes] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { bytesUsed, bytesLimit } = await getStorageUsage();
-        if (cancelled) return;
-        setUsedBytes(bytesUsed);
-        setLimitBytes(bytesLimit);
-        setState("ready");
-      } catch {
-        if (!cancelled) setState("unavailable");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Storage read via TanStack Query. Fails soft: a failed read resolves to the
+  // calm "unavailable" copy, never a blocking modal — the songs are safe either
+  // way, and a gentle retry runs behind the scenes.
+  const storageQuery = useStorageUsage();
+  const usedBytes = storageQuery.data?.bytesUsed ?? 0;
+  const limitBytes = storageQuery.data?.bytesLimit ?? 0;
+  const state: LoadState = storageQuery.isLoading
+    ? "loading"
+    : storageQuery.isError
+      ? "unavailable"
+      : "ready";
 
   const percent =
     limitBytes > 0 ? Math.min(100, Math.round((usedBytes / limitBytes) * 100)) : 0;

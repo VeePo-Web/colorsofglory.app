@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import { money } from "@/components/admin/AdminUI";
 import { adminFounderSummary, adminReferralsRecent, adminAttentionSummary, type AttentionSummary } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 export default function AdminHomePage() {
-  const { data: founders = [] } = useQuery({ queryKey: ["admin", "founder-summary"], queryFn: adminFounderSummary, staleTime: 30_000 });
-  const { data: recent = [] } = useQuery({ queryKey: ["admin", "recent", 25], queryFn: () => adminReferralsRecent(25), staleTime: 30_000 });
-  const { data: attn } = useQuery<AttentionSummary>({ queryKey: ["admin", "attention"], queryFn: adminAttentionSummary, staleTime: 20_000 });
+  const { data: founders = [] } = useQuery({ queryKey: qk.admin.founderSummary(), queryFn: adminFounderSummary, staleTime: 30_000 });
+  const { data: recent = [] } = useQuery({ queryKey: qk.admin.recent(25), queryFn: () => adminReferralsRecent(25), staleTime: 30_000 });
+  const { data: attn } = useQuery<AttentionSummary>({ queryKey: qk.admin.attention(), queryFn: adminAttentionSummary, staleTime: 20_000 });
 
   const active = founders.filter((f) => f.status === "active").length;
   const referrals = founders.reduce((s, f) => s + (f.attributed_users ?? 0), 0);

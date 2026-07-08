@@ -14,6 +14,7 @@ import {
   retryPayout,
   type PayoutRow,
 } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const money = (c: number, cur: string) => `$${(c / 100).toFixed(2)} ${cur?.toUpperCase() ?? ""}`;
 
@@ -39,7 +40,7 @@ function friendlyError(e: unknown): string {
 export default function PayoutBatchesPage() {
   const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery<PayoutRow[]>({
-    queryKey: ["admin", "payout-batches"],
+    queryKey: qk.admin.payoutBatches(),
     queryFn: () => adminListPayouts(150),
     staleTime: 15_000,
   });
@@ -47,7 +48,7 @@ export default function PayoutBatchesPage() {
   // Resolve recipient name + payout method so the operator sees who they're
   // paying (and how) rather than a bare uuid. Reuses the referrer ledger RPC.
   const { data: ledger = [] } = useQuery({
-    queryKey: ["admin", "referrer-ledger"],
+    queryKey: qk.admin.referrerLedger(),
     queryFn: adminReferrerLedger,
     staleTime: 30_000,
   });
@@ -58,7 +59,7 @@ export default function PayoutBatchesPage() {
   const [dlg, setDlg] = useState<{ kind: "paid" | "failed"; id: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "payout-batches"] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.admin.payoutBatches() });
   const run = (fn: () => Promise<unknown>, okMsg: string) =>
     fn().then(() => { toast.success(okMsg); invalidate(); }).catch((e) => toast.error(friendlyError(e)));
 

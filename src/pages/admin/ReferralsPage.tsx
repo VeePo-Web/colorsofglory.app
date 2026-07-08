@@ -5,11 +5,12 @@ import AdminShell from "@/components/admin/AdminShell";
 import { money, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { adminReferrerLedger, type ReferrerLedgerRow } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 export default function ReferralsPage() {
   const [q, setQ] = useState("");
   const { data: rows = [], isLoading } = useQuery<ReferrerLedgerRow[]>({
-    queryKey: ["admin", "referrer-ledger"],
+    queryKey: qk.admin.referrerLedger(),
     queryFn: adminReferrerLedger,
     staleTime: 30_000,
   });

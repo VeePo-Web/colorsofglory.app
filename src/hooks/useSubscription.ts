@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { qk } from "@/hooks/queryKeys";
+import { useRealtimeBilling } from "@/hooks/useRealtime";
 import {
   getMyBillingStatus,
   type BillingStatus,
@@ -30,37 +31,23 @@ export type SubscriptionState = {
  */
 export function useSubscription(): SubscriptionState {
   const userQuery = useQuery({
-    queryKey: ["auth-user"],
+    queryKey: qk.authUser(),
     queryFn: async () => (await supabase.auth.getUser()).data.user,
     staleTime: 60_000,
   });
   const userId = userQuery.data?.id ?? null;
 
   const subQuery = useQuery({
-    queryKey: ["subscription", userId],
+    queryKey: qk.subscription(userId),
     enabled: !!userId,
     queryFn: async () => getMyBillingStatus(),
   });
 
-  useEffect(() => {
-    if (!userId) return;
-    const channel = supabase
-      .channel(`sub-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "subscriptions", filter: `user_id=eq.${userId}` },
-        () => subQuery.refetch(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "storage_addons", filter: `user_id=eq.${userId}` },
-        () => subQuery.refetch(),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, subQuery]);
+  // Re-hydrate on a remote plan / storage change. Folded onto the shared
+  // realtime→invalidation pattern (Step 8): the channel invalidates
+  // qk.subscription(userId) — which this very query observes, so it refetches —
+  // plus qk.billing() / qk.storage() for the other account hooks.
+  useRealtimeBilling(userId);
 
   const status = subQuery.data ?? null;
   const sub = status?.subscription ?? null;

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { adminFounderDetail } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const FounderByCodePanel = lazy(() => import("@/components/admin/FounderByCodePanel"));
 
@@ -63,7 +64,7 @@ const EMPTY_REWARDS: Detail["reward_events"] = [];
 export default function FounderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["admin", "founder", id],
+    queryKey: qk.admin.founder(id),
     queryFn: () => adminFounderDetail(id!) as Promise<Detail>,
     enabled: !!id,
   });

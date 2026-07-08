@@ -97,8 +97,41 @@ export function registerOutboxUploader(key: string, uploader: OutboxUploader): v
 
 export type OutboxEvent =
   | { type: "success"; outboxId: string; memoId: string; songId: string }
-  | { type: "failed"; outboxId: string; songId: string; error: string; willRetry: boolean }
+  | {
+      type: "failed";
+      outboxId: string;
+      songId: string;
+      error: string;
+      willRetry: boolean;
+      /**
+       * Why the take didn't sync — lets a surface tell apart a transient network
+       * failure from an offline device or a full storage plan. `"quota_storage"`
+       * means the take is RETAINED and will sync once storage is added; the UI
+       * surfaces "Saved · will sync" + an "Add storage" prompt (never data loss).
+       */
+      reason?: "offline" | "quota_storage" | "upload";
+    }
   | { type: "change"; pending: number };
+
+/**
+ * True when an upload failed because the user's storage plan is full. The seam
+ * throws a `CogError` with `code === "QUOTA_EXCEEDED_STORAGE"`; we also tolerate
+ * the raw slug appearing in a message so this holds even if the error wasn't
+ * normalized. This is treated as RETAIN-and-retry (like offline), NOT a burned
+ * attempt — the idea is never lost, it just waits for room.
+ */
+function isStorageQuotaError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code === "QUOTA_EXCEEDED_STORAGE") return true;
+  const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  const lower = msg.toLowerCase();
+  return (
+    msg.includes("QUOTA_EXCEEDED_STORAGE") ||
+    lower.includes("storage_limit_reached") ||
+    lower.includes("storage_quota_exceeded") ||
+    lower.includes("out of storage")
+  );
+}
 
 type Listener = (event: OutboxEvent) => void;
 
@@ -275,7 +308,7 @@ async function processJob(id: string): Promise<void> {
   // is already safe in the cache.
   if (isOffline()) {
     patchJob(id, { status: "queued" });
-    emit({ type: "failed", outboxId: id, songId: job.songId, error: "offline", willRetry: true });
+    emit({ type: "failed", outboxId: id, songId: job.songId, error: "offline", willRetry: true, reason: "offline" });
     return;
   }
 
@@ -310,6 +343,23 @@ async function processJob(id: string): Promise<void> {
     emit({ type: "success", outboxId: id, memoId, songId: job.songId });
     emitChange();
   } catch (err) {
+    // Storage full is NOT a transient failure — retain the take exactly like the
+    // offline case: keep it QUEUED (do NOT burn an attempt toward parking) so it
+    // syncs automatically once the user adds storage. The take is never lost; the
+    // surface shows "Saved · will sync" + an "Add storage" prompt off this reason.
+    if (isStorageQuotaError(err)) {
+      patchJob(id, { status: "queued", lastError: "QUOTA_EXCEEDED_STORAGE" });
+      emit({
+        type: "failed",
+        outboxId: id,
+        songId: job.songId,
+        error: "quota_storage",
+        willRetry: true,
+        reason: "quota_storage",
+      });
+      return;
+    }
+
     const attempts = job.attempts + 1;
     const willRetry = attempts < MAX_ATTEMPTS_BEFORE_PARKED;
     patchJob(id, {
@@ -319,7 +369,7 @@ async function processJob(id: string): Promise<void> {
     });
     // The take + job remain. It will be retried on `online`, the heartbeat, or
     // an explicit retry — the idea is never lost.
-    emit({ type: "failed", outboxId: id, songId: job.songId, error: "upload failed", willRetry });
+    emit({ type: "failed", outboxId: id, songId: job.songId, error: "upload failed", willRetry, reason: "upload" });
   } finally {
     inFlight.delete(id);
   }

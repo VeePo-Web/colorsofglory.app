@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Isolate the catalog hero under test: stub the data layer + heavy sub-trees so
 // this exercises SongCatalogPage's own markup (the change under audit), not
@@ -22,14 +23,19 @@ vi.mock("@/lib/pricing/pricingApi", () => ({ canCreateSong: vi.fn().mockResolved
 vi.mock("@/components/cog/BottomNav", () => ({ default: () => <nav data-testid="bottomnav" /> }));
 vi.mock("@/components/cog/CogBrand", () => ({ default: () => <div data-testid="cogbrand" /> }));
 vi.mock("@/components/capture/SeedIdeasShelf", () => ({ default: () => <div data-testid="seedshelf" /> }));
+// Practice resume card pulls the PracticePlayerProvider context (a separate
+// feature lane); stub it as a heavy sub-tree so the hero renders in isolation.
+vi.mock("@/components/practice/PracticeResumeCard", () => ({ default: () => null }));
 
 import SongCatalogPage from "@/pages/SongCatalogPage";
 
 const renderPage = () =>
   render(
-    <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <SongCatalogPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <SongCatalogPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 describe("SongCatalogPage — world-class hero (content-locked, token-precise)", () => {

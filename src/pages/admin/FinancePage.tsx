@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import AdminShell from "@/components/admin/AdminShell";
 import { adminFinanceSummary, type FinanceSummary } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const money = (c: number) => `$${((c ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -12,7 +13,7 @@ const PLAN_LABEL: Record<string, string> = {
 
 export default function FinancePage() {
   const { data, isLoading, error } = useQuery<FinanceSummary>({
-    queryKey: ["admin", "finance-summary"],
+    queryKey: qk.admin.financeSummary(),
     queryFn: adminFinanceSummary,
     staleTime: 30_000,
   });

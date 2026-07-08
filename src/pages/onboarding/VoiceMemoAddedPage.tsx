@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Pause, Play, UserPlus, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
-import { listMemosForSong, getPlaybackUrl, type VoiceMemo } from "@/integrations/cog/memos";
+import { getPlaybackUrl, type VoiceMemo } from "@/integrations/cog/memos";
+import { useMemos } from "@/hooks/useAppQueries";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import { getSong } from "@/lib/songContext";
 
@@ -40,30 +41,20 @@ const VoiceMemoAddedPage = () => {
   // so we never render a stranger's song name.
   const songTitle = useMemo(() => getSong(songId)?.title ?? "", [songId]);
 
-  // The REAL first memo — no hardcoded fixture. Loaded via A3's memo SDK.
-  const [memo, setMemo] = useState<VoiceMemo | null>(null);
-  const [loading, setLoading] = useState(true);
+  // The REAL first memo — no hardcoded fixture. Read via A3's memo query hook;
+  // the latest memo is the one just captured. Fails soft: on error the query
+  // yields no data and the page shows its calm "capture the first idea" prompt.
+  const memosQuery = useMemos(songId);
+  const memo: VoiceMemo | null = memosQuery.data?.[0] ?? null;
+  const loading = memosQuery.isLoading;
 
+  // Never fake success: only mark the aha step when a real memo exists. (The DB
+  // trigger on the voice_memo insert remains the source of truth; this is the
+  // monotonic client-side belt-and-suspenders mark.)
   useEffect(() => {
-    let cancelled = false;
-    listMemosForSong(songId)
-      .then((memos) => {
-        if (cancelled) return;
-        const latest = memos[0] ?? null;
-        setMemo(latest);
-        setLoading(false);
-        // Never fake success: only mark the aha step when a real memo exists.
-        // (The DB trigger on the voice_memo insert remains the source of truth;
-        // this is the monotonic client-side belt-and-suspenders mark.)
-        if (latest) updateOnboardingStep("first_voice_memo_added").catch(() => {});
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [songId]);
+    if (memo) updateOnboardingStep("first_voice_memo_added").catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once per memo identity
+  }, [memo?.id]);
 
   // Real playback of the real memo.
   const audioRef = useRef<HTMLAudioElement | null>(null);

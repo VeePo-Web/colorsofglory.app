@@ -28,12 +28,12 @@ import { canCreateSong } from "@/lib/pricing/pricingApi";
 import CoachMark from "@/components/onboarding/CoachMark";
 import { useCoachMark } from "@/components/onboarding/useCoachMark";
 import {
-  listMySongs,
   createSong,
   archiveSong,
   unarchiveSong,
   type SongCard as SongRow,
 } from "@/integrations/cog/songs";
+import { useSongs } from "@/hooks/useAppQueries";
 import {
   Dialog,
   DialogContent,
@@ -51,9 +51,9 @@ const EMPTY_COPY: Record<Tab, string> = {
   Archived: "Archived songs stay safe and readable here.",
 };
 
-// Session-warm song list — returning to the catalog paints the last known
-// list instantly (0ms perceived) while a background refresh reconciles.
-let songsWarmCache: SongRow[] | null = null;
+// The catalog read lives in TanStack Query (useSongs). Its cache is the warm
+// store — a return visit repaints the last known list instantly (0ms perceived)
+// while a background refresh reconciles.
 
 // Remember which album the songwriter was inside, so tapping a song → the
 // whiteboard → back returns them to that album (working an EP song by song),
@@ -66,10 +66,14 @@ const UNGROUPED = "__ungrouped__";
 
 const SongCatalogPage = () => {
   const navigate = useNavigate();
+  const songsQuery = useSongs();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
   const [isCheckingCreate, setIsCheckingCreate] = useState(false);
-  const [songs, setSongs] = useState<SongRow[]>(() => songsWarmCache ?? []);
-  const [loading, setLoading] = useState(songsWarmCache === null);
+  // Local working copy seeded from the query (synchronously from cache on a
+  // warm remount → no empty flash); mutated optimistically for archive /
+  // restore / album edits, then re-synced from the query by the effect below.
+  const [songs, setSongs] = useState<SongRow[]>(songsQuery.data ?? []);
+  const loading = songsQuery.isLoading;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
@@ -109,23 +113,20 @@ const SongCatalogPage = () => {
     else updatePrefs({ view: "grid", density: 2 });
   };
 
+  // Mirror the query result into the local working copy. Query owns the fetch
+  // and cache; local state exists only so archive / album edits can update the
+  // list optimistically without a round-trip.
   useEffect(() => {
-    (async () => {
-      try {
-        setSongs(await listMySongs());
-      } catch {
-        // A warm cache means stale-but-present beats an error wall.
-        if (songsWarmCache === null) toast.error("Couldn't load your songs");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    if (songsQuery.data) setSongs(songsQuery.data);
+  }, [songsQuery.data]);
 
-  // Keep the warm cache current so the next visit paints instantly.
+  // Fail soft: only wall the page with a toast when the FIRST load errors with
+  // nothing cached to show. A stale list always beats an error wall.
   useEffect(() => {
-    if (!loading) songsWarmCache = songs;
-  }, [songs, loading]);
+    if (songsQuery.isError && !songsQuery.data?.length) {
+      toast.error("Couldn't load your songs");
+    }
+  }, [songsQuery.isError, songsQuery.data]);
 
   // Remember the focused album across navigations; drop the memory if that
   // album was since removed so we never restore into a ghost.

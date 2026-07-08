@@ -6,14 +6,18 @@ import { z } from "zod";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import OnboardingShell from "@/components/cog/OnboardingShell";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { updatePassword, AuthError } from "@/integrations/cog/auth";
 
 const passwordSchema = z.string().min(8, "At least 8 characters").max(72);
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
-  const [ready, setReady] = useState(false);
+  // The single app-wide auth subscription (A4's AuthContext) already tracks the
+  // recovery session: a hash-based reset link establishes a session and flips
+  // status to "authed". Reading it here avoids a second onAuthStateChange.
+  const { status } = useAuth();
+  const ready = status === "authed";
   const [invalid, setInvalid] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -22,37 +26,15 @@ const ResetPasswordPage = () => {
   const pwRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let mounted = true;
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (!mounted) return;
-      if (event === "PASSWORD_RECOVERY") {
-        setReady(true);
-        setInvalid(false);
-      }
-    });
-
-    // Hash-based recovery links typically arrive with an existing session
-    // and fire PASSWORD_RECOVERY. If we don't see one within ~1.5s, treat
-    // as invalid.
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (data.session) setReady(true);
-    });
-    const timer = window.setTimeout(() => {
-      if (!mounted) return;
-      setReady((r) => {
-        if (!r) setInvalid(true);
-        return r;
-      });
-    }, 1500);
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-      if (timer) window.clearTimeout(timer);
-    };
-  }, []);
+    // Recovery links normally arrive with a session within a moment. If none
+    // has resolved after ~1.5s, treat the link as invalid/expired.
+    if (ready) {
+      setInvalid(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setInvalid(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, [ready]);
 
   // Focus the new-password field the moment the recovery session is confirmed —
   // the input is disabled until then, so autoFocus alone would never land.

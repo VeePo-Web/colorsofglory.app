@@ -1,10 +1,10 @@
 import type { ElementType } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, FileText, Mic, Music, PenLine, StickyNote, UserPlus } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
-import { getSong, type SongDetail } from "@/integrations/cog/songs";
+import { type SongDetail } from "@/integrations/cog/songs";
+import { useSongDetail } from "@/hooks/useAppQueries";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
@@ -84,11 +84,10 @@ const SongWorkspacePage = () => {
 
   const cachedTitle = useMemo(readCachedTitle, []);
 
-  const { data: song, isLoading } = useQuery({
-    queryKey: ["song-detail", songId],
-    queryFn: () => getSong(songId),
-    enabled: Boolean(songId),
-  });
+  // Workspace hub read — TanStack Query via the shared `qk.songDetail` key
+  // (counts drive the hub badges). Fails soft: on error the cached title/counts
+  // stay painted, never a blocking modal.
+  const { data: song, isLoading } = useSongDetail(songId);
 
   // Depth surface: the room rose from the catalog, so paging back is a
   // rightward swipe (mid-screen — the browser keeps its own edge gesture).

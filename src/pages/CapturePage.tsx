@@ -24,7 +24,7 @@ const CapturePage = () => {
   const params = useParams<{ id?: string }>();
   const songId = params.id;
   // A3's cached-first title hook (live query + session cache, "" while loading)
-  // — replaces the page's old raw supabase.from("songs") read.
+  // — replaces the page's old raw direct-client songs read.
   const title = useSongTitle(songId);
   const songTitle = title || undefined;
 

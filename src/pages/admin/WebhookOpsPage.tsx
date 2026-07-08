@@ -5,6 +5,7 @@ import AdminShell from "@/components/admin/AdminShell";
 import { TableSkeleton } from "@/components/admin/AdminUI";
 import { Button } from "@/components/ui/button";
 import { adminBillingEvents, redriveBillingEvent, type BillingEventRow } from "@/integrations/cog/admin";
+import { qk } from "@/hooks/queryKeys";
 
 const money = (c: number | null, cur: string | null) =>
   c == null ? "—" : `$${(c / 100).toFixed(2)}${cur ? ` ${cur.toUpperCase()}` : ""}`;
@@ -16,7 +17,7 @@ export default function WebhookOpsPage() {
   const [onlyFailed, setOnlyFailed] = useState(true);
 
   const { data: rows = [], isLoading } = useQuery<BillingEventRow[]>({
-    queryKey: ["admin", "billing-events", onlyFailed],
+    queryKey: qk.admin.billingEvents(onlyFailed),
     queryFn: () => adminBillingEvents(100, onlyFailed),
     staleTime: 15_000,
   });
@@ -25,7 +26,7 @@ export default function WebhookOpsPage() {
     mutationFn: (id: string) => redriveBillingEvent(id),
     onSuccess: () => {
       toast.success("Event re-driven");
-      qc.invalidateQueries({ queryKey: ["admin", "billing-events"] });
+      qc.invalidateQueries({ queryKey: qk.admin.billingEvents() });
     },
     onError: (e: unknown) => toast.error((e as Error).message ?? "Re-drive failed"),
   });

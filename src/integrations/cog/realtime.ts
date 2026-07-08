@@ -74,6 +74,37 @@ export function subscribeSongPresence(
   };
 }
 
+/**
+ * Account billing realtime — the signed-in user's plan + storage changes.
+ * Fires `onChange("subscription")` when a `subscriptions` row moves and
+ * `onChange("storage")` when a `storage_addons` row moves, so a plan upgrade or
+ * a storage top-up made on another device re-hydrates the current one. Like
+ * every seam channel this carries the TABLE + event kind only — never the row's
+ * content; the caller re-reads the billing status through its query.
+ */
+export function subscribeBilling(
+  user_id: string,
+  onChange: (kind: "subscription" | "storage") => void,
+): () => void {
+  const channel = supabase
+    .channel(`billing:${user_id}`)
+    .on(
+      "postgres_changes" as any,
+      { event: "*", schema: "public", table: "subscriptions", filter: `user_id=eq.${user_id}` },
+      () => onChange("subscription"),
+    )
+    .on(
+      "postgres_changes" as any,
+      { event: "*", schema: "public", table: "storage_addons", filter: `user_id=eq.${user_id}` },
+      () => onChange("storage"),
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export function subscribeSongRoom(song_id: string, handlers: SongRoomHandlers): () => void {
   const filter = `song_id=eq.${song_id}`;
   const channel = supabase.channel(`song:${song_id}`);
