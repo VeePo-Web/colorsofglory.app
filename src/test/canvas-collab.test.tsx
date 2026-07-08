@@ -11,7 +11,7 @@ vi.mock("@/integrations/cog/activity", () => ({
   markSongSeen: (songId: string) => markSongSeen(songId),
 }));
 
-vi.mock("@/hooks/useCurrentAccount", () => ({
+vi.mock("@/integrations/cog/auth", () => ({
   useCurrentAccount: () => ({
     loading: false,
     user: { id: "me" },
