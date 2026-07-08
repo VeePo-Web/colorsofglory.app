@@ -68,6 +68,7 @@ import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
+import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
@@ -2209,6 +2210,10 @@ const SongCanvasExperience = () => {
           onDismiss={() => setShowRecap(false)}
         />
       )}
+
+      {/* Return-visit recap — auto-shows once for a returning collaborator
+          with real activity-feed changes since their last visit (Product 12) */}
+      {!showRecap && <CanvasRecapGate songId={songId} />}
 
       {/* Copy-link invite sheet — one tap from the room's presence stack */}
       {showShareSheet && (

@@ -52,8 +52,10 @@ const CapturePage = lazy(() => import("./pages/CapturePage"));
 const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
 const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
 const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
+const VoiceMemosPage = lazy(() => import("./pages/VoiceMemosPage"));
 const CreditsPage = lazy(() => import("./pages/CreditsPage"));
 const ActivityPage = lazy(() => import("./pages/ActivityPage"));
+const VersionHistoryPage = lazy(() => import("./pages/VersionHistoryPage"));
 const NotesPage = lazy(() => import("./pages/NotesPage"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage"));
 const SongMemoryPage = lazy(() => import("./pages/SongMemoryPage"));
@@ -192,7 +194,10 @@ const App = () => {
             <Route path="/songs/:id/sheet" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
             <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
             <Route path="/albums/:albumId/practice" element={<AlbumPracticeExperience />} />
-            <Route path="/songs/:id/voice" element={<CanvasLayerRedirect layer="voice" />} />
+            {/* Voice's canonical home (C4) is the dedicated page — recorder, take
+                versions, layered stacks, import. The canvas ?layer=voice panel stays
+                as an embedded view of the same memo list, reachable from the canvas. */}
+            <Route path="/songs/:id/voice" element={<RequireAuth><VoiceMemosPage /></RequireAuth>} />
             {/* Notes pad (C5) is the real Notes front door â€” the standalone
                 song-level pad, NOT the canvas ?layer=notes summary (D-group). */}
             <Route path="/songs/:id/notes" element={<RequireAuth><NotesPage /></RequireAuth>} />
@@ -201,6 +206,9 @@ const App = () => {
                 a real page, not a canvas redirect. Members-only data underneath. */}
             <Route path="/songs/:id/activity" element={<RequireAuth><ActivityPage /></RequireAuth>} />
             <Route path="/songs/:id/credits" element={<RequireAuth><CreditsPage /></RequireAuth>} />
+            {/* Version history (E3): the snapshot timeline + non-destructive
+                restore. Restore never overwrites; the Original is protected. */}
+            <Route path="/songs/:id/versions" element={<RequireAuth><VersionHistoryPage /></RequireAuth>} />
             <Route path="/songs/:id/memory" element={<RequireAuth><SongMemoryPage /></RequireAuth>} />
 
             {/* Personal Memory Graph / Zettelkasten (Feature 33) */}

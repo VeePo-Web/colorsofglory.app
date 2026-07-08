@@ -24,24 +24,24 @@ const StatRow = ({ people, monthly, yearly, highlight }: StatRowProps) => (
   <div
     className="flex items-center justify-between px-4 py-3 rounded-xl"
     style={{
-      backgroundColor: highlight ? "rgba(181,147,90,0.10)" : "rgba(0,0,0,0.02)",
-      border: highlight ? "1px solid rgba(181,147,90,0.25)" : "1px solid rgba(0,0,0,0.06)",
+      backgroundColor: highlight ? "rgba(184,149,58,0.10)" : "rgba(0,0,0,0.02)",
+      border: highlight ? "1px solid rgba(184,149,58,0.25)" : "1px solid rgba(0,0,0,0.06)",
     }}
   >
     <div className="flex items-center gap-2">
-      <Users size={13} strokeWidth={1.5} style={{ color: highlight ? "#B5935A" : "#999" }} />
-      <span className="text-sm font-medium" style={{ color: highlight ? "#1A1A1A" : "#666" }}>
+      <Users size={13} strokeWidth={1.5} style={{ color: highlight ? "var(--cog-gold)" : "var(--cog-muted)" }} />
+      <span className="text-sm font-medium" style={{ color: highlight ? "var(--cog-charcoal)" : "var(--cog-warm-gray)" }}>
         {people.toLocaleString()} {people === 1 ? "songwriter" : "songwriters"}
       </span>
     </div>
     <div className="text-right">
       <span
         className="text-sm font-bold"
-        style={{ color: highlight ? "#B5935A" : "#1A1A1A" }}
+        style={{ color: highlight ? "var(--cog-gold)" : "var(--cog-charcoal)" }}
       >
         ${monthly.toLocaleString()}/mo
       </span>
-      <span className="text-xs ml-1.5" style={{ color: "#999" }}>
+      <span className="text-xs ml-1.5" style={{ color: "var(--cog-muted)" }}>
         ${yearly.toLocaleString()}/yr
       </span>
     </div>
@@ -139,33 +139,33 @@ const EarnPage = () => {
         style={{
           width: 56,
           height: 56,
-          backgroundColor: "rgba(181,147,90,0.12)",
-          border: "1.5px solid rgba(181,147,90,0.25)",
+          backgroundColor: "rgba(184,149,58,0.12)",
+          border: "1.5px solid rgba(184,149,58,0.25)",
         }}
       >
-        <TrendingUp size={26} strokeWidth={1.5} style={{ color: "#B5935A" }} />
+        <TrendingUp size={26} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
       </div>
 
       {/* Headline */}
       <h1
         className="text-[2.4rem] font-bold text-center mb-2 leading-[1.05]"
-        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+        style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
       >
         Invite songwriters.
         <br />Earn every month.
       </h1>
 
       {/* Core value prop */}
-      <p className="text-[1rem] text-center mb-2" style={{ color: "#666" }}>
+      <p className="text-[1rem] text-center mb-2" style={{ color: "var(--cog-warm-gray)" }}>
         You earn{" "}
-        <span className="font-bold" style={{ color: "#1A1A1A" }}>
+        <span className="font-bold" style={{ color: "var(--cog-charcoal)" }}>
           ${perReferralDollars} / month
         </span>{" "}
         for every songwriter who joins Pro through your link.
       </p>
       <p
         className="text-[0.8125rem] text-center mb-8 font-medium"
-        style={{ color: "#B5935A" }}
+        style={{ color: "var(--cog-gold)" }}
       >
         Stacks infinitely. No cap. Paid monthly while they stay.
       </p>
@@ -174,14 +174,14 @@ const EarnPage = () => {
       <div
         className="rounded-2xl p-4 mb-6"
         style={{
-          backgroundColor: "#FFFFFF",
+          backgroundColor: "var(--cog-cream-light)",
           border: "1px solid rgba(0,0,0,0.08)",
           boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
         }}
       >
         <div className="flex items-center gap-2 mb-3">
-          <DollarSign size={14} strokeWidth={1.5} style={{ color: "#B5935A" }} />
-          <p className="text-[0.8125rem] font-semibold uppercase tracking-wide" style={{ color: "#999" }}>
+          <DollarSign size={14} strokeWidth={1.5} style={{ color: "var(--cog-gold)" }} />
+          <p className="text-[0.8125rem] font-semibold uppercase tracking-wide" style={{ color: "var(--cog-muted)" }}>
             What this looks like
           </p>
         </div>
@@ -199,14 +199,14 @@ const EarnPage = () => {
         </div>
 
         {/* Top-tier emphasis */}
-        <div className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "rgba(181,147,90,0.06)" }}>
-          <p className="text-[0.875rem] text-center leading-relaxed" style={{ color: "#666" }}>
+        <div className="mt-4 rounded-xl px-4 py-3" style={{ backgroundColor: "rgba(184,149,58,0.06)" }}>
+          <p className="text-[0.875rem] text-center leading-relaxed" style={{ color: "var(--cog-warm-gray)" }}>
             Refer{" "}
-            <span className="font-bold" style={{ color: "#1A1A1A" }}>
+            <span className="font-bold" style={{ color: "var(--cog-charcoal)" }}>
               {headline.people.toLocaleString()} songwriters
             </span>
             {" "}→{" "}
-            <span className="font-bold" style={{ color: "#B5935A" }}>
+            <span className="font-bold" style={{ color: "var(--cog-gold)" }}>
               ${headline.yearly.toLocaleString()} / year
             </span>
             {" "}recurring cash — direct into your account, every month, for as long as they stay.
@@ -218,21 +218,21 @@ const EarnPage = () => {
       <div
         className="rounded-2xl mb-3"
         style={{
-          backgroundColor: "#FFFFFF",
-          border: "1.5px solid rgba(181,147,90,0.30)",
+          backgroundColor: "var(--cog-cream-light)",
+          border: "1.5px solid rgba(184,149,58,0.30)",
           boxShadow: "0 2px 12px rgba(0,0,0,0.05)",
           overflow: "hidden",
         }}
       >
         <div className="px-4 pt-3 pb-1">
-          <p className="text-[0.75rem] font-medium uppercase tracking-wide" style={{ color: "#999" }}>
+          <p className="text-[0.75rem] font-medium uppercase tracking-wide" style={{ color: "var(--cog-muted)" }}>
             Your referral link
           </p>
         </div>
         <div className="flex items-center gap-2 px-4 pb-3">
           <p
             className="flex-1 text-[0.9375rem] font-medium truncate"
-            style={{ color: referralLink ? "#1A1A1A" : "#999", fontFamily: "monospace" }}
+            style={{ color: referralLink ? "var(--cog-charcoal)" : "var(--cog-muted)", fontFamily: "monospace" }}
           >
             {referralLink ?? "Generating your link…"}
           </p>
@@ -241,9 +241,9 @@ const EarnPage = () => {
             disabled={!fullLink}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-50"
             style={{
-              backgroundColor: copied ? "rgba(181,147,90,0.12)" : "rgba(0,0,0,0.04)",
-              color: copied ? "#B5935A" : "#666",
-              border: copied ? "1px solid rgba(181,147,90,0.25)" : "1px solid transparent",
+              backgroundColor: copied ? "rgba(184,149,58,0.12)" : "rgba(0,0,0,0.04)",
+              color: copied ? "var(--cog-gold)" : "var(--cog-warm-gray)",
+              border: copied ? "1px solid rgba(184,149,58,0.25)" : "1px solid transparent",
             }}
             aria-label="Copy referral link"
           >
@@ -259,9 +259,9 @@ const EarnPage = () => {
         disabled={!fullLink}
         className="w-full mb-4 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[0.9375rem] font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
         style={{
-          backgroundColor: "rgba(181,147,90,0.12)",
-          color: "#B5935A",
-          border: "1px solid rgba(181,147,90,0.30)",
+          backgroundColor: "rgba(184,149,58,0.12)",
+          color: "var(--cog-gold)",
+          border: "1px solid rgba(184,149,58,0.30)",
         }}
         aria-label="Share my referral link"
       >
@@ -270,7 +270,7 @@ const EarnPage = () => {
       </button>
 
       {/* Rules summary */}
-      <p className="text-[0.75rem] text-center mb-6" style={{ color: "#999" }}>
+      <p className="text-[0.75rem] text-center mb-6" style={{ color: "var(--cog-muted)" }}>
         Direct referrals only · 30-day payout hold · Payouts begin when referral goes Pro
       </p>
 
@@ -282,7 +282,7 @@ const EarnPage = () => {
       <button
         onClick={handleContinue}
         className="text-sm text-center w-full py-4 transition-opacity hover:opacity-70 underline"
-        style={{ color: "#999", fontFamily: "var(--font-body)" }}
+        style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
       >
         Skip for now
       </button>

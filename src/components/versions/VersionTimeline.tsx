@@ -1,8 +1,8 @@
 import { History, RotateCcw, ShieldCheck } from "lucide-react";
-import type { SongVersion } from "@/types";
+import type { SongVersion } from "@/integrations/cog/versions";
 import type { SongMember } from "@/integrations/cog/members";
 import { parseSnapshot, summarizeSnapshot } from "@/integrations/cog/versions";
-import { relativeTime } from "@/lib/notes/relativeTime";
+import { relativeTime } from "./relativeTime";
 
 /**
  * The snapshot timeline (E3): versions newest-first down a warm gold spine.

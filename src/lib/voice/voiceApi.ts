@@ -14,7 +14,12 @@ export interface VoiceMemoRecord {
   song_id: string;
   title: string;
   duration_ms: number;
+  /** Real section id when the memo is attached to a lyric section (PV-05). */
+  section_id: string | null;
+  /** Resolved section name (e.g. "Verse 1") — never a placeholder string. */
   section_label: string | null;
+  /** Persisted real-audio peaks (0–1). Null only on legacy rows → seed fallback. */
+  waveform_peaks: number[] | null;
   storage_path: string;
   created_at: string;
   created_by: string;
@@ -32,13 +37,26 @@ const PROCESSING_STATUSES = new Set<VoiceMemoRow["status"]>([
   "uploaded",
 ]);
 
-function toVoiceMemoRecord(row: VoiceMemoRow): VoiceMemoRecord {
+/** Row shape when the memo list embeds its linked section (for the real name). */
+type VoiceMemoRowWithSection = VoiceMemoRow & {
+  song_sections?: { label: string | null } | null;
+};
+
+function toVoiceMemoRecord(row: VoiceMemoRowWithSection): VoiceMemoRecord {
   return {
     id: row.id,
     song_id: row.song_id,
     title: row.title ?? "Voice memo",
     duration_ms: row.duration_ms ?? 0,
-    section_label: row.section_id ? "Linked section" : "Raw idea",
+    section_id: row.section_id,
+    // Resolve the REAL section name from the embedded row — a memo attached to
+    // "Verse 1" reads "Verse 1", never a "Linked section" placeholder.
+    section_label: row.section_id
+      ? row.song_sections?.label ?? null
+      : "Raw idea",
+    waveform_peaks: Array.isArray(row.waveform_peaks)
+      ? (row.waveform_peaks as number[])
+      : null,
     storage_path: row.storage_path,
     created_at: row.created_at,
     created_by: "Contributor",
@@ -63,6 +81,8 @@ export async function getUploadUrl(params: {
   parentMemoId?: string;
   /** Dedupes a double-tapped "Save layer" so it never creates two memos. */
   idempotencyKey?: string;
+  /** Real lyric section this memo is attached to (PV-05). */
+  sectionId?: string | null;
 }): Promise<UploadUrlResult> {
   const { data, error } = await supabase.functions.invoke("voice-memo-upload-url", {
     body: {
@@ -73,6 +93,7 @@ export async function getUploadUrl(params: {
       file_name: params.fileName,
       parent_memo_id: params.parentMemoId,
       idempotency_key: params.idempotencyKey,
+      section_id: params.sectionId ?? null,
     },
   });
   if (error) throw new Error(error.message);
@@ -98,12 +119,15 @@ export async function finalizeMemo(params: {
   memoId: string;
   byteSize: number;
   durationMs: number;
+  /** Real-audio peaks computed at capture — persisted for every card/player. */
+  waveformPeaks?: number[] | null;
 }): Promise<void> {
   const { error } = await supabase.functions.invoke("voice-memo-finalize", {
     body: {
       memo_id: params.memoId,
       actual_byte_size: params.byteSize,
       duration_ms: params.durationMs,
+      waveform_peaks: params.waveformPeaks ?? undefined,
     },
   });
   if (error) throw new Error(error.message);
@@ -138,11 +162,11 @@ export async function transcribeMemo(memoId: string): Promise<void> {
 export async function listVoiceMemos(songId: string): Promise<VoiceMemoRecord[]> {
   const { data, error } = await supabase
     .from("voice_memos")
-    .select("*")
+    .select("*, song_sections(label)")
     .eq("song_id", songId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []).map(toVoiceMemoRecord);
+  return ((data ?? []) as VoiceMemoRowWithSection[]).map(toVoiceMemoRecord);
 }
 
 /** Complete upload: getUploadUrl + upload blob + finalize in sequence */
@@ -159,6 +183,10 @@ export async function uploadVoiceMemo(params: {
   parentMemoId?: string;
   /** Stable key per save attempt; prevents duplicate layers on double-tap. */
   idempotencyKey?: string;
+  /** Real lyric section this memo attaches to (PV-05). */
+  sectionId?: string | null;
+  /** Real-audio peaks computed at capture (waveformPeaks module). */
+  waveformPeaks?: number[] | null;
 }): Promise<string> {
   const byteSize = params.blob.size;
 
@@ -170,6 +198,7 @@ export async function uploadVoiceMemo(params: {
     fileName: params.fileName,
     parentMemoId: params.parentMemoId,
     idempotencyKey: params.idempotencyKey,
+    sectionId: params.sectionId,
   });
 
   await uploadBlob(uploadUrl, params.blob, params.mimeType);
@@ -178,6 +207,7 @@ export async function uploadVoiceMemo(params: {
     memoId,
     byteSize,
     durationMs: params.durationMs,
+    waveformPeaks: params.waveformPeaks,
   });
 
   return memoId;

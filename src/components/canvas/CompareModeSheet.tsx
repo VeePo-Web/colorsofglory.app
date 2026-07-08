@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GitCompare, Pause, Play, X } from "lucide-react";
-import type { CanvasCard } from "./SongCanvasExperience";
+import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CompareModeSheetProps {
   /** Exactly two canvas cards to compare. */
-  cards: [CanvasCard, CanvasCard];
+  cards: [CanvasBoardCard, CanvasBoardCard];
+  /** Card currently auditioning through the shared canvas audio (useCompareMode). */
+  playingId: string | null;
+  /** Real A/B audition toggle — one take at a time, never overlapping. */
+  onTogglePlay: (cardId: string) => void;
   /** Called with the winning card id when the songwriter chooses a direction. */
   onChoose: (winnerId: string) => void;
   /** Called when the songwriter keeps both ideas active. */
@@ -18,7 +22,7 @@ interface CompareModeSheetProps {
 // ─── Idea card view ───────────────────────────────────────────────────────────
 
 interface IdeaCardViewProps {
-  card: CanvasCard;
+  card: CanvasBoardCard;
   label: string;
   isPlaying: boolean;
   isSelected: boolean;
@@ -197,12 +201,19 @@ const IdeaCardView = ({
 
 // ─── Compare mode sheet ───────────────────────────────────────────────────────
 
-const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeSheetProps) => {
+const CompareModeSheet = ({
+  cards,
+  playingId,
+  onTogglePlay,
+  onChoose,
+  onKeepBoth,
+  onClose,
+}: CompareModeSheetProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [playingId, setPlayingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Idempotency: block double-tap on the CTA
   const decisionKeyRef = useRef<string | null>(null);
@@ -210,10 +221,6 @@ const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeS
   const section = cards[0].section || "Idea";
   const labelA = `${section} A`;
   const labelB = `${section} B`;
-
-  const togglePlay = useCallback((id: string) => {
-    setPlayingId((prev) => (prev === id ? null : id));
-  }, []);
 
   const handleChoose = useCallback(async () => {
     if (!selectedId || isSaving || decisionKeyRef.current) return;
@@ -250,13 +257,37 @@ const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeS
     }
   }, [isSaving, onKeepBoth, onClose]);
 
-  // Keyboard dismiss
+  // Focus management: move focus into the sheet on open, trap Tab within it,
+  // Escape to dismiss. Background stays inert behind the scrim + trap.
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    sheetRef.current?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !sheetRef.current) return;
+      const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === sheetRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      previouslyFocused?.focus?.();
+    };
   }, [onClose]);
 
   const statusText = isDone
@@ -282,6 +313,8 @@ const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeS
 
       {/* ── Sheet ────────────────────────────────────────────────────────── */}
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={`Compare ${section} ideas`}
@@ -380,7 +413,7 @@ const CompareModeSheet = ({ cards, onChoose, onKeepBoth, onClose }: CompareModeS
             label={labelA}
             isPlaying={playingId === cards[0].id}
             isSelected={selectedId === cards[0].id}
-            onTogglePlay={() => togglePlay(cards[0].id)}
+            onTogglePlay={() => onTogglePlay(cards[0].id)}
             onSelect={() =>
               setSelectedId((prev) => (prev === cards[0].id ? null : cards[0].id))
             }

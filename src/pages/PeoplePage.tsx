@@ -16,17 +16,15 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { copyTextToClipboard } from "@/lib/invite/clipboard";
 import { getAvatarColor, getAvatarInitials } from "@/lib/invite/inviteContext";
+import RolePicker from "@/components/roles/RolePicker";
+import { roleLabel } from "@/lib/invite/roles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// Two roles only — matches the DB enum (collaborator / viewer). Reviewer is
-// deferred until the backend adds the enum value.
+// Selectable invite roles today = the DB enum (collaborator→contributor /
+// viewer). Reviewer is shown coming-soon by RolePicker. All labels + copy come
+// from the single canonical ROLE_DISPLAY map (no local role strings here).
 type InviteRole = "viewer" | "contributor";
-
-const ROLE_DETAILS: Record<InviteRole, { label: string; desc: string }> = {
-  viewer:      { label: "Viewer",      desc: "Can listen and read." },
-  contributor: { label: "Contributor", desc: "Can add lyrics, memos, comments, and ideas." },
-};
 
 // ─── Contact validation ────────────────────────────────────────────────────────
 
@@ -49,44 +47,6 @@ interface Collab {
   avatarColor: string;
   avatarInitials: string;
 }
-
-// ─── Role selection card ─────────────────────────────────────────────────────
-
-const RoleCard = ({
-  role,
-  selected,
-  onSelect,
-}: {
-  role: InviteRole;
-  selected: boolean;
-  onSelect: () => void;
-}) => {
-  const { label, desc } = ROLE_DETAILS[role];
-  return (
-    <button
-      onClick={onSelect}
-      className="flex-1 rounded-2xl p-4 text-left transition-all duration-150 active:scale-[0.97]"
-      style={{
-        backgroundColor: selected ? "rgba(181,147,90,0.06)" : "#FFFFFF",
-        border: selected ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.08)",
-        boxShadow: selected
-          ? "0 0 0 3px rgba(181,147,90,0.12), 0 2px 12px rgba(0,0,0,0.06)"
-          : "0 2px 8px rgba(0,0,0,0.05)",
-      }}
-      aria-pressed={selected}
-    >
-      <p
-        className="text-[0.9375rem] font-semibold mb-1"
-        style={{ color: selected ? "#B5935A" : "#1A1A1A", fontFamily: "var(--font-body)" }}
-      >
-        {label}
-      </p>
-      <p className="text-[0.75rem] leading-snug" style={{ color: "#666" }}>
-        {desc}
-      </p>
-    </button>
-  );
-};
 
 // ─── Generated link panel ────────────────────────────────────────────────────
 
@@ -169,7 +129,7 @@ const GeneratedLinkPanel = ({
           border: "1px solid rgba(181,147,90,0.25)",
         }}
       >
-        {ROLE_DETAILS[invite.assignedRole as InviteRole]?.label ?? invite.assignedRole}
+        {roleLabel(invite.assignedRole)}
       </span>
 
       {/* URL display */}
@@ -484,16 +444,15 @@ const PeoplePage = () => {
             </div>
           ) : (
             <>
-              {/* Role cards */}
-              <div className="flex gap-2 mb-5">
-                {(["viewer", "contributor"] as InviteRole[]).map((r) => (
-                  <RoleCard
-                    key={r}
-                    role={r}
-                    selected={selectedRole === r}
-                    onSelect={() => { setSelectedRole(r); setGeneratedInvite(null); }}
-                  />
-                ))}
+              {/* Role selection — E1's canonical RolePicker (one selector shared
+                  by People + invite). Shows Viewer / Contributor selectable and
+                  Reviewer as a coming-soon card, so the owner sees the full,
+                  in-control role picture. Labels come from ROLE_DISPLAY. */}
+              <div className="mb-5">
+                <RolePicker
+                  value={selectedRole}
+                  onChange={(r) => { setSelectedRole(r as InviteRole); setGeneratedInvite(null); }}
+                />
               </div>
 
               {/* Contact input */}

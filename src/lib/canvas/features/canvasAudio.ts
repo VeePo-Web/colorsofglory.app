@@ -1,0 +1,96 @@
+import { getPlaybackUrl } from "@/integrations/cog/memos";
+
+/**
+ * canvasAudio — the ONE audio element for canvas feature playback.
+ *
+ * Listen Path (F20) and Compare Mode (F21) both audition takes through this
+ * singleton, so starting one always silences the other and nothing on the
+ * canvas can double-play. Signed URLs are short-lived; they're cached briefly
+ * and re-fetched past the TTL.
+ */
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a canvas card id to a playable voice-memo id.
+ * DB-hydrated cards are `db-voice-<memoId>`; freshly flushed uploads carry the
+ * raw memo uuid. Mock/local ids (no backing audio) resolve to null.
+ */
+export function memoIdForCard(cardId: string): string | null {
+  if (cardId.startsWith("db-voice-")) {
+    const id = cardId.slice("db-voice-".length);
+    return UUID_RE.test(id) ? id : null;
+  }
+  return UUID_RE.test(cardId) ? cardId : null;
+}
+
+const URL_TTL_MS = 4 * 60 * 1000;
+const urlCache = new Map<string, { url: string; fetchedAt: number }>();
+
+let el: HTMLAudioElement | null = null;
+let playToken = 0;
+
+function element(): HTMLAudioElement {
+  if (!el) {
+    el = new Audio();
+    el.preload = "auto";
+  }
+  return el;
+}
+
+/** Hard stop: silence + drop the current source. Invalidates in-flight plays. */
+export function stopCanvasAudio(): void {
+  playToken++;
+  if (el) {
+    el.pause();
+    el.removeAttribute("src");
+  }
+}
+
+/** Pause without dropping the source. Invalidates in-flight plays. */
+export function pauseCanvasAudio(): void {
+  playToken++;
+  el?.pause();
+}
+
+export interface CanvasPlayHandlers {
+  onEnded?: () => void;
+  onError?: () => void;
+}
+
+/**
+ * Play a memo through the shared element. Any previous canvas playback stops
+ * first. Resolves true if this request is still the active one after start.
+ */
+export async function playMemoOnCanvas(
+  memoId: string,
+  handlers: CanvasPlayHandlers = {},
+): Promise<boolean> {
+  const token = ++playToken;
+  const audio = element();
+  audio.pause();
+  try {
+    let url: string;
+    const cached = urlCache.get(memoId);
+    if (cached && Date.now() - cached.fetchedAt < URL_TTL_MS) {
+      url = cached.url;
+    } else {
+      url = await getPlaybackUrl(memoId);
+      urlCache.set(memoId, { url, fetchedAt: Date.now() });
+    }
+    if (token !== playToken) return false;
+    audio.src = url;
+    audio.onended = () => {
+      if (token === playToken) handlers.onEnded?.();
+    };
+    audio.onerror = () => {
+      if (token === playToken) handlers.onError?.();
+    };
+    await audio.play();
+    return token === playToken;
+  } catch {
+    if (token === playToken) handlers.onError?.();
+    return false;
+  }
+}
