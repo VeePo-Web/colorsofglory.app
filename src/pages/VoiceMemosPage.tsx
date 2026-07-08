@@ -21,14 +21,17 @@ import {
   getBestMimeType,
 } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
+import { saveMemoDurable } from "@/lib/voice/saveMemo";
 import {
-  enqueuePendingUpload,
-  flushPendingUpload,
-  listPendingUploads,
-  discardPendingUpload,
-} from "@/lib/voice/pendingUploads";
+  subscribeOutbox,
+  listOutboxJobs,
+  retryOutboxJob,
+  discardOutboxJob,
+} from "@/lib/voice/captureOutbox";
 import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";
+import { resamplePeaks } from "@/lib/audio/waveformPeaks";
+import TakeMiniPlayer from "@/components/voice/TakeMiniPlayer";
 import { supabase } from "@/integrations/supabase/client";
 
 // ─── Playable memo card ───────────────────────────────────────────────────────
@@ -40,6 +43,8 @@ interface MemoCardProps {
   onRetry?: (id: string) => void;
   /** Permanently discard a failed take. */
   onDiscardFailed?: (id: string) => void;
+  /** Open the take mini-player — swipe between this memo's versions (F15). */
+  onOpenTakes?: (memo: VoiceMemoRecord) => void;
 }
 
 const WAVEFORM_BARS = 28;
@@ -64,7 +69,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
-const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) => {
+const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed, onOpenTakes }: MemoCardProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -74,7 +79,11 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
 
   const [hasLocal, setHasLocal] = useState(false);
 
-  const bars = generateWaveform(memo.id, WAVEFORM_BARS);
+  // Real persisted peaks whenever they exist; the ID-seeded shape is a fallback
+  // for legacy rows with null peaks ONLY (Law 3: real audio, never fake).
+  const bars = memo.waveform_peaks?.length
+    ? resamplePeaks(memo.waveform_peaks, WAVEFORM_BARS)
+    : generateWaveform(memo.id, WAVEFORM_BARS);
   const statusMeta = STATUS_LABELS[memo.status ?? "ready"] ?? STATUS_LABELS.ready;
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
@@ -291,6 +300,20 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed }: MemoCardProps) =
                   padding: "4px 0", minWidth: 120,
                 }}
               >
+                {isReady && onOpenTakes && (
+                  <button
+                    type="button"
+                    onClick={() => { onOpenTakes(memo); setShowMenu(false); }}
+                    style={{
+                      display: "block", width: "100%", padding: "9px 14px",
+                      textAlign: "left", fontFamily: "var(--font-body)",
+                      fontSize: 13, color: "var(--cog-charcoal)",
+                      backgroundColor: "transparent", border: "none", cursor: "pointer",
+                    }}
+                  >
+                    Takes
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -421,6 +444,9 @@ const VoiceMemosPage = () => {
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
   const memoCountRef = useRef(0);
 
+  // Take mini-player (F15) — swipe between a memo's versions.
+  const [takesMemo, setTakesMemo] = useState<VoiceMemoRecord | null>(null);
+
   // A take that auto-finalized (call, Bluetooth swap, tab hidden, length ceiling)
   // must still reach review — otherwise an interrupted in-song idea is salvaged by
   // the recorder but silently lost from the flow. Surface it; the review sheet
@@ -454,87 +480,57 @@ const VoiceMemosPage = () => {
     loadMemos();
   }, [loadMemos]);
 
-  // Flush a queued take and reconcile the UI. On success the optimistic/failed
-  // card is replaced by the real DB record; on failure the card stays put as a
-  // calm "Save failed — Retry", because the take itself is safe in the cache.
-  const flushAndReconcile = useCallback(
-    async (pendingId: string) => {
-      try {
-        await flushPendingUpload(pendingId);
-        setMemos((prev) => prev.filter((m) => m.id !== pendingId));
-        const real = await listVoiceMemos(songId);
-        setMemos(real);
+  // Reconcile optimistic cards as the Capture Outbox syncs them. Success swaps
+  // the card for the real DB record; failure flips it to a calm retriable card
+  // — the take itself has been safe in the device cache the whole time.
+  useEffect(() => {
+    const unsubscribe = subscribeOutbox((event) => {
+      if (event.type === "change") return;
+      if (event.songId !== songId) return;
+      if (event.type === "success") {
+        setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
+        void loadMemos();
         setUploadError(null);
-      } catch {
-        // The blob is still safe on the device — surface a retriable card, not a
-        // dead end. The creed holds: a captured idea is never lost. Re-derive the
-        // card from the durable store so a concurrent server reload that replaced
-        // the memo list can never make the failed take invisible.
-        const rows = await listPendingUploads(songId);
-        const row = rows.find((r) => r.id === pendingId);
-        setMemos((prev) => {
-          if (prev.some((m) => m.id === pendingId)) {
-            return prev.map((m) =>
-              m.id === pendingId ? { ...m, is_processing: false, status: "failed" } : m,
-            );
-          }
-          if (!row) return prev;
-          const card: VoiceMemoRecord = {
-            id: row.id,
-            song_id: row.songId,
-            title: row.title,
-            duration_ms: row.durationMs,
-            section_label: row.sectionLabel,
-            storage_path: "",
-            created_at: row.createdAt,
-            created_by: "You",
-            is_processing: false,
-            status: "failed",
-          };
-          return [card, ...prev];
-        });
+      } else if (!event.willRetry) {
+        setMemos((prev) =>
+          prev.map((m) =>
+            m.id === event.outboxId ? { ...m, is_processing: false, status: "failed" } : m,
+          ),
+        );
         setUploadError("Your recording is safe. Tap Retry on the memo to finish saving.");
       }
-    },
-    [songId],
-  );
+    });
+    return unsubscribe;
+  }, [songId, loadMemos]);
 
-  // Recovery sweep: a take whose upload was interrupted last session (tab closed,
-  // app killed, network died) is still safe in the cache. Surface each as a
-  // retriable card, then quietly attempt one auto-retry — a reconnected device
-  // heals itself without the songwriter lifting a finger.
+  // Recovery sweep: takes whose upload was interrupted last session (tab
+  // closed, app killed, network died) are still queued in the outbox with their
+  // blobs cached. Surface each as a card; the outbox retries them on its own
+  // (load, `online`, heartbeat) — a reconnected device heals itself.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const orphans = await listPendingUploads(songId);
-      if (cancelled || orphans.length === 0) return;
-      setMemos((prev) => {
-        const known = new Set(prev.map((m) => m.id));
-        const cards: VoiceMemoRecord[] = orphans
-          .filter((o) => !known.has(o.id))
-          .map((o) => ({
-            id: o.id,
-            song_id: o.songId,
-            title: o.title,
-            duration_ms: o.durationMs,
-            section_label: o.sectionLabel,
-            storage_path: "",
-            created_at: o.createdAt,
-            created_by: "You",
-            is_processing: true,
-            status: "uploading",
-          }));
-        return cards.length ? [...cards, ...prev] : prev;
-      });
-      for (const orphan of orphans) {
-        if (cancelled) return;
-        await flushAndReconcile(orphan.id);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [songId, flushAndReconcile]);
+    const orphans = listOutboxJobs(songId);
+    if (orphans.length === 0) return;
+    setMemos((prev) => {
+      const known = new Set(prev.map((m) => m.id));
+      const cards: VoiceMemoRecord[] = orphans
+        .filter((o) => !known.has(o.id))
+        .map((o) => ({
+          id: o.id,
+          song_id: o.songId,
+          title: o.title,
+          duration_ms: o.durationMs,
+          section_id: (o.extra?.sectionId as string | undefined) ?? null,
+          section_label: o.sectionLabel,
+          waveform_peaks: (o.extra?.waveformPeaks as number[] | undefined) ?? null,
+          storage_path: "",
+          created_at: o.createdAt,
+          created_by: "You",
+          is_processing: o.status !== "failed",
+          status: o.status === "failed" ? "failed" : "uploading",
+        }));
+      return cards.length ? [...cards, ...prev] : prev;
+    });
+  }, [songId]);
 
   // Wire current user name to memos
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -580,10 +576,9 @@ const VoiceMemosPage = () => {
     memoCountRef.current++;
     const title = name.trim() || defaultCaptureName();
 
-    // Local-first: write the blob to the device BEFORE any network call. From
-    // here on the take cannot be lost — not by a dropped upload, not by the tab
-    // closing a second later. The optimistic card is keyed to the durable id.
-    const pending = await enqueuePendingUpload({
+    // The one canonical save: blob → device cache BEFORE any network call →
+    // outbox retries on reconnect. Real peaks computed once, in the same call.
+    const { optimistic } = await saveMemoDurable({
       blob: pendingRecording.blob,
       songId,
       mimeType: pendingRecording.mimeType,
@@ -591,47 +586,31 @@ const VoiceMemosPage = () => {
       title,
       sectionLabel: section,
       transcribe,
+      createdBy: currentUserId ?? "You",
     });
 
-    const optimisticMemo: VoiceMemoRecord = {
-      id: pending.id,
-      song_id: songId,
-      title,
-      duration_ms: pendingRecording.durationMs,
-      section_label: section,
-      storage_path: "",
-      created_at: new Date().toISOString(),
-      created_by: currentUserId ?? "You",
-      is_processing: true,
-      status: "uploading",
-    };
-    setMemos((prev) => [optimisticMemo, ...prev]);
+    setMemos((prev) => [optimistic, ...prev]);
     setFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
-
-    await flushAndReconcile(pending.id);
-  }, [pendingRecording, songId, currentUserId, flushAndReconcile]);
+  }, [pendingRecording, songId, currentUserId]);
 
   // Retry a take whose upload failed — the blob has been waiting safely in the
   // cache the whole time.
-  const handleRetryMemo = useCallback(
-    async (pendingId: string) => {
-      setUploadError(null);
-      setMemos((prev) =>
-        prev.map((m) =>
-          m.id === pendingId ? { ...m, is_processing: true, status: "uploading" } : m,
-        ),
-      );
-      await flushAndReconcile(pendingId);
-    },
-    [flushAndReconcile],
-  );
+  const handleRetryMemo = useCallback(async (outboxId: string) => {
+    setUploadError(null);
+    setMemos((prev) =>
+      prev.map((m) =>
+        m.id === outboxId ? { ...m, is_processing: true, status: "uploading" } : m,
+      ),
+    );
+    await retryOutboxJob(outboxId);
+  }, []);
 
   // Discard a failed take for good — removes the cached blob and the card.
-  const handleDiscardFailed = useCallback(async (pendingId: string) => {
-    await discardPendingUpload(pendingId);
-    setMemos((prev) => prev.filter((m) => m.id !== pendingId));
+  const handleDiscardFailed = useCallback(async (outboxId: string) => {
+    await discardOutboxJob(outboxId);
+    setMemos((prev) => prev.filter((m) => m.id !== outboxId));
     setUploadError(null);
   }, []);
 
@@ -646,34 +625,20 @@ const VoiceMemosPage = () => {
       const mimeType = file.type || getBestMimeType();
       const title = file.name.replace(/\.[^.]+$/, "") || defaultCaptureName();
 
-      // Local-first, just like a recorded take: the imported file is cached to the
-      // device before any upload and retried on failure, so no save path is left
-      // unprotected. An optimistic card appears immediately, keyed to the durable
-      // pending id, and a failed upload becomes a calm retry instead of a dead end.
-      const pending = await enqueuePendingUpload({
+      // Imports ride the same canonical path as recorded takes: cache-first,
+      // auto-retry, real peaks. Downstream, an imported memo is
+      // indistinguishable from a recorded one (F11).
+      const { optimistic } = await saveMemoDurable({
         blob: file,
         songId,
         mimeType,
         durationMs,
         title,
         sectionLabel: "Raw idea",
+        fileName: file.name,
+        createdBy: currentUserId ?? "You",
       });
-
-      const optimisticMemo: VoiceMemoRecord = {
-        id: pending.id,
-        song_id: songId,
-        title,
-        duration_ms: durationMs,
-        section_label: "Raw idea",
-        storage_path: "",
-        created_at: new Date().toISOString(),
-        created_by: currentUserId ?? "You",
-        is_processing: true,
-        status: "uploading",
-      };
-      setMemos((prev) => [optimisticMemo, ...prev]);
-
-      await flushAndReconcile(pending.id);
+      setMemos((prev) => [optimistic, ...prev]);
     } catch {
       // Reading the file itself failed (corrupt / unsupported) — nothing was
       // captured, so there's nothing to retain. Guide the user, calmly.
@@ -681,7 +646,7 @@ const VoiceMemosPage = () => {
     } finally {
       setIsUploading(false);
     }
-  }, [songId, memos.length, currentUserId, flushAndReconcile]);
+  }, [songId, currentUserId]);
 
   const handleDelete = useCallback(async (memoId: string) => {
     setMemos((prev) => prev.filter((m) => m.id !== memoId));
@@ -843,6 +808,7 @@ const VoiceMemosPage = () => {
                       onDelete={handleDelete}
                       onRetry={handleRetryMemo}
                       onDiscardFailed={handleDiscardFailed}
+                      onOpenTakes={setTakesMemo}
                     />
                   ))}
                 </div>
@@ -885,6 +851,17 @@ const VoiceMemosPage = () => {
       </div>
 
       <SongTabBar activeTab="voice" />
+
+      {/* Take mini-player — versions of one memo (F15). Distinct from the
+          layered stack (F16) and from F2's practice global mini-player. */}
+      {takesMemo && (
+        <TakeMiniPlayer
+          memoId={takesMemo.id}
+          memoTitle={takesMemo.title}
+          fallbackPeaks={takesMemo.waveform_peaks}
+          onClose={() => setTakesMemo(null)}
+        />
+      )}
 
       {/* Recording sheet */}
       {(flow === "recording" || recorderState.phase === "permission-denied") && (

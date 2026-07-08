@@ -67,6 +67,8 @@ export type OutboxUploader = (job: OutboxJob, blob: Blob) => Promise<string>;
 const DEFAULT_UPLOADER_KEY = "voiceApi";
 const uploaders: Record<string, OutboxUploader> = {
   // The default in-song pipeline (recorded takes + file imports on the Voice tab).
+  // Real-audio peaks + the real section id ride in the serializable `extra` so
+  // they survive a reload and persist on retry too.
   [DEFAULT_UPLOADER_KEY]: (job, blob) =>
     uploadVoiceMemo({
       songId: job.songId,
@@ -79,6 +81,8 @@ const uploaders: Record<string, OutboxUploader> = {
       parentMemoId: job.parentMemoId,
       fileName: job.fileName,
       idempotencyKey: job.idempotencyKey,
+      sectionId: (job.extra?.sectionId as string | undefined) ?? null,
+      waveformPeaks: (job.extra?.waveformPeaks as number[] | undefined) ?? null,
     }),
 };
 
@@ -168,6 +172,22 @@ export function subscribeOutbox(listener: Listener): () => void {
 /** How many takes are still waiting to sync. */
 export function pendingCount(): number {
   return readIndex().length;
+}
+
+/**
+ * The queued/failed jobs for one song, newest first — what a surface renders as
+ * optimistic "still saving" cards after a reload (the recovery sweep).
+ */
+export function listOutboxJobs(songId: string): OutboxJob[] {
+  return readIndex()
+    .filter((j) => j.songId === songId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/** User-driven retry of ONE parked take (resets its attempt counter). */
+export async function retryOutboxJob(id: string): Promise<void> {
+  writeIndex(readIndex().map((j) => (j.id === id ? { ...j, status: "queued" as const, attempts: 0 } : j)));
+  await processJob(id);
 }
 
 function ensureWired(): void {

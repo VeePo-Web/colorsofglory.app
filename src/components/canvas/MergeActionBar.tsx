@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import type { CanvasCard } from "./SongCanvasExperience";
+import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
 
 interface MergeActionBarProps {
   selection: string[];
-  cards: CanvasCard[];
+  cards: CanvasBoardCard[];
   onRemove: (id: string) => void;
   onMerge: () => void;
   onClear: () => void;
@@ -12,6 +13,7 @@ interface MergeActionBarProps {
 
 const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeActionBarProps) => {
   const [visible, setVisible] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(selection.length > 0));
@@ -22,7 +24,7 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
 
   const selectedCards = selection
     .map((id) => cards.find((c) => c.id === id))
-    .filter(Boolean) as CanvasCard[];
+    .filter(Boolean) as CanvasBoardCard[];
   const canMerge = selection.length === 2;
 
   return (
@@ -40,7 +42,7 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
         boxShadow: "0 -8px 32px rgba(0,0,0,0.12)",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)",
         transform: visible && selection.length > 0 ? "translateY(0)" : "translateY(100%)",
-        transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transition: reducedMotion ? "none" : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
       {/* Drag handle */}

@@ -2,7 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { Play, Pause, MoreHorizontal } from "lucide-react";
 import type { VoiceMemoRecord } from "@/lib/voice/voiceApi";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
-import { generateWaveform, VOICE_BAR_COUNT, MAX_BAR_HEIGHT, BAR_WIDTH, BAR_GAP } from "@/lib/canvas/waveformSeed";
+import { generateWaveform } from "@/lib/canvas/waveformSeed";
+import { resamplePeaks } from "@/lib/audio/waveformPeaks";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { audioCache } from "@/lib/voice/audioCache";
@@ -20,7 +21,10 @@ const MINI_BAR_MAX_H = 12;
 const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoListItemProps) => {
   const color = getCreatorColor(creatorName);
   const initials = getCreatorInitials(creatorName);
-  const bars = generateWaveform(memo.id, MINI_BAR_COUNT);
+  // Real persisted peaks when present; ID-seeded shape only for legacy rows.
+  const bars = memo.waveform_peaks?.length
+    ? resamplePeaks(memo.waveform_peaks, MINI_BAR_COUNT)
+    : generateWaveform(memo.id, MINI_BAR_COUNT);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);

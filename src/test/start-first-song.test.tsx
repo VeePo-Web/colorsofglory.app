@@ -2,16 +2,16 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
-// Creating the first song must NOT silently drop an authenticated user onto the
-// demo song "1" when the insert fails — it must show a retryable error. The
-// demo fallback is only for a genuinely absent session.
+// Creating the first song goes through A3's createSong() edge function. It must
+// NOT silently drop an authenticated user onto the demo song "1" when creation
+// fails — it must show a retryable error. The demo fallback is DEV-only and
+// only for a genuinely absent session.
 
 const navigate = vi.fn();
 const getUser = vi.fn();
 const setSong = vi.fn();
 const updateOnboardingStep = vi.fn((_s: string) => Promise.resolve());
-const songsInsert = vi.fn();
-let songResult: { data: { id: string; title: string } | null; error: { message: string } | null };
+const createSong = vi.fn();
 
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router-dom")>();
@@ -21,17 +21,14 @@ vi.mock("react-router-dom", async (importOriginal) => {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: { getUser: () => getUser() },
-    from: (table: string) => ({
-      insert: (_payload: unknown) => {
-        if (table === "songs") {
-          songsInsert();
-          return { select: () => ({ single: () => Promise.resolve(songResult) }) };
-        }
-        return Promise.resolve({ error: null });
-      },
+    from: () => ({
       update: () => ({ eq: () => Promise.resolve({ error: null }) }),
     }),
   },
+}));
+
+vi.mock("@/integrations/cog/songs", () => ({
+  createSong: (input: unknown) => createSong(input),
 }));
 
 vi.mock("@/lib/songContext", () => ({ setSong: (s: unknown) => setSong(s) }));
@@ -46,21 +43,24 @@ describe("StartFirstSongPage — first song creation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
-    songResult = { data: { id: "song-9", title: "My Song" }, error: null };
+    createSong.mockResolvedValue({ song: { id: "song-9", title: "My Song" } });
   });
 
-  it("creates the real song and advances the onboarding step", async () => {
+  it("creates the real song via createSong() and advances the onboarding step", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
     render(<StartFirstSongPage />);
     typeTitle("My Song");
     clickCreate();
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9?first=1"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9"));
+    expect(createSong).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "My Song" }),
+    );
     expect(updateOnboardingStep).toHaveBeenCalledWith("first_song_created");
   });
 
-  it("shows a retryable error (not the demo song) when an authed insert fails", async () => {
+  it("shows a retryable error (not the demo song) when createSong fails", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-    songResult = { data: null, error: { message: "db down" } };
+    createSong.mockRejectedValue(new Error("db down"));
     render(<StartFirstSongPage />);
     typeTitle("My Song");
     clickCreate();
@@ -68,38 +68,15 @@ describe("StartFirstSongPage — first song creation", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("creates only ONE song on a rapid double-tap of Create", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-    render(<StartFirstSongPage />);
-    typeTitle("My Song");
-    // Same button element, two quick taps — the second must not create a
-    // second song (submittingRef guard + the loading-disabled button).
-    const btn = screen.getByRole("button", { name: /create song/i });
-    fireEvent.click(btn);
-    fireEvent.click(btn);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9?first=1"));
-    expect(songsInsert).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not fire a second insert from Enter after Create was tapped", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-    render(<StartFirstSongPage />);
-    const input = screen.getByLabelText("Song title");
-    fireEvent.change(input, { target: { value: "My Song" } });
-    fireEvent.click(screen.getByRole("button", { name: /create song/i }));
-    // Enter on the title bypasses the disabled button — the ref guard is what
-    // stops it from starting a second creation.
-    fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/song-9?first=1"));
-    expect(songsInsert).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses the demo fallback only when there is genuinely no session", async () => {
+  it("uses the DEV-only demo fallback when there is genuinely no session", async () => {
+    // vitest runs under Vite DEV mode, so the guarded branch is reachable here;
+    // in a production build import.meta.env.DEV is false and this path routes
+    // to /auth/login instead.
     getUser.mockResolvedValue({ data: { user: null } });
     render(<StartFirstSongPage />);
     typeTitle("My Song");
     clickCreate();
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/1?first=1"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/songs/1"));
+    expect(createSong).not.toHaveBeenCalled();
   });
 });

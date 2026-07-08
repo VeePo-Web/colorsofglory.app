@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Play, Pause, X } from "lucide-react";
-import type { CanvasCard } from "@/components/canvas/SongCanvasExperience";
+import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
 
 /**
  * ListenPathBar — fixed bottom bar for F20 Listen Path.
@@ -10,21 +11,39 @@ import { formatDuration } from "@/lib/voice/audioFormat";
  * Slides up from the bottom (rAF-deferred entry) whenever the queue has ≥ 1 card.
  * zIndex 700 — safely below StackSheet scrim (799) and sheet (800).
  *
- * Design: CapCut-grade horizontal chip row + simple prev/play-pause/next transport.
- * Every chip carries the contributor's color as a numbered circle badge (1-based).
+ * Presentation only: the playback state machine (real sequenced audio,
+ * auto-advance, dwell) lives in useListenPath — this bar is a controlled
+ * transport over that hook.
  */
 interface ListenPathBarProps {
   queue: string[];
-  cards: CanvasCard[];
+  cards: CanvasBoardCard[];
+  step: number;
+  playing: boolean;
+  onPlayPause: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onStepTo: (index: number) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
   onSave: () => void;
 }
 
-const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBarProps) => {
+const ListenPathBar = ({
+  queue,
+  cards,
+  step,
+  playing,
+  onPlayPause,
+  onPrev,
+  onNext,
+  onStepTo,
+  onRemove,
+  onClear,
+  onSave,
+}: ListenPathBarProps) => {
   const [visible, setVisible] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [step, setStep] = useState(0);
+  const reducedMotion = usePrefersReducedMotion();
 
   // Entry: defer one frame so CSS transition fires.
   useEffect(() => {
@@ -32,17 +51,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
     return () => cancelAnimationFrame(t);
   }, [queue.length]);
 
-  // Reset step when queue empties or changes length significantly.
-  useEffect(() => {
-    if (queue.length === 0) { setPlaying(false); setStep(0); }
-    else if (step >= queue.length) setStep(queue.length - 1);
-  }, [queue.length, step]);
-
   const cardMap = new Map(cards.map((c) => [c.id, c]));
-
-  const handlePrev = () => setStep((s) => Math.max(0, s - 1));
-  const handleNext = () => setStep((s) => Math.min(queue.length - 1, s + 1));
-  const togglePlay = () => setPlaying((p) => !p);
 
   if (queue.length === 0) return null;
 
@@ -62,7 +71,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
         borderRadius: "20px 20px 0 0",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
         transform: visible ? "translateY(0)" : "translateY(100%)",
-        transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transition: reducedMotion ? "none" : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
       {/* Drag handle */}
@@ -174,7 +183,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
               index={index}
               isActive={isActive}
               color={color}
-              onTap={() => setStep(index)}
+              onTap={() => onStepTo(index)}
               onRemove={() => onRemove(id)}
             />
           );
@@ -193,7 +202,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
       >
         <button
           type="button"
-          onClick={handlePrev}
+          onClick={onPrev}
           disabled={step === 0}
           style={{
             width: 44,
@@ -214,7 +223,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
 
         <button
           type="button"
-          onClick={togglePlay}
+          onClick={onPlayPause}
           style={{
             width: 52,
             height: 52,
@@ -237,7 +246,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
 
         <button
           type="button"
-          onClick={handleNext}
+          onClick={onNext}
           disabled={step === queue.length - 1}
           style={{
             width: 44,
@@ -265,7 +274,7 @@ const ListenPathBar = ({ queue, cards, onRemove, onClear, onSave }: ListenPathBa
 // ── Chip sub-component ────────────────────────────────────────────────────────
 
 interface ChipItemProps {
-  card: CanvasCard;
+  card: CanvasBoardCard;
   index: number;
   isActive: boolean;
   color: { base: string; glow: string };

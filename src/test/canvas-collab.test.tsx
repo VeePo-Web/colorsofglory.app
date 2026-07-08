@@ -3,18 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const listMembers = vi.fn();
-const getRecentActivity = vi.fn();
 const getActivitySince = vi.fn();
 const markSongSeen = vi.fn().mockResolvedValue(undefined);
 
-vi.mock("@/integrations/cog/members", () => ({
-  listMembers: (songId: string) => listMembers(songId),
-}));
-
 vi.mock("@/integrations/cog/activity", () => ({
-  getRecentActivity: (songId: string, limit?: number, offset?: number) =>
-    getRecentActivity(songId, limit, offset),
   getActivitySince: (songId: string, since: string | null) => getActivitySince(songId, since),
   markSongSeen: (songId: string) => markSongSeen(songId),
 }));
@@ -30,7 +22,6 @@ vi.mock("@/hooks/useCurrentAccount", () => ({
   }),
 }));
 
-import SongCanvasCollabLayers from "@/components/cog/SongCanvasCollabLayers";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
 
 const renderWithQuery = (ui: ReactElement) =>
@@ -41,18 +32,6 @@ const renderWithQuery = (ui: ReactElement) =>
       {ui}
     </QueryClientProvider>,
   );
-
-const member = (overrides: Record<string, unknown> = {}) => ({
-  user_id: "u-owner",
-  role: "owner",
-  joined_at: "2026-06-01T00:00:00.000Z",
-  display_name: "Naomi Grace",
-  first_name: "Naomi",
-  avatar_url: null,
-  avatar_color: "#53AB8B",
-  initials: "NG",
-  ...overrides,
-});
 
 const activityRow = (overrides: Record<string, unknown> = {}) => ({
   id: Math.random().toString(36).slice(2),
@@ -70,58 +49,6 @@ const activityRow = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-});
-
-describe("SongCanvasCollabLayers — real roster, no mock people", () => {
-  it("renders the actual members with real role labels", async () => {
-    listMembers.mockResolvedValue([
-      member(),
-      member({
-        user_id: "u-collab",
-        role: "collaborator",
-        display_name: "Levi Hart",
-        initials: "LH",
-        avatar_color: null,
-        joined_at: "2026-06-02T00:00:00.000Z",
-      }),
-    ]);
-    getRecentActivity.mockResolvedValue([]);
-
-    renderWithQuery(<SongCanvasCollabLayers activeLayer="people" songId="song1" />);
-
-    expect(await screen.findByText("Naomi Grace")).toBeInTheDocument();
-    expect(screen.getByText("Levi Hart")).toBeInTheDocument();
-    expect(screen.getByText("Owner")).toBeInTheDocument();
-    expect(screen.getByText("Contributor")).toBeInTheDocument();
-    expect(listMembers).toHaveBeenCalledWith("song1");
-    // The old hardcoded demo people are gone.
-    expect(screen.queryByText("Parker")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sarah M.")).not.toBeInTheDocument();
-    expect(screen.queryByText("Caleb R.")).not.toBeInTheDocument();
-  });
-
-  it("shows grouped real activity in the 'What changed' card", async () => {
-    listMembers.mockResolvedValue([member()]);
-    getRecentActivity.mockResolvedValue([activityRow(), activityRow()]);
-
-    renderWithQuery(<SongCanvasCollabLayers activeLayer="room" songId="song1" />);
-
-    expect(await screen.findByText("Levi added 2 voice memos")).toBeInTheDocument();
-  });
-
-  it("stays calm when the song is empty — quiet copy, no fake data", async () => {
-    listMembers.mockResolvedValue([]);
-    getRecentActivity.mockResolvedValue([]);
-
-    renderWithQuery(<SongCanvasCollabLayers activeLayer="room" songId="song1" />);
-
-    expect(
-      await screen.findByText("Invite someone into this song to write together."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Nothing yet — changes to this song will show up here."),
-    ).toBeInTheDocument();
-  });
 });
 
 describe("CanvasRecapGate — 'what changed since you left' (Product 12)", () => {
@@ -146,9 +73,9 @@ describe("CanvasRecapGate — 'what changed since you left' (Product 12)", () =>
     renderWithQuery(<CanvasRecapGate songId="song1" />);
 
     expect(await screen.findByText("What changed since you left")).toBeInTheDocument();
-    expect(screen.getByText("Levi added 2 voice memos")).toBeInTheDocument();
+    expect(await screen.findByText("Levi added 2 voice memos")).toBeInTheDocument();
     expect(screen.getByText("Levi moved an idea into Final")).toBeInTheDocument();
-    expect(screen.queryByText(/Me /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Me /)).not.toBeInTheDocument();
     expect(getActivitySince).toHaveBeenCalledWith("song1", "2026-07-01T00:00:00.000Z");
   });
 

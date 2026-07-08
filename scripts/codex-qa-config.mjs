@@ -159,7 +159,6 @@ export const instantFeelSourceChecks = [
 ];
 
 export const placeholderRouteFiles = [
-  "src/pages/LyricsEditorPage.tsx",
   "src/pages/VoiceMemosPage.tsx",
   "src/pages/NotesPage.tsx",
   "src/pages/PeoplePage.tsx",

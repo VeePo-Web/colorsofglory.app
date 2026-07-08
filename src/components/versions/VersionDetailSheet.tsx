@@ -1,8 +1,8 @@
 import { RotateCcw, ShieldCheck } from "lucide-react";
-import type { SongVersion } from "@/types";
+import type { SongVersion } from "@/integrations/cog/versions";
 import type { SongMember } from "@/integrations/cog/members";
 import { parseSnapshot, summarizeSnapshot } from "@/integrations/cog/versions";
-import { relativeTime } from "@/lib/notes/relativeTime";
+import { relativeTime } from "./relativeTime";
 import VersionSheetShell from "./VersionSheetShell";
 import { versionHeadline } from "./VersionTimeline";
 
@@ -94,13 +94,6 @@ const VersionDetailSheet = ({
               <Stat label="Lines" value={String(summary.lineCount)} />
               <Stat label="Chords" value={String(summary.chordCount)} />
             </div>
-            {(summary.key || summary.bpm) && (
-              <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--cog-warm-gray)" }}>
-                {[summary.key && `Key of ${summary.key}`, summary.bpm && `${summary.bpm} BPM`]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            )}
             {summary.sections.length > 0 ? (
               <ul style={{ listStyle: "none", margin: "12px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                 {summary.sections.map((s, i) => (
