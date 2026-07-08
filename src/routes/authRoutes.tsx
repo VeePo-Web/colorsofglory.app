@@ -38,6 +38,7 @@ export const authRoutes = (
     <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
     <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
     <Route path="/auth/email" element={<EmailAuthPage />} />
+    <Route path="/auth/email/verify" element={<EmailCodeVerifyPage />} />
     <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/auth/reset" element={<ResetPasswordPage />} />
     <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
