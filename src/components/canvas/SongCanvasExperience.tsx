@@ -653,10 +653,14 @@ const CanvasCardEl = ({
         </p>
       )}
 
-      {/* "Used in Final" label for dimmed references */}
+      {/* Kept-reference label for dimmed cards — nothing is ever deleted */}
       {card.isDimmedReference && (
         <p style={{ fontSize: 10, color: card.accent, marginTop: 8, fontWeight: 600 }}>
-          ↳ Used in Final
+          {card.dimReason === "merged"
+            ? "↳ Merged into section"
+            : card.dimReason === "compare_kept"
+            ? "↳ Kept for reference"
+            : "↳ Used in Final"}
         </p>
       )}
 
@@ -1797,6 +1801,8 @@ const SongCanvasExperience = () => {
           >
             {canvasStatus}
           </p>
+          {/* F14 one-tap metronome — consumes C4's engine via useCanvasMetronome */}
+          <CanvasMetronomeToggle metronome={metronome} />
           <button
             type="button"
             onClick={() => setShowRecap(true)}
@@ -2232,7 +2238,7 @@ const SongCanvasExperience = () => {
         <Suspense fallback={null}>
           <OwnerReviewQueueSheet
             items={reviewQueueItems}
-            onApprove={handleMoveToFinal}
+            onApprove={arrangement.moveToFinal}
             onKeep={handleKeepInIdeas}
             onDismiss={handleDismissReview}
             onAcceptLine={handleAcceptLine}
@@ -2273,10 +2279,10 @@ const SongCanvasExperience = () => {
         if (c.tree === "final" && !isViewer) {
           const pos = finalOrder[c.id];
           if (pos && pos > 1) {
-            actions.push({ id: "up", label: "Move up in the arrangement", tone: "muted", onClick: () => moveFinalCard(c.id, -1) });
+            actions.push({ id: "up", label: "Move up in the arrangement", tone: "muted", onClick: () => arrangement.moveBy(c.id, -1) });
           }
           if (pos && pos < finalCards.length) {
-            actions.push({ id: "down", label: "Move down in the arrangement", tone: "muted", onClick: () => moveFinalCard(c.id, 1) });
+            actions.push({ id: "down", label: "Move down in the arrangement", tone: "muted", onClick: () => arrangement.moveBy(c.id, 1) });
           }
         }
         if (c.type === "lyric" && !isViewer) {
@@ -2286,19 +2292,27 @@ const SongCanvasExperience = () => {
             onClick: () => setLineSuggest({ cardId: c.id, originalLine: c.body, sectionLabel: c.section }),
           });
         }
-        const inPath = listenQueue.includes(c.id);
+        // F21 — audition this idea against its same-section variant.
+        if (!isViewer && compare.canCompare(c)) {
+          actions.push({
+            id: "compare",
+            label: "Compare A vs B",
+            onClick: () => compare.open(c.id),
+          });
+        }
+        const inPath = listenPath.queue.includes(c.id);
         actions.push({
           id: "path",
-          label: inPath ? `Remove from Listen Path (#${listenQueue.indexOf(c.id) + 1})` : "Add to Listen Path",
-          onClick: () => addToListenQueue(c.id),
+          label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to Listen Path",
+          onClick: () => listenPath.toggleCard(c.id),
           active: inPath,
         });
         if (c.tree === "ideas" && !c.isDimmedReference && !isViewer) {
-          const inMerge = mergeSelection.includes(c.id);
+          const inMerge = merge.selection.includes(c.id);
           actions.push({
             id: "merge",
             label: inMerge ? "Cancel merge selection" : "Select to merge",
-            onClick: () => toggleMergeSelect(c.id),
+            onClick: () => merge.toggleSelect(c.id),
             active: inMerge,
           });
         }

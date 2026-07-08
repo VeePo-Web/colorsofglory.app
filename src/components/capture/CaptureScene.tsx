@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle } from "lucide-react";
+import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle, CloudOff } from "lucide-react";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { toast } from "sonner";
 
 import { useVoiceRecorder, type RecordingResult } from "@/hooks/useVoiceRecorder";
 import { useLiveTranscript } from "@/hooks/useLiveTranscript";
-import { submitSharedAudio } from "@/integrations/cog/intake";
-import { createSong } from "@/integrations/cog/songs";
-import { getPrimaryTakeIdForMemo } from "@/integrations/cog/transcript";
+import { getPrimaryTakeIdForMemo, getTakeWithTranscript } from "@/integrations/cog/transcript";
+import { enqueueCaptureUpload, retryOutboxJob, subscribeOutbox } from "@/lib/voice/captureOutbox";
 import { supabase } from "@/integrations/supabase/client";
 import {
   saveFailedCapture,
@@ -134,6 +133,69 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // can retry instead of re-recording.
   const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number } | null>(null);
 
+  // Queued-take reassurance: the take is already DURABLE (blob in IndexedDB,
+  // retry job in localStorage via the Capture Outbox) and auto-retries on
+  // reconnect / heartbeat / next app load. This state only renders the calm
+  // "saved on this device" card — nothing here needs rescuing.
+  const [queuedTake, setQueuedTake] = useState<{ outboxId: string; durationMs: number } | null>(null);
+  const queuedTakeRef = useRef<typeof queuedTake>(null);
+  useEffect(() => {
+    queuedTakeRef.current = queuedTake;
+  }, [queuedTake]);
+
+  // Resolve a synced memo → its primary take → open the Review Sheet. Shared
+  // by the awaited save path and the background outbox-sync path.
+  const openReviewForMemo = useCallback(
+    async (memoId: string, tookMs: number, freshBlob?: Blob | null) => {
+      const takeId = await resolveTakeId(memoId);
+      if (!takeId) {
+        // The memo is saved server-side; its take row is still materializing.
+        // NEVER re-upload from here (that would double-create) — the peek
+        // strip will surface it the moment it lands.
+        setStatus("ready");
+        setQueuedTake(null);
+        toast.success("Take saved", { description: "It'll appear in Latest in a moment." });
+        return;
+      }
+      // Cache the just-recorded blob under the take id so Review plays back
+      // INSTANTLY from the device — no cloud signed URL, no network wait,
+      // works offline. (On the background path the outbox already cached the
+      // blob under the memo id — reuse it.)
+      const blob = freshBlob ?? (await audioCache.get(memoId).catch(() => null));
+      if (blob) void audioCache.set(takeId, blob);
+      const takeRow = await getTakeWithTranscript(takeId).catch(() => null);
+      setStatus("ready");
+      setFailedTake(null);
+      setQueuedTake(null);
+      // A recovered take just saved — retire any durable failed-capture record.
+      void clearAllFailedCaptures();
+      setReview({
+        open: true,
+        takeId,
+        songId: takeRow?.song_id ?? songId ?? null,
+        songTitle,
+        storagePath: takeRow?.storage_path ?? null,
+        durationMs: tookMs,
+      });
+    },
+    [songId, songTitle],
+  );
+  const openReviewRef = useRef(openReviewForMemo);
+  useEffect(() => {
+    openReviewRef.current = openReviewForMemo;
+  }, [openReviewForMemo]);
+
+  // If a queued take syncs in the background (outbox auto-retry) while the
+  // scene is still open, graduate it straight into review.
+  useEffect(() => {
+    return subscribeOutbox((event) => {
+      const queued = queuedTakeRef.current;
+      if (event.type === "success" && queued && event.outboxId === queued.outboxId) {
+        void openReviewRef.current(event.memoId, queued.durationMs, null);
+      }
+    });
+  }, []);
+
   // Tear down the mic ONLY when the scene unmounts.
   //
   // Previously this effect depended on [recorder, live]. Both are fresh object
@@ -196,38 +258,35 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         const targetSongId = songId;
         const targetSongTitle = songTitle;
 
-        const intake = await submitSharedAudio({
-          file,
-          song_id: targetSongId,
-          title: targetSongTitle ? `${targetSongTitle} — capture` : "Capture",
-        });
-
-        const takeId = await getPrimaryTakeIdForMemo(intake.voice_memo_id);
-        if (!takeId) throw new Error("Take was created but could not be located.");
-
-        // Cache the just-recorded blob under the take id so Review can play it
-        // back INSTANTLY from the device — no cloud signed URL, no network wait,
-        // works offline. Benchmark: review starts with listening, never on AI/cloud.
-        void audioCache.set(takeId, file);
-
-        const { data: takeRow } = await supabase
-          .from("takes")
-          .select("storage_path")
-          .eq("id", takeId)
-          .maybeSingle();
-
-        setStatus("ready");
-        setFailedTake(null);
-        // A recovered take just saved — retire any durable failed-capture record.
-        void clearAllFailedCaptures();
-        setReview({
-          open: true,
-          takeId,
+        // Durable FIRST — the sacred promise. The blob goes to IndexedDB and a
+        // retryable job to localStorage BEFORE any network call, then uploads
+        // through the outbox's registered "intake" pipeline (the same
+        // intake-voice-memo edge fn as before). A dropped connection, a killed
+        // tab, or a reload can no longer lose the take: it auto-retries on
+        // reconnect, on the outbox heartbeat, and at next app load.
+        const { outboxId } = await enqueueCaptureUpload({
+          blob: file,
           songId: targetSongId,
-          songTitle: targetSongTitle,
-          storagePath: (takeRow?.storage_path as string | undefined) ?? null,
+          title: targetSongTitle ? `${targetSongTitle} — capture` : "Capture",
+          mimeType: file.type || "audio/webm",
           durationMs: fileDurationMs,
+          sectionLabel: "Capture",
+          fileName: file.name,
+          uploaderKey: "intake",
         });
+
+        const settled = await waitForOutboxResult(outboxId);
+        if (!settled.ok) {
+          // Not a failure the user must fix: the take is safe on-device and
+          // the outbox keeps retrying. Calm queued card, never red.
+          setStatus("skipped");
+          setFailedTake(null);
+          setQueuedTake({ outboxId, durationMs: fileDurationMs });
+          void clearAllFailedCaptures();
+          return;
+        }
+
+        await openReviewForMemo(settled.memoId, fileDurationMs, file);
       } catch (err) {
         setStatus("skipped");
         // Keep the recording so the idea survives a flaky network — never discard.
@@ -245,7 +304,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         setSaving(false);
       }
     },
-    [saving, songId, songTitle, refreshSeedCount],
+    [saving, songId, songTitle, refreshSeedCount, navigate, openReviewForMemo],
   );
 
   const retryFailedTake = useCallback(() => {
@@ -676,6 +735,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
             durationMs={failedTake.durationMs}
             onRetry={retryFailedTake}
             onDiscard={() => setFailedTake(null)}
+          />
+        )}
+
+        {/* Queued take — already DURABLY saved via the Capture Outbox and
+            auto-retrying. Calm gold reassurance, never an error state. */}
+        {queuedTake && !failedTake && !saving && phase !== "recording" && (
+          <QueuedTakeNotice
+            durationMs={queuedTake.durationMs}
+            onSyncNow={() => {
+              void retryOutboxJob(queuedTake.outboxId);
+            }}
           />
         )}
 

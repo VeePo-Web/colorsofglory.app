@@ -1,14 +1,28 @@
-﻿import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { PracticePlayerProvider } from "@/components/practice/PracticePlayerContext";
+
+// ── Foundation providers (A4) ─────────────────────────────────────────────
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { OutboxProvider } from "@/lib/outbox/OutboxContext";
 import { isPreviewUnlocked } from "@/lib/preview/previewUnlock";
+
+// ── Shell + nav chrome (A5) ───────────────────────────────────────────────
+import BrandedSkeleton from "@/components/shell/BrandedSkeleton";
+import SongSurfaceTracker from "@/components/nav/SongSurfaceTracker";
+import RouteAnnouncer from "@/components/nav/RouteAnnouncer";
+
+// ── Route groups (A5) — every path lives in one of these fragments ─────────
+import { authRoutes } from "@/routes/authRoutes";
+import { onboardingRoutes } from "@/routes/onboardingRoutes";
+import { songRoutes } from "@/routes/songRoutes";
+import { settingsRoutes } from "@/routes/settingsRoutes";
+import { adminRoutes } from "@/routes/AdminRoutes";
 
 const PasswordGate = lazy(() => import("@/components/PasswordGate"));
 const GlobalCaptureFlow = lazy(() => import("@/components/capture/GlobalCaptureFlow"));
@@ -16,109 +30,31 @@ const MiniPracticePlayer = lazy(() =>
   import("@/components/practice/MiniPracticePlayer").then((module) => ({ default: module.MiniPracticePlayer })),
 );
 
-const PhoneLoginPage = lazy(() => import("./pages/auth/PhoneLoginPage"));
-const CodeVerifyPage = lazy(() => import("./pages/auth/CodeVerifyPage"));
-const EmailAuthPage = lazy(() => import("./pages/auth/EmailAuthPage"));
-const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
-const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"));
-import RequireAuth from "./components/auth/RequireAuth";
-const FirstIntentPage = lazy(() => import("./pages/onboarding/FirstIntentPage"));
-const StartFirstSongPage = lazy(() => import("./pages/onboarding/StartFirstSongPage"));
-const FounderCodePage = lazy(() => import("./pages/onboarding/FounderCodePage"));
-const EarnPage = lazy(() => import("./pages/onboarding/EarnPage"));
-const CaptureFirstIdeaPage = lazy(() => import("./pages/onboarding/CaptureFirstIdeaPage"));
-const VoiceMemoAddedPage = lazy(() => import("./pages/onboarding/VoiceMemoAddedPage"));
-// Legacy /invite/:token links (and the post-auth pending-invite resume) funnel
-// into the one real, frictionless join flow at /join/:token. The old preview page
-// was a mock that dumped users onto the wrong song with no auth â€” never route to it.
-const InviteTokenRedirect = () => {
-  const { token } = useParams<{ token: string }>();
-  return <Navigate to={`/join/${token ?? ""}`} replace />;
-};
+// Legal (public) — linked from the auth + invite trust lines
+const TermsPage = lazy(() => import("@/pages/legal/TermsPage"));
+const PrivacyPage = lazy(() => import("@/pages/legal/PrivacyPage"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
-// Invite flow - new frictionless join screens
-const JoinEntryPage      = lazy(() => import("./pages/invite/JoinEntryPage"));
-const InviteJoinPage     = lazy(() => import("./pages/invite/InviteJoinPage"));
-const InviteWelcomePage  = lazy(() => import("./pages/invite/InviteWelcomeBackPage"));
-const InviteVerifyPage   = lazy(() => import("./pages/invite/InviteVerifyPage"));
-const InviteNamePage     = lazy(() => import("./pages/invite/InviteNamePage"));
-const InviteTeamPage     = lazy(() => import("./pages/invite/InviteTeamIntroPage"));
-const ReturningHomePage  = lazy(() => import("./pages/ReturningHomePage"));
-
-const SongCatalogPage = lazy(() => import("./pages/SongCatalogPage"));
-const PracticePlayerPage = lazy(() => import("./pages/PracticePlayerPage"));
-const AlbumPracticeExperience = lazy(() => import("./pages/AlbumPracticeExperience"));
-const CapturePage = lazy(() => import("./pages/CapturePage"));
-const SongWorkspacePage = lazy(() => import("./pages/SongWorkspacePage"));
-const SongCanvasPage = lazy(() => import("./pages/SongCanvasPage"));
-const SongSheetPage = lazy(() => import("./pages/SongSheetPage"));
-const VoiceMemosPage = lazy(() => import("./pages/VoiceMemosPage"));
-const CreditsPage = lazy(() => import("./pages/CreditsPage"));
-const ActivityPage = lazy(() => import("./pages/ActivityPage"));
-const VersionHistoryPage = lazy(() => import("./pages/VersionHistoryPage"));
-const NotesPage = lazy(() => import("./pages/NotesPage"));
-const MemoryPage = lazy(() => import("./pages/MemoryPage"));
-const SongMemoryPage = lazy(() => import("./pages/SongMemoryPage"));
-const BrainstormPage = lazy(() => import("./pages/BrainstormPage"));
-const StoragePage = lazy(() => import("./pages/settings/StoragePage"));
-const ReferralPage = lazy(() => import("./pages/settings/ReferralPage"));
-const BillingPage = lazy(() => import("./pages/settings/BillingPage"));
-const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
-
-// Pricing + checkout (new)
-const PricingUpgradePage     = lazy(() => import("./pages/pricing/UpgradePage"));
-const CheckoutSuccessPage    = lazy(() => import("./pages/pricing/CheckoutSuccessPage"));
-const ReferralRedirectPage   = lazy(() => import("./pages/pricing/ReferralRedirectPage"));
-
-// Legacy upgrade placeholder (keep for any existing links)
-const UpgradePage = lazy(() => import("./pages/UpgradePage"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-
-// Legal (public) â€” linked from the auth + invite trust lines
-const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
-const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
-
-// Admin (internal-only)
-const RequireAdmin = lazy(() => import("./components/admin/RequireAdmin"));
-const AdminHomePage = lazy(() => import("./pages/admin/AdminHomePage"));
-const AdminFoundersPage = lazy(() => import("./pages/admin/FoundersPage"));
-const AdminFounderDetailPage = lazy(() => import("./pages/admin/FounderDetailPage"));
-const AdminCodesPage = lazy(() => import("./pages/admin/CodesPage"));
-const AdminPayoutsPage = lazy(() => import("./pages/admin/PayoutsPage"));
-const AdminFinancePage = lazy(() => import("./pages/admin/FinancePage"));
-// Admin (internal-only) â€” all admin routing lives in src/routes/AdminRoutes.tsx
-import { adminRoutes } from "@/routes/AdminRoutes";
-import SongSurfaceTracker from "@/components/nav/SongSurfaceTracker";
-import RouteAnnouncer from "@/components/nav/RouteAnnouncer";
-
-const RouteFallback = () => (
-  <div className="relative min-h-screen bg-[var(--cog-cream)]">
-    <div className="pointer-events-none fixed inset-0 cog-glow" />
-    <div className="relative mx-auto flex min-h-screen w-full max-w-[var(--max-w-app)] flex-col justify-center px-8">
-      <p
-        className="mb-6 text-center text-xs font-medium uppercase"
-        style={{ color: "var(--cog-muted)", letterSpacing: "0.24em" }}
-      >
-        Colors of Glory
-      </p>
-      <div className="space-y-3" aria-label="Loading page">
-        <div className="h-5 w-32 rounded-full" style={{ backgroundColor: "rgba(184,149,58,0.12)" }} />
-        <div className="h-12 rounded-2xl bg-[var(--cog-cream-light)] shadow-[var(--cog-shadow-sm)]" />
-        <div className="h-12 rounded-2xl bg-[var(--cog-cream-light)] shadow-[var(--cog-shadow-sm)]" />
-      </div>
-    </div>
-  </div>
-);
-
-const CanvasLayerRedirect = ({ layer }: { layer: string }) => {
-  const { id } = useParams<{ id: string }>();
-  const songId = id ?? "1";
-  return <Navigate to={`/songs/${songId}/canvas?layer=${layer}`} replace />;
-};
-
+/**
+ * App — the shell composition. All routing lives in the route-group fragments
+ * (src/routes/*); this file only wires the provider stack, the router, the one
+ * shared loading skeleton, and the two always-on overlays.
+ *
+ * Provider order (single documented source of truth):
+ *   PasswordGate(isPreviewUnlocked)
+ *     → QueryClientProvider(A4 queryClient)
+ *       → AuthProvider(A4, single auth subscription)
+ *         → OutboxProvider(A4 offline-write outbox)
+ *           → TooltipProvider → Toaster/Sonner
+ *             → BrowserRouter(v7 flags)
+ *               → PracticePlayerProvider
+ *                 → Suspense(BrandedSkeleton) → <Routes>
+ * The capture FAB + mini-player mount AFTER <Routes> but inside <BrowserRouter>
+ * so they persist across navigation and never re-mount on route change.
+ */
 const App = () => {
   const [unlocked, setUnlocked] = useState<boolean>(
-    () => typeof window !== "undefined" && isPreviewUnlocked()
+    () => typeof window !== "undefined" && isPreviewUnlocked(),
   );
 
   if (!unlocked) {
@@ -130,135 +66,46 @@ const App = () => {
   }
 
   return (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-    <OutboxProvider>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-        <PracticePlayerProvider>
-        <SongSurfaceTracker />
-        <RouteAnnouncer />
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            {/* Auth â€” phone-first front door (Twilio SMS OTP); email is the fallback */}
-            <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/auth/login" element={<PhoneLoginPage />} />
-            <Route path="/auth/phone" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/auth/phone/verify" element={<CodeVerifyPage />} />
-            <Route path="/auth/email" element={<EmailAuthPage />} />
-            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/auth/reset" element={<ResetPasswordPage />} />
-            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <OutboxProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+              <PracticePlayerProvider>
+                <SongSurfaceTracker />
+                <RouteAnnouncer />
+                <Suspense fallback={<BrandedSkeleton />}>
+                  <Routes>
+                    {authRoutes}
+                    {onboardingRoutes}
+                    {songRoutes}
+                    {settingsRoutes}
+                    {adminRoutes}
 
-            {/* Onboarding */}
-            <Route path="/onboarding" element={<Navigate to="/auth/login" replace />} />
-            <Route path="/onboarding/intent" element={<FirstIntentPage />} />
-            <Route path="/onboarding/start-song" element={<StartFirstSongPage />} />
-            <Route path="/onboarding/founder-code" element={<FounderCodePage />} />
-            <Route path="/onboarding/earn" element={<EarnPage />} />
+                    {/* Legal (public) */}
+                    <Route path="/terms" element={<TermsPage />} />
+                    <Route path="/privacy" element={<PrivacyPage />} />
 
-            {/* Legacy invite link â†’ redirect into the real frictionless join flow */}
-            <Route path="/invite/:token" element={<InviteTokenRedirect />} />
+                    {/* Fallback — branded 404 */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
 
-            {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
-            <Route path="/join"           element={<JoinEntryPage />} />
-            <Route path="/join/:token"    element={<InviteJoinPage />} />
-            <Route path="/invite/welcome" element={<InviteWelcomePage />} />
-            <Route path="/invite/verify"  element={<InviteVerifyPage />} />
-            <Route path="/invite/name"    element={<InviteNamePage />} />
-            <Route path="/invite/team"    element={<InviteTeamPage />} />
-
-            {/* Returning user smart home */}
-            <Route path="/home"           element={<ReturningHomePage />} />
-
-            {/* Core app */}
-            <Route path="/" element={<RequireAuth><CapturePage /></RequireAuth>} />
-            <Route path="/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
-            <Route path="/songs" element={<RequireAuth><SongCatalogPage /></RequireAuth>} />
-            {/* Mic-first capture is the song's default landing.
-                Workspace hub is one tap away at /songs/:id/room. */}
-            <Route path="/songs/:id" element={<RequireAuth><CapturePage /></RequireAuth>} />
-            <Route path="/songs/:id/room" element={<RequireAuth><SongWorkspacePage /></RequireAuth>} />
-            <Route path="/songs/:id/brainstorm" element={<RequireAuth><BrainstormPage /></RequireAuth>} />
-            <Route path="/songs/:id/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
-            <Route path="/songs/:id/capture-onboarding" element={<CaptureFirstIdeaPage />} />
-            <Route path="/songs/:id/voice-added" element={<VoiceMemoAddedPage />} />
-            {/* Lyrics + Chords resolve to the structured Lyric & Chord Sheet editor (C3).
-                The canvas ideation layer stays reachable via the canvas's own layer
-                switcher; /sheet stays as an alias so existing links keep working. */}
-            <Route path="/songs/:id/lyrics" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
-            <Route path="/songs/:id/chords" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
-            <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
-            <Route path="/songs/:id/sheet" element={<RequireAuth><SongSheetPage /></RequireAuth>} />
-            <Route path="/songs/:id/practice" element={<PracticePlayerPage />} />
-            <Route path="/albums/:albumId/practice" element={<AlbumPracticeExperience />} />
-            {/* Voice's canonical home (C4) is the dedicated page — recorder, take
-                versions, layered stacks, import. The canvas ?layer=voice panel stays
-                as an embedded view of the same memo list, reachable from the canvas. */}
-            <Route path="/songs/:id/voice" element={<RequireAuth><VoiceMemosPage /></RequireAuth>} />
-            {/* Notes pad (C5) is the real Notes front door â€” the standalone
-                song-level pad, NOT the canvas ?layer=notes summary (D-group). */}
-            <Route path="/songs/:id/notes" element={<RequireAuth><NotesPage /></RequireAuth>} />
-            <Route path="/songs/:id/people" element={<CanvasLayerRedirect layer="people" />} />
-            {/* Activity (E2): the calm "what changed since you left" feed â€”
-                a real page, not a canvas redirect. Members-only data underneath. */}
-            <Route path="/songs/:id/activity" element={<RequireAuth><ActivityPage /></RequireAuth>} />
-            <Route path="/songs/:id/credits" element={<RequireAuth><CreditsPage /></RequireAuth>} />
-            {/* Version history (E3): the snapshot timeline + non-destructive
-                restore. Restore never overwrites; the Original is protected. */}
-            <Route path="/songs/:id/versions" element={<RequireAuth><VersionHistoryPage /></RequireAuth>} />
-            <Route path="/songs/:id/memory" element={<RequireAuth><SongMemoryPage /></RequireAuth>} />
-
-            {/* Personal Memory Graph / Zettelkasten (Feature 33) */}
-            <Route path="/memory" element={<RequireAuth><MemoryPage /></RequireAuth>} />
-
-            {/* Settings */}
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings/billing" element={<BillingPage />} />
-            <Route path="/settings/storage" element={<StoragePage />} />
-            <Route path="/settings/referral" element={<ReferralPage />} />
-
-            {/* Pricing + checkout */}
-            <Route path="/upgrade" element={<PricingUpgradePage />} />
-            <Route path="/pricing" element={<PricingUpgradePage />} />
-            <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
-            <Route path="/r/:code" element={<ReferralRedirectPage />} />
-
-            {/* Legacy upgrade placeholder */}
-            <Route path="/upgrade-old" element={<UpgradePage />} />
-
-            {/* Admin (internal) */}
-            <Route path="/admin" element={<RequireAdmin><AdminHomePage /></RequireAdmin>} />
-            <Route path="/admin/founders" element={<RequireAdmin><AdminFoundersPage /></RequireAdmin>} />
-            <Route path="/admin/founders/:id" element={<RequireAdmin><AdminFounderDetailPage /></RequireAdmin>} />
-            <Route path="/admin/codes" element={<RequireAdmin><AdminCodesPage /></RequireAdmin>} />
-            <Route path="/admin/payouts" element={<RequireAdmin><AdminPayoutsPage /></RequireAdmin>} />
-            <Route path="/admin/finance" element={<RequireAdmin><AdminFinancePage /></RequireAdmin>} />
-            {/* Admin (internal) â€” routes defined in src/routes/AdminRoutes.tsx */}
-            {adminRoutes}
-
-            {/* Legal (public) */}
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-
-            {/* Fallback */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-        <Suspense fallback={null}>
-          <GlobalCaptureFlow />
-        </Suspense>
-        <Suspense fallback={null}>
-          <MiniPracticePlayer />
-        </Suspense>
-        </PracticePlayerProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-    </OutboxProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+                {/* Always-on overlays — persist across navigation, outside <Routes> */}
+                <Suspense fallback={null}>
+                  <GlobalCaptureFlow />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <MiniPracticePlayer />
+                </Suspense>
+              </PracticePlayerProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </OutboxProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 };
 

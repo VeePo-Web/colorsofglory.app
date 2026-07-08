@@ -15,6 +15,8 @@ const badgeVariants = cva(
         outline: "text-foreground border-border/60",
         editorial: "border-border/40 bg-transparent text-muted-foreground uppercase tracking-[0.12em] text-[10px]",
         sacred: "border-transparent text-primary-foreground bg-gradient-to-r from-primary/90 to-[hsl(var(--gold-warm)/0.8)]",
+        // Chord chip — gold-pale pill above lyric lines (CLAUDE.md §2.4)
+        chord: "border-transparent rounded-chip bg-[var(--cog-gold-pale)] text-[var(--cog-charcoal)] tracking-normal",
       },
     },
     defaultVariants: {

@@ -1,5 +1,6 @@
 import { registerOutboxUploader } from "./captureOutbox";
 import { uploadVoiceMemo as uploadBrainstormMemo } from "@/integrations/cog/memos";
+import { submitSharedAudio } from "@/integrations/cog/intake";
 
 /**
  * Startup registration of every non-default Capture Outbox uploader.
@@ -26,3 +27,19 @@ registerOutboxUploader("memos", (job, blob) =>
     waveformPeaks: (job.extra?.waveformPeaks as number[] | undefined) ?? undefined,
   }),
 );
+
+// The in-song capture scene (C2): the intake-voice-memo edge fn creates the
+// memo AND its primary take in one call — the take id the Review Sheet needs.
+// Registered at startup so a capture-scene take queued offline still syncs
+// after a full reload, even if the capture page is never reopened.
+registerOutboxUploader("intake", async (job, blob) => {
+  const file = new File([blob], job.fileName ?? `take-${job.id}.webm`, {
+    type: job.mimeType || blob.type || "audio/webm",
+  });
+  const result = await submitSharedAudio({
+    file,
+    song_id: job.songId,
+    title: job.title,
+  });
+  return result.voice_memo_id;
+});
