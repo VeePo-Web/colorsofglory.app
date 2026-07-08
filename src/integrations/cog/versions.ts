@@ -42,11 +42,30 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { CogError } from "./songs";
+import type {
+  SongVersion,
+  VersionKind,
+  SnapshotSection,
+  SongSnapshotV1,
+  SnapshotSummary,
+  VersionActivityKind,
+  RestoreResult,
+} from "@/types";
 
-/** Generated row — canonical domain type until a shared @/types barrel exists. */
-export type SongVersion = Database["public"]["Tables"]["song_versions"]["Row"];
-export type VersionKind = SongVersion["kind"];
+// Version domain types moved to the @/types barrel (A2 Step 3); re-exported for
+// existing deep imports until the Step 10 codemod repoints them.
+export type {
+  SongVersion,
+  VersionKind,
+  SnapshotSection,
+  SongSnapshotV1,
+  SnapshotSummary,
+  VersionActivityKind,
+  RestoreResult,
+};
 
+// Private local alias of the DB section enum (barrel intentionally omits it —
+// a different UI-oriented SectionKind lives in lib/capture/transcriptModel).
 type SectionKind = Database["public"]["Enums"]["section_kind"];
 
 function asCogError(err: { code?: string | null; message?: string } | null | undefined): CogError {
@@ -54,20 +73,6 @@ function asCogError(err: { code?: string | null; message?: string } | null | und
 }
 
 // ─── Snapshot codec (pure — unit-tested in src/test/version-history.test.ts) ─
-
-export type SnapshotSection = {
-  id: string;
-  kind: SectionKind;
-  label: string | null;
-  position: number;
-  lyrics: { content: Json; plain_text: string } | null;
-};
-
-export type SongSnapshotV1 = {
-  v: 1;
-  song: { title: string | null };
-  sections: SnapshotSection[];
-};
 
 /** Decode a stored snapshot. Returns null for unreadable/foreign payloads —
  *  callers render a calm fallback, never raw JSON. */
@@ -132,16 +137,6 @@ function chordCountOf(s: SnapshotSection): number {
   );
 }
 
-export type SnapshotSummary = {
-  title: string | null;
-  sectionCount: number;
-  lineCount: number;
-  chordCount: number;
-  /** Ordered section labels with per-section line counts, for the detail sheet. */
-  sections: Array<{ label: string; lineCount: number }>;
-  isEmpty: boolean;
-};
-
 /** Human-readable summary of what a snapshot held. Pure. */
 export function summarizeSnapshot(snapshot: SongSnapshotV1): SnapshotSummary {
   const sections = snapshot.sections.map((s) => ({
@@ -167,8 +162,6 @@ export function findOriginalId(versions: SongVersion[]): string | null {
 }
 
 // ─── Activity contract (E3 → E2) ─────────────────────────────────────────────
-
-export type VersionActivityKind = "version_saved" | "version_restored";
 
 function emitVersionActivity(
   _kind: VersionActivityKind,
@@ -388,14 +381,6 @@ export async function ensureOriginalVersion(songId: string): Promise<SongVersion
     return after.find((v) => v.id === id) ?? null;
   }
 }
-
-export type RestoreResult = {
-  /** The safety snapshot of the state as it was JUST BEFORE the restore —
-   *  restoring this version is Undo. */
-  preRestoreVersion: SongVersion;
-  /** The new restore_point version (parent = the version that was restored). */
-  restoredVersion: SongVersion;
-};
 
 /**
  * Restore the song to an earlier version — non-destructively.

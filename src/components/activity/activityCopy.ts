@@ -29,7 +29,7 @@ import {
   UserPlus,
   Waves,
 } from "lucide-react";
-import type { SongActivityKind } from "@/integrations/cog/activity";
+import type { SongActivityKind } from "@/types";
 
 /** Which song surface a tapped card should open. */
 export type ActivitySurface = "voice" | "people" | "canvas" | "room";

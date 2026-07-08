@@ -23,8 +23,12 @@ import type {
   MemorySong,
   MemoryVoiceMemo,
 } from "@/lib/memory/memoryTypes";
+import type { LoadedMemory, VaultExportOutcome } from "@/types";
 
 export type { MemoryGraph } from "@/lib/memory/memoryTypes";
+// `LoadedMemory` / `VaultExportOutcome` moved to the @/types barrel (A2 Step 3);
+// re-exported for existing deep imports until the Step 10 codemod repoints them.
+export type { LoadedMemory, VaultExportOutcome };
 
 const EMPTY_BUNDLE = (userId: string): MemoryRawBundle => ({
   userId,
@@ -175,11 +179,6 @@ export async function fetchMemoryBundle(): Promise<MemoryRawBundle> {
   return { userId, songs, sections, notes, ideas, people, voiceMemos, lyrics };
 }
 
-export interface LoadedMemory {
-  graph: MemoryGraph;
-  bundle: MemoryRawBundle;
-}
-
 /** Fetch + reduce into the memory graph. Keeps the bundle for vault export. */
 export async function loadMemory(): Promise<LoadedMemory> {
   const bundle = await fetchMemoryBundle();
@@ -213,8 +212,6 @@ function triggerDownload(bytes: Uint8Array): void {
 export function downloadVault(graph: MemoryGraph, bundle: MemoryRawBundle): void {
   triggerDownload(buildVaultZip(graph, bundle));
 }
-
-export type VaultExportOutcome = "shared" | "downloaded" | "cancelled";
 
 /**
  * Mobile-first vault export: hand the .zip to the native share sheet

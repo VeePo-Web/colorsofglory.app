@@ -1,4 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { IdeaCapture } from "@/types";
+
+// `IdeaCapture` moved to the @/types barrel (A2 Step 3); re-exported for existing
+// deep imports until the Step 10 codemod repoints them.
+export type { IdeaCapture };
 
 export type QuickCaptureInput = {
   song_id?: string | null;
@@ -8,21 +13,6 @@ export type QuickCaptureInput = {
   tags?: string[];
   section_id?: string | null;
   voice_memo_id?: string | null;
-};
-
-export type IdeaCapture = {
-  id: string;
-  song_id: string | null;
-  author_user_id: string;
-  title: string | null;
-  lyric_snippet: string | null;
-  scripture_ref: string | null;
-  tags: string[];
-  section_id: string | null;
-  voice_memo_id: string | null;
-  created_at: string;
-  updated_at: string;
-  promoted_card_id?: string | null;
 };
 
 /** Atomically save a quick-capture entry; bumps song last_activity_at when scoped to a song. */

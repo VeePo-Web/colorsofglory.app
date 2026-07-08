@@ -14,7 +14,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit"
+    "test:types": "vitest run --typecheck --typecheck.only type-contract",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "types:gen": "node scripts/gen-supabase-types.mjs",
+    "types:check": "node scripts/gen-supabase-types.mjs && git diff --exit-code -- src/integrations/supabase/types.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

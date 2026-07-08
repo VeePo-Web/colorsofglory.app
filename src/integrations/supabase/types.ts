@@ -1,3 +1,11 @@
+// ============================================================================
+// GENERATED FILE — DO NOT EDIT.
+// Generated from the Supabase schema (owned by Lovable) via the Supabase CLI.
+// To update: run `npm run types:gen` (requires the supabase CLI + project access).
+// This file is the ROOT that every domain type in `@/types` derives from.
+// Hand-edits will be overwritten and are caught in CI by `npm run types:check`.
+// ============================================================================
+
 export type Json =
   | string
   | number

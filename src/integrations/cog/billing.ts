@@ -1,40 +1,24 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type {
+  Subscription,
+  StorageAddon,
+  PlanId,
+  PlanKey,
+  BillingStatus,
+  PlanTier,
+  PricingCard,
+} from "@/types";
 
-export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
-export type StorageAddon = Database["public"]["Tables"]["storage_addons"]["Row"];
-export type PlanId = "free" | "starter" | "pro" | "founder_pro";
-export type PlanKey = "free" | "starter" | "pro";
-
-export type BillingStatus = {
-  authenticated: boolean;
-  user_id: string | null;
-  plan: PlanId;
-  is_pro: boolean;
-  subscription: {
-    id: string;
-    plan: PlanId;
-    status: string;
-    current_period_end: string | null;
-    cancel_at_period_end: boolean;
-    cancelled_at: string | null;
-    unit_amount_cents: number;
-    currency: string;
-  } | null;
-  storage: {
-    used_bytes: number;
-    included_bytes: number;
-    addon_bytes: number;
-    limit_bytes: number;
-    pct_used: number;
-  };
-  addons: Array<{
-    id: string;
-    bytes: number;
-    status: string;
-    current_period_end: string | null;
-  }>;
-  song_quota: { owned_limit: number; can_create_song: boolean };
+// Billing domain types moved to the @/types barrel (A2 Step 3); re-exported for
+// existing deep imports until the Step 10 codemod repoints them.
+export type {
+  Subscription,
+  StorageAddon,
+  PlanId,
+  PlanKey,
+  BillingStatus,
+  PlanTier,
+  PricingCard,
 };
 
 /**
@@ -47,39 +31,6 @@ export async function getMyBillingStatus(): Promise<BillingStatus> {
   if (error) throw error;
   return data as BillingStatus;
 }
-
-export type PlanTier = {
-  key: PlanKey;
-  display_name: string;
-  monthly_cents: number;
-  currency: string;
-  owned_song_limit: number;
-  storage_bytes_included: number;
-  allows_founder_code: boolean;
-  allows_member_referral: boolean;
-  allows_storage_addons: boolean;
-  stripe_price_id: string | null;
-  stripe_referral_price_id: string | null;
-  sort_order: number;
-};
-
-export type PricingCard = {
-  plan_key: PlanKey;
-  eyebrow: string;
-  name: string;
-  price_display: string;
-  price_suffix: string;
-  discounted_price_display?: string;
-  discount_badge?: string;
-  headline: string;
-  subhead: string;
-  bullets: string[];
-  cta_label: string;
-  cta_label_with_code?: string;
-  cta_kind: "free" | "subscribe" | "subscribe_with_code";
-  trust_line?: string;
-  most_popular?: boolean;
-};
 
 export type PricingPageCopy = {
   h1: string;

@@ -55,7 +55,7 @@ import {
   activitySentence,
 } from "@/components/activity/activityCopy";
 import { groupRows } from "@/components/activity/useActivityFeed";
-import type { SongActivityKind } from "@/integrations/cog/activity";
+import type { SongActivityKind } from "@/types";
 
 const ALL_KINDS: SongActivityKind[] = [
   "take_committed",

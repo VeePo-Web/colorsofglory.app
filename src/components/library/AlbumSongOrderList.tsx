@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
-import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import type { SongCard as SongRow } from "@/types";
 import { coverColor } from "@/lib/library/format";
 
 interface AlbumSongOrderListProps {

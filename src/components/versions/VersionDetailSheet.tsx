@@ -1,6 +1,6 @@
 import { RotateCcw, ShieldCheck } from "lucide-react";
-import type { SongVersion } from "@/integrations/cog/versions";
-import type { SongMember } from "@/integrations/cog/members";
+import type { SongVersion } from "@/types";
+import type { SongMember } from "@/types";
 import { parseSnapshot, summarizeSnapshot } from "@/integrations/cog/versions";
 import { relativeTime } from "./relativeTime";
 import VersionSheetShell from "./VersionSheetShell";

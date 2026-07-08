@@ -17,8 +17,8 @@ import {
   listSongNotes,
   removeNote as removeNoteApi,
   updateNote as updateNoteApi,
-  type SongNote,
 } from "@/integrations/cog/notes";
+import type { SongNote } from "@/types";
 
 /** The signed-in user's id (React-layer), via the same getUser() query pattern the app uses. */
 export function useCurrentUserId(): string | undefined {

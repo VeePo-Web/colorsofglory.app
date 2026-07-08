@@ -7,11 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronDown, ChevronUp, Loader2, Merge, Trash2 } from "lucide-react";
 
-import {
-  requestTranscript,
-  pollTranscriptUntilReady,
-  type TranscriptBlock,
-} from "@/integrations/cog/transcript";
+import { requestTranscript, pollTranscriptUntilReady } from "@/integrations/cog/transcript";
+import type { TranscriptBlock } from "@/types";
 import { getTakeSignedUrl } from "@/integrations/cog/takes";
 import { commitTakeToCanvas } from "@/integrations/cog/canvas";
 import { formatDuration } from "@/lib/voice/audioFormat";

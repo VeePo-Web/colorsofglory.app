@@ -13,6 +13,15 @@ export default defineConfig({
     // under full-suite CPU contention; give them headroom so CI is deterministic.
     testTimeout: 20000,
     hookTimeout: 20000,
+    // Type-level contract tests (A2). Only activated by the `--typecheck` flag
+    // (see `npm run test:types`), so a plain `vitest run` is unaffected. Scoped
+    // to *.test-d.ts and `ignoreSourceErrors` so ONLY the contract assertions in
+    // those files can fail — never unrelated in-progress errors elsewhere.
+    typecheck: {
+      tsconfig: "./tsconfig.app.json",
+      include: ["src/test/**/*.test-d.ts"],
+      ignoreSourceErrors: true,
+    },
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

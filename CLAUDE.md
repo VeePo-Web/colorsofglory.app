@@ -33,6 +33,8 @@ This project is built by three specialized roles. **Claude owns the frontend onl
 
 **Document-first law:** Claude reads the source PDF (extracted in `zip_extracted/extracted_text/`) before building any screen. The reference image always wins over the PDF if they conflict.
 
+**Type-contract law:** All domain types obey [`docs/TYPE-CONTRACT.md`](docs/TYPE-CONTRACT.md) — the generated `src/integrations/supabase/types.ts` is never hand-edited, every domain type DERIVES from `Database` (no forked enums or parallel interfaces), and every feature file and cog function file imports domain types ONLY from the `@/types` barrel. That doc also tracks known schema-vs-mockup product gaps.
+
 ---
 
 ## 1. WHAT WE ARE BUILDING

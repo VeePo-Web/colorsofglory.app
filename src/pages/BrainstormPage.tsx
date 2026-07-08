@@ -6,7 +6,8 @@ import {
   listBrainstormMemos,
   type BrainstormMemo,
 } from "@/integrations/cog/brainstorm";
-import { getSong, type SongDetail } from "@/integrations/cog/songs";
+import { getSong } from "@/integrations/cog/songs";
+import type { SongDetail } from "@/types";
 import { enqueueCaptureUpload, subscribeOutbox } from "@/lib/voice/captureOutbox";
 
 const BrainstormMemosPanel = lazy(() => import("@/components/brainstorm/BrainstormMemosPanel"));

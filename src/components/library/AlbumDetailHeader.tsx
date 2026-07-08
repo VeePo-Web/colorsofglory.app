@@ -1,5 +1,5 @@
 import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check, Repeat } from "lucide-react";
-import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import type { SongCard as SongRow } from "@/types";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
 

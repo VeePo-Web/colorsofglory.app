@@ -20,10 +20,9 @@ import {
   ensureOriginalVersion,
   listVersions,
   restoreVersion,
-  type RestoreResult,
-  type SongVersion,
 } from "@/integrations/cog/versions";
-import { listMembers, myRole, type SongMember } from "@/integrations/cog/members";
+import { listMembers, myRole } from "@/integrations/cog/members";
+import type { RestoreResult, SongVersion, SongMember } from "@/types";
 
 /** Canonical cache key for a song's version timeline. */
 export const songVersionsKey = (songId: string) => ["song-versions", songId] as const;

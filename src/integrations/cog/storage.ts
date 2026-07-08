@@ -1,9 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { StorageUsage } from "@/types";
 
-export interface StorageUsage {
-  bytesUsed: number;
-  bytesLimit: number;
-}
+// `StorageUsage` moved to the @/types barrel (A2 Step 3); re-exported for existing
+// deep imports until the Step 10 codemod repoints them.
+export type { StorageUsage };
 
 export async function getStorageUsage(): Promise<StorageUsage> {
   const { data: userData } = await supabase.auth.getUser();

@@ -14,10 +14,9 @@ import {
   findOriginalId,
   parseSnapshot,
   summarizeSnapshot,
-  type SongSnapshotV1,
 } from "@/integrations/cog/versions";
 import { versionHeadline } from "@/components/versions/VersionTimeline";
-import type { SongVersion } from "@/types";
+import type { SongVersion, SongSnapshotV1 } from "@/types";
 
 const sheet = {
   songId: "s1",

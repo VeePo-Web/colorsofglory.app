@@ -5,9 +5,12 @@
  */
 
 /**
- * UI role labels used across invite screens.
- * DB mapping: viewer→viewer, contributor→collaborator, reviewer→collaborator
- * (Lovable's song_member_role enum is: owner | collaborator | viewer)
+ * Invite-flow role union carried through sessionStorage. This is a LOCAL,
+ * flow-specific narrowing — the canonical role vocabulary (labels, capabilities,
+ * DB⇄UI mapping) lives in `@/types/role`; use `displayRoleToDb` there for the
+ * round-trip (viewer→viewer, contributor→collaborator, reviewer→collaborator;
+ * Lovable's song_member_role enum is owner | collaborator | viewer). The extra
+ * `collaborator` member here tolerates a raw DB value flowing in from a preview.
  */
 export type InviteRole = 'viewer' | 'contributor' | 'reviewer' | 'collaborator';
 

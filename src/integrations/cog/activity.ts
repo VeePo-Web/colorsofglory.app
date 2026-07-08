@@ -8,6 +8,11 @@ export { getSongActivity as getRecentActivity } from "./songs";
 
 import { getSongActivity, type SongActivityRow } from "./songs";
 import { supabase } from "@/integrations/supabase/client";
+import type { SongActivityKind, ActivityDigestRow, RecapDigest } from "@/types";
+
+// Activity domain types moved to the @/types barrel (A2 Step 3); re-exported for
+// existing deep imports until the Step 10 codemod repoints them.
+export type { SongActivityKind, ActivityDigestRow, RecapDigest };
 
 /** Convenience filter: activity newer than a given ISO timestamp. */
 export async function getActivitySince(
@@ -21,32 +26,6 @@ export async function getActivitySince(
 }
 
 // ---------- Step 3: realtime activity layer ----------
-
-export type SongActivityKind =
-  | "take_committed"
-  | "capture_created"
-  | "capture_promoted"
-  | "memo_uploaded"
-  | "memo_finalized"
-  | "memo_transcribed"
-  | "invite_accepted"
-  | "member_left"
-  | "owner_transferred"
-  | "card_moved"
-  | "card_linked"
-  | "card_unlinked"
-  | "card_grouped"
-  | "card_section_set"
-  | "card_promoted_final"
-  | "card_deleted";
-
-export type ActivityDigestRow = {
-  kind: SongActivityKind;
-  actor_user_id: string | null;
-  event_count: number;
-  last_at: string;
-  sample_entity_ids: string[] | null;
-};
 
 /** Grouped digest of activity in a song since a timestamp (membership-gated). */
 export async function listActivitySince(
@@ -68,8 +47,6 @@ export async function markSongSeen(song_id: string): Promise<void> {
   const { error } = await (supabase as any).rpc("mark_song_seen", { _song_id: song_id });
   if (error) throw error;
 }
-
-export type RecapDigest = { digest: string; rows: ActivityDigestRow[] };
 
 /** AI-generated one-paragraph recap of activity since a timestamp. */
 export async function getRecapDigest(song_id: string, since?: string): Promise<RecapDigest> {

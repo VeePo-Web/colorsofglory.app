@@ -1,20 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Take } from "@/types";
 
-export type Take = {
-  id: string;
-  voice_memo_id: string;
-  song_id: string;
-  created_by: string;
-  storage_path: string;
-  duration_ms: number | null;
-  byte_size: number;
-  waveform_peaks: number[] | null;
-  friendly_name: string | null;
-  name_is_custom: boolean;
-  is_primary: boolean;
-  is_archived: boolean;
-  created_at: string;
-};
+// `Take` moved to the @/types barrel (A2 Step 3); re-exported for existing deep
+// imports until the Step 10 codemod repoints them.
+export type { Take };
 
 export async function listTakes(
   voice_memo_id: string,

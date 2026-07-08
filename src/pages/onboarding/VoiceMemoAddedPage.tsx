@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, Mic, Pause, Play, UserPlus, Waves } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BackHeader from "@/components/cog/BackHeader";
-import { listMemosForSong, getPlaybackUrl, type VoiceMemo } from "@/integrations/cog/memos";
+import { listMemosForSong, getPlaybackUrl } from "@/integrations/cog/memos";
+import type { VoiceMemo } from "@/types";
 import { updateOnboardingStep } from "@/lib/invite/inviteApi";
 import { getSong } from "@/lib/songContext";
 

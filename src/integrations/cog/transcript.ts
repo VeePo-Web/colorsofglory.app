@@ -1,35 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
+import type {
+  TranscriptBlock,
+  TranscriptPayload,
+  TranscriptStatus,
+  TakeTranscriptRow,
+} from "@/types";
+
+// Transcript domain types moved to the @/types barrel (A2 Step 3); re-exported
+// for existing deep imports until the Step 10 codemod repoints them.
+export type { TranscriptBlock, TranscriptPayload, TranscriptStatus, TakeTranscriptRow };
 
 // Cast for new columns not yet in generated Database types.
 const db = supabase as unknown as { from: (t: string) => any };
-
-export type TranscriptBlock = {
-  id: string;
-  kind: "lyrics" | "chords" | "scripture" | "idea" | "section";
-  section_kind: string | null;
-  label: string;
-  text: string;
-  start_ms: number;
-  end_ms: number;
-};
-
-export type TranscriptPayload = {
-  model: string;
-  blocks: TranscriptBlock[];
-  raw_text: string;
-};
-
-export type TranscriptStatus = "idle" | "processing" | "ready" | "failed";
-
-export type TakeTranscriptRow = {
-  id: string;
-  song_id: string;
-  storage_path: string;
-  duration_ms: number | null;
-  transcript_status: TranscriptStatus;
-  transcript_json: TranscriptPayload | null;
-  transcript_error: string | null;
-};
 
 /** Kick off transcription. Resolves with the structured blocks. */
 export async function requestTranscript(take_id: string): Promise<TranscriptBlock[]> {

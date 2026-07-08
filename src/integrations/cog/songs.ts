@@ -1,81 +1,34 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { CogError } from "@/types";
+import type {
+  Song,
+  SongCard,
+  SongDetail,
+  SongActivityRow,
+  SongNotificationPrefs,
+  SongStatus,
+  SongMemberRole,
+  SongInvite,
+  InvitePreview,
+  CogErrorCode,
+} from "@/types";
 
-export type Song = Database["public"]["Tables"]["songs"]["Row"];
-export type SongInvite = Database["public"]["Tables"]["song_invites"]["Row"];
-export type SongStatus = Database["public"]["Enums"]["song_status"];
-export type SongMemberRole = Database["public"]["Enums"]["song_member_role"];
-
-/** Minimal shape for the Song Catalog grid. */
-export type SongCard = {
-  id: string;
-  title: string;
-  cover_color: string | null;
-  status: SongStatus;
-  last_activity_at: string | null;
-  created_at: string;
-  my_role: SongMemberRole;
-  voice_memo_count: number;
-  collaborator_count: number;
+// Domain types + the CogError class now live in the @/types barrel (A2 Steps 3
+// & 7). Re-exported here so existing deep importers keep resolving until the
+// Step 10 codemod repoints them.
+export { CogError };
+export type {
+  Song,
+  SongCard,
+  SongDetail,
+  SongActivityRow,
+  SongNotificationPrefs,
+  SongStatus,
+  SongMemberRole,
+  SongInvite,
+  InvitePreview,
+  CogErrorCode,
 };
-
-/** Full song + per-room counts for the Workspace hub. */
-export type SongDetail = {
-  id: string;
-  owner_user_id: string;
-  title: string;
-  status: SongStatus;
-  key_signature: string | null;
-  tempo_bpm: number | null;
-  time_signature: string | null;
-  tags: string[] | null;
-  cover_color: string | null;
-  is_locked: boolean;
-  last_activity_at: string | null;
-  created_at: string;
-  updated_at: string;
-  lyrics_snippet: string | null;
-  my_role: SongMemberRole;
-  counts: {
-    sections: number;
-    lyrics_filled: number;
-    voice_memos: number;
-    notes: number;
-    collaborators: number;
-    pending_suggestions: number;
-  };
-};
-
-/**
- * Canonical edge-function error codes. UI can switch on these to render
- * specific messages without parsing free-text error strings.
- */
-export type CogErrorCode =
-  | "INTERNAL"
-  | "INVALID_INPUT"
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "METHOD_NOT_ALLOWED"
-  | "QUOTA_EXCEEDED_SONGS"
-  | "QUOTA_EXCEEDED_STORAGE"
-  | "SONG_NOT_FOUND"
-  | "SONG_DELETED"
-  | "NOT_A_MEMBER"
-  | "OWNER_CANNOT_LEAVE"
-  | "NEW_OWNER_NOT_MEMBER"
-  | "TRANSFER_BLOCKED_QUOTA"
-  | "INVITE_NOT_FOUND"
-  | "INVITE_EXPIRED"
-  | "INVITE_ALREADY_USED"
-  | "INVITE_EXHAUSTED";
-
-export class CogError extends Error {
-  code: CogErrorCode | string;
-  constructor(code: string, message?: string) {
-    super(message ?? code);
-    this.code = code;
-  }
-}
 
 type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
 type FunctionErrorContext = { json?: () => Promise<unknown> };
@@ -137,26 +90,6 @@ export const acceptInvite = (token: string) =>
     { token },
   );
 
-export type InvitePreview = {
-  song_id: string;
-  song_title: string;
-  lyrics_snippet: string | null;
-  inviter_name: string;
-  inviter_first_name: string;
-  inviter_avatar_color: string | null;
-  role: string;
-  collaborator_count: number;
-  collaborators: Array<{
-    user_id: string;
-    role: string;
-    first_name: string | null;
-    avatar_color: string | null;
-    initials: string;
-  }>;
-  expires_at: string;
-  uses_remaining: number;
-};
-
 export const previewInvite = (token: string) =>
   call<InvitePreview>("song-invite-preview", { token });
 
@@ -175,18 +108,6 @@ export const requestNewInvite = (input: {
 
 // --- Song activity feed (members only, IDs+kinds only — no raw content) ---
 
-export type SongActivityRow = {
-  id: string;
-  created_at: string;
-  action: string;
-  entity_type: string;
-  entity_id: string | null;
-  actor_user_id: string | null;
-  actor_name: string | null;
-  actor_color: string | null;
-  payload: Record<string, unknown>;
-};
-
 export const getSongActivity = async (song_id: string, limit = 50, offset = 0) => {
   const { data, error } = await supabase.rpc("get_song_activity", {
     _song_id: song_id,
@@ -198,14 +119,6 @@ export const getSongActivity = async (song_id: string, limit = 50, offset = 0) =
 };
 
 // --- Per-song notification preferences ---
-
-export type SongNotificationPrefs = {
-  user_id: string;
-  song_id: string;
-  notify_on_join: boolean;
-  notify_on_contribution: boolean;
-  push_enabled: boolean;
-};
 
 export const getNotificationPrefs = async (song_id: string) => {
   const { data, error } = await supabase

@@ -1,18 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type { VoiceMemo, VoiceMemoTranscript, MemoLifecycle } from "@/types";
 
-export type VoiceMemo = Database["public"]["Tables"]["voice_memos"]["Row"];
-export type VoiceMemoTranscript = Database["public"]["Tables"]["voice_memo_transcripts"]["Row"];
-
-/** Lifecycle stages for a voice memo. `ready` is legacy — new rows use the others. */
-export type MemoLifecycle =
-  | "uploading"
-  | "uploaded"
-  | "finalized"
-  | "transcribed"
-  | "failed"
-  | "deleted"
-  | "ready";
+// Domain types moved to the @/types barrel (A2 Step 3); re-exported for
+// backwards-compatible deep imports until the Step 10 codemod. NOTE: the
+// memo-level `TranscriptStatus` below is a DISTINCT type kept local here — the
+// barrel surfaces the take-level TranscriptStatus (src/types/voice.ts).
+export type { VoiceMemo, VoiceMemoTranscript, MemoLifecycle };
 
 export type TranscriptStatus =
   | "pending"

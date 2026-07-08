@@ -18,8 +18,8 @@ import {
   archiveTake,
   unarchiveTake,
   getTakeSignedUrl,
-  type Take,
 } from "@/integrations/cog/takes";
+import type { Take } from "@/types";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { audioCache } from "@/lib/voice/audioCache";
 import { generateWaveform } from "@/lib/canvas/waveformSeed";

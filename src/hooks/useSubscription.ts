@@ -1,12 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getMyBillingStatus,
-  type BillingStatus,
-  type PlanId,
-  type Subscription,
-} from "@/integrations/cog/billing";
+import { getMyBillingStatus } from "@/integrations/cog/billing";
+import type { BillingStatus, PlanId, Subscription } from "@/types";
 
 export type SubscriptionState = {
   plan: PlanId;

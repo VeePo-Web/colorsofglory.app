@@ -6,8 +6,9 @@ import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import SongNoteCard from "@/components/notes/SongNoteCard";
 import { useSongTitle } from "@/lib/songContext";
-import { listMembers, type SongMember } from "@/integrations/cog/members";
-import { addNote as addNoteApi, type SongNote } from "@/integrations/cog/notes";
+import { listMembers } from "@/integrations/cog/members";
+import { addNote as addNoteApi } from "@/integrations/cog/notes";
+import type { SongMember, SongNote } from "@/types";
 import {
   songNotesKey,
   useAddNote,

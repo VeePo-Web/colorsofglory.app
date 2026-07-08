@@ -1,16 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
-import { CogError, type SongMemberRole } from "./songs";
+import { CogError } from "./songs";
+import type { SongMember, SongMemberRole } from "@/types";
 
-export type SongMember = {
-  user_id: string;
-  role: SongMemberRole;
-  joined_at: string;
-  display_name: string | null;
-  first_name: string | null;
-  avatar_url: string | null;
-  avatar_color: string | null;
-  initials: string;
-};
+// `SongMember` moved to the @/types barrel (A2 Step 3); re-exported for existing
+// deep imports until the Step 10 codemod repoints them.
+export type { SongMember };
 
 function initialsFrom(name: string | null, firstName: string | null): string {
   const source = (name ?? firstName ?? "").trim();

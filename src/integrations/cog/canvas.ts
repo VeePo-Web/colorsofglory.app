@@ -1,5 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TranscriptBlock } from "./transcript";
+import type { CanvasCard, CommitTakeResult } from "@/types";
+
+// `CanvasCard` / `CommitTakeResult` moved to the @/types barrel (A2 Step 3);
+// re-exported for existing deep imports until the Step 10 codemod repoints them.
+export type { CanvasCard, CommitTakeResult };
 
 // Cast to `any` for table access because generated `Database` types lag
 // behind a freshly applied migration. Types regenerate on the next pull.
@@ -7,31 +12,6 @@ const db = supabase as unknown as {
   from: (table: string) => any;
   functions: typeof supabase.functions;
 };
-
-export type CanvasCard = {
-  id: string;
-  song_id: string;
-  created_by: string;
-  take_id: string | null;
-  kind: "lyrics" | "chords" | "scripture" | "idea" | "section";
-  section_kind: string | null;
-  label: string | null;
-  body: string;
-  start_ms: number | null;
-  end_ms: number | null;
-  position: number;
-  x: number | null;
-  y: number | null;
-  created_at: string;
-  updated_at: string;
-  parent_card_id: string | null;
-  group_id: string | null;
-  tree_kind: "ideas" | "final";
-  section_label: string | null;
-  z_index: number;
-};
-
-export type CommitTakeResult = { song_id: string; card_ids: string[] };
 
 export type CommitTakeInput = {
   take_id: string;

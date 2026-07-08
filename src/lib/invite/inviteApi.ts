@@ -21,10 +21,14 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { InviteContext } from './inviteContext';
 import { InviteError, parseSupabaseError } from './inviteErrors';
+import type { SongMemberRole } from '@/types/role';
+import { dbRoleToDisplay, displayRoleToDb } from '@/types/role';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type DbRole = 'owner' | 'collaborator' | 'viewer';
+/** Storage role. Alias of the canonical {@link SongMemberRole} (@/types/role). */
+export type DbRole = SongMemberRole;
+/** Invite-facing UI role — the narrowed set an invitee can be granted. */
 export type UiRole = InviteContext['assignedRole']; // 'viewer' | 'contributor' | 'reviewer'
 
 export interface InvitePreview {
@@ -65,17 +69,18 @@ export interface GeneratedInvite {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Map DB role → UI label */
+/**
+ * Map DB role → invite UI role. Delegates to the canonical `dbRoleToDisplay`
+ * (@/types/role) and narrows to the invite set — `owner` never surfaces as a
+ * joinable invite role, so it folds to Contributor here.
+ */
 export function dbRoleToUi(dbRole: string): UiRole {
-  if (dbRole === 'viewer') return 'viewer';
-  return 'contributor';  // owner + collaborator both map to contributor for display
+  const role = dbRoleToDisplay(dbRole);
+  return role === 'owner' ? 'contributor' : role;
 }
 
-/** Map UI label → DB role */
-export function uiRoleToDb(uiRole: string): DbRole {
-  if (uiRole === 'viewer') return 'viewer';
-  return 'collaborator';  // contributor + reviewer both → collaborator
-}
+/** Map UI role → DB role. Alias of the canonical `displayRoleToDb` (@/types/role). */
+export const uiRoleToDb = displayRoleToDb;
 
 /** Aurora palette colors assigned by user_id hash */
 const AVATAR_COLORS = ['#8070C4', '#4D8FD2', '#53AB8B', '#D4AE5C', '#C26A95'];

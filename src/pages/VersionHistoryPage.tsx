@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Bookmark, RotateCcw, ShieldCheck } from "lucide-react";
-import { findOriginalId, type SongVersion } from "@/integrations/cog/versions";
+import { findOriginalId } from "@/integrations/cog/versions";
+import type { SongVersion } from "@/types";
 import {
   useEnsureOriginal,
   useMembersById,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, Pencil, Trash2, X } from "lucide-react";
-import type { SongNote } from "@/integrations/cog/notes";
+import type { SongNote } from "@/types";
 import { relativeTime } from "@/lib/notes/relativeTime";
 
 interface SongNoteCardProps {

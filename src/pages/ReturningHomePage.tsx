@@ -4,7 +4,8 @@ import { Mic, Users, Loader2 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import { useCurrentAccount } from "@/integrations/cog/auth";
-import { listMySongs, type SongCard } from "@/integrations/cog/songs";
+import { listMySongs } from "@/integrations/cog/songs";
+import type { SongCard } from "@/types";
 
 /** Compact "x ago" for the last-activity line. */
 function relativeTime(iso: string | null): string {

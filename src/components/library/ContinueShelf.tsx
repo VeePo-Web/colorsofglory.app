@@ -1,5 +1,5 @@
 import { ArrowRight, Mic } from "lucide-react";
-import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import type { SongCard as SongRow } from "@/types";
 import { relativeDate, coverColor } from "@/lib/library/format";
 
 /**

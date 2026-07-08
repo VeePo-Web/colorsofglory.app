@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import type { SongCard as SongRow } from "@/types";
 import type { LibraryDensity, LibrarySort, LibraryView } from "@/lib/library/libraryPrefs";
 import SongGridCard from "./SongGridCard";
 import SongListRow from "./SongListRow";

@@ -14,11 +14,12 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 import { CogError } from "./songs";
+import type { SongNote, NoteActivityKind } from "@/types";
 
-/** A single song-level note, derived from the generated schema (never hand-authored). */
-export type SongNote = Database["public"]["Tables"]["song_notes"]["Row"];
+// Note domain types moved to the @/types barrel (A2 Step 3); re-exported for
+// existing deep imports until the Step 10 codemod repoints them.
+export type { SongNote, NoteActivityKind };
 
 /**
  * Note activity contract (C5 → E-group). When a note changes we EMIT an event
@@ -33,8 +34,6 @@ export type SongNote = Database["public"]["Tables"]["song_notes"]["Row"];
  * it. When the contract lands, fill in the emit below. Do NOT ever put
  * `note.body` in the payload.
  */
-export type NoteActivityKind = "note_added" | "note_edited" | "note_removed";
-
 function emitNoteActivity(_kind: NoteActivityKind, _ids: { song_id: string; note_id: string }): void {
   // no-op until E-group publishes a client emit path / trigger (see above).
 }

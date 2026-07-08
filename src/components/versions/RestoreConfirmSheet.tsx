@@ -1,5 +1,5 @@
 import { ShieldCheck } from "lucide-react";
-import type { SongVersion } from "@/integrations/cog/versions";
+import type { SongVersion } from "@/types";
 import VersionSheetShell from "./VersionSheetShell";
 import { versionHeadline } from "./VersionTimeline";
 

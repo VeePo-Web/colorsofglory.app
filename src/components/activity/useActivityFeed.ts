@@ -23,10 +23,10 @@ import {
   listActivitySince,
   markSongSeen,
   type ActivityEvent,
-  type ActivityDigestRow,
 } from "@/integrations/cog/activity";
-import { getNotificationPrefs, getSong, type SongDetail } from "@/integrations/cog/songs";
-import { listMembers, type SongMember } from "@/integrations/cog/members";
+import { getNotificationPrefs, getSong } from "@/integrations/cog/songs";
+import { listMembers } from "@/integrations/cog/members";
+import type { ActivityDigestRow, SongDetail, SongMember } from "@/types";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
 import { UNKNOWN_ACTOR } from "./activityCopy";
 

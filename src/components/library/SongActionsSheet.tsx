@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks } from "lucide-react";
-import type { SongCard as SongRow } from "@/integrations/cog/songs";
+import type { SongCard as SongRow } from "@/types";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
 
