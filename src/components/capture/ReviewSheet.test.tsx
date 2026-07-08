@@ -86,7 +86,7 @@ describe("ReviewSheet — never a dead end", () => {
     const textarea = await screen.findByPlaceholderText("Edit this block…");
     fireEvent.change(textarea, { target: { value: "when mercy found me" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add to canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to song" }));
 
     await waitFor(() => expect(commitTakeToCanvas).toHaveBeenCalledTimes(1));
     expect(commitTakeToCanvas).toHaveBeenCalledWith({

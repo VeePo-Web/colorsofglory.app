@@ -30,9 +30,11 @@ import { routeAfterAuth } from "@/lib/auth/postAuthRoute";
 
 const REPLACE = { replace: true };
 
-function setStep(step: string | null) {
+function setStep(step: string | null, firstSongId: string | null = null) {
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-  maybeSingle.mockResolvedValue({ data: step === null ? null : { onboarding_step: step } });
+  maybeSingle.mockResolvedValue({
+    data: step === null ? null : { onboarding_step: step, first_song_id: firstSongId },
+  });
 }
 
 describe("routeAfterAuth — post-auth resume routing", () => {
@@ -49,18 +51,23 @@ describe("routeAfterAuth — post-auth resume routing", () => {
     expect(updateOnboardingStep).not.toHaveBeenCalled();
   });
 
-  it("keeps a pre-song user in the create-first-song lane", async () => {
-    for (const step of ["intent_selected", "referral_program_seen", "founder_code_seen"]) {
+  it("resumes each pre-song step on its own screen (typed STEP_ROUTE, no swallow)", async () => {
+    const expected: Record<string, string> = {
+      intent_selected: "/onboarding/start-song",
+      referral_program_seen: "/onboarding/earn",
+      founder_code_seen: "/onboarding/founder-code",
+    };
+    for (const [step, route] of Object.entries(expected)) {
       vi.clearAllMocks();
       setStep(step);
       const navigate = vi.fn();
       await routeAfterAuth(navigate);
-      expect(navigate).toHaveBeenCalledWith("/onboarding/start-song", REPLACE);
+      expect(navigate).toHaveBeenCalledWith(route, REPLACE);
       expect(updateOnboardingStep).not.toHaveBeenCalled();
     }
   });
 
-  it("lands a returning user (song already created) on /home and completes onboarding once", async () => {
+  it("drops a mid-onboarding user back inside their song so momentum continues", async () => {
     for (const step of [
       "first_song_created",
       "first_idea_captured",
@@ -69,12 +76,24 @@ describe("routeAfterAuth — post-auth resume routing", () => {
       "first_collaborator_invited",
     ]) {
       vi.clearAllMocks();
-      setStep(step);
+      setStep(step, "s1");
       const navigate = vi.fn();
       await routeAfterAuth(navigate);
-      expect(navigate).toHaveBeenCalledWith("/home", REPLACE);
-      expect(updateOnboardingStep).toHaveBeenCalledWith("completed");
+      expect(navigate).toHaveBeenCalledWith("/songs/s1", REPLACE);
     }
+  });
+
+  it("guards a null first_song_id — never builds /songs/null", async () => {
+    setStep("first_song_created", null);
+    const navigate = vi.fn();
+    await routeAfterAuth(navigate);
+    expect(navigate).toHaveBeenCalledWith("/onboarding/start-song", REPLACE);
+
+    vi.clearAllMocks();
+    setStep("first_idea_captured", null);
+    const navigate2 = vi.fn();
+    await routeAfterAuth(navigate2);
+    expect(navigate2).toHaveBeenCalledWith("/home", REPLACE);
   });
 
   it("does not re-mark onboarding for an already-completed or dismissed user", async () => {
@@ -93,7 +112,7 @@ describe("routeAfterAuth — post-auth resume routing", () => {
     sessionStorage.setItem("cog:invite-token", "tok-123");
     const navigate = vi.fn();
     await routeAfterAuth(navigate);
-    expect(navigate).toHaveBeenCalledWith("/invite/tok-123", REPLACE);
+    expect(navigate).toHaveBeenCalledWith("/join/tok-123", REPLACE);
     expect(updateOnboardingStep).not.toHaveBeenCalled();
   });
 
