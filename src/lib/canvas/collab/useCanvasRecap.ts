@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getActivitySince, markSongSeen } from "@/integrations/cog/activity";
-import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useCurrentAccount } from "@/integrations/cog/auth";
 import { buildRecapDigest, type RecapEntry } from "./recapDigest";
 
 /**
