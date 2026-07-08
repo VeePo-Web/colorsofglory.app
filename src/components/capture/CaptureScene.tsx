@@ -33,8 +33,12 @@ const CaptureSheet = lazy(() => import("./CaptureSheet"));
 const ReviewSheet = lazy(() => import("./ReviewSheet"));
 const CommitRibbon = lazy(() => import("./CommitRibbon"));
 import ImportMemoButton from "./ImportMemoButton";
+import MetronomeBar from "./MetronomeBar";
+import { useMetronome } from "@/hooks/useMetronome";
 import LatestPeekStrip from "./LatestPeekStrip";
+import HeardCuesStrip from "./HeardCuesStrip";
 import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
+import { detectMusicCues } from "@/lib/capture/musicCues";
 import type { SectionMarker } from "@/lib/capture/transcriptModel";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
@@ -76,6 +80,18 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // gesture is already disabled off-idle; this closes the button vector too.
   const navLocked = phase === "recording" || phase === "stopping";
   const live = useLiveTranscript();
+  const metro = useMetronome();
+  // Stable method refs. The hook return objects are recreated every render, so
+  // using them directly in effect deps re-runs those effects — and their
+  // cleanups — on every render. These useCallback-stable methods are safe deps.
+  const { cancelRecording } = recorder;
+  const { start: startLive, stop: stopLive, reset: resetLive, supported: liveSupported } = live;
+  const { stop: stopMetro } = metro;
+
+  // Optional count-in + click so a hummed idea lands in time. Off by default —
+  // it only matters to people who reach for it, and never adds friction otherwise.
+  const [metroBpm, setMetroBpm] = useState<number | null>(null);
+  const [clickOn, setClickOn] = useState(false);
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
   const [status, setStatus] = useState<
@@ -228,6 +244,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   const teardownRef = useRef<() => void>(() => {});
   teardownRef.current = () => {
     live.stop();
+    // The metronome click must never outlive the scene.
+    stopMetro();
   };
   useEffect(() => {
     return () => teardownRef.current();
@@ -237,6 +255,10 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
     return buildTranscriptBlocks(live.words, markers);
   }, [live.words, manualMarkers]);
+
+  // Spoken key / tempo / chords heard inside the take, so the idea arrives
+  // song-ready without typing ("key of G, about 120 BPM, chords are G C D").
+  const musicCues = useMemo(() => detectMusicCues(live.words), [live.words]);
 
   const handleAudioFile = useCallback(
     async (file: File, fileDurationMs: number) => {
@@ -346,7 +368,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // same upload path as a manual stop, so the idea lands in review either way.
   const handleAutoFinalize = useCallback(
     (result: RecordingResult | null) => {
-      live.stop();
+      stopLive();
+      stopMetro();
       if (!result) {
         setStatus("idle");
         return;
@@ -363,7 +386,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       });
       void handleAudioFile(file, result.durationMs);
     },
-    [handleAudioFile, live],
+    [handleAudioFile, stopLive, stopMetro],
   );
 
   useEffect(() => {
@@ -375,7 +398,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
     if (phase === "recording") {
       const result = await recorder.stopRecording();
-      live.stop();
+      stopLive();
+      stopMetro();
       if (!result) return;
       const file = new File([result.blob], `take-${Date.now()}.webm`, {
         type: result.mimeType || "audio/webm",
@@ -384,16 +408,23 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       return;
     }
 
-    // Start recording fresh.
+    // Start recording fresh. An optional count-in plays *before* the live
+    // transcript + recorder start, so the count clicks aren't transcribed and
+    // the singer comes in on the downbeat.
     setManualMarkers([]);
     setStatus("listening");
     live.stop();
     live.reset();
+    if (clickOn && metroBpm) {
+      metro.prime();
+      await metro.countIn(metroBpm, 4);
+    }
     const started = await recorder.startRecording();
     if (!started) {
       setStatus("idle");
       return;
     }
+    if (clickOn && metroBpm) metro.start(metroBpm);
     // Live STT is a pure enhancement. Let MediaRecorder own the mic first so a
     // speech-recognition permission/session cannot masquerade as recording — and
     // never let a SpeechRecognition throw (e.g. "already started") reject this
@@ -405,7 +436,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         /* recognition is optional; the take keeps recording regardless */
       }
     }
-  }, [phase, recorder, saving, live, handleAudioFile]);
+  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -734,6 +765,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           onTap={handleMicTap}
         />
 
+        {/* Tap-tempo + optional count-in — quiet under the mic, idle only. */}
+        {phase !== "recording" && !saving && !review.open && (
+          <MetronomeBar
+            bpm={metroBpm}
+            clickOn={clickOn}
+            onBpmChange={setMetroBpm}
+            onClickToggle={setClickOn}
+          />
+        )}
+
         {/* Recovery path — a denied or errored mic must never be a dead end. */}
         {phase === "permission-denied" && (
           <RecoveryNotice
@@ -785,6 +826,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
                 : status
           }
         />
+
+        {/* "Heard" cues — quiet confirmation the app caught the key/tempo/chords. */}
+        {!review.open && <HeardCuesStrip cues={musicCues} />}
 
         {pendingBlocks.length > 0 && phase !== "recording" && !review.open && (
           <p
