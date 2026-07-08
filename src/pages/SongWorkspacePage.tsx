@@ -119,7 +119,8 @@ const SongWorkspacePage = () => {
       case "voice":
         return `/songs/${songId}/canvas?layer=voice`;
       case "notes":
-        return `/songs/${songId}/canvas?layer=notes`;
+        // Notes (C5) opens the standalone song-level pad, not the canvas layer.
+        return `/songs/${songId}/notes`;
       case "invite":
         return `/songs/${songId}/canvas?layer=people`;
     }
