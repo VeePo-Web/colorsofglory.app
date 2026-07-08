@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError } from "./errors";
 
 export interface StorageUsage {
   bytesUsed: number;
@@ -8,7 +9,7 @@ export interface StorageUsage {
 export async function getStorageUsage(): Promise<StorageUsage> {
   const { data: userData } = await supabase.auth.getUser();
   const uid = userData.user?.id;
-  if (!uid) throw new Error("Not authenticated");
+  if (!uid) throw new CogError("UNAUTHENTICATED", "Not authenticated");
 
   const [{ data: usage }, { data: limit }] = await Promise.all([
     supabase.from("storage_usage").select("bytes_used").eq("user_id", uid).maybeSingle(),

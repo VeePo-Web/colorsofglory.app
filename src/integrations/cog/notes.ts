@@ -15,7 +15,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { CogError } from "./songs";
+import { CogError, toCogError } from "./errors";
 
 /** A single song-level note, derived from the generated schema (never hand-authored). */
 export type SongNote = Database["public"]["Tables"]["song_notes"]["Row"];
@@ -50,7 +50,7 @@ export async function listSongNotes(songId: string): Promise<SongNote[]> {
     .eq("song_id", songId)
     .is("section_id", null)
     .order("created_at", { ascending: false });
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return (data ?? []) as SongNote[];
 }
 
@@ -77,7 +77,7 @@ export async function addNote(songId: string, body: string): Promise<SongNote> {
     })
     .select("*")
     .single();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   emitNoteActivity("note_added", { song_id: songId, note_id: data.id });
   return data as SongNote;
 }
@@ -93,7 +93,7 @@ export async function updateNote(id: string, body: string): Promise<SongNote> {
     .eq("id", id)
     .select("*")
     .single();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   emitNoteActivity("note_edited", { song_id: (data as SongNote).song_id, note_id: id });
   return data as SongNote;
 }
@@ -105,6 +105,6 @@ export async function updateNote(id: string, body: string): Promise<SongNote> {
  */
 export async function removeNote(id: string, songId?: string): Promise<void> {
   const { error } = await supabase.from("song_notes").delete().eq("id", id);
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   if (songId) emitNoteActivity("note_removed", { song_id: songId, note_id: id });
 }

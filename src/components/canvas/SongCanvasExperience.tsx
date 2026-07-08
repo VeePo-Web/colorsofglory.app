@@ -59,6 +59,8 @@ import {
 import StackSheet from "@/components/voice/StackSheet";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
+import RoleToast from "@/components/invite/RoleToast";
+import type { InviteRole } from "@/lib/invite/inviteContext";
 import CoachMark from "@/components/onboarding/CoachMark";
 import { useCoachMark } from "@/components/onboarding/useCoachMark";
 import { useSongCollaborators } from "@/lib/invite/useSongCollaborators";
@@ -796,6 +798,10 @@ const SongCanvasExperience = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isViewer = searchParams.get("role") === "viewer";
+  // Fresh arrival from an accepted invite (?invite=1) — show the one-time
+  // "you joined as [role]" welcome toast so they know where they stand.
+  const isInviteArrival = searchParams.get("invite") === "1";
+  const invitedRole = (searchParams.get("role") ?? "contributor") as InviteRole;
 
   // First-run tour refs — the canvas hooks live below, after showFirstRun is
   // known, so they can wait for the empty-room first-action guide to finish.
@@ -2218,6 +2224,9 @@ const SongCanvasExperience = () => {
       {/* Return-visit recap — auto-shows once for a returning collaborator
           with real activity-feed changes since their last visit (Product 12) */}
       {!showRecap && <CanvasRecapGate songId={songId} />}
+
+      {/* Fresh-from-invite welcome: "You joined as [role]" — once, on arrival. */}
+      {isInviteArrival && <RoleToast role={invitedRole} />}
 
       {/* Copy-link invite sheet — one tap from the room's presence stack */}
       {showShareSheet && (

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, call, toCogError } from "./errors";
 
 export type QuickCaptureInput = {
   song_id?: string | null;
@@ -36,7 +37,7 @@ export async function quickCapture(input: QuickCaptureInput): Promise<string> {
     _section_id: input.section_id ?? null,
     _voice_memo_id: input.voice_memo_id ?? null,
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as string;
 }
 
@@ -46,7 +47,7 @@ export async function listCaptures(song_id: string): Promise<IdeaCapture[]> {
     .select("*")
     .eq("song_id", song_id)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as IdeaCapture[];
 }
 
@@ -60,13 +61,13 @@ export async function listMyUnfiledCaptures(): Promise<IdeaCapture[]> {
     .is("song_id", null)
     .eq("author_user_id", uid)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as IdeaCapture[];
 }
 
 export async function deleteCapture(id: string): Promise<void> {
   const { error } = await supabase.from("idea_captures").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export type PromoteCaptureInput = {
@@ -87,26 +88,9 @@ export type PromoteCaptureResult = {
 
 /** Promote an idea capture into a canvas card (idempotent per capture). */
 export async function promoteCapture(input: PromoteCaptureInput): Promise<PromoteCaptureResult> {
-  const { data, error } = await supabase.functions.invoke<PromoteCaptureResult>("promote-capture", {
-    body: input,
-  });
-  if (error) {
-    // Surface the real server error code — the edge function returns
-    // `{ error: "<code>", detail?: ... }` on non-2xx. supabase-js otherwise
-    // hides the body behind a generic "non-2xx status code" message.
-    const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
-    let code: string | undefined;
-    if (ctx?.json) {
-      try {
-        const body = (await ctx.json()) as { error?: string; code?: string; message?: string };
-        code = body?.error ?? body?.code ?? body?.message;
-      } catch {
-        /* ignore */
-      }
-    }
-    console.error("[promote-capture]", { code, error });
-    throw new Error(code ?? (error as Error).message ?? "promote_capture_failed");
-  }
-  if (!data) throw new Error("promote-capture returned no data");
+  // Routed through `call` so the real server code (forbidden, quota, ...)
+  // surfaces as a CogError.code instead of a generic non-2xx string.
+  const data = await call<PromoteCaptureResult>("promote-capture", input);
+  if (!data) throw new CogError("INTERNAL", "promote-capture returned no data");
   return data;
 }

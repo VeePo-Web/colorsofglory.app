@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, toCogError } from "./errors";
 
 export type Take = {
   id: string;
@@ -24,13 +25,13 @@ export async function listTakes(
     _voice_memo_id: voice_memo_id,
     _include_archived: opts.include_archived ?? false,
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as Take[];
 }
 
 export async function setPrimaryTake(take_id: string): Promise<string> {
   const { data, error } = await supabase.rpc("set_primary_take", { _take_id: take_id });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as string;
 }
 
@@ -39,7 +40,7 @@ export async function archiveTake(take_id: string): Promise<void> {
     .from("takes")
     .update({ is_archived: true })
     .eq("id", take_id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function unarchiveTake(take_id: string): Promise<void> {
@@ -47,7 +48,7 @@ export async function unarchiveTake(take_id: string): Promise<void> {
     .from("takes")
     .update({ is_archived: false })
     .eq("id", take_id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function renameTake(take_id: string, friendly_name: string): Promise<void> {
@@ -55,7 +56,7 @@ export async function renameTake(take_id: string, friendly_name: string): Promis
     .from("takes")
     .update({ friendly_name, name_is_custom: true })
     .eq("id", take_id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 /**
@@ -75,7 +76,7 @@ export async function createTake(input: {
 }): Promise<Take> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth.user?.id;
-  if (!uid) throw new Error("Not authenticated");
+  if (!uid) throw new CogError("UNAUTHENTICATED", "Not authenticated");
 
   const { data, error } = await supabase
     .from("takes")
@@ -92,7 +93,7 @@ export async function createTake(input: {
     })
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   if (input.make_primary) {
     await setPrimaryTake(data.id);
   }
@@ -107,6 +108,6 @@ export async function getTakeSignedUrl(storage_path: string, expires_in_seconds 
   const { data, error } = await supabase.storage
     .from("voice-memos")
     .createSignedUrl(storage_path, expires_in_seconds);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data.signedUrl;
 }

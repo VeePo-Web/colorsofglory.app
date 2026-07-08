@@ -8,6 +8,7 @@ export { getSongActivity as getRecentActivity } from "./songs";
 
 import { getSongActivity, type SongActivityRow } from "./songs";
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, call, toCogError } from "./errors";
 
 /** Convenience filter: activity newer than a given ISO timestamp. */
 export async function getActivitySince(
@@ -59,24 +60,21 @@ export async function listActivitySince(
     _since: since,
     _limit: limit,
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as ActivityDigestRow[];
 }
 
 /** Update the caller's last_seen_at for a song (for "what changed since you left"). */
 export async function markSongSeen(song_id: string): Promise<void> {
   const { error } = await (supabase as any).rpc("mark_song_seen", { _song_id: song_id });
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export type RecapDigest = { digest: string; rows: ActivityDigestRow[] };
 
 /** AI-generated one-paragraph recap of activity since a timestamp. */
 export async function getRecapDigest(song_id: string, since?: string): Promise<RecapDigest> {
-  const { data, error } = await supabase.functions.invoke<RecapDigest>("digest-recap", {
-    body: { song_id, since },
-  });
-  if (error) throw error;
-  if (!data) throw new Error("digest-recap returned no data");
+  const data = await call<RecapDigest>("digest-recap", { song_id, since });
+  if (!data) throw new CogError("INTERNAL", "digest-recap returned no data");
   return data;
 }

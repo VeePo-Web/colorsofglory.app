@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TranscriptBlock } from "./transcript";
+import { call, toCogError } from "./errors";
 
 // Cast to `any` for table access because generated `Database` types lag
 // behind a freshly applied migration. Types regenerate on the next pull.
@@ -42,33 +43,14 @@ export type CommitTakeInput = {
 };
 
 /**
- * Invoke `commit-take` and surface the server's real error code/message
- * (e.g. "forbidden", "song_limit_reached", "take_not_found") instead of the
- * generic supabase-js "Edge Function returned a non-2xx status code" string.
- * The edge function responds with `{ error: "<code>" }` on failure; we read
- * it off `FunctionsHttpError.context` and throw a real Error whose `.message`
- * IS that code, so callers can pattern-match on `raw.includes("forbidden")`.
+ * Commit a transcribed take onto the canvas. Routed through `call`, which
+ * reads the edge function `{ error: "<code>" }` body off a non-2xx Response
+ * and throws a CogError — so a new-song QUOTA_EXCEEDED_SONGS (and forbidden /
+ * take_not_found) reaches the UI as `.code`, with the raw slug preserved on
+ * `.message` for existing message-matching callers.
  */
 export async function commitTakeToCanvas(input: CommitTakeInput): Promise<CommitTakeResult> {
-  const { data, error } = await supabase.functions.invoke("commit-take", { body: input });
-  if (error) {
-    const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
-    let code: string | undefined;
-    if (ctx?.json) {
-      try {
-        const body = (await ctx.json()) as { error?: string; code?: string; message?: string };
-        code = body?.error ?? body?.code ?? body?.message;
-      } catch {
-        /* fall through */
-      }
-    }
-    const msg = code ?? (error as Error).message ?? "commit_take_failed";
-    // Log the full context to the console so future regressions are searchable
-    // even when the toast only shows the friendly copy.
-    console.error("[commit-take]", { code, error });
-    throw new Error(msg);
-  }
-  return data as CommitTakeResult;
+  return call<CommitTakeResult>("commit-take", input);
 }
 
 export async function listCanvasCards(song_id: string): Promise<CanvasCard[]> {
@@ -77,13 +59,13 @@ export async function listCanvasCards(song_id: string): Promise<CanvasCard[]> {
     .select("*")
     .eq("song_id", song_id)
     .order("position", { ascending: true });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as CanvasCard[];
 }
 
 export async function deleteCanvasCard(id: string): Promise<void> {
   const { error } = await db.from("canvas_cards").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function updateCanvasCard(
@@ -91,7 +73,7 @@ export async function updateCanvasCard(
   patch: Partial<Pick<CanvasCard, "label" | "body" | "kind" | "section_kind" | "position" | "x" | "y">>,
 ): Promise<void> {
   const { error } = await db.from("canvas_cards").update(patch).eq("id", id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 // ---------- Canvas write RPCs ----------
@@ -100,7 +82,7 @@ export type BulkMoveItem = { id: string; x: number; y: number; z?: number };
 
 async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await (supabase as any).rpc(fn, args);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as T;
 }
 

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, toCogError } from "./errors";
 
 // =========================================================================
 // Direct admin RPCs (internal dashboard) — see migrations 20260604062*.
@@ -34,7 +35,7 @@ export async function adminCreateFounder(input: {
     _reward_profile: (input.reward_profile ?? null) as never,
     _notes: input.notes ?? null,
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
@@ -52,31 +53,31 @@ export async function adminCreateFounderCode(input: {
     _expires_at: input.expires_at ?? null,
     _label: input.label ?? null,
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
 export async function adminDeactivateCode(code_id: string) {
   const { data, error } = await supabase.rpc("admin_deactivate_code", { _code_id: code_id });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
 export async function adminFounderSummary() {
   const { data, error } = await supabase.rpc("admin_founder_summary");
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
 export async function adminFounderDetail(founder_id: string) {
   const { data, error } = await supabase.rpc("admin_founder_detail", { _founder_id: founder_id });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
 export async function adminReferralsRecent(limit = 50) {
   const { data, error } = await supabase.rpc("admin_referrals_recent", { _limit: limit });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
@@ -93,7 +94,7 @@ export type AttentionSummary = {
 /** Admin Home "needs attention" cockpit — things requiring intervention now. */
 export async function adminAttentionSummary(): Promise<AttentionSummary> {
   const { data, error } = await supabase.rpc("admin_attention_summary" as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as AttentionSummary;
 }
 
@@ -109,14 +110,14 @@ export type OtpStats = {
 
 export async function adminOtpStats(): Promise<OtpStats> {
   const { data, error } = await supabase.rpc("admin_otp_stats" as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as OtpStats;
 }
 
 /** Tune an otp_* app setting (e.g. geo allowlist, daily ceiling). Audited. */
 export async function adminSetAppSetting(key: string, value: unknown): Promise<void> {
   const { error } = await supabase.rpc("admin_set_app_setting" as never, { _key: key, _value: value } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export type FinanceSummary = {
@@ -140,7 +141,7 @@ export type FinanceSummary = {
 /** Reconciled finance snapshot (admin only). Numbers trace to Stripe-sourced rows. */
 export async function adminFinanceSummary(): Promise<FinanceSummary> {
   const { data, error } = await supabase.rpc("admin_finance_summary" as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as FinanceSummary;
 }
 
@@ -164,7 +165,7 @@ export type PayoutRow = {
 
 export async function adminListPayouts(limit = 100): Promise<PayoutRow[]> {
   const { data, error } = await supabase.rpc("admin_list_payouts" as never, { _limit: limit } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as unknown as PayoutRow[];
 }
 
@@ -186,7 +187,7 @@ export async function adminBillingEvents(limit = 50, onlyFailed = false): Promis
     _limit: limit,
     _only_failed: onlyFailed,
   } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as unknown as BillingEventRow[];
 }
 
@@ -212,7 +213,7 @@ export async function adminFraudFlags(onlyOpen = true, limit = 100): Promise<Fra
     _only_open: onlyOpen,
     _limit: limit,
   } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as unknown as FraudFlag[];
 }
 
@@ -228,7 +229,7 @@ export async function adminCreateFraudFlag(input: {
     _reason: input.reason,
     _severity: input.severity ?? "low",
   } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as FraudFlag;
 }
 
@@ -237,7 +238,7 @@ export async function adminResolveFraudFlag(id: string, note?: string): Promise<
     _id: id,
     _note: note ?? null,
   } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as FraudFlag;
 }
 
@@ -259,7 +260,7 @@ export type ReferrerLedgerRow = {
 /** Per-referrer tracker: referrals + earnings + whether they can be paid. */
 export async function adminReferrerLedger(): Promise<ReferrerLedgerRow[]> {
   const { data, error } = await supabase.rpc("admin_referrer_ledger" as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as unknown as ReferrerLedgerRow[];
 }
 
@@ -277,7 +278,7 @@ export type CurrentAttribution = {
 /** Read the current referral attribution for a referred user (admin). */
 export async function adminAttributionForUser(userId: string): Promise<CurrentAttribution> {
   const { data, error } = await supabase.rpc("admin_attribution_for_user" as never, { _user: userId } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as CurrentAttribution;
 }
 
@@ -286,7 +287,7 @@ export async function adminMonthlyPayouts(month_start?: string) {
     "admin_monthly_payouts",
     month_start ? { _month_start: month_start } : ({} as never),
   );
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
@@ -306,8 +307,8 @@ type CreateFounderInput = {
 
 async function callAdmin(fn: string, body: unknown) {
   const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error) throw error;
-  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  if (error) throw toCogError(error);
+  if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
   return data;
 }
 
@@ -391,7 +392,7 @@ export async function searchAuditLogs(filters: AuditSearchFilters = {}): Promise
     if (v !== undefined && v !== null && v !== "") body[k] = v;
   }
   const { data, error } = await supabase.functions.invoke("admin-audit-search", { body });
-  if (error) throw error;
-  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  if (error) throw toCogError(error);
+  if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
   return data as AuditSearchResult;
 }

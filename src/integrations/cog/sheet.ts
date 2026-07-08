@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, toCogError } from "./errors";
 import {
   type SheetDoc,
   type SheetSectionDoc,
@@ -70,7 +71,7 @@ const db = supabase as unknown as { from: (t: string) => any };
 async function requireUserId(): Promise<string> {
   const { data } = await supabase.auth.getUser();
   const uid = data.user?.id;
-  if (!uid) throw new Error("Not authenticated");
+  if (!uid) throw new CogError("UNAUTHENTICATED", "Not authenticated");
   return uid;
 }
 
@@ -122,9 +123,9 @@ export async function getSongSheet(songId: string): Promise<SongSheet> {
       .eq("label", SHEET_META_LABEL)
       .maybeSingle(),
   ]);
-  if (sectionsRes.error) throw sectionsRes.error;
-  if (lyricsRes.error) throw lyricsRes.error;
-  if (metaRes.error) throw metaRes.error;
+  if (sectionsRes.error) throw toCogError(sectionsRes.error);
+  if (lyricsRes.error) throw toCogError(lyricsRes.error);
+  if (metaRes.error) throw toCogError(metaRes.error);
 
   const meta = (metaRes.data?.chords ?? null) as SheetMetaV1 | null;
   const sections = (sectionsRes.data ?? []) as Array<{
@@ -224,7 +225,7 @@ export async function saveSongSheet(
       })),
       { onConflict: "id" },
     );
-    if (secErr) throw secErr;
+    if (secErr) throw toCogError(secErr);
 
     const { error: lyrErr } = await db.from("song_lyrics").upsert(
       changed.map(({ section }) => ({
@@ -237,7 +238,7 @@ export async function saveSongSheet(
       })),
       { onConflict: "section_id" },
     );
-    if (lyrErr) throw lyrErr;
+    if (lyrErr) throw toCogError(lyrErr);
   }
 
   // Remove sections that left the doc (soft in product terms: the emitted
@@ -251,7 +252,7 @@ export async function saveSongSheet(
       .delete()
       .eq("song_id", songId)
       .in("id", removedIds);
-    if (delErr) throw delErr;
+    if (delErr) throw toCogError(delErr);
   }
 
   // Sheet meta — one song-level progression row, updated in place.
@@ -270,13 +271,13 @@ export async function saveSongSheet(
     .eq("song_id", songId)
     .eq("label", SHEET_META_LABEL)
     .maybeSingle();
-  if (metaSelErr) throw metaSelErr;
+  if (metaSelErr) throw toCogError(metaSelErr);
   if (metaRow?.id) {
     const { error } = await db
       .from("chord_progressions")
       .update({ chords: meta, updated_at: now })
       .eq("id", metaRow.id);
-    if (error) throw error;
+    if (error) throw toCogError(error);
   } else {
     const { error } = await db.from("chord_progressions").insert({
       song_id: songId,
@@ -285,7 +286,7 @@ export async function saveSongSheet(
       chords: meta,
       created_by_user_id: uid,
     });
-    if (error) throw error;
+    if (error) throw toCogError(error);
   }
 
   return { savedAt: now };
@@ -348,7 +349,7 @@ export async function seedSheetFromCapture(songId: string, key = "C"): Promise<S
     .eq("song_id", songId)
     .eq("transcript_status", "ready")
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) throw toCogError(error);
 
   const ordinals = new Map<string, number>();
   const sections: SheetSectionDoc[] = [];

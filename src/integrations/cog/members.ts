@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { CogError, type SongMemberRole } from "./songs";
+import { toCogError } from "./errors";
+import { type SongMemberRole } from "./songs";
 
 export type SongMember = {
   user_id: string;
@@ -22,7 +23,7 @@ function initialsFrom(name: string | null, firstName: string | null): string {
 /** All members of a song. Caller must be a member; otherwise returns []. */
 export async function listMembers(songId: string): Promise<SongMember[]> {
   const { data, error } = await supabase.rpc("list_song_members", { _song_id: songId });
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     user_id: row.user_id as string,
     role: row.role as SongMemberRole,
@@ -41,6 +42,6 @@ export async function listMembers(songId: string): Promise<SongMember[]> {
 /** Signed-in user's role in a song, or null if not a member. */
 export async function myRole(songId: string): Promise<SongMemberRole | null> {
   const { data, error } = await supabase.rpc("my_song_role", { _song_id: songId });
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return (data as SongMemberRole | null) ?? null;
 }

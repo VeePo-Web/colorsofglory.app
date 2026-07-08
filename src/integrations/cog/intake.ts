@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, toCogError } from "./errors";
 
 /**
  * Share-sheet intake SDK (Pattern 4).
@@ -40,8 +41,8 @@ export async function submitSharedAudio(input: SharedAudioInput): Promise<Intake
   const { data, error } = await supabase.functions.invoke<IntakeResult>("intake-voice-memo", {
     body: form,
   });
-  if (error) throw error;
-  if (!data) throw new Error("Intake returned no data");
+  if (error) throw toCogError(error);
+  if (!data) throw new CogError("INTERNAL", "Intake returned no data");
   return data;
 }
 

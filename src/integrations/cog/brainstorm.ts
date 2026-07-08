@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toCogError } from "./errors";
 import { uploadVoiceMemo, getPlaybackUrl, type VoiceMemo } from "./memos";
 
 export type BrainstormMemo = VoiceMemo & { notes: string | null };
@@ -11,28 +12,28 @@ export async function listBrainstormMemos(songId: string, includeArchived = fals
     .order("created_at", { ascending: false });
   if (!includeArchived) q = q.neq("status", "archived" as never).neq("status", "deleted");
   const { data, error } = await q;
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as BrainstormMemo[];
 }
 
 export async function updateMemoTitle(memoId: string, title: string): Promise<void> {
   const { error } = await supabase.from("voice_memos").update({ title: title || null }).eq("id", memoId);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function updateMemoNotes(memoId: string, notes: string): Promise<void> {
   const { error } = await supabase.from("voice_memos").update({ notes: notes || null }).eq("id", memoId);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function archiveMemo(memoId: string): Promise<void> {
   const { error } = await supabase.from("voice_memos").update({ status: "archived" as never }).eq("id", memoId);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export async function unarchiveMemo(memoId: string): Promise<void> {
   const { error } = await supabase.from("voice_memos").update({ status: "finalized" }).eq("id", memoId);
-  if (error) throw error;
+  if (error) throw toCogError(error);
 }
 
 export { uploadVoiceMemo, getPlaybackUrl };

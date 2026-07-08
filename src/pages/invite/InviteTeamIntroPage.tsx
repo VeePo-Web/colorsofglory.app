@@ -62,7 +62,12 @@ const InviteTeamIntroPage = () => {
       navigate('/', { replace: true });
       return;
     }
-    navigate(`/songs/${songId}/lyrics?invite=1&role=${assignedRole}`, { replace: true });
+    // Land on the CANVAS — the core songwriting room — not the lyric sheet.
+    // The canvas is where the role-aware experience lives: an invited viewer is
+    // locked to read-only there (isViewer) with the "ask the owner to contribute"
+    // affordance, while the sheet has no such guard. invite=1 triggers the
+    // welcome toast; role drives the lock.
+    navigate(`/songs/${songId}/canvas?invite=1&role=${assignedRole}`, { replace: true });
   };
 
   useEffect(() => {

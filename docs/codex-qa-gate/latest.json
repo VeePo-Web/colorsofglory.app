@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-13T17:33:12.197Z",
+  "generatedAt": "2026-07-08T04:46:09.946Z",
   "routesChecked": [
     {
       "path": "/",
@@ -163,13 +163,13 @@
   "results": [
     {
       "name": "lint",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "typecheck",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 2"
     },
     {
       "name": "build",
@@ -183,8 +183,8 @@
     },
     {
       "name": "bundle budget",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "exit 1"
     },
     {
       "name": "Old-brand content scan",
@@ -198,13 +198,13 @@
     },
     {
       "name": "basic accessibility source checks",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "1 misses"
     },
     {
       "name": "instant-feel source checks",
-      "status": "pass",
-      "details": ""
+      "status": "fail",
+      "details": "2 misses"
     },
     {
       "name": "Placeholder route scan",
@@ -217,5 +217,30 @@
       "details": "26 routes"
     }
   ],
-  "findings": []
+  "findings": [
+    {
+      "severity": "P1",
+      "title": "basic accessibility source checks missed expected source checks.",
+      "details": [
+        {
+          "file": "src/App.tsx",
+          "label": "Route fallback has a loading label"
+        }
+      ]
+    },
+    {
+      "severity": "P1",
+      "title": "instant-feel source checks missed expected source checks.",
+      "details": [
+        {
+          "file": "src/App.tsx",
+          "label": "Suspense fallback is a skeleton instead of a spinner"
+        },
+        {
+          "file": "src/pages/SongCatalogPage.tsx",
+          "label": "Song catalog cards have stable minimum height"
+        }
+      ]
+    }
+  ]
 }

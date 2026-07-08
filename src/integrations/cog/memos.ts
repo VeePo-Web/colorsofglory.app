@@ -118,6 +118,7 @@ export async function listMyRecentMemos(limit = 3): Promise<RecentCaptureMemo[]>
   if (!uid) return [];
   // Embedded selects cross tables the generated types lag behind — same local
   // cast pattern as cog/transcript.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped embed, rows re-shaped below
   const db = supabase as unknown as { from: (t: string) => any };
   const { data, error } = await db
     .from("voice_memos")

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { CogError, toCogError } from "./errors";
 
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type StorageAddon = Database["public"]["Tables"]["storage_addons"]["Row"];
@@ -44,7 +45,7 @@ export type BillingStatus = {
  */
 export async function getMyBillingStatus(): Promise<BillingStatus> {
   const { data, error } = await supabase.functions.invoke("me-billing-status", { body: {} });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as BillingStatus;
 }
 
@@ -133,7 +134,7 @@ export async function getPricingCatalog(): Promise<PlanTier[]> {
     .from("plan_tiers")
     .select("*")
     .order("sort_order", { ascending: true });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data ?? []) as PlanTier[];
 }
 
@@ -142,7 +143,7 @@ export type FaqItem = { q: string; a: string };
 
 export async function getPricingPage(): Promise<{ page: PricingPageCopy; cards: PricingCard[]; faq: FaqItem[] }> {
   const { data, error } = await supabase.from("pricing_copy").select("key, payload");
-  if (error) throw error;
+  if (error) throw toCogError(error);
   const rows = (data ?? []) as PricingCopyRow[];
   const map = new Map<string, unknown>(rows.map((r) => [r.key, r.payload]));
   const page = map.get("page") as PricingPageCopy;
@@ -159,7 +160,7 @@ export async function validateCode(code: string, plan_key: PlanKey = "pro"): Pro
   const { data, error } = await supabase.functions.invoke("validate-code", {
     body: { code, plan_key },
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as ValidateCodeResult;
 }
 
@@ -180,10 +181,10 @@ export async function startCheckout(input: {
       environment: input.environment ?? "sandbox",
     },
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   const result = data as CheckoutResponse | null;
-  if (result?.error) throw new Error(result.error);
-  if (!result?.clientSecret) throw new Error("checkout_session_failed");
+  if (result?.error) throw new CogError("INTERNAL", result.error);
+  if (!result?.clientSecret) throw new CogError("INTERNAL", "checkout_session_failed");
   return {
     clientSecret: result.clientSecret,
     applied_code_kind: result.applied_code_kind ?? "none",
@@ -199,7 +200,7 @@ export async function getMyReferralStats(): Promise<{
   pending_cents: number;
 }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("unauthorized");
+  if (!user) throw new CogError("UNAUTHENTICATED", "unauthorized");
 
   const [{ data: profile }, { data: rewards }, { data: activeAttrs }] = await Promise.all([
     supabase.from("profiles").select("referral_code").eq("user_id", user.id).maybeSingle(),
@@ -231,14 +232,14 @@ export async function getMyReferralStats(): Promise<{
 /** Reads the effective plan for the signed-in user via the SECURITY DEFINER helper. */
 export async function getCurrentPlan(userId: string): Promise<PlanId> {
   const { data, error } = await supabase.rpc("current_plan", { _user_id: userId });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data as PlanId) ?? "free";
 }
 
 /** True if the user currently has Pro / Founder Pro access (incl. grace period). */
 export async function isProUser(userId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc("is_pro_user", { _user_id: userId });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return !!data;
 }
 
@@ -251,7 +252,7 @@ export async function getLatestSubscription(userId: string): Promise<Subscriptio
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
@@ -262,14 +263,14 @@ export async function getStorageAddons(userId: string): Promise<StorageAddon[]> 
     .select("*")
     .eq("user_id", userId)
     .in("status", ["active", "trialing", "past_due"]);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
 /** Effective storage limit (bytes) for the user: plan base plus active add-ons. */
 export async function getEffectiveStorageLimit(userId: string): Promise<number> {
   const { data, error } = await supabase.rpc("effective_storage_limit", { _user_id: userId });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return Number(data ?? 0);
 }
 
@@ -280,7 +281,7 @@ export async function canPurchaseFounderRate(userId: string): Promise<boolean> {
     .select("referrer_type")
     .eq("referred_user_id", userId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data?.referrer_type === "founder";
 }
 
@@ -297,8 +298,8 @@ export async function createCheckoutSession(opts: {
       environment: opts.environment ?? "sandbox",
     },
   });
-  if (error) throw error;
-  if (!data?.clientSecret) throw new Error("checkout_session_failed");
+  if (error) throw toCogError(error);
+  if (!data?.clientSecret) throw new CogError("INTERNAL", "checkout_session_failed");
   return { clientSecret: data.clientSecret as string };
 }
 
@@ -310,8 +311,8 @@ export async function openBillingPortal(opts: {
   const { data, error } = await supabase.functions.invoke("billing-customer-portal", {
     body: { returnUrl: opts.returnUrl, environment: opts.environment ?? "sandbox" },
   });
-  if (error) throw error;
-  if (!data?.url) throw new Error("portal_session_failed");
+  if (error) throw toCogError(error);
+  if (!data?.url) throw new CogError("INTERNAL", "portal_session_failed");
   return { url: data.url as string };
 }
 
@@ -328,8 +329,8 @@ export async function cancelSubscription(opts: {
       environment: opts.environment ?? "sandbox",
     },
   });
-  if (error) throw error;
-  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  if (error) throw toCogError(error);
+  if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
   return data as { ok: true; status: string; cancel_at_period_end: boolean };
 }
 

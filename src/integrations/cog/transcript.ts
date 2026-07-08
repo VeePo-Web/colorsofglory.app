@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { call, toCogError } from "./errors";
 
 // Cast for new columns not yet in generated Database types.
 const db = supabase as unknown as { from: (t: string) => any };
@@ -33,11 +34,8 @@ export type TakeTranscriptRow = {
 
 /** Kick off transcription. Resolves with the structured blocks. */
 export async function requestTranscript(take_id: string): Promise<TranscriptBlock[]> {
-  const { data, error } = await supabase.functions.invoke("transcribe-take", {
-    body: { take_id },
-  });
-  if (error) throw error;
-  return ((data as { blocks?: TranscriptBlock[] })?.blocks ?? []) as TranscriptBlock[];
+  const data = await call<{ blocks?: TranscriptBlock[] }>("transcribe-take", { take_id });
+  return (data?.blocks ?? []) as TranscriptBlock[];
 }
 
 export async function getTakeWithTranscript(take_id: string): Promise<TakeTranscriptRow | null> {
@@ -46,7 +44,7 @@ export async function getTakeWithTranscript(take_id: string): Promise<TakeTransc
     .select("id, song_id, storage_path, duration_ms, transcript_status, transcript_json, transcript_error")
     .eq("id", take_id)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data as unknown) as TakeTranscriptRow | null;
 }
 
@@ -62,7 +60,7 @@ export async function getPrimaryTakeIdForMemo(voice_memo_id: string): Promise<st
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return (data?.id as string | undefined) ?? null;
 }
 

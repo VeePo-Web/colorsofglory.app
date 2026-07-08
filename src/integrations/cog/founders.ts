@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toCogError } from "./errors";
 
 export type FounderStats = {
   is_founder: boolean;
@@ -43,7 +44,7 @@ export type FounderStats = {
  */
 export async function getMyFounderStats(): Promise<FounderStats> {
   const { data, error } = await supabase.functions.invoke("me-founder-stats", { body: {} });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as FounderStats;
 }
 
@@ -55,7 +56,7 @@ export async function getMyFounderProfile() {
     .select("*, codes:codes(*)")
     .eq("user_id", u.user.id)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
@@ -69,7 +70,7 @@ export async function listMyReferredUsers() {
     .from("referral_attributions")
     .select("*")
     .eq("referrer_founder_id", founder.id);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
@@ -84,7 +85,7 @@ export async function getMyMonthlyEarnings() {
     .select("*")
     .eq("referrer_founder_id", founder.id)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   const rewards = data ?? [];
   const by_status: Record<string, number> = {};
   for (const r of rewards) by_status[r.status] = (by_status[r.status] ?? 0) + (r.amount_cents ?? 0);

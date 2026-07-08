@@ -1,5 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { CogError, toCogError, call } from "./errors";
+
+// The error contract lives once in `./errors`; re-exported here so the many
+// `@/integrations/cog/songs` importers (members/notes/versions) keep resolving
+// CogError unchanged.
+export { CogError, toCogError, call, codeFromServer } from "./errors";
+export type { CogErrorCode } from "./errors";
 
 export type Song = Database["public"]["Tables"]["songs"]["Row"];
 export type SongInvite = Database["public"]["Tables"]["song_invites"]["Row"];
@@ -45,64 +52,6 @@ export type SongDetail = {
     pending_suggestions: number;
   };
 };
-
-/**
- * Canonical edge-function error codes. UI can switch on these to render
- * specific messages without parsing free-text error strings.
- */
-export type CogErrorCode =
-  | "INTERNAL"
-  | "INVALID_INPUT"
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "METHOD_NOT_ALLOWED"
-  | "QUOTA_EXCEEDED_SONGS"
-  | "QUOTA_EXCEEDED_STORAGE"
-  | "SONG_NOT_FOUND"
-  | "SONG_DELETED"
-  | "NOT_A_MEMBER"
-  | "OWNER_CANNOT_LEAVE"
-  | "NEW_OWNER_NOT_MEMBER"
-  | "TRANSFER_BLOCKED_QUOTA"
-  | "INVITE_NOT_FOUND"
-  | "INVITE_EXPIRED"
-  | "INVITE_ALREADY_USED"
-  | "INVITE_EXHAUSTED";
-
-export class CogError extends Error {
-  code: CogErrorCode | string;
-  constructor(code: string, message?: string) {
-    super(message ?? code);
-    this.code = code;
-  }
-}
-
-type Envelope<T> = { ok: boolean; code?: string; message?: string; data?: T };
-type FunctionErrorContext = { json?: () => Promise<unknown> };
-type FunctionInvokeError = { context?: FunctionErrorContext; message?: string };
-
-async function call<T = unknown>(fn: string, body: unknown): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(fn, { body });
-  let env = data as Envelope<T> | undefined;
-  const functionError = error as FunctionInvokeError | null;
-  // On non-2xx, supabase-js puts the Response on error.context; parse the body.
-  if (functionError?.context && typeof functionError.context.json === "function") {
-    try {
-      env = (await functionError.context.json()) as Envelope<T>;
-    } catch {
-      /* ignore parse failure, fall through to generic error */
-    }
-  }
-  // New-shape envelope
-  if (env && typeof env === "object" && "ok" in env) {
-    if (!env.ok) throw new CogError(env.code ?? "INTERNAL", env.message);
-    return (env.data ?? env) as T;
-  }
-  if (error) throw new CogError("INTERNAL", error.message);
-  // Legacy shape (function not yet migrated): pass through
-  if ((data as { error?: string })?.error) throw new CogError("INTERNAL", (data as { error: string }).error);
-  return data as T;
-}
 
 export const createSong = (input: {
   title: string;
@@ -193,7 +142,7 @@ export const getSongActivity = async (song_id: string, limit = 50, offset = 0) =
     _limit: limit,
     _offset: offset,
   });
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return (data ?? []) as SongActivityRow[];
 };
 
@@ -213,7 +162,7 @@ export const getNotificationPrefs = async (song_id: string) => {
     .select("*")
     .eq("song_id", song_id)
     .maybeSingle();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return (data ?? null) as SongNotificationPrefs | null;
 };
 
@@ -228,7 +177,7 @@ export const upsertNotificationPrefs = async (
     .upsert({ user_id: user.id, song_id, ...patch }, { onConflict: "user_id,song_id" })
     .select()
     .maybeSingle();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return data as SongNotificationPrefs | null;
 };
 
@@ -237,7 +186,7 @@ export const upsertNotificationPrefs = async (
 /** Catalog: all songs the signed-in user is a member of, newest activity first. */
 export const listMySongs = async (): Promise<SongCard[]> => {
   const { data, error } = await supabase.rpc("list_my_songs");
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   return (data ?? []) as SongCard[];
 };
 
@@ -246,7 +195,7 @@ export const getSong = async (song_id: string): Promise<SongDetail | null> => {
   const { data, error } = await supabase
     .rpc("get_song_detail", { _song_id: song_id })
     .maybeSingle();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
   if (!data) return null;
   const row = data as Record<string, unknown>;
   return {
@@ -285,5 +234,5 @@ export const archiveSong = async (song_id: string): Promise<void> => {
     .from("songs")
     .update({ status: "archived" })
     .eq("id", song_id);
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+  if (error) throw toCogError(error);
 };

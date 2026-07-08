@@ -15,38 +15,54 @@ import {
   parseSnapshot,
   summarizeSnapshot,
   type SongSnapshotV1,
+  type SongVersion,
 } from "@/integrations/cog/versions";
 import { versionHeadline } from "@/components/versions/VersionTimeline";
-import type { SongVersion } from "@/types";
 
-const sheet = {
-  songId: "s1",
-  key: "G",
-  mode: "major" as const,
-  originalKey: "G",
-  capo: 0,
-  bpm: 72,
-  display: "letters" as const,
+const snapshot: SongSnapshotV1 = {
+  v: 1,
+  song: { title: "Colors of Glory" },
   sections: [
     {
       id: "sec1",
+      kind: "verse",
       label: "Verse 1",
-      lines: [
-        { id: "l1", text: "Morning light", anchors: [{ chord: { degree: 1, quality: "maj" }, at: 0 }] },
-        { id: "l2", text: "over the water", anchors: [] },
-      ],
+      position: 0,
+      lyrics: {
+        content: {
+          v: 1,
+          lines: [
+            { id: "l1", text: "Morning light", anchors: [{ chord: { degree: 1 }, at: 0 }] },
+            { id: "l2", text: "over the water", anchors: [] },
+          ],
+        },
+        plain_text: "Morning light\nover the water",
+      },
     },
     {
       id: "sec2",
-      label: "Chorus",
-      lines: [
-        { id: "l3", text: "Glory, glory", anchors: [{ chord: { degree: 4, quality: "maj" }, at: 0 }, { chord: { degree: 5, quality: "maj" }, at: 7 }] },
-      ],
+      kind: "chorus",
+      label: null,
+      position: 1,
+      lyrics: {
+        content: {
+          v: 1,
+          lines: [
+            {
+              id: "l3",
+              text: "Glory, glory",
+              anchors: [
+                { chord: { degree: 4 }, at: 0 },
+                { chord: { degree: 5 }, at: 7 },
+              ],
+            },
+          ],
+        },
+        plain_text: "Glory, glory",
+      },
     },
   ],
-} as SongSnapshotV1["sheet"];
-
-const snapshot: SongSnapshotV1 = { v: 1, song: { title: "Colors of Glory" }, sheet };
+};
 
 const version = (over: Partial<SongVersion>): SongVersion =>
   ({
@@ -60,27 +76,38 @@ const version = (over: Partial<SongVersion>): SongVersion =>
     parent_version_id: null,
     created_by_user_id: "u1",
     created_at: "2026-07-07T00:00:00Z",
-    ...over,
+  ...over,
   }) as SongVersion;
 
 describe("parseSnapshot", () => {
-  it("round-trips a v1 snapshot", () => {
+  it("round-trips a v1 snapshot and keeps sections ordered by position", () => {
     const parsed = parseSnapshot(JSON.parse(JSON.stringify(snapshot)));
     expect(parsed).not.toBeNull();
     expect(parsed?.song.title).toBe("Colors of Glory");
-    expect(parsed?.sheet?.sections).toHaveLength(2);
+    expect(parsed?.sections.map((s) => s.id)).toEqual(["sec1", "sec2"]);
   });
 
   it("rejects unreadable payloads instead of throwing (calm fallback, never raw JSON)", () => {
     expect(parseSnapshot(null)).toBeNull();
     expect(parseSnapshot("nope" as never)).toBeNull();
     expect(parseSnapshot({ v: 2 } as never)).toBeNull();
-    expect(parseSnapshot({ v: 1, sheet: { sections: "bad" } } as never)).toBeNull();
+    expect(parseSnapshot({ v: 1, sections: "bad" } as never)).toBeNull();
+    // a section without an id/position is a foreign shape
+    expect(parseSnapshot({ v: 1, sections: [{ label: "x" }] } as never)).toBeNull();
   });
 
-  it("treats a sheetless snapshot as a valid blank page", () => {
-    const parsed = parseSnapshot({ v: 1, song: { title: null }, sheet: null } as never);
-    expect(parsed?.sheet).toBeNull();
+  it("treats a sectionless snapshot as a valid blank page", () => {
+    const parsed = parseSnapshot({ v: 1, song: { title: null }, sections: [] } as never);
+    expect(parsed?.sections).toEqual([]);
+  });
+
+  it("keeps sections without lyrics (a labeled-but-unwritten section)", () => {
+    const parsed = parseSnapshot({
+      v: 1,
+      song: { title: null },
+      sections: [{ id: "a", kind: "bridge", label: null, position: 0, lyrics: null }],
+    } as never);
+    expect(parsed?.sections[0].lyrics).toBeNull();
   });
 });
 
@@ -90,26 +117,33 @@ describe("summarizeSnapshot", () => {
     expect(s.sectionCount).toBe(2);
     expect(s.lineCount).toBe(3);
     expect(s.chordCount).toBe(3);
-    expect(s.key).toBe("G");
-    expect(s.bpm).toBe(72);
     expect(s.sections.map((x) => x.label)).toEqual(["Verse 1", "Chorus"]);
     expect(s.isEmpty).toBe(false);
   });
 
   it("summarizes a blank snapshot as empty", () => {
-    const s = summarizeSnapshot({ v: 1, song: { title: null }, sheet: null });
+    const s = summarizeSnapshot({ v: 1, song: { title: null }, sections: [] });
     expect(s.isEmpty).toBe(true);
-    expect(s.key).toBeNull();
     expect(s.sectionCount).toBe(0);
   });
 
-  it("renders minor keys with the m suffix", () => {
+  it("falls back to the kind title when a section has no label, and to zero chords for foreign content", () => {
     const s = summarizeSnapshot({
       v: 1,
       song: { title: null },
-      sheet: { ...sheet!, mode: "minor", key: "E" },
+      sections: [
+        {
+          id: "a",
+          kind: "pre_chorus",
+          label: null,
+          position: 0,
+          lyrics: { content: { some: "foreign shape" }, plain_text: "one line\n\n" },
+        },
+      ],
     });
-    expect(s.key).toBe("Em");
+    expect(s.sections[0].label).toBe("Pre-Chorus");
+    expect(s.lineCount).toBe(1);
+    expect(s.chordCount).toBe(0);
   });
 });
 

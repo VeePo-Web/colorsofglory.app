@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { CogError, toCogError } from "./errors";
 
 export type Translation = "web" | "kjv" | "asv";
 
@@ -24,8 +25,8 @@ export async function fetchPassage(
   const { data, error } = await supabase.functions.invoke<ScripturePassage>("fetch-scripture", {
     body: { reference, translation },
   });
-  if (error) throw error;
-  if (!data) throw new Error("No passage returned");
+  if (error) throw toCogError(error);
+  if (!data) throw new CogError("INTERNAL", "No passage returned");
 
   cache.set(k, data);
   return data;

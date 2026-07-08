@@ -61,3 +61,26 @@
   lane comment. E1: interim capability hook, collapse when `useCapabilities` ships. E2:
   `version_saved`/`version_restored` kinds documented, client emit is a safe no-op; DB trigger
   already bumps activity. Contract: `docs/VERSION-CONTRACT.md`.
+
+## 2026-07-08 — Ported to the reset tree + committed/pushed
+
+The working tree was reset to a different lineage mid-session (Lovable-driven history; the
+sheet seam `cog/sheet.ts`, `cog/errors.ts`, the `@/types` barrel, `lib/notes/relativeTime`,
+and the first `versions.ts`/`useSongVersions.ts` were gone; the five sheet components
+survived untracked). E3 was re-ported onto the new structure:
+
+- **Snapshot v1 is now rows-based** (`{v:1, song:{title}, sections:[{id, kind, label,
+  position, lyrics:{content, plain_text}|null}]}`): `song_sections` + `song_lyrics` captured
+  verbatim, `content` opaque Json — editor-agnostic and lossless. Restore upserts/removes rows
+  to match the snapshot. Restore law unchanged (preserve-first → apply → restore_point).
+- **`SongVersion` lives in the seam** (no `@/types` barrel in this tree); `CogError` comes
+  from `cog/songs.ts`; `relativeTime` is a lane-local copy in `components/versions/`.
+- **Gating stays on the interim `myRole` hook** — E1's `useCapabilities` was present but
+  incomplete (`@/types/role` missing) at port time; collapse later per contract §5.
+- **Route:** A5's regenerated `src/routes/songRoutes.tsx` already carries
+  `/songs/:id/versions` → nothing to add from E3.
+- **Verified:** `tsc -p tsconfig.app.json` — zero errors in E3 files (remaining 8 errors are
+  other lanes': E1 `@/types/role` × 4, pre-existing test-file errors × 4); `vite build` green
+  with `VersionHistoryPage` code-split; `src/test/version-history.test.ts` 12/12.
+- **Committed** E3 files only (`git commit --only`) and pushed to
+  `https://github.com/VeePo-Web/colorsofglory.app` (main).

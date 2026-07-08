@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toCogError } from "./errors";
 
 export const REFERRAL_SHARE_BASE = "https://colorsofglory.app/r/";
 export function buildReferralShareUrl(code: string): string {
@@ -45,7 +46,7 @@ export type MyReferralsSummary = {
 
 export async function getMyReferrals(): Promise<MyReferralsSummary> {
   const { data, error } = await supabase.functions.invoke("me-referrals");
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as MyReferralsSummary;
 }
 
@@ -56,7 +57,7 @@ export async function getMyReferrals(): Promise<MyReferralsSummary> {
  */
 export async function claimReferralCode(code: string): Promise<string> {
   const { data, error } = await supabase.rpc("claim_referral_code" as never, { _code: code } as never);
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as unknown as string;
 }
 
@@ -67,7 +68,7 @@ export type PayoutMethodInput = {
 };
 export async function setMyPayoutMethod(input: PayoutMethodInput) {
   const { data, error } = await supabase.functions.invoke("me-set-payout-method", { body: input });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as { ok: true };
 }
 
@@ -81,7 +82,7 @@ export type ResolvedCode = {
 
 export async function resolveCode(input: { code?: string; slug?: string }): Promise<ResolvedCode> {
   const { data, error } = await supabase.functions.invoke("referral-resolve", { body: input });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as ResolvedCode;
 }
 
@@ -95,7 +96,7 @@ export async function resolveCode(input: { code?: string; slug?: string }): Prom
  */
 export async function attachReferral(code: string, _source?: string) {
   const { data, error } = await supabase.functions.invoke("referral-attach", { body: { code } });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
@@ -104,7 +105,7 @@ export async function applyFounderCodeToActiveSub(code: string, environment?: "s
   const { data, error } = await supabase.functions.invoke("apply-founder-code-to-active-sub", {
     body: { code, environment },
   });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data as {
     ok?: boolean;
     error?: string;
@@ -121,7 +122,7 @@ export async function getMyAttribution() {
     .select("*")
     .eq("referred_user_id", u.user.id)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data;
 }
 
@@ -133,7 +134,7 @@ export async function getMyCredits() {
     .select("*")
     .eq("user_id", u.user.id)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   return data ?? [];
 }
 
@@ -145,7 +146,7 @@ export async function getMyRewardSummary() {
     .select("id, amount_cents, status, reward_kind, created_at, hold_until, invoice_external_id")
     .or(`referrer_user_id.eq.${u.user.id}`)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw toCogError(error);
   const rewards = data ?? [];
   const sum = (s: string) => rewards.filter((r) => r.status === s).reduce((a, r) => a + (r.amount_cents ?? 0), 0);
   return {
