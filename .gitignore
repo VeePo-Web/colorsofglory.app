@@ -30,3 +30,6 @@ zip_extracted/
 # Stress-test artifacts
 scripts/stress/phones.json
 /tmp/otp-stress-*.ndjson
+
+# Agent worktrees (transient, per-agent)
+.claude/worktrees/
