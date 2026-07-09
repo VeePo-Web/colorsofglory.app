@@ -62,8 +62,9 @@ const SectionCluster = memo(({ cluster, onExpand }: SectionClusterProps) => {
       onPointerDown={(e) => e.stopPropagation()}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      role="group"
-      aria-label={`Section cluster: ${sectionLabel}, ${cards.length} ideas. Click to expand.`}
+      data-canvas-nopan
+      role="button"
+      aria-label={`Section cluster: ${sectionLabel}, ${cards.length} ideas. Tap to expand.`}
       aria-expanded={false}
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onExpand(cluster.id); } }}

@@ -65,23 +65,30 @@ const FirstActionPrompt = ({ onHum, onLyric, onChords }: FirstActionPromptProps)
           pointerEvents: "auto",
         }}
       >
-        {/* Headline */}
+        {/* Headline — the calm empty state */}
         <p
-          className="text-center mb-1 leading-snug"
+          className="text-center leading-snug"
           style={{
-            fontSize: 22,
+            fontSize: 23,
             fontWeight: 700,
             color: "#1A1A1A",
             fontFamily: "var(--font-display)",
+            lineHeight: 1.15,
           }}
         >
-          What's the first idea
+          Every idea for this song
+        </p>
+        <p
+          className="text-center mb-2"
+          style={{ fontSize: 23, fontWeight: 700, color: "#1A1A1A", fontFamily: "var(--font-display)", lineHeight: 1.15 }}
+        >
+          starts here.
         </p>
         <p
           className="text-center mb-6"
-          style={{ fontSize: 22, fontWeight: 700, color: "#1A1A1A", fontFamily: "var(--font-display)", lineHeight: 1.1 }}
+          style={{ fontSize: 13.5, color: "var(--cog-warm-gray, #6B6459)", fontFamily: "var(--font-body)", maxWidth: 280 }}
         >
-          for this song?
+          Capture the first spark — a hum, a line, a chord. Nothing is ever lost.
         </p>
 
         {/* Action chips */}

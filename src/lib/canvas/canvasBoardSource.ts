@@ -1,6 +1,6 @@
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import { DEMO_BOARD } from "@/lib/canvas/demoBoard";
-import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
+import type { CanvasBoardCard, CanvasBoardTree } from "@/lib/canvas/canvasTypes";
 
 /**
  * canvasBoardSource — the INTERIM board store seam the render layer reads/writes
@@ -38,6 +38,47 @@ export function initialBoard(songId: string): CanvasBoardCard[] {
   // Only the explicit demo route shows samples; no real song is ever pre-filled
   // with someone else's words.
   return songId === "demo" ? DEMO_BOARD : [];
+}
+
+/** A (tree, section) group that collapses into one SectionCluster node. */
+export interface CardCluster {
+  id: string;
+  sectionLabel: string;
+  tree: CanvasBoardTree;
+  cardIds: string[];
+}
+
+/** A zone-section is dense enough to collapse into a stack at/above this count. */
+export const CLUSTER_THRESHOLD = 5;
+
+/**
+ * INTERIM cluster flag: which (tree, section) groups are dense enough to
+ * collapse into a SectionCluster. A4's `useCanvasStore` owns this flag (it's a
+ * product/layout decision, not a render one); the render layer only CONSUMES
+ * the result. Dimmed references never cluster. Documented for A4 in
+ * docs/CANVAS-RENDER-CONTRACT.md §8.
+ */
+export function clusterFlags(cards: CanvasBoardCard[]): CardCluster[] {
+  const groups = new Map<string, CanvasBoardCard[]>();
+  for (const c of cards) {
+    if (!c.section || c.isDimmedReference) continue;
+    const key = `${c.tree}::${c.section}`;
+    const list = groups.get(key);
+    if (list) list.push(c);
+    else groups.set(key, [c]);
+  }
+  const out: CardCluster[] = [];
+  for (const [key, list] of groups) {
+    if (list.length < CLUSTER_THRESHOLD) continue;
+    const sep = key.indexOf("::");
+    out.push({
+      id: `cluster-${key}`,
+      tree: key.slice(0, sep) as CanvasBoardTree,
+      sectionLabel: key.slice(sep + 2),
+      cardIds: list.map((c) => c.id),
+    });
+  }
+  return out;
 }
 
 /** Persist the board (interim; A4's store owns this once it lands). */

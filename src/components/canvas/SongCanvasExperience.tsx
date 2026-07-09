@@ -60,7 +60,8 @@ import {
   listPendingUploads,
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { initialBoard, writeBoard, hydrateBoard } from "@/lib/canvas/canvasBoardSource";
+import { initialBoard, writeBoard, hydrateBoard, clusterFlags } from "@/lib/canvas/canvasBoardSource";
+import type { SectionClusterData } from "@/components/canvas/SectionCluster";
 import {
   addLineSuggestion,
   listLineSuggestions,
@@ -650,6 +651,55 @@ const SongCanvasExperience = () => {
   const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
   const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
 
+  // ── Section clusters (Step 8) ──────────────────────────────────────────────
+  // WHICH dense sections collapse is the store's flag (clusterFlags = interim
+  // A4 seam); the render layer only presents them. A tapped-open cluster fans
+  // its members back onto the board.
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
+  const boardCards = useMemo(() => [...ideasCards, ...finalCards], [ideasCards, finalCards]);
+  const clusterFlagList = useMemo(() => clusterFlags(boardCards), [boardCards]);
+
+  // Collapsed clusters → SectionClusterData for the render layer; their member
+  // ids are hidden from the card render so a stack replaces the loose cards.
+  const { clusterData, hiddenCardIds } = useMemo(() => {
+    const byId = new Map(boardCards.map((c) => [c.id, c]));
+    const hidden = new Set<string>();
+    const data: SectionClusterData[] = [];
+    for (const cl of clusterFlagList) {
+      if (expandedClusters.has(cl.id)) continue; // expanded → members render loose
+      const members = cl.cardIds.map((id) => byId.get(id)).filter(Boolean) as CanvasCard[];
+      if (members.length === 0) continue;
+      members.forEach((m) => hidden.add(m.id));
+      // Present the stack at the group's top-left card; color = most frequent hand.
+      const anchor = members.reduce((a, b) => (b.y < a.y ? b : a));
+      const tally = new Map<string, number>();
+      for (const m of members) tally.set(m.contributor, (tally.get(m.contributor) ?? 0) + 1);
+      const topContributor = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? anchor.contributor;
+      data.push({
+        id: cl.id,
+        sectionLabel: cl.sectionLabel,
+        x: anchor.x,
+        y: anchor.y,
+        color: getCreatorColor(topContributor),
+        cards: members.map((m) => ({
+          id: m.id, title: m.title, body: m.body, contributor: m.contributor, type: m.type, x: m.x, y: m.y,
+        })),
+      });
+    }
+    return { clusterData: data, hiddenCardIds: hidden };
+  }, [clusterFlagList, expandedClusters, boardCards]);
+
+  // What the render surface draws: every card minus the ones tucked in a
+  // collapsed stack (D2/D3 still operate on the full ideasCards/finalCards).
+  const stageIdeasCards = useMemo(
+    () => (hiddenCardIds.size ? ideasCards.filter((c) => !hiddenCardIds.has(c.id)) : ideasCards),
+    [ideasCards, hiddenCardIds],
+  );
+  const stageFinalCards = useMemo(
+    () => (hiddenCardIds.size ? finalCards.filter((c) => !hiddenCardIds.has(c.id)) : finalCards),
+    [finalCards, hiddenCardIds],
+  );
+
   // First-run guide is driven by an ACTUALLY empty board, not a one-time visit
   // flag — so it guides a new song, returns if the room is ever cleared (never
   // a dead-end blank), and never overlays a song that already has ideas.
@@ -898,6 +948,25 @@ const SongCanvasExperience = () => {
     viewportApiRef.current?.fitTo(boundsOfCards([...ideasCards, ...finalCards], true), vw, vh, 72, 560);
     setSelectedId(null);
   }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
+
+  // Tap a cluster → fan its members back onto the board and frame them; tap
+  // again (or fit) to re-collapse. Framing reuses the semantic-nav fitTo.
+  const handleExpandCluster = useCallback((clusterId: string) => {
+    setExpandedClusters((prev) => {
+      const next = new Set(prev);
+      if (next.has(clusterId)) { next.delete(clusterId); return next; }
+      next.add(clusterId);
+      return next;
+    });
+    const flag = clusterFlagList.find((c) => c.id === clusterId);
+    if (!flag) return;
+    const ids = new Set(flag.cardIds);
+    const members = boardCards.filter((c) => ids.has(c.id));
+    if (members.length === 0) return;
+    const { vw, vh } = viewportDims();
+    // Wait a frame so the fanned-out cards exist before we frame them.
+    requestAnimationFrame(() => viewportApiRef.current?.fitTo(boundsOfCards(members, false), vw, vh, 90, 520));
+  }, [clusterFlagList, boardCards, boundsOfCards, viewportDims]);
 
   // One-tap navigation to a zone — frames that zone's cards (Ideas includes the
   // root it branches from). Primary mobile nav: the phone can't show both zones,
@@ -1350,8 +1419,10 @@ const SongCanvasExperience = () => {
           className="w-full h-full"
           initialZoom={0.8}
           songTitle={songTitle}
-          ideasCards={ideasCards}
-          finalCards={finalCards}
+          ideasCards={stageIdeasCards}
+          finalCards={stageFinalCards}
+          clusters={clusterData}
+          onExpandCluster={handleExpandCluster}
           selectedId={selectedId}
           isDropActive={isDragOver}
           getCardInteractions={getCardInteractions}

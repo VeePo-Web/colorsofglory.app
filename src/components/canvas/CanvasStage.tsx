@@ -8,6 +8,7 @@ import ZoneLabels from "@/components/canvas/ZoneLabel";
 import SongRootCard from "@/components/canvas/SongRootCard";
 import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
 import CanvasCard, { type CanvasCardInteractions, type CanvasZone } from "@/components/canvas/CanvasCard";
+import SectionCluster, { type SectionClusterData } from "@/components/canvas/SectionCluster";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 
 export type { CanvasCardInteractions };
@@ -64,6 +65,15 @@ export interface CanvasStageProps {
   /** D3 slot: calm per-card marker (e.g. pending-review dot), rendered inside the card. */
   cardAdornment?: (card: CanvasBoardCard) => ReactNode;
   /**
+   * Collapsed section stacks to render (a dense section presented as one
+   * stacked-shadow node). The FLAG for what clusters comes from the store (see
+   * canvasBoardSource.clusterFlags) — the render layer only presents it; its
+   * member cards are already excluded from ideasCards/finalCards by the host.
+   */
+  clusters?: SectionClusterData[];
+  /** Tapping a cluster asks the host to expand + frame it (Step 6 fitTo). */
+  onExpandCluster?: (clusterId: string) => void;
+  /**
    * Bridges the viewport pan/zoom API (panTo, screenToCanvas…) out to the page
    * shell for presence-jump / fly-to-card. Populated after first render.
    */
@@ -95,6 +105,8 @@ const CanvasStage = ({
   isDropActive = false,
   getCardInteractions,
   cardAdornment,
+  clusters,
+  onExpandCluster,
   viewportApiRef,
   overlay,
   featureLayers,
@@ -126,7 +138,16 @@ const CanvasStage = ({
       <ZoneLabels />
       <CanvasDivider isDropActive={isDropActive || dragZone === "final"} />
 
-      {/* Render all cards */}
+      {/* Collapsed section stacks — a dense section as one stacked node */}
+      {clusters?.map((cluster) => (
+        <SectionCluster
+          key={cluster.id}
+          cluster={cluster}
+          onExpand={(id) => onExpandCluster?.(id)}
+        />
+      ))}
+
+      {/* Render all visible cards (clustered members are excluded upstream) */}
       {[...ideasCards, ...finalCards].map((card) => (
         <CanvasCard
           key={card.id}
