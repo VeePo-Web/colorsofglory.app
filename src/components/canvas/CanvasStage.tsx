@@ -180,6 +180,11 @@ const CanvasStage = ({
       @media (prefers-reduced-motion: reduce) {
         [style*="cog-card-enter"] { animation: none !important; }
         [style*="cog-card-pulse-dot"] { animation: none !important; }
+        /* Cards + clusters settle instantly (no transform/opacity easing) — the
+           inline transitions are neutralized so nothing slides or springs. */
+        [data-canvas-card], [data-canvas-nopan], [data-canvas-nopan] * {
+          transition: none !important;
+        }
       }
     `}</style>
   </>

@@ -21,6 +21,11 @@ export interface UseGestureOptions {
 
 const CURSOR_BROADCAST_INTERVAL = 100; // ms
 
+/** Imperative reduced-motion check for the animation paths (panTo/fitTo jump). */
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /**
  * True when a pointerdown lands on something that should handle its own press
  * rather than pan the canvas: any card, or any button/link/tab/slider in the
@@ -312,6 +317,13 @@ export function useGesture(
     const startPanY = pan.current.y;
     const targetPanX = viewportCenterX - targetCanvasX * zoom.current;
     const targetPanY = viewportCenterY - targetCanvasY * zoom.current;
+    // Reduced motion: jump to the destination, no easing.
+    if (prefersReducedMotion()) {
+      pan.current.x = targetPanX; pan.current.y = targetPanY;
+      onTransform(pan.current.x, pan.current.y, zoom.current);
+      onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      return;
+    }
     const start = performance.now();
 
     function frame(now: number) {
@@ -344,6 +356,13 @@ export function useGesture(
     const startPanX = pan.current.x;
     const startPanY = pan.current.y;
     const startZoom = zoom.current;
+    // Reduced motion: jump to the destination, no easing.
+    if (prefersReducedMotion()) {
+      pan.current.x = targetPanX; pan.current.y = targetPanY; zoom.current = z;
+      onTransform(pan.current.x, pan.current.y, zoom.current);
+      onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      return;
+    }
     const start = performance.now();
 
     function frame(now: number) {
@@ -387,5 +406,30 @@ export function useGesture(
     animateTo(viewW / 2 - cx * z, viewH / 2 - cy * z, z, durationMs);
   }, [animateTo, minZoom, maxZoom]);
 
-  return { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, panRef: pan, zoomRef: zoom };
+  // ── Keyboard controls (accessibility) ───────────────────────────────────────
+
+  /** Pan by a screen-space delta (arrow keys). Instant, clamped, state-synced. */
+  const nudge = useCallback((dx: number, dy: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    pan.current.x += dx;
+    pan.current.y += dy;
+    const c = clampPan(pan.current.x, pan.current.y, zoom.current, el.clientWidth, el.clientHeight);
+    pan.current = c;
+    onTransform(c.x, c.y, zoom.current);
+    onTransformEnd(c.x, c.y, zoom.current);
+  }, [containerRef, onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Zoom by a factor about the viewport center (+/- keys). */
+  const zoomBy = useCallback((factor: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    applyZoomAt(factor, el.clientWidth / 2, el.clientHeight / 2);
+    const c = clampPan(pan.current.x, pan.current.y, zoom.current, el.clientWidth, el.clientHeight);
+    pan.current = c;
+    onTransform(c.x, c.y, zoom.current);
+    onTransformEnd(c.x, c.y, zoom.current);
+  }, [containerRef, onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef: pan, zoomRef: zoom };
 }

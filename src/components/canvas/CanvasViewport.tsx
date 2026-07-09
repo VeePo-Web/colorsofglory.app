@@ -120,7 +120,7 @@ const CanvasViewport = ({
     }
   }, [applyTransform]);
 
-  const { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, panRef, zoomRef } = useGesture(
+  const { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef, zoomRef } = useGesture(
     containerRef as React.RefObject<HTMLElement>,
     { panX: reactPan.x, panY: reactPan.y, zoom: reactZoom },
     {
@@ -183,8 +183,24 @@ const CanvasViewport = ({
           cursor: "grab",
           ...style,
         }}
-        aria-label="Song canvas. Use the Ideas, Final, and Fit buttons above to move between parts of the song. You can also drag to pan and pinch to zoom, or use arrow keys to pan and + / - to zoom."
+        aria-label="Song canvas. Use the Ideas, Final, and Fit buttons above to move between parts of the song. You can also drag to pan and pinch to zoom, or focus the canvas and use arrow keys to pan and + / - to zoom."
         role="application"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          // Keyboard pan/zoom — only when the canvas itself (not a card/button)
+          // holds focus, so Tab-cycling through cards keeps its arrow behavior.
+          if (e.target !== e.currentTarget) return;
+          const STEP = 120;
+          switch (e.key) {
+            case "ArrowUp": e.preventDefault(); nudge(0, STEP); break;
+            case "ArrowDown": e.preventDefault(); nudge(0, -STEP); break;
+            case "ArrowLeft": e.preventDefault(); nudge(STEP, 0); break;
+            case "ArrowRight": e.preventDefault(); nudge(-STEP, 0); break;
+            case "+": case "=": e.preventDefault(); zoomBy(1.15); break;
+            case "-": case "_": e.preventDefault(); zoomBy(1 / 1.15); break;
+            default: break;
+          }
+        }}
       >
         {/* Warm song-room glow — fixed behind the transforming layer, always
             centered in the viewport. This is the brand "spiritual warmth"
