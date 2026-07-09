@@ -29,6 +29,7 @@ const GlobalCaptureFlow = lazy(() => import("@/components/capture/GlobalCaptureF
 const MiniPracticePlayer = lazy(() =>
   import("@/components/practice/MiniPracticePlayer").then((module) => ({ default: module.MiniPracticePlayer })),
 );
+const StorageWarningController = lazy(() => import("@/components/pricing/StorageWarningController"));
 
 // Legal (public) — linked from the auth + invite trust lines
 const TermsPage = lazy(() => import("@/pages/legal/TermsPage"));
@@ -99,6 +100,12 @@ const App = () => {
                 </Suspense>
                 <Suspense fallback={null}>
                   <MiniPracticePlayer />
+                </Suspense>
+                {/* Storage warning (G1 · Onboarding 16) — surfaces the calm
+                    approaching/over-limit sheet off real billing data + outbox
+                    quota events; never blocks reading existing work. */}
+                <Suspense fallback={null}>
+                  <StorageWarningController />
                 </Suspense>
               </PracticePlayerProvider>
             </BrowserRouter>

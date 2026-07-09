@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 import RequireAuth from "@/components/auth/RequireAuth";
 
 // ── Account settings + pricing/checkout ───────────────────────────────────
@@ -15,7 +15,6 @@ const ReferralPage = lazy(() => import("@/pages/settings/ReferralPage"));
 const PricingUpgradePage = lazy(() => import("@/pages/pricing/UpgradePage"));
 const CheckoutSuccessPage = lazy(() => import("@/pages/pricing/CheckoutSuccessPage"));
 const ReferralRedirectPage = lazy(() => import("@/pages/pricing/ReferralRedirectPage"));
-const UpgradePage = lazy(() => import("@/pages/UpgradePage")); // legacy placeholder
 
 export const settingsRoutes = (
   <>
@@ -31,7 +30,8 @@ export const settingsRoutes = (
     <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
     <Route path="/r/:code" element={<ReferralRedirectPage />} />
 
-    {/* Legacy upgrade placeholder (kept for any existing links) */}
-    <Route path="/upgrade-old" element={<UpgradePage />} />
+    {/* Legacy upgrade link — the old hardcoded page is retired; the server-driven
+        pricing page is the one source of plan truth (G1 · MONETIZATION-CONTRACT). */}
+    <Route path="/upgrade-old" element={<Navigate to="/upgrade" replace />} />
   </>
 );

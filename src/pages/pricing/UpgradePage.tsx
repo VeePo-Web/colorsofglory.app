@@ -23,36 +23,59 @@ import {
 
 const CheckoutModal = lazy(() => import("@/components/pricing/CheckoutModal"));
 
-// Feature lists - UI layer supplementing DB data
+// Feature copy - qualitative phrasing lives here; every NUMBER (song limits,
+// storage) is read from the server plan_tiers row so the page can never
+// contradict what billing actually enforces (money truth: server wins).
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  free: [
-    "1 complete song workspace",
-    "All features (lyrics, voice, chords, notes)",
-    "Unlimited collaborators on that song",
-    "Version history on that song",
-  ],
-  starter: [
-    "Everything in Free",
-    "3 more songs (4 total)",
-    "All features on every song",
-    "Voice memos on every song",
-  ],
-  pro: [
+const formatStorage = (bytes: number): string => {
+  if (!bytes || bytes <= 0) return "";
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb >= 10 ? Math.round(gb) : Number(gb.toFixed(1))}GB`;
+  const mb = bytes / (1024 * 1024);
+  return `${Math.round(mb)}MB`;
+};
+
+const songCount = (n: number): string => (n === 1 ? "1 song" : `${n} songs`);
+
+const planFeatures = (tier: PlanTier, tiers: PlanTier[]): string[] => {
+  const freeTier = tiers.find((t) => t.key === "free");
+  const storage = formatStorage(tier.storageBytesIncluded);
+  if (tier.key === "free") {
+    return [
+      tier.ownedSongLimit === 1
+        ? "1 complete song workspace"
+        : `${tier.ownedSongLimit} complete song workspaces`,
+      "All features (lyrics, voice, chords, notes)",
+      "Unlimited collaborators on that song",
+      "Version history on that song",
+    ];
+  }
+  if (tier.key === "starter") {
+    const more = freeTier ? tier.ownedSongLimit - freeTier.ownedSongLimit : tier.ownedSongLimit;
+    return [
+      "Everything in Free",
+      `${songCount(more).replace("song", "more song")} (${tier.ownedSongLimit} total)`,
+      "All features on every song",
+      "Voice memos on every song",
+    ];
+  }
+  return [
     "Everything in Starter",
-    "50 songs",
-    "100GB voice memo storage",
+    songCount(tier.ownedSongLimit),
+    ...(storage ? [`${storage} voice memo storage`] : []),
     "Unlimited exports (PDF, audio)",
     "Priority support",
     "Advanced version history",
-    "50% off with referral code (limited time)",
-  ],
+    ...(tier.allowsMemberReferral ? ["50% off with referral code (limited time)"] : []),
+  ];
 };
 
-const PLAN_MISSING: Record<string, string[]> = {
-  free: ["More songs", "Exports"],
-  starter: ["More than 4 songs", "Exports", "Founder code discount"],
-  pro: [],
+const planMissing = (tier: PlanTier): string[] => {
+  if (tier.key === "free") return ["More songs", "Exports"];
+  if (tier.key === "starter") {
+    return [`More than ${songCount(tier.ownedSongLimit)}`, "Exports", "Founder code discount"];
+  }
+  return [];
 };
 
 const PLAN_TAGLINES: Record<string, string> = {
@@ -120,6 +143,7 @@ const codeErrorMessage = (reason?: string): string => {
 
 interface PricingCardProps {
   tier: PlanTier;
+  allTiers: PlanTier[];
   isCurrentPlan: boolean;
   isReferred: boolean;
   codeResult: ValidateCodeResult | null;
@@ -129,14 +153,15 @@ interface PricingCardProps {
 
 const PricingCard = ({
   tier,
+  allTiers,
   isCurrentPlan,
   isReferred,
   codeResult,
   isLoading,
   onSelect,
 }: PricingCardProps) => {
-  const features = PLAN_FEATURES[tier.key] ?? [];
-  const missing = PLAN_MISSING[tier.key] ?? [];
+  const features = planFeatures(tier, allTiers);
+  const missing = planMissing(tier);
   const tagline = PLAN_TAGLINES[tier.key] ?? "";
 
   // Price logic
@@ -207,6 +232,11 @@ const PricingCard = ({
         )}
         <p
           className="font-bold"
+          aria-label={
+            isFree
+              ? "Free"
+              : `${centsToDisplay(effectiveCents, tier.currency)} per month${showDiscount ? ", discounted from " + centsToDisplay(tier.monthlyCents, tier.currency) : ""}`
+          }
           style={{
             fontSize: isFree ? "1.5rem" : "1.875rem",
             color: "#1A1A1A",
@@ -289,10 +319,29 @@ const UpgradePage = () => {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [checkoutSummary, setCheckoutSummary] = useState<{
+    planName: string;
+    priceLabel: string;
+    appliedCode: { kind: "founder" | "member_referral"; label: string } | null;
+  } | null>(null);
 
   useEffect(() => {
     setStoredRefCode(sessionStorage.getItem("cog:referral-code"));
   }, []);
+
+  // Remember what the songwriter was doing so /checkout/success can hand them
+  // straight back — a song gate returns to the catalog (to create that second
+  // song), settings returns to settings. Set on arrival, consumed on success.
+  useEffect(() => {
+    const returnTo = source?.startsWith("song_gate")
+      ? "/"
+      : source === "settings"
+      ? "/settings"
+      : "/";
+    try {
+      sessionStorage.setItem("cog:upgrade-return-to", returnTo);
+    } catch { /* non-fatal */ }
+  }, [source]);
 
   // Warm the embedded-checkout chunk (Stripe UI) while the songwriter reads the
   // pricing, so picking a plan opens the payment surface instantly instead of
@@ -302,17 +351,27 @@ const UpgradePage = () => {
     preloadOnIdle(() => import("@/components/pricing/CheckoutModal"));
   }, []);
 
-  // Load data
+  // Load data (retryable — a failed plan load must never be a dead end on a
+  // money page; the songwriter gets a calm one-tap "Try again").
+  const [loadAttempt, setLoadAttempt] = useState(0);
   useEffect(() => {
+    let cancelled = false;
     setDataError(null);
+    setIsLoadingData(true);
     Promise.all([fetchPlanTiers(), fetchCurrentPlan()])
       .then(([tierData, plan]) => {
+        if (cancelled) return;
         setTiers(tierData);
         setCurrentPlan(plan);
       })
-      .catch(() => setDataError("Plans are taking longer than usual to load. Refresh and try again."))
-      .finally(() => setIsLoadingData(false));
-  }, []);
+      .catch(() => {
+        if (!cancelled) setDataError("Plans are taking longer than usual to load.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingData(false);
+      });
+    return () => { cancelled = true; };
+  }, [loadAttempt]);
 
   // Pre-validate referral code from URL
   useEffect(() => {
@@ -422,6 +481,23 @@ const UpgradePage = () => {
       }
 
       if (result.clientSecret) {
+        // Summarize exactly what this session charges, from server-validated
+        // numbers (tier row + validate-code result) — shown in the modal header.
+        const discounted =
+          result.appliedCodeKind !== "none"
+            ? activeDiscountResult?.effectiveCents ?? Math.round(tier.monthlyCents / 2)
+            : null;
+        const cents = discounted ?? tier.monthlyCents;
+        setCheckoutSummary({
+          planName: tier.displayName,
+          priceLabel: `${centsToDisplay(cents, tier.currency)}/month`,
+          appliedCode:
+            result.appliedCodeKind === "founder"
+              ? { kind: "founder", label: `Founder code applied — ${centsToDisplay(cents, tier.currency)}/month` }
+              : result.appliedCodeKind === "member_referral"
+              ? { kind: "member_referral", label: `Referral applied — 50% off, ${centsToDisplay(cents, tier.currency)}/month` }
+              : null,
+        });
         setClientSecret(result.clientSecret);
       } else if (result.url) {
         window.location.href = result.url;
@@ -436,8 +512,10 @@ const UpgradePage = () => {
   };
 
   const gateMessages: Record<string, string> = {
+    song_gate: "Your first song proved the workspace. Ready to start the next one?",
     song_gate_free: "Your first song proved the workspace. Ready to start the next one?",
     song_gate_starter: "You've filled your Starter catalog. Time to go Pro.",
+    storage: "Your songs are safe. More room keeps every new idea safe too.",
   };
   const gateMessage = source ? gateMessages[source] : null;
 
@@ -518,13 +596,21 @@ const UpgradePage = () => {
                 style={{ backgroundColor: "rgba(224,84,64,0.08)", color: "#E05440", border: "1px solid rgba(224,84,64,0.20)" }}
                 role="alert"
               >
-                {dataError}
+                {dataError}{" "}
+                <button
+                  onClick={() => setLoadAttempt((n) => n + 1)}
+                  className="font-semibold underline underline-offset-2"
+                  style={{ color: "#E05440" }}
+                >
+                  Try again
+                </button>
               </div>
             )}
             {tiers.map((tier) => (
               <PricingCard
                 key={tier.key}
                 tier={tier}
+                allTiers={tiers}
                 isCurrentPlan={currentPlan === tier.key || (currentPlan === "founder_pro" && tier.key === "pro")}
                 isReferred={!!activeDiscountResult && tier.key === "pro"}
                 codeResult={tier.key === "pro" ? activeDiscountResult : null}
@@ -562,6 +648,7 @@ const UpgradePage = () => {
                       setCodeResult(null);
                     }}
                     placeholder="FOUNDER-XXXXXX or REFERRAL"
+                    aria-label="Founder or referral code"
                     autoCapitalize="characters"
                     autoCorrect="off"
                     className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
@@ -622,7 +709,10 @@ const UpgradePage = () => {
         <Suspense fallback={<div className="fixed inset-0 z-50" style={{ backgroundColor: "rgba(26,26,26,0.80)" }} />}>
           <CheckoutModal
             clientSecret={clientSecret}
-            onClose={() => { setClientSecret(null); setCheckoutTierKey(null); }}
+            planName={checkoutSummary?.planName}
+            priceLabel={checkoutSummary?.priceLabel}
+            appliedCode={checkoutSummary?.appliedCode}
+            onClose={() => { setClientSecret(null); setCheckoutTierKey(null); setCheckoutSummary(null); }}
           />
         </Suspense>
       )}

@@ -28,12 +28,38 @@ vi.mock("@/integrations/cog/songs", async (importOriginal) => {
     }),
   };
 });
+// The pricing page renders server plan tiers — stub the pricing API so the
+// smoke render is deterministic (no supabase round-trip in jsdom).
+vi.mock("@/lib/pricing/pricingApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/pricing/pricingApi")>();
+  return {
+    ...actual,
+    fetchPlanTiers: vi.fn().mockResolvedValue([
+      {
+        key: "free", displayName: "Free", monthlyCents: 0, currency: "cad",
+        ownedSongLimit: 1, storageBytesIncluded: 524_288_000,
+        allowsFounderCode: false, allowsMemberReferral: false, allowsStorageAddons: false,
+        stripePriceId: null, stripeReferralPriceId: null, sortOrder: 0,
+      },
+      {
+        key: "pro", displayName: "Pro", monthlyCents: 10000, currency: "cad",
+        ownedSongLimit: 50, storageBytesIncluded: 107_374_182_400,
+        allowsFounderCode: true, allowsMemberReferral: true, allowsStorageAddons: true,
+        stripePriceId: "price_pro", stripeReferralPriceId: "price_pro_ref", sortOrder: 2,
+      },
+    ]),
+    fetchCurrentPlan: vi.fn().mockResolvedValue("free"),
+    validateCode: vi.fn(),
+    createCheckoutSession: vi.fn(),
+  };
+});
+
 import SongCatalogPage from "@/pages/SongCatalogPage";
 import SongWorkspacePage from "@/pages/SongWorkspacePage";
 import CaptureFirstIdeaPage from "@/pages/onboarding/CaptureFirstIdeaPage";
 import VoiceMemoAddedPage from "@/pages/onboarding/VoiceMemoAddedPage";
 import NotFound from "@/pages/NotFound";
-import UpgradePage from "@/pages/UpgradePage";
+import UpgradePage from "@/pages/pricing/UpgradePage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import ChordsPage from "@/pages/ChordsPage";
 import SongCanvasPage from "@/pages/SongCanvasPage";
@@ -96,11 +122,11 @@ describe("Codex 390px mobile render smoke", () => {
     expect(screen.getByRole("link", { name: /go to songs/i })).toBeInTheDocument();
   });
 
-  it("renders the upgrade page at the primary mobile width", () => {
+  it("renders the upgrade page at the primary mobile width", async () => {
     renderRoute("/upgrade", "/upgrade", <UpgradePage />);
 
     expect(screen.getByRole("heading", { name: /ready to build your catalog/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /go pro/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /go pro/i })).toBeInTheDocument();
   });
 
   it("renders the settings page at the primary mobile width", () => {

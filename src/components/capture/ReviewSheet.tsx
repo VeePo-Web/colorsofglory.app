@@ -452,8 +452,8 @@ const ReviewSheet = ({
     } catch (e) {
       const raw = (e as { message?: string })?.message ?? "";
       if (raw.includes("song_limit_reached") || raw.includes("402")) {
-        toast.error("Free plan limit reached", { description: "Upgrade to add more songs." });
-        navigate("/upgrade");
+        toast.error("Your first song is safe", { description: "Upgrade to start the next one." });
+        navigate("/upgrade?source=song_gate_free");
       } else if (raw.includes("forbidden")) {
         toast.error("You don't have access to this song", {
           description: "Ask the owner to invite you as a collaborator, or file this idea into a song you own.",
