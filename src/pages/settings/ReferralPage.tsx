@@ -6,6 +6,17 @@ import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { fetchReferralStats, centsToDisplay, type ReferralStats } from "@/lib/pricing/pricingApi";
 import { setMyPayoutMethod } from "@/integrations/cog/referrals";
+import ShareReferralSheet from "@/components/referral/ShareReferralSheet";
+import VanityCodeClaim from "@/components/referral/VanityCodeClaim";
+
+/** Quiet loading placeholder — pulses unless the user prefers reduced motion. */
+const Shimmer = ({ width, height = 14 }: { width: number | string; height?: number }) => (
+  <span
+    className="inline-block rounded-md animate-pulse motion-reduce:animate-none"
+    style={{ width, height, backgroundColor: "rgba(28,26,23,0.08)" }}
+    aria-hidden="true"
+  />
+);
 
 const ReferralPage = () => {
   const navigate = useNavigate();
@@ -15,6 +26,7 @@ const ReferralPage = () => {
   const [payoutEmail, setPayoutEmail] = useState("");
   const [editingPayout, setEditingPayout] = useState(false);
   const [savingPayout, setSavingPayout] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     fetchReferralStats()
@@ -53,24 +65,13 @@ const ReferralPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Warm, faith-toned invite that leads with what the friend gets (first song
-  // free) — the message travels with the link through the native share sheet.
-  const inviteMessage =
-    "I'm writing songs on Colors of Glory — lyrics, voice memos, and the people I write with all in one place for each song. Your first song is free:";
+  // Sharing goes through the ONE shared surface (ShareReferralSheet) so the
+  // warm first-song-free message never diverges from the in-song prompts.
 
-  const handleShare = async () => {
-    const url = stats?.link ? fullLink : "https://colorsofglory.app";
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title: "Colors of Glory", text: inviteMessage, url });
-        return;
-      } catch (err) {
-        // User dismissed the sheet → stop. Any real failure falls through to
-        // copying the link so the invite is never lost.
-        if ((err as Error)?.name === "AbortError") return;
-      }
-    }
-    handleCopy();
+  // After a vanity-code claim the code/link change server-side — refetch so the
+  // new /r/<name> flows into the link card and the share sheet immediately.
+  const refreshStats = () => {
+    fetchReferralStats().then(setStats).catch(() => {/* keep current */});
   };
 
   return (
@@ -159,15 +160,19 @@ const ReferralPage = () => {
             Your referral link
           </p>
           <div className="flex items-center gap-3">
-            <p
-              className="flex-1 text-sm truncate"
-              style={{
-                color: "var(--cog-charcoal)",
-                fontFamily: "monospace",
-              }}
-            >
-              {referralLink}
-            </p>
+            {isLoading ? (
+              <Shimmer width="70%" height={16} />
+            ) : (
+              <p
+                className="flex-1 text-sm truncate"
+                style={{
+                  color: "var(--cog-charcoal)",
+                  fontFamily: "monospace",
+                }}
+              >
+                {referralLink}
+              </p>
+            )}
             <button
               onClick={handleCopy}
               className="flex items-center justify-center rounded-xl transition-all duration-150 active:scale-95 flex-shrink-0"
@@ -183,10 +188,14 @@ const ReferralPage = () => {
               <Copy size={15} strokeWidth={1.8} />
             </button>
           </div>
+          {/* Vanity code — memorable /r/<name> links (claim_referral_code RPC) */}
+          {!isLoading && (
+            <VanityCodeClaim currentCode={stats?.code ?? null} onClaimed={refreshStats} />
+          )}
         </div>
 
         {/* Stats grid - live data from me-referrals */}
-        <div className="flex flex-col gap-3 mb-8">
+        <div className="flex flex-col gap-3 mb-8" aria-busy={isLoading}>
           {([
             [
               { label: "Signups", value: isLoading ? "..." : String(stats?.attributedCount ?? 0) },
@@ -206,6 +215,8 @@ const ReferralPage = () => {
                     backgroundColor: "var(--cog-cream-light)",
                     border: "1.5px solid var(--cog-border)",
                   }}
+                  role="group"
+                  aria-label={isLoading ? `${stat.label} loading` : `${stat.label}: ${stat.value}`}
                 >
                   <p
                     className="font-semibold mb-0.5"
@@ -215,8 +226,9 @@ const ReferralPage = () => {
                       fontFamily: "var(--font-display)",
                       lineHeight: 1,
                     }}
+                    aria-hidden={isLoading}
                   >
-                    {stat.value}
+                    {isLoading ? <Shimmer width={48} height={30} /> : stat.value}
                   </p>
                   <p
                     className="text-xs"
@@ -335,7 +347,7 @@ const ReferralPage = () => {
 
         <button
           type="button"
-          onClick={handleShare}
+          onClick={() => setShareOpen(true)}
           className="text-sm text-center w-full py-3 transition-opacity hover:opacity-70 mb-10"
           style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
         >
@@ -344,6 +356,20 @@ const ReferralPage = () => {
             Share invite
           </span>
         </button>
+
+        {/* Calm zero-state — no referrals yet is a beginning, not an error */}
+        {!isLoading && stats && stats.recentReferrals.length === 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6 text-center"
+            style={{ backgroundColor: "var(--cog-cream-light)", border: "1.5px solid var(--cog-border)" }}
+          >
+            <p className="text-sm" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", lineHeight: 1.6 }}>
+              Share your link with a songwriter you love writing with.
+              <br />
+              Their first song is free — you earn when they go Pro.
+            </p>
+          </div>
+        )}
 
         {/* Recent activity — anonymized momentum feed so shares feel like they land */}
         {!isLoading && stats && stats.recentReferrals.length > 0 && (
@@ -426,6 +452,9 @@ const ReferralPage = () => {
         </div>
       </div>
       <BottomNav active="settings" />
+
+      {/* The ONE share surface — same sheet the in-song prompts open */}
+      <ShareReferralSheet open={shareOpen} onClose={() => setShareOpen(false)} link={stats?.link ?? null} />
     </div>
   );
 };

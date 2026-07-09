@@ -18,6 +18,10 @@ import { copyTextToClipboard } from "@/lib/invite/clipboard";
 import { getAvatarColor, getAvatarInitials } from "@/lib/invite/inviteContext";
 import RolePicker from "@/components/roles/RolePicker";
 import { roleLabel } from "@/lib/invite/roles";
+// F3 referral loop — the host renders the calm nudge; this screen only fires
+// the moments (see docs/REFERRAL-CONTRACT.md).
+import ReferralPromptHost from "@/components/referral/ReferralPromptHost";
+import { triggerReferralPrompt } from "@/components/referral/referralPromptState";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -298,6 +302,7 @@ const PeoplePage = () => {
     try {
       const invite = await generateInviteToken(songId, selectedRole, 5);
       setGeneratedInvite(invite);
+      triggerReferralPrompt("invite_sent", songId);
     } catch {
       setError("Couldn't create the link. Please try again.");
     } finally {
@@ -315,6 +320,7 @@ const PeoplePage = () => {
       if (result.delivered) {
         setSent({ channel: result.channel, to: contact.trim() });
         setContact("");
+        triggerReferralPrompt("invite_sent", songId);
       } else {
         // Backend delivery not available — fall back to a shareable link.
         setGeneratedInvite({
@@ -553,6 +559,9 @@ const PeoplePage = () => {
       </div>
 
       <SongTabBar activeTab="people" />
+
+      {/* F3 — calm referral nudge host; also detects the room growing */}
+      <ReferralPromptHost songId={songId} collaboratorCount={collabs.length} />
     </div>
   );
 };
