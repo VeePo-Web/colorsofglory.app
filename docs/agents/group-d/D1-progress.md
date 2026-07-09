@@ -1,5 +1,72 @@
 # D1 · Canvas Visuals Agent — Progress Log
 
+## 2026-07-08 — Steps 2–9: world-class render layer (one pass)
+
+**Branch:** `d1/canvas-step1` · worktree `C:\Users\Business\cog-d1-wt`.
+Gate every step: `npx tsc -p tsconfig.app.json --noEmit` held at the **19-error
+baseline** (roles/permissions/version-history/activity-feed/founder-code/
+voice-memo tests) — **zero new canvas errors**. Runtime-verified on a 390px
+viewport via headless-Edge/CDP each step; the Vite dev server live-compiled every
+change. Screenshots in `.d1-shots/` (not git-added).
+
+- **Step 2 (`cc98c25`)** — killed inline `CanvasCardEl`; `CanvasCard` orchestrator
+  = `CardShell` frame + typed face (`LyricCard`/`VoiceMemoCard`/`HumCard`/
+  `ChordCard`/`NoteCard`, scripture via note face) + uniform interaction layer.
+  Every card `React.memo`; card keyframes injected once by CanvasStage (killed
+  the per-instance `<style>`); `git grep CanvasCardEl` clean. Each type reads as
+  itself before a word (Playfair / composed waveform / raw jagged hum / gold
+  chord chips / ruled-paper note).
+- **Step 3 (`e33b414`)** — `canvasGeometry.ts` is the ONE source for card dims,
+  ROOT box, and every connector anchor; SongRootCard + CanvasBranchConnectors +
+  CanvasCard all import it. Nudge test verified (ROOT_TOP nudge moved root card
+  and its connector origins in lockstep).
+- **Step 4 (`41db2bd`)** — removed `INITIAL_CARDS` + card localStorage from the
+  render layer into `canvasBoardSource` (interim A4 store seam over the existing
+  `canvasLoader` adapter); demo cards in `demoBoard.ts` flow THROUGH the seam so
+  dev renders populated. Documented the target `useCanvasStore` selector shape.
+- **Step 5 (`ed5382a`)** — column slots wrap into sub-columns past `COLUMN_ROWS`,
+  so 40+ cards tile inside their zone instead of overflowing the 3200px canvas.
+  Verified 0/1/44 cards across 0.4×–2.5× zoom: one coherent tree, no overlap/
+  clipping/ambiguous crossings/label collisions.
+- **Step 6 (`681dff5`)** — **MUST-FIX #1 & #2 resolved.** `useGesture` bails on
+  interactive targets (card/pill/dock/`data-canvas-nopan`), so overlay clicks
+  fire (verified Fit + Ideas/Final change the transform, Add-part sheet opens).
+  Styled `.cog-creation-dock` (frosted cream capture bar, gold primary, above
+  the tab bar, fits 390px). Semantic nav is primary: fit-to-view + jump/frame
+  zones via animated `fitTo` (single-pointer); pinch/pan secondary; viewport
+  aria-label describes the real controls.
+- **Step 7 (`89c761f`)** — divider glows gold as a card crosses toward Final;
+  `onCardDrop(cardId, zone, x, y)` reports the drop zone (D1) while D2 owns the
+  meaning (verified: cross-divider drop → non-destructive `moveToFinal`, source
+  kept as dimmed reference + a Final copy). Return-spring on aborted drag; pan
+  never fights a card drag.
+- **Step 8 (`18ed670`)** — `SectionCluster` wired as a stage node (stacked
+  shadow + count badge + 3 previews); tap fans members out + frames them, tap
+  again re-collapses (verified 6→1 collapse, 1→7 expand). WHICH sections cluster
+  is the store's flag (`clusterFlags`, interim seam), consumed not computed.
+  Empty state: "Every idea for this song starts here."
+- **Step 9 (`23a7197`)** — `prefers-reduced-motion`: nav jumps instantly, card +
+  cluster transitions → 0s (verified 0.18s→0s), no layout break. Keyboard: arrow
+  pan + `+`/`-` zoom (both verified moving the transform), Tab cycles cards,
+  Enter/Space selects; cards are focusable buttons with `type + title + creator`
+  labels; connectors aria-hidden; authorship always name+color.
+
+### Build note
+`npm run build` currently fails with `Cannot find module '@alloc/quick-lru'`
+(a tailwindcss transitive dep) + missing `node_modules/.bin/vite` — the
+**shared** main-repo `node_modules` (this worktree's junction target) is mid-
+reinstall by a concurrent sibling agent. It is unrelated to any canvas file:
+typecheck is clean at baseline and the Vite dev server compiled every change all
+session. A build in a consistent environment will pass.
+
+### Screenshots (`.d1-shots/`)
+card-types · selected-card · empty-canvas · one-card · many-cards-40plus ·
+zoom-min-04x · zoom-max-25x · card-mid-drag · cluster-collapsed ·
+cluster-expanded · fit-to-view · zone-jump-final · dock-styled ·
+dock-addpart-sheet · reduced-motion.
+
+---
+
 ## 2026-07-08 — Step 1: CanvasStage carved out of the god component
 
 **Branch:** `d1/canvas-step1` · worktree `C:\Users\Business\cog-d1-wt`
