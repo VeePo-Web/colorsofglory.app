@@ -1,13 +1,51 @@
 import { useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mic } from "lucide-react";
 import { goBackOr } from "@/lib/nav/safeBack";
 import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
 import { loadSession, loadLoopMode } from "@/lib/audio/practiceStorage";
-import { loadPracticeSections } from "@/lib/practice/practiceApi";
+import { loadPracticeBundle } from "@/lib/practice/practiceApi";
 import type { PracticeSection } from "@/lib/audio/practiceTypes";
+
+/**
+ * Keep the screen awake while a practice session is live on this route — a
+ * music stand that sleeps mid-verse fails the one job it has. Best-effort
+ * (Wake Lock API where available); reacquires when the tab returns.
+ */
+function usePracticeWakeLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+    };
+    if (!nav.wakeLock) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      try {
+        sentinel = await nav.wakeLock!.request("screen");
+        if (cancelled) void sentinel.release().catch(() => {});
+      } catch {
+        /* denied (low battery etc.) — never block practice */
+      }
+    };
+
+    void acquire();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      void sentinel?.release().catch(() => {});
+    };
+  }, [active]);
+}
 
 /**
  * Route: /song/:songId/practice
@@ -22,7 +60,13 @@ export default function PracticePlayerPage() {
   const navigate   = useNavigate();
   const location   = useLocation();
   const hook       = usePracticeContext();
-  const { state, initSession } = hook;
+  const { state, initSession, applyEnrichment } = hook;
+
+  // Screen stays awake for the whole live session (full player + drive mode).
+  usePracticeWakeLock(
+    state.songId === songId &&
+    (state.status === "ready" || state.status === "playing" || state.status === "paused"),
+  );
 
   // Practice launches from the canvas; closing pops back there, but on a cold
   // load / deep link it lands on the song's canvas instead of dead-ending.
@@ -49,43 +93,80 @@ export default function PracticePlayerPage() {
       const persisted = loadSession(songId);
       const title = navState.songTitle ?? persisted?.title ?? "Untitled Song";
 
+      const savedMode = loadLoopMode(songId);
+
+      if (navState.sections) {
+        // Canvas fast path: start instantly on the nav-state sections, then
+        // enrich in the background with the full bundle — takes per section
+        // (F15), the chord chart (C3), and the song's tempo/key — without
+        // disturbing whatever is already playing.
+        if (savedMode) hook.setLoopMode(savedMode);
+        initSession(songId, title, navState.sections, persisted ?? undefined);
+        try {
+          const bundle = await loadPracticeBundle(songId);
+          if (!cancelled) {
+            applyEnrichment(songId, bundle.sections, { bpm: bundle.bpm, songKey: bundle.songKey });
+          }
+        } catch { /* enrichment is best-effort — practice already runs */ }
+        return;
+      }
+
       // Deep-link / resume-from-home has no sections in nav state — self-load
       // so practice never dead-ends when opened cold.
-      const sections = navState.sections ?? (await loadPracticeSections(songId));
+      const bundle = await loadPracticeBundle(songId);
       if (cancelled) return;
 
-      const savedMode = loadLoopMode(songId);
       if (savedMode) hook.setLoopMode(savedMode);
 
-      initSession(songId, title, sections, persisted ?? undefined);
+      initSession(songId, title, bundle.sections, persisted ?? undefined, {
+        bpm: bundle.bpm,
+        songKey: bundle.songKey,
+      });
     })();
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId]);
 
-  // Idle / no sections
+  // Idle / no sections — warm, points at the one action that unlocks practice
   if (state.status === "idle") {
     return (
       <div
-        className="fixed inset-0 flex flex-col items-center justify-center gap-4"
+        className="fixed inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center"
         style={{ backgroundColor: "var(--cog-cream)" }}
       >
-        <p style={{ fontFamily: "var(--font-body)", fontSize: "0.9375rem", color: "var(--cog-muted)" }}>
-          No sections with voice memos found for this song.
+        <div className="pointer-events-none absolute inset-0 cog-glow" />
+        <div
+          className="relative flex items-center justify-center rounded-full"
+          style={{ width: 64, height: 64, backgroundColor: "rgba(184,149,58,0.12)" }}
+        >
+          <Mic size={26} style={{ color: "var(--cog-gold)" }} />
+        </div>
+        <p
+          className="relative"
+          style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 600, color: "var(--cog-charcoal)" }}
+        >
+          Record a take to practice this song
+        </p>
+        <p
+          className="relative"
+          style={{ fontFamily: "var(--font-body)", fontSize: "0.9375rem", color: "var(--cog-warm-gray)", maxWidth: 300 }}
+        >
+          Once a section has a voice memo, it shows up here ready to loop, slow down, and rehearse.
         </p>
         <button
           onClick={handleClose}
-          className="rounded-full px-6 py-2"
+          className="relative rounded-full px-6 py-2.5 mt-2 active:scale-[0.97]"
           style={{
             backgroundColor: "var(--cog-gold)",
             color: "#fff",
             fontFamily: "var(--font-body)",
             fontWeight: 600,
             border: "none",
+            minHeight: 44,
           }}
         >
-          Go back
+          Back to the song
         </button>
       </div>
     );

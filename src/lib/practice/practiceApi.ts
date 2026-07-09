@@ -1,7 +1,15 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { PracticeSection, TranscriptLine } from "@/lib/audio/practiceTypes";
+import type {
+  PracticeSection,
+  PracticeTake,
+  PracticeChordLine,
+  TranscriptLine,
+} from "@/lib/audio/practiceTypes";
 import { loadHistory } from "@/lib/audio/practiceStorage";
 import { masteryFromLoops } from "@/lib/audio/practiceTypes";
+import { getSongSheet } from "@/integrations/cog/sheet";
+import type { SheetDoc } from "@/lib/chords/sheetState";
+import { chordToLetters, chordToNumbers } from "@/lib/chords/nashville";
 
 interface SectionRow {
   id: string;
@@ -89,9 +97,85 @@ function parseWordTimestamps(raw: unknown): TranscriptLine[] | null {
   return lines;
 }
 
+// ─── Chords from C3's sheet (read-only) ─────────────────────────────────────
+
+/** Normalize a section label for sheet↔practice matching ("Verse 1 " ≡ "verse 1"). */
+export function normalizeSectionLabel(label: string | null | undefined): string {
+  return (label ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /**
- * Loads all song sections and their associated voice memos (first memo per section)
- * and returns a ready-to-use PracticeSection[] for the practice player.
+ * Pre-render a SheetDoc's sections into practice chord lines, keyed by
+ * normalized label. Chords render in the doc's display key/mode/notation —
+ * exactly what the writer sees in the sheet editor. First section with a
+ * given label wins (a repeated "Chorus" maps to the one chart). Pure;
+ * exported for tests.
+ */
+export function buildChordLinesByLabel(doc: SheetDoc): Map<string, PracticeChordLine[]> {
+  const byLabel = new Map<string, PracticeChordLine[]>();
+  for (const section of doc.sections) {
+    const key = normalizeSectionLabel(section.label);
+    if (!key || byLabel.has(key)) continue;
+    const lines: PracticeChordLine[] = section.lines
+      .filter((l) => l.text.trim().length > 0 || l.anchors.length > 0)
+      .map((l) => ({
+        text: l.text,
+        chords: l.anchors.map((a) => ({
+          glyph:
+            doc.display === "numbers"
+              ? chordToNumbers(a.chord, doc.mode)
+              : chordToLetters(a.chord, doc.key, doc.mode),
+          at: a.at,
+        })),
+      }));
+    if (lines.length > 0) byLabel.set(key, lines);
+  }
+  return byLabel;
+}
+
+/** The song-level practice payload: sections plus the sheet's tempo and key. */
+export interface PracticeBundle {
+  sections: PracticeSection[];
+  /** Tempo from C3's sheet meta; null when the song has no declared tempo. */
+  bpm: number | null;
+  /** Display key from C3's sheet; null when there is no sheet. */
+  songKey: string | null;
+}
+
+/**
+ * Loads all song sections with EVERY playable voice memo per section (the
+ * section's takes, F15) plus the song's lyric+chord sheet (C3, read-only) and
+ * returns a ready-to-use practice payload. The sheet is best-effort — a song
+ * with no sheet simply practices without chords.
+ *
+ * This function lives in lib/ (not pages/components) so it may use supabase directly.
+ */
+export async function loadPracticeBundle(songId: string): Promise<PracticeBundle> {
+  const [sections, sheet] = await Promise.all([
+    loadPracticeSections(songId),
+    getSongSheet(songId).catch(() => null),
+  ]);
+
+  const doc = sheet?.doc ?? null;
+  if (doc) {
+    const chordsByLabel = buildChordLinesByLabel(doc);
+    for (const section of sections) {
+      section.chordLines = chordsByLabel.get(normalizeSectionLabel(section.label)) ?? null;
+    }
+  }
+
+  return {
+    sections,
+    bpm: doc?.bpm ?? null,
+    songKey: doc?.key ?? null,
+  };
+}
+
+/**
+ * Loads all song sections and their associated voice memos — every playable
+ * memo per section becomes a take (oldest first); the first take is mirrored
+ * into the section's active fields so the engine's existing paths are
+ * untouched. Returns a ready-to-use PracticeSection[] for the practice player.
  *
  * This function lives in lib/ (not pages/components) so it may use supabase directly.
  */
@@ -134,33 +218,48 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
     transcripts.map(t => [t.memo_id, t]),
   );
 
-  // Build a memo-per-section map: section_id → first memo
-  const memoBySection = new Map<string | null, MemoRow>();
+  // Group ALL memos per section (oldest first — the query orders by
+  // created_at): every playable memo on a section is one of its takes (F15).
+  const memosBySection = new Map<string | null, MemoRow[]>();
   for (const memo of memos) {
     const key = memo.section_id ?? null;
-    if (!memoBySection.has(key)) {
-      memoBySection.set(key, memo);
-    }
+    const arr = memosBySection.get(key) ?? [];
+    arr.push(memo);
+    memosBySection.set(key, arr);
   }
 
-  // Load persisted mastery data
-  const history = loadHistory(songId);
-
-  // 3. Build PracticeSection[] — one entry per section that has a memo
-  const result: PracticeSection[] = [];
-
-  // Sections with known section_id
-  for (const section of sections) {
-    const memo = memoBySection.get(section.id);
-    if (!memo) continue; // skip sections with no voice memo
-
-    const transcript = memo ? transcriptByMemoId.get(memo.id) : undefined;
+  const takeFromMemo = (memo: MemoRow, index: number): PracticeTake => {
+    const transcript = transcriptByMemoId.get(memo.id);
     const transcriptLines = transcript
       ? parseWordTimestamps(transcript.segments) ??
         (transcript.text
           ? [{ text: transcript.text, startMs: 0, endMs: memo.duration_ms ?? 0 }]
           : null)
       : null;
+    return {
+      memoId: memo.id,
+      label: memo.title?.trim() || `Take ${index + 1}`,
+      durationMs: memo.duration_ms ?? 0,
+      lyrics: transcript?.text || null,
+      transcriptLines,
+    };
+  };
+
+  // Load persisted mastery data
+  const history = loadHistory(songId);
+
+  // 3. Build PracticeSection[] — one entry per section that has a memo.
+  // The FIRST take is mirrored into the section's active fields so every
+  // existing engine path (caching, playback, karaoke) is untouched.
+  const result: PracticeSection[] = [];
+
+  // Sections with known section_id
+  for (const section of sections) {
+    const sectionMemos = memosBySection.get(section.id);
+    if (!sectionMemos || sectionMemos.length === 0) continue; // no voice memo → not practicable
+
+    const takes = sectionMemos.map(takeFromMemo);
+    const active = takes[0];
 
     const sectionHistory = history.sections[section.id];
     const masteryLevel = sectionHistory
@@ -170,37 +269,37 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
     result.push({
       id: section.id,
       label: section.label ?? `Section ${section.position ?? result.length + 1}`,
-      memoId: memo?.id ?? null,
-      lyrics: transcript?.text || null,
-      transcriptLines,
-      durationMs: memo?.duration_ms ?? 0,
+      memoId: active.memoId,
+      lyrics: active.lyrics,
+      transcriptLines: active.transcriptLines,
+      durationMs: active.durationMs,
       cacheStatus: "pending",
       masteryLevel,
       loopCountThisSession: 0,
+      takes,
+      activeTakeIndex: 0,
     });
   }
 
-  // Memos not attached to any section (section_id = null) — append at end
-  const nullMemo = memoBySection.get(null);
-  if (nullMemo && !result.some(r => r.memoId === nullMemo.id)) {
-    const transcript = transcriptByMemoId.get(nullMemo.id);
-    const transcriptLines = transcript
-      ? parseWordTimestamps(transcript.segments) ??
-        (transcript.text
-          ? [{ text: transcript.text, startMs: 0, endMs: nullMemo.duration_ms ?? 0 }]
-          : null)
-      : null;
+  // Memos not attached to any section (section_id = null) — append at end,
+  // all of them together as one "Voice Memo" section with N takes.
+  const nullMemos = memosBySection.get(null) ?? [];
+  if (nullMemos.length > 0 && !result.some(r => r.memoId === nullMemos[0].id)) {
+    const takes = nullMemos.map(takeFromMemo);
+    const active = takes[0];
 
     result.push({
-      id: `unassigned-${nullMemo.id}`,
-      label: nullMemo.title ?? "Voice Memo",
-      memoId: nullMemo.id,
-      lyrics: transcript?.text || null,
-      transcriptLines,
-      durationMs: nullMemo.duration_ms ?? 0,
+      id: `unassigned-${nullMemos[0].id}`,
+      label: nullMemos[0].title ?? "Voice Memo",
+      memoId: active.memoId,
+      lyrics: active.lyrics,
+      transcriptLines: active.transcriptLines,
+      durationMs: active.durationMs,
       cacheStatus: "pending",
       masteryLevel: "untouched",
       loopCountThisSession: 0,
+      takes,
+      activeTakeIndex: 0,
     });
   }
 
@@ -224,7 +323,9 @@ export async function loadAlbumPracticeSections(
   const perSong = await Promise.all(
     songs.map(async (song) => {
       try {
-        const sections = await loadPracticeSections(song.id);
+        // Bundle (not bare sections) so album rehearsal gets each song's
+        // chords too; per-song bpm is ignored — tempo is set per session.
+        const { sections } = await loadPracticeBundle(song.id);
         return sections.map((s) => ({
           ...s,
           id: `${song.id}::${s.id}`,

@@ -57,6 +57,7 @@ export function SectionStrip({
     const container = containerRef.current;
     if (!chip || !container) return;
 
+    if (typeof container.scrollTo !== "function") return; // older WebKit / jsdom
     const chipLeft = chip.offsetLeft;
     const chipWidth = chip.offsetWidth;
     const containerWidth = container.offsetWidth;

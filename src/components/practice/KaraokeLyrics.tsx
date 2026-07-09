@@ -112,14 +112,13 @@ export function KaraokeLyrics({
       {/* Current line */}
       <p
         key={current}
-        className="transition-all"
+        className="transition-all cog-karaoke-line"
         style={{
           fontFamily: "var(--font-display)",
           fontSize: activeFontSize,
           fontWeight: 600,
           lineHeight: 1.35,
           color: "var(--cog-charcoal)",
-          animation: "karaoke-in 200ms var(--cog-ease-reveal) both",
         }}
       >
         {current}
@@ -144,6 +143,10 @@ export function KaraokeLyrics({
         @keyframes karaoke-in {
           from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        .cog-karaoke-line { animation: karaoke-in 200ms var(--cog-ease-reveal) both; }
+        @media (prefers-reduced-motion: reduce) {
+          .cog-karaoke-line { animation: none; }
         }
       `}</style>
     </div>

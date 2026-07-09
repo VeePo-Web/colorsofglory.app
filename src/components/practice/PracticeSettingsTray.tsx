@@ -1,5 +1,6 @@
-import { X, Zap, Timer, Gauge, Repeat, Volume2 } from "lucide-react";
+import { X, Zap, Timer, Gauge, Repeat, Volume2, Minus, Plus, AudioLines } from "lucide-react";
 import type { PracticePlayerState, LoopMode, SpeedTrainerConfig } from "@/lib/audio/practiceTypes";
+import { effectiveClickBpm } from "@/hooks/usePracticePlayer";
 
 interface PracticeSettingsTrayProps {
   state: PracticePlayerState;
@@ -11,6 +12,8 @@ interface PracticeSettingsTrayProps {
   onSetCountIn: (enabled: boolean) => void;
   onSetSpeedTrainer: (patch: Partial<SpeedTrainerConfig>) => void;
   onSetTimerMinutes: (minutes: number | null) => void;
+  onToggleMetronome: () => void;
+  onSetBpm: (bpm: number) => void;
 }
 
 const SPEEDS = [0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1.0, 1.1, 1.2, 1.25, 1.5, 2.0];
@@ -49,6 +52,8 @@ export function PracticeSettingsTray({
   onSetCountIn,
   onSetSpeedTrainer,
   onSetTimerMinutes,
+  onToggleMetronome,
+  onSetBpm,
 }: PracticeSettingsTrayProps) {
   const timerMinutes = state.timerEndTimeMs
     ? Math.round((state.timerEndTimeMs - Date.now()) / 60000)
@@ -292,6 +297,70 @@ export function PracticeSettingsTray({
             </div>
           </SettingsSection>
 
+          {/* Metronome */}
+          <SettingsSection icon={<AudioLines size={16} />} label="Metronome">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "0.9375rem", fontWeight: 500, color: "var(--cog-charcoal)" }}>
+                    Click while practicing
+                  </div>
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--cog-warm-gray)" }}>
+                    {state.bpmFromSong ? "Tempo from your song sheet" : "Set your tempo below"}
+                  </div>
+                </div>
+                <ToggleSwitch
+                  enabled={state.metronomeOn}
+                  onToggle={onToggleMetronome}
+                />
+              </div>
+
+              {/* Tempo stepper */}
+              <div
+                className="flex items-center justify-between rounded-xl px-4 py-3"
+                style={{ backgroundColor: "rgba(28,26,23,0.04)" }}
+              >
+                <button
+                  onClick={() => onSetBpm(state.bpm - 5)}
+                  aria-label="Slower tempo"
+                  className="flex items-center justify-center rounded-full active:scale-95"
+                  style={{ width: 36, height: 36, backgroundColor: "rgba(28,26,23,0.06)", border: "none", color: "var(--cog-charcoal)" }}
+                >
+                  <Minus size={16} />
+                </button>
+                <div className="text-center">
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.375rem", fontWeight: 700, color: "var(--cog-charcoal)", lineHeight: 1.1 }}>
+                    {state.bpm}
+                  </div>
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--cog-warm-gray)" }}>
+                    bpm
+                  </div>
+                </div>
+                <button
+                  onClick={() => onSetBpm(state.bpm + 5)}
+                  aria-label="Faster tempo"
+                  className="flex items-center justify-center rounded-full active:scale-95"
+                  style={{ width: 36, height: 36, backgroundColor: "rgba(28,26,23,0.06)", border: "none", color: "var(--cog-charcoal)" }}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              {/* The click follows the speed trainer, not just the song. */}
+              {effectiveClickBpm(state) !== state.bpm && (
+                <div
+                  className="rounded-xl px-4 py-3"
+                  style={{ backgroundColor: "rgba(184,149,58,0.08)" }}
+                >
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--cog-warm-gray)" }}>
+                    Clicking at <span style={{ fontWeight: 600, color: "var(--cog-gold)" }}>{effectiveClickBpm(state)} bpm</span>
+                    {" — "}your tempo scaled by the current playback speed.
+                  </div>
+                </div>
+              )}
+            </div>
+          </SettingsSection>
+
           {/* Count-in */}
           <div className="flex items-center justify-between">
             <div>
@@ -362,6 +431,8 @@ function ToggleSwitch({
   return (
     <button
       onClick={onToggle}
+      role="switch"
+      aria-checked={enabled}
       className="relative flex-shrink-0 rounded-full transition-colors"
       style={{
         width: 48,

@@ -50,6 +50,7 @@ export function MiniPracticePlayer() {
       {/* Left: tap to expand */}
       <button
         onClick={handleBarClick}
+        aria-label={`Open practice player — ${activeSection?.label ?? "practice"}`}
         className="flex-1 flex items-center gap-3 min-w-0 text-left"
         style={{ background: "none", border: "none", padding: 0, height: "100%" }}
       >
@@ -117,6 +118,7 @@ export function MiniPracticePlayer() {
             if (isPlaying) pause();
             else play();
           }}
+          aria-label={isPlaying ? "Pause practice" : "Resume practice"}
           className="flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
           style={{ width: 36, height: 36, backgroundColor: colors.bg, border: "none" }}
         >
@@ -129,6 +131,7 @@ export function MiniPracticePlayer() {
         {/* Skip forward */}
         <button
           onClick={e => { e.stopPropagation(); goToNextSection(); }}
+          aria-label="Next section"
           className="flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
           style={{ width: 36, height: 36, backgroundColor: "rgba(28,26,23,0.06)", border: "none" }}
         >
@@ -138,6 +141,7 @@ export function MiniPracticePlayer() {
         {/* Dismiss session */}
         <button
           onClick={e => { e.stopPropagation(); endSession(); }}
+          aria-label="End practice session"
           className="flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
           style={{ width: 36, height: 36, backgroundColor: "rgba(28,26,23,0.06)", border: "none" }}
         >

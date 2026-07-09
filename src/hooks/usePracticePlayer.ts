@@ -24,6 +24,19 @@ import {
   type SpeedTrainerConfig,
   type PersistedPracticeSession,
 } from "@/lib/audio/practiceTypes";
+// C4's one metronome engine (the same one Capture and the Canvas consume) —
+// practice wires it up, never re-implements the click.
+import { Metronome } from "@/lib/audio/metronome";
+
+/** Tempo the click should run at: song bpm scaled by the effective playback
+ *  speed, so the metronome tracks the speed trainer as it ramps. */
+export function effectiveClickBpm(state: Pick<PracticePlayerState, "bpm" | "playbackSpeed" | "speedTrainer">): number {
+  const speed = state.speedTrainer.enabled ? state.speedTrainer.currentSpeed : state.playbackSpeed;
+  return Math.round(state.bpm * speed);
+}
+
+const DEFAULT_BPM = 100;
+const BEATS_PER_BAR = 4;
 
 // ─── Haptics ───────────────────────────────────────────────────────────────
 
@@ -61,6 +74,11 @@ const buildInitialState = (
   gapMs: 500,
   showLyrics: true,
   countInEnabled: false,
+  bpm: DEFAULT_BPM,
+  bpmFromSong: false,
+  metronomeOn: false,
+  metronomeBeat: -1,
+  songKey: null,
   timerEndTimeMs: null,
   speedTrainer: { ...DEFAULT_SPEED_TRAINER },
   stats: { ...INITIAL_STATS, startTimeMs: Date.now() },
@@ -90,6 +108,17 @@ export function usePracticePlayer() {
   // Blob URL we created (needs revocation on section change)
   const blobUrlRef = useRef<string | null>(null);
 
+  // Metronome (C4's engine, consumed — never forked). One instance for the
+  // running click, one for the count-in bar (countIn is a constructor-bound
+  // mode on the engine, so the two jobs get separate instances).
+  const metroRef = useRef<Metronome | null>(null);
+  const countInMetroRef = useRef<Metronome | null>(null);
+  const countInResolveRef = useRef<(() => void) | null>(null);
+
+  // Generation token: bumped by pause/end/section- and take-changes so an
+  // in-flight count-in or take-swap that got superseded never plays audio.
+  const playGenRef = useRef(0);
+
   // Stable ref to state so callbacks don't capture stale closures
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -115,6 +144,45 @@ export function usePracticePlayer() {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
+  }, []);
+
+  // ─── Count-in (C4 metronome in one-bar mode) ──────────────────────────
+
+  /** Silence a pending count-in and release anyone awaiting it. */
+  const cancelCountIn = useCallback(() => {
+    countInMetroRef.current?.stop();
+    countInResolveRef.current?.();
+    countInResolveRef.current = null;
+  }, []);
+
+  /**
+   * Play one bar of clicks at the effective tempo and resolve as the first
+   * real downbeat lands — the moment the section should start. Resolves
+   * immediately when Web Audio is unavailable so playback never hangs.
+   */
+  const runCountIn = useCallback(async (): Promise<void> => {
+    if (!countInMetroRef.current) {
+      countInMetroRef.current = new Metronome({
+        bpm: effectiveClickBpm(stateRef.current),
+        beatsPerBar: BEATS_PER_BAR,
+        countIn: true,
+        onCountInDone: () => {
+          countInMetroRef.current?.stop();
+          countInResolveRef.current?.();
+          countInResolveRef.current = null;
+        },
+      });
+    }
+    const m = countInMetroRef.current;
+    m.setBpm(effectiveClickBpm(stateRef.current));
+    const done = new Promise<void>((resolve) => { countInResolveRef.current = resolve; });
+    await m.start();
+    if (!m.isRunning) {
+      // No Web Audio — the engine no-ops rather than throwing; so do we.
+      countInResolveRef.current = null;
+      return;
+    }
+    await done;
   }, []);
 
   // ─── Position tracking ────────────────────────────────────────────────
@@ -149,6 +217,8 @@ export function usePracticePlayer() {
     const section = s.sections[sectionIndex];
     if (!section) return;
 
+    const gen = ++playGenRef.current;
+    cancelCountIn();
     clearGapTimer();
     stopPositionRaf();
 
@@ -239,6 +309,13 @@ export function usePracticePlayer() {
         currentPositionMs: 0,
       }));
 
+      // One bar of clicks before the section starts (the tray's count-in
+      // toggle, finally real). Abort if paused/superseded during the bar.
+      if (stateRef.current.countInEnabled) {
+        await runCountIn();
+        if (gen !== playGenRef.current) return;
+      }
+
       audio.onended = () => handleSectionEnded(sectionIndex);
       await audio.play();
       startPositionTracking();
@@ -266,7 +343,7 @@ export function usePracticePlayer() {
       setState(prev => ({ ...prev, status: "paused" }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl, startPositionTracking]);
+  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl, startPositionTracking, cancelCountIn, runCountIn]);
 
   // ─── Loop scheduling ──────────────────────────────────────────────────
 
@@ -353,13 +430,25 @@ export function usePracticePlayer() {
         if (nextIndex !== sectionIndex) {
           loadAndPlay(nextIndex);
         } else {
-          audio.play().catch(() => {});
-          setState(prev => ({
-            ...prev,
-            loopCount: nextLoopCount,
-            currentPositionMs: 0,
-          }));
-          audio.onended = () => handleSectionEnded(nextIndex);
+          const restart = () => {
+            audio.play().catch(() => {});
+            setState(prev => ({
+              ...prev,
+              loopCount: nextLoopCount,
+              currentPositionMs: 0,
+            }));
+            audio.onended = () => handleSectionEnded(nextIndex);
+          };
+          // "1-bar count before each loop": the same-section restart counts
+          // in too, aborting if the user paused during the bar.
+          if (stateRef.current.countInEnabled) {
+            const gen = playGenRef.current;
+            void runCountIn().then(() => {
+              if (gen === playGenRef.current && stateRef.current.status === "playing") restart();
+            });
+          } else {
+            restart();
+          }
         }
       }, s.gapMs);
     };
@@ -468,6 +557,7 @@ export function usePracticePlayer() {
     songTitle: string,
     sections: PracticeSection[],
     resumeSession?: PersistedPracticeSession,
+    meta?: { bpm?: number | null; songKey?: string | null },
   ) => {
     const initial = buildInitialState(songId, songTitle, sections);
 
@@ -479,6 +569,12 @@ export function usePracticePlayer() {
       initial.driveMode = resumeSession.driveMode;
     }
 
+    if (meta?.bpm != null) {
+      initial.bpm = meta.bpm;
+      initial.bpmFromSong = true;
+    }
+    if (meta?.songKey) initial.songKey = meta.songKey;
+
     setState(initial);
 
     // Pre-cache
@@ -486,6 +582,57 @@ export function usePracticePlayer() {
 
     setState(prev => ({ ...prev, status: "ready" }));
   }, [preCacheAll]);
+
+  /**
+   * Merge the full practice bundle (takes per section, chord lines from C3's
+   * sheet, tempo/key) into a session that started from lighter nav-state
+   * sections (the canvas fast path). Never touches active playback: takes are
+   * only grafted onto sections that don't have any yet, and the live section's
+   * mirrored fields are left alone.
+   */
+  const applyEnrichment = useCallback((
+    songId: string,
+    sections: PracticeSection[],
+    meta?: { bpm?: number | null; songKey?: string | null },
+  ) => {
+    setState(prev => {
+      if (prev.songId !== songId) return prev;
+      const byId = new Map(sections.map(s => [s.id, s]));
+      return {
+        ...prev,
+        bpm: !prev.bpmFromSong && meta?.bpm != null ? meta.bpm : prev.bpm,
+        bpmFromSong: prev.bpmFromSong || meta?.bpm != null,
+        songKey: prev.songKey ?? meta?.songKey ?? null,
+        sections: prev.sections.map(sec => {
+          const enriched = byId.get(sec.id);
+          if (!enriched) return sec;
+          const next: PracticeSection = {
+            ...sec,
+            chordLines: sec.chordLines ?? enriched.chordLines ?? null,
+          };
+          if ((!sec.takes || sec.takes.length === 0) && enriched.takes && enriched.takes.length > 0) {
+            const idx = enriched.takes.findIndex(t => t.memoId === sec.memoId);
+            if (idx >= 0) {
+              next.takes = enriched.takes;
+              next.activeTakeIndex = idx;
+            } else if (sec.memoId) {
+              // The playing memo isn't in the loaded takes (filtered status
+              // etc.) — keep it as its own take so the mirror stays honest.
+              next.takes = [
+                { memoId: sec.memoId, label: "Current take", durationMs: sec.durationMs, lyrics: sec.lyrics, transcriptLines: sec.transcriptLines },
+                ...enriched.takes,
+              ];
+              next.activeTakeIndex = 0;
+            } else {
+              next.takes = enriched.takes;
+              next.activeTakeIndex = 0;
+            }
+          }
+          return next;
+        }),
+      };
+    });
+  }, []);
 
   const play = useCallback(() => {
     const s = stateRef.current;
@@ -503,6 +650,8 @@ export function usePracticePlayer() {
   }, [loadAndPlay, startPositionTracking]);
 
   const pause = useCallback(() => {
+    playGenRef.current++; // invalidate a pending count-in / loop restart
+    cancelCountIn();
     clearGapTimer();
     if (audioRef.current) {
       audioRef.current.pause();
@@ -526,7 +675,7 @@ export function usePracticePlayer() {
       sectionLabel: s.sections[s.activeSectionIndex]?.label,
       loopCount: s.loopCount,
     });
-  }, [clearGapTimer, stopPositionRaf]);
+  }, [clearGapTimer, stopPositionRaf, cancelCountIn]);
 
   const resume = useCallback(() => play(), [play]);
 
@@ -620,6 +769,155 @@ export function usePracticePlayer() {
     }
   }, []);
 
+  // ─── Take-swiping (F15 — consume C4's memo/take model) ────────────────
+
+  /**
+   * Switch a section to another of its takes. For the active section the
+   * audio source is swapped mid-session while loop mode, loop counts, speed,
+   * and (clamped) position are preserved — rehearsal flow is never broken.
+   * Sections with one take are untouched by definition.
+   */
+  const setActiveTake = useCallback(async (sectionIndex: number, takeIndex: number) => {
+    const s = stateRef.current;
+    const section = s.sections[sectionIndex];
+    const takes = section?.takes;
+    if (!section || !takes || takeIndex < 0 || takeIndex >= takes.length) return;
+    if ((section.activeTakeIndex ?? 0) === takeIndex) return;
+    const take = takes[takeIndex];
+
+    const mirror = (sec: PracticeSection): PracticeSection => ({
+      ...sec,
+      memoId: take.memoId,
+      durationMs: take.durationMs,
+      lyrics: take.lyrics,
+      transcriptLines: take.transcriptLines,
+      activeTakeIndex: takeIndex,
+    });
+
+    // Inactive section — re-point it; audio loads whenever it's entered.
+    if (sectionIndex !== s.activeSectionIndex) {
+      setState(prev => ({
+        ...prev,
+        sections: prev.sections.map((sec, i) => (i === sectionIndex ? mirror(sec) : sec)),
+      }));
+      return;
+    }
+
+    // Active section: swap the source under the engine without disturbing it.
+    const wasPlaying = s.status === "playing";
+    const prevPositionMs = s.currentPositionMs;
+    const gen = ++playGenRef.current; // supersede pending count-ins/loads
+    cancelCountIn();
+    clearGapTimer();
+    stopPositionRaf();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+    }
+    revokeBlobUrl();
+
+    setState(prev => ({
+      ...prev,
+      status: "caching",
+      sections: prev.sections.map((sec, i) => (i === sectionIndex ? mirror(sec) : sec)),
+      // An A/B window drawn on the old take is kept only if the new take is
+      // long enough for it — a half-valid drill window would loop garbage.
+      loopRegion:
+        prev.loopRegion && take.durationMs > 0 && prev.loopRegion.endMs <= take.durationMs
+          ? prev.loopRegion
+          : null,
+    }));
+
+    try {
+      let blob = await audioCache.get(take.memoId);
+      if (!blob) {
+        const url = await getSignedUrl(take.memoId);
+        const resp = await fetch(url);
+        blob = await resp.blob();
+        await audioCache.set(take.memoId, blob);
+      }
+      if (gen !== playGenRef.current) return;
+
+      const gain = await computeNormalizationGain(take.memoId, blob);
+      if (gen !== playGenRef.current) return;
+
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlRef.current = blobUrl;
+
+      let audioCtx = audioCtxRef.current;
+      if (!audioCtx || audioCtx.state === "closed") {
+        audioCtx = new AudioContext();
+        audioCtxRef.current = audioCtx;
+      }
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+
+      if (sourceRef.current) {
+        try { sourceRef.current.disconnect(); } catch { /* already disconnected */ }
+      }
+      if (gainNodeRef.current) {
+        try { gainNodeRef.current.disconnect(); } catch { /* already disconnected */ }
+      }
+
+      const audio = new Audio(blobUrl);
+      audio.preload = "auto";
+      audioRef.current = audio;
+
+      const st = stateRef.current;
+      audio.playbackRate = st.speedTrainer.enabled ? st.speedTrainer.currentSpeed : st.playbackSpeed;
+
+      try {
+        const source = audioCtx.createMediaElementSource(audio);
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = gain;
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        sourceRef.current = source;
+        gainNodeRef.current = gainNode;
+      } catch {
+        // Web Audio setup failed — plain element fallback (no normalization)
+      }
+
+      // Same musical spot in the new take, clamped so we never land past its
+      // end (which would fire onended instantly and skip a loop).
+      const resumeMs =
+        take.durationMs > 0 ? Math.min(prevPositionMs, Math.max(0, take.durationMs - 250)) : 0;
+      audio.currentTime = resumeMs / 1000;
+      audio.onended = () => handleSectionEnded(sectionIndex);
+
+      setState(prev => ({
+        ...prev,
+        status: wasPlaying ? "playing" : "paused",
+        currentPositionMs: resumeMs,
+      }));
+
+      if (wasPlaying) {
+        await audio.play();
+        startPositionTracking();
+      }
+      vibrate(HAPTIC_SECTION_CHANGE);
+
+      updateMediaSession({
+        sectionLabel: `${section.label} · ${take.label}`,
+        loopCount: stateRef.current.loopCount,
+        songTitle: section.songTitle ?? stateRef.current.songTitle,
+        durationMs: take.durationMs,
+        positionMs: resumeMs,
+        playbackRate: audio.playbackRate,
+        onPlay:           () => resume(),
+        onPause:          () => pause(),
+        onPrev:           () => goToPrevSection(),
+        onNext:           () => goToNextSection(),
+        onRestartCurrent: () => restartCurrentSection(),
+      });
+      if (wasPlaying) setMediaSessionPlaybackState("playing");
+    } catch {
+      if (gen === playGenRef.current) {
+        setState(prev => ({ ...prev, status: "paused" }));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelCountIn, clearGapTimer, stopPositionRaf, revokeBlobUrl, startPositionTracking]);
+
   const setLoopMode = useCallback((mode: LoopMode) => {
     setState(prev => ({ ...prev, loopMode: mode, sequencePosition: 0, repeatCountThisPosition: 0, loopCount: 0 }));
     saveLoopMode(stateRef.current.songId, mode);
@@ -652,6 +950,47 @@ export function usePracticePlayer() {
     setState(prev => ({ ...prev, countInEnabled: enabled }));
   }, []);
 
+  // ─── Metronome (F14 in practice — consume C4's engine) ────────────────
+
+  /**
+   * One-tap click at the song tempo. Independent of playback like a physical
+   * metronome (pause the take, keep the click, practice a cappella); the
+   * tempo-tracking effect below keeps it locked to the speed trainer.
+   * Must be called from a user gesture (it resumes the AudioContext).
+   */
+  const toggleMetronome = useCallback(() => {
+    const s = stateRef.current;
+    if (s.metronomeOn) {
+      metroRef.current?.stop();
+      setState(prev => ({ ...prev, metronomeOn: false, metronomeBeat: -1 }));
+      return;
+    }
+    if (!metroRef.current) {
+      metroRef.current = new Metronome({
+        bpm: effectiveClickBpm(s),
+        beatsPerBar: BEATS_PER_BAR,
+        onBeat: (beat) => setState(prev => (prev.metronomeOn ? { ...prev, metronomeBeat: beat } : prev)),
+      });
+    }
+    metroRef.current.setBpm(effectiveClickBpm(s));
+    setState(prev => ({ ...prev, metronomeOn: true }));
+    void metroRef.current.start();
+  }, []);
+
+  const setBpm = useCallback((bpm: number) => {
+    const clamped = Math.max(40, Math.min(240, Math.round(bpm)));
+    if (!Number.isFinite(clamped)) return;
+    setState(prev => ({ ...prev, bpm: clamped }));
+  }, []);
+
+  // The click follows the music: song bpm × effective playback speed, live —
+  // when the speed trainer steps 0.7×→0.8×, the very next interval clicks at
+  // the new tempo (C4's setBpm is glitch-free by design).
+  useEffect(() => {
+    if (!state.metronomeOn) return;
+    metroRef.current?.setBpm(effectiveClickBpm(state));
+  }, [state.metronomeOn, state.bpm, state.playbackSpeed, state.speedTrainer.enabled, state.speedTrainer.currentSpeed, state]);
+
   const setRepeatPerSection = useCallback((count: 1 | 2 | 3) => {
     setState(prev => ({ ...prev, repeatPerSection: count }));
   }, []);
@@ -672,6 +1011,9 @@ export function usePracticePlayer() {
   }, []);
 
   const endSession = useCallback(() => {
+    playGenRef.current++;
+    cancelCountIn();
+    metroRef.current?.stop();
     clearGapTimer();
     stopPositionRaf();
 
@@ -700,9 +1042,9 @@ export function usePracticePlayer() {
     mergeSessionIntoHistory(s.songId, sessionMinutes, loopsMap);
     clearSession(s.songId);
 
-    setState(prev => ({ ...prev, status: "ended", showSummary: true }));
+    setState(prev => ({ ...prev, status: "ended", showSummary: true, metronomeOn: false, metronomeBeat: -1 }));
     setMediaSessionPlaybackState("none");
-  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl]);
+  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl, cancelCountIn]);
 
   // ─── Cleanup on unmount ───────────────────────────────────────────────
 
@@ -710,6 +1052,13 @@ export function usePracticePlayer() {
     return () => {
       clearGapTimer();
       stopPositionRaf();
+      cancelCountIn();
+      // Release both metronome AudioContexts — a click must never outlive
+      // the provider (C4's dispose() is stop + context close).
+      metroRef.current?.dispose();
+      metroRef.current = null;
+      countInMetroRef.current?.dispose();
+      countInMetroRef.current = null;
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.onended = null;
@@ -720,15 +1069,19 @@ export function usePracticePlayer() {
       }
       clearMediaSession();
     };
-  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl]);
+  }, [clearGapTimer, stopPositionRaf, revokeBlobUrl, cancelCountIn]);
 
   return {
     state,
     initSession,
+    applyEnrichment,
     play,
     pause,
     resume,
     goToSection,
+    setActiveTake,
+    toggleMetronome,
+    setBpm,
     goToNextSection,
     goToPrevSection,
     goToNextSong,

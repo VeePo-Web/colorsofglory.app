@@ -142,6 +142,7 @@ export function DriveModePlayer({ hook }: DriveModePlayerProps) {
         {/* Prev section */}
         <button
           onClick={goToPrevSection}
+          aria-label="Previous section"
           className="flex items-center justify-center rounded-full"
           style={driveBtn()}
         >
@@ -151,6 +152,7 @@ export function DriveModePlayer({ hook }: DriveModePlayerProps) {
         {/* Restart current (left of play) */}
         <button
           onClick={restartCurrentSection}
+          aria-label="Restart section"
           className="flex items-center justify-center rounded-full"
           style={{ ...driveBtn(), width: 72, height: 72 }}
         >
@@ -160,6 +162,7 @@ export function DriveModePlayer({ hook }: DriveModePlayerProps) {
         {/* Play / Pause — largest */}
         <button
           onClick={isPlaying ? pause : play}
+          aria-label={isPlaying ? "Pause" : "Play"}
           className="flex items-center justify-center rounded-full"
           style={{
             width: 100,
@@ -182,6 +185,7 @@ export function DriveModePlayer({ hook }: DriveModePlayerProps) {
         {/* Next section */}
         <button
           onClick={goToNextSection}
+          aria-label="Next section"
           className="flex items-center justify-center rounded-full"
           style={driveBtn()}
         >
