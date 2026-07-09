@@ -8,6 +8,9 @@ import RequireAuth from "@/components/auth/RequireAuth";
 // referral URL must resolve for a not-yet-authed visitor.
 
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const AccountPage = lazy(() => import("@/pages/settings/AccountPage"));
+const NotificationsPage = lazy(() => import("@/pages/settings/NotificationsPage"));
+const PrivacySecurityPage = lazy(() => import("@/pages/settings/PrivacyPage"));
 const BillingPage = lazy(() => import("@/pages/settings/BillingPage"));
 const StoragePage = lazy(() => import("@/pages/settings/StoragePage"));
 const ReferralPage = lazy(() => import("@/pages/settings/ReferralPage"));
@@ -20,6 +23,9 @@ export const settingsRoutes = (
   <>
     {/* Settings — per-user, guarded */}
     <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+    <Route path="/settings/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
+    <Route path="/settings/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+    <Route path="/settings/privacy" element={<RequireAuth><PrivacySecurityPage /></RequireAuth>} />
     <Route path="/settings/billing" element={<RequireAuth><BillingPage /></RequireAuth>} />
     <Route path="/settings/storage" element={<RequireAuth><StoragePage /></RequireAuth>} />
     <Route path="/settings/referral" element={<RequireAuth><ReferralPage /></RequireAuth>} />

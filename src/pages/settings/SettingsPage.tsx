@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   HardDrive,
   Gift,
@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Compass,
   LogOut,
+  Wrench,
 } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
@@ -30,7 +31,7 @@ interface SettingsRow {
 
 const SettingsPage = () => {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useCurrentAccount();
+  const { user, profile, isAdmin, signOut } = useCurrentAccount();
 
   // Real account identity — never hardcode a person's email.
   const accountSublabel =
@@ -40,17 +41,21 @@ const SettingsPage = () => {
 
   const rows = useMemo<SettingsRow[]>(
     () => [
-      { id: "account", icon: User, label: "Account", sublabel: accountSublabel, to: "#" },
+      { id: "account", icon: User, label: "Account", sublabel: accountSublabel, to: "/settings/account" },
       { id: "upgrade", icon: Crown, label: "Upgrade to Pro", sublabel: "More songs, more space, exports", to: "/upgrade", accent: true },
       { id: "billing", icon: CreditCard, label: "Billing", sublabel: "Manage plan, invoices, and cancellation", to: "/settings/billing" },
       { id: "storage", icon: HardDrive, label: "Storage", sublabel: "Manage your space", to: "/settings/storage" },
       { id: "referral", icon: Gift, label: "Refer & Earn", sublabel: "Invite a co-writer, you both benefit", to: "/settings/referral" },
-      { id: "notifications", icon: Bell, label: "Notifications", to: "#" },
-      { id: "privacy", icon: ShieldCheck, label: "Privacy & Security", to: "#" },
+      { id: "notifications", icon: Bell, label: "Notifications", sublabel: "What each song can tell you", to: "/settings/notifications" },
+      { id: "privacy", icon: ShieldCheck, label: "Privacy & Security", sublabel: "Password, sessions, account", to: "/settings/privacy" },
+      // Admin console entry — link only (G3 owns the console), admins only.
+      ...(isAdmin
+        ? [{ id: "admin", icon: Wrench, label: "Admin", sublabel: "Open the admin console", to: "/admin" } as SettingsRow]
+        : []),
       { id: "tour", icon: Compass, label: "Show me around", sublabel: "A quick tour of your song's room", action: "tour" },
       { id: "signout", icon: LogOut, label: "Sign out", action: "signout", destructive: true },
     ],
-    [accountSublabel],
+    [accountSublabel, isAdmin],
   );
 
   const handleRow = async (row: SettingsRow) => {
@@ -162,9 +167,22 @@ const SettingsPage = () => {
           })}
         </div>
 
-        {/* Version */}
+        {/* Footer — support, policies, version */}
+        <div className="mt-8 flex items-center justify-center gap-2 text-xs" style={{ color: "var(--cog-warm-gray)" }}>
+          <a href="mailto:hello@colorsofglory.app" className="underline underline-offset-2">
+            Help &amp; Support
+          </a>
+          <span aria-hidden="true">·</span>
+          <Link to="/terms" className="underline underline-offset-2">
+            Terms
+          </Link>
+          <span aria-hidden="true">·</span>
+          <Link to="/privacy" className="underline underline-offset-2">
+            Privacy Policy
+          </Link>
+        </div>
         <p
-          className="text-xs text-center mt-8"
+          className="text-xs text-center mt-3"
           style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
         >
           Colors of Glory - v0.1.0-alpha

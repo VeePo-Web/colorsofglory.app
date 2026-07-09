@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, HardDrive } from "lucide-react";
+import { HardDrive } from "lucide-react";
+import BackHeader from "@/components/cog/BackHeader";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
 import { useStorageUsage } from "@/hooks/useAppQueries";
@@ -45,23 +46,13 @@ const StoragePage = () => {
         }}
       />
 
+      <BackHeader label="Settings" fallback="/settings" />
+
       <div
         className="relative flex flex-col flex-1 px-6 pb-12"
         style={{ maxWidth: "var(--max-w-app)", margin: "0 auto", width: "100%" }}
       >
-        {/* Header */}
-        <div className="pt-14 pb-6">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-            style={{ color: "var(--cog-warm-gray)", minHeight: 44 }}
-          >
-            <ArrowLeft size={15} />
-            Back
-          </button>
-        </div>
-
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-6 pt-2">
           <CogBrand variant="stacked" size="sm" />
         </div>
 
