@@ -46,7 +46,7 @@ import {
   listPendingUploads,
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import { initialBoard, writeBoard, hydrateBoard } from "@/lib/canvas/canvasBoardSource";
 import {
   addLineSuggestion,
   listLineSuggestions,
@@ -123,82 +123,11 @@ const LAYERS: Array<{ id: LayerId; label: string; icon: ElementType }> = [
   { id: "people", label: "People",  icon: Users },
 ];
 
-// ─── Initial card data ────────────────────────────────────────────────────────
+// ─── Card data ──────────────────────────────────────────────────────────────
+// The board (real backend rows + the demo sample tree) and its persistence live
+// behind canvasBoardSource — the interim A4 store seam. This component owns NO
+// hardcoded card array and touches localStorage for cards nowhere directly.
 
-const INITIAL_CARDS: CanvasCard[] = [
-  {
-    id: "hum-1",
-    tree: "ideas",
-    type: "hum",
-    title: "First melody hum",
-    body: "Soft lift into the chorus. Keep the ache in the first two notes.",
-    meta: "0:12 voice",
-    section: "Verse 1",
-    contributor: "Parker",
-    status: "raw",
-    accent: getCreatorColor("Parker").base,
-    x: 80,
-    y: 200,
-  },
-  {
-    id: "verse-line",
-    tree: "ideas",
-    type: "lyric",
-    title: "Verse image",
-    body: "I waited in the quiet / You painted morning gold.",
-    meta: "Lyric fragment",
-    section: "Verse 1",
-    contributor: "Sarah",
-    status: "shortlisted",
-    accent: getCreatorColor("Sarah").base,
-    x: 320,
-    y: 200,
-  },
-  {
-    id: "meaning-psalm",
-    tree: "ideas",
-    type: "scripture",
-    title: "Meaning anchor",
-    body: "Psalm 46:10 — Be still before the second verse turns upward.",
-    meta: "Scripture",
-    section: "Meaning",
-    contributor: "Parker",
-    status: "meaning",
-    accent: getCreatorColor("Parker").base,
-    x: 80,
-    y: 440,
-  },
-  {
-    id: "chorus-core",
-    tree: "final",
-    type: "section",
-    title: "Chorus center",
-    body: "You are glory in the waiting / Fire in the night.",
-    meta: "Approved lyric",
-    section: "Chorus",
-    contributor: "Parker",
-    status: "approved",
-    accent: getCreatorColor("Parker").base,
-    x: DIVIDER_X + 80,
-    y: 200,
-  },
-  {
-    id: "chord-bed",
-    tree: "final",
-    type: "chord",
-    title: "Warm progression",
-    body: "C - G - Am - F, 74 BPM. Let the bridge breathe.",
-    meta: "Key C",
-    section: "Arrangement",
-    contributor: "Caleb",
-    status: "approved",
-    accent: getCreatorColor("Caleb").base,
-    x: DIVIDER_X + 80,
-    y: 420,
-  },
-];
-
-const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
 // Interim store persistence for non-card feature state (saved listen path).
 // This key + the CanvasFeatureMutations impl below ARE the A4 replacement
 // seam — see docs/CANVAS-FEATURES-CONTRACT.md.
@@ -213,24 +142,6 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
   }
 };
 const SHOW_LEGACY_CANVAS_FABS = false;
-
-const getStoredCards = (songId: string): CanvasCard[] => {
-  try {
-    const stored = localStorage.getItem(CARDS_KEY(songId));
-    // Respect a saved board exactly — including an empty one. A songwriter who
-    // clears their canvas must not have demo cards resurrected on reload.
-    if (stored) {
-      const parsed = JSON.parse(stored) as CanvasCard[];
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {
-    // Fall through to a clean start.
-  }
-  // No saved board yet: a real song is a private, empty room (the first-action
-  // prompt guides the first idea). Only the explicit demo route shows samples,
-  // so no real song is ever pre-filled with someone else's words.
-  return songId === "demo" ? INITIAL_CARDS : [];
-};
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -289,7 +200,7 @@ const SongCanvasExperience = () => {
     return full || "You";
   }, [profile]);
 
-  const [cards, setCards] = useState<CanvasCard[]>(() => getStoredCards(songId));
+  const [cards, setCards] = useState<CanvasCard[]>(() => initialBoard(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
@@ -483,46 +394,20 @@ const SongCanvasExperience = () => {
   }, [searchParams]);
 
   useEffect(() => {
-    localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
+    writeBoard(songId, cards);
   }, [cards, songId]);
 
-  // Pull any voice memos for this song from the backend and merge in the ones
-  // we don't already have. Reused on mount AND on every realtime event, so a
-  // collaborator's new memo/layer appears in the room without a reload.
+  // Pull this song's real voice memos from the backend (through the board source
+  // seam) and merge in the ones we don't already have. Reused on mount AND on
+  // every realtime event, so a collaborator's new memo appears without a reload.
   const hydrateVoiceMemos = useCallback(async () => {
-    try {
-      const db = await loadVoiceMemosForCanvas(songId);
-      const dbCards: CanvasCard[] = db.nodes
-        .filter((node) => node.objectType === "idea_card")
-        .map((node): CanvasCard | null => {
-          const card = db.cards[node.objectId];
-          if (!card) return null;
-          return {
-            id: card.id,
-            tree: "ideas" as const,
-            type: "voice" as const,
-            title: card.title,
-            body: card.body || card.preview || "",
-            meta: card.preview || "Voice memo",
-            section: "Raw idea",
-            contributor: card.contributorName,
-            status: "raw" as const,
-            accent: card.contributorColor,
-            x: node.x,
-            y: node.y,
-          };
-        })
-        .filter((card): card is CanvasCard => Boolean(card));
-
-      if (dbCards.length === 0) return;
-      setCards((prev) => {
-        const existing = new Set(prev.map((card) => card.id));
-        const fresh = dbCards.filter((card) => !existing.has(card.id));
-        return fresh.length > 0 ? [...prev, ...fresh] : prev;
-      });
-    } catch {
-      // The local canvas remains usable when backend hydration is unavailable.
-    }
+    const dbCards = await hydrateBoard(songId);
+    if (dbCards.length === 0) return;
+    setCards((prev) => {
+      const existing = new Set(prev.map((card) => card.id));
+      const fresh = dbCards.filter((card) => !existing.has(card.id));
+      return fresh.length > 0 ? [...prev, ...fresh] : prev;
+    });
   }, [songId]);
 
   // Mount hydration + live room channel. Any change in the song's room nudges a
