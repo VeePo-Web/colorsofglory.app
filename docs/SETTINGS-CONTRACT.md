@@ -38,7 +38,10 @@ of an existing subscription and stay in G2.
   CTA "Add storage".
 - Under 80% → gold accent, "Your storage" / "Upgrade for more space".
 - Promise everywhere: *existing work is never deleted; only new uploads pause.*
-  G1's `StorageWarningSheet` (not yet built) should reuse these numbers + copy.
+- **Reconciled with G1 (2026-07-08):** G1's shipped `StorageWarningSheet` /
+  `StorageWarningController` use the same ≥80% "approaching" threshold, never
+  block existing work, and route purchases to G1 checkout — the meter and the
+  warning tell one story. Keep both sides at 80% if either changes.
 
 ## 3. Data consumed (never rewritten)
 
@@ -73,7 +76,8 @@ of an existing subscription and stay in G2.
 - **Lovable (later):** an avatars storage bucket for photo uploads. The account
   screen ships color avatars now; `profiles.avatar_url` is already read
   app-wide when it exists.
-- **G1:** when `StorageWarningSheet` is built, match §2 thresholds/copy.
+- **G1:** `StorageWarningSheet` shipped mid-run and already matches §2 (≥80%,
+  non-blocking) — no action needed unless thresholds change.
 
 ## 6. A11y + calm guarantees
 
