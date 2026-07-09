@@ -92,7 +92,7 @@ const OwnerReviewQueueSheet = ({
         role="presentation"
         onClick={onClose}
         style={{
-          position: "fixed", inset: 0, zIndex: 60,
+          position: "fixed", inset: 0, zIndex: 799,
           backgroundColor: "rgba(28,26,23,0.48)",
           animation: "cog-fade-in 200ms ease forwards",
         }}
@@ -102,7 +102,7 @@ const OwnerReviewQueueSheet = ({
         aria-modal="true"
         aria-label="Needs your review"
         style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 61,
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 800,
           backgroundColor: "var(--cog-cream)",
           borderRadius: "28px 28px 0 0",
           paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",

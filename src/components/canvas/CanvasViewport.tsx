@@ -15,7 +15,9 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MIN_ZOOM = 0.4;
+// 0.25 lets fitTo genuinely frame the whole song on a 390px phone (the old
+// 0.4 floor meant "Fit" framed an empty middle band with both trees cut off).
+const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 2.5;
 const INITIAL_ZOOM = 1.0;
 
@@ -43,6 +45,10 @@ export interface ViewportCtx {
   /** Current pan (read-only, updates after gesture ends) */
   panX: number;
   panY: number;
+  /** Per-frame pan for a card drag's edge auto-pan (no React sync per call). */
+  dragPanBy: (dx: number, dy: number) => void;
+  /** Sync React state once after a dragPanBy sequence ends. */
+  endDragPan: () => void;
 }
 
 const CanvasViewportContext = createContext<ViewportCtx | null>(null);
@@ -120,7 +126,7 @@ const CanvasViewport = ({
     }
   }, [applyTransform]);
 
-  const { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef, zoomRef } = useGesture(
+  const { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, dragPanBy, endDragPan, panRef, zoomRef } = useGesture(
     containerRef as React.RefObject<HTMLElement>,
     { panX: reactPan.x, panY: reactPan.y, zoom: reactZoom },
     {
@@ -169,12 +175,15 @@ const CanvasViewport = ({
     zoom: reactZoom,
     panX: reactPan.x,
     panY: reactPan.y,
+    dragPanBy,
+    endDragPan,
   };
 
   return (
     <CanvasViewportContext.Provider value={ctxValue}>
       <div
         ref={containerRef}
+        data-canvas-viewport="true"
         className={`relative overflow-hidden ${className}`}
         style={{
           touchAction: "none",       // prevent browser scroll hijacking gestures

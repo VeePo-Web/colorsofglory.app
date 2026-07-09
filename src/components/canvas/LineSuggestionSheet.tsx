@@ -106,14 +106,14 @@ const LineSuggestionSheet = ({
         <div
           aria-hidden="true"
           onClick={handleDismiss}
-          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.36)", zIndex: 60, animation: "cog-fade-in 200ms ease both" }}
+          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.36)", zIndex: 799, animation: "cog-fade-in 200ms ease both" }}
         />
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Suggestion sent"
           style={{
-            position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 61,
+            position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 800,
             backgroundColor: "var(--cog-cream-light)",
             borderRadius: "20px 20px 0 0",
             padding: "40px 24px",
@@ -146,7 +146,7 @@ const LineSuggestionSheet = ({
       <div
         aria-hidden="true"
         onClick={handleDismiss}
-        style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.36)", zIndex: 60, animation: "cog-fade-in 200ms ease both" }}
+        style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.36)", zIndex: 799, animation: "cog-fade-in 200ms ease both" }}
       />
 
       {/* Panel */}
@@ -155,7 +155,7 @@ const LineSuggestionSheet = ({
         aria-modal="true"
         aria-label={mode === "create" ? "Suggest a line change" : "Review line suggestion"}
         style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 61,
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 800,
           backgroundColor: "var(--cog-cream-light)",
           borderRadius: "20px 20px 0 0",
           maxHeight: "90dvh",

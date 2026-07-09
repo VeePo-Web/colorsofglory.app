@@ -1,28 +1,34 @@
 import { useEffect, useState } from "react";
-import { Mic, Music, StickyNote, X } from "lucide-react";
+import { BookOpen, Mic, Music, PenLine, StickyNote, X } from "lucide-react";
 
 /**
  * AddPartSheet — the clean, instant way to build the song's structure.
  *
  * Songwriters think in PARTS (Verse, Chorus, Bridge…), not "generic ideas".
  * Tap a part and a card for it is created and opened, ready to write. A quiet
- * second row covers the raw captures (lyric line, chord, note). Snapchat-clean:
- * big tap targets, one gesture, no forms.
+ * second row covers the raw captures (lyric line, chord, scripture, note).
+ * Snapchat-clean: big tap targets, one gesture, no forms.
  */
+export type AddPartType = "lyric" | "chord" | "note" | "scripture";
+
 export type PartKind =
   | { section: string; type: "lyric" }
-  | { section: "Raw idea"; type: "lyric" | "chord" | "note" };
+  | { section: "Raw idea"; type: AddPartType };
 
 interface AddPartSheetProps {
-  onPick: (choice: { section: string; type: "lyric" | "chord" | "note" }) => void;
+  onPick: (choice: { section: string; type: AddPartType }) => void;
   onClose: () => void;
 }
 
 const PARTS = ["Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Hook", "Outro", "Tag"];
 
-const QUICK: Array<{ label: string; type: "lyric" | "chord" | "note"; icon: typeof Mic }> = [
-  { label: "Lyric line", type: "lyric", icon: StickyNote },
+// Scripture/meaning is a charter feature (COG Product 10) — a worship leader
+// must be able to anchor a chorus to Isaiah 43 from here.
+const QUICK: Array<{ label: string; type: AddPartType; icon: typeof Mic }> = [
+  { label: "Lyric line", type: "lyric", icon: PenLine },
   { label: "Chord idea", type: "chord", icon: Music },
+  { label: "Scripture / meaning", type: "scripture", icon: BookOpen },
+  { label: "Note", type: "note", icon: StickyNote },
 ];
 
 const AddPartSheet = ({ onPick, onClose }: AddPartSheetProps) => {
@@ -115,20 +121,21 @@ const AddPartSheet = ({ onPick, onClose }: AddPartSheetProps) => {
         <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--cog-muted)", fontFamily: "var(--font-body)", margin: "18px 6px 8px" }}>
           Or a quick idea
         </p>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {QUICK.map(({ label, type, icon: Icon }) => (
             <button
               key={label}
               type="button"
-              onClick={() => onPick({ section: "Raw idea", type })}
+              onClick={() => onPick({ section: type === "scripture" ? "Meaning" : "Raw idea", type })}
               style={{
-                flex: 1, minHeight: 52, borderRadius: 14, cursor: "pointer",
+                minHeight: 52, borderRadius: 14, cursor: "pointer",
                 backgroundColor: "#FFFFFF", border: "1.5px solid rgba(0,0,0,0.08)",
-                color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
+                color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 600,
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                padding: "0 10px",
               }}
             >
-              <Icon size={16} strokeWidth={1.8} /> {label}
+              <Icon size={16} strokeWidth={1.8} style={{ flexShrink: 0 }} /> {label}
             </button>
           ))}
         </div>

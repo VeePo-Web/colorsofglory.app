@@ -1,15 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import SongCanvasPage from "@/pages/SongCanvasPage";
 
+// useSongTitle reads react-query — the page needs a QueryClientProvider like
+// every other routed test.
 const renderCanvas = (path = "/songs/1/canvas") =>
   render(
-    <MemoryRouter initialEntries={[path]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <Routes>
-        <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={[path]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <Routes>
+          <Route path="/songs/:id/canvas" element={<SongCanvasPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 const lastButton = (name: RegExp) => {
@@ -32,7 +37,9 @@ describe("Feature 04 song whiteboard canvas", () => {
     expect(screen.getByText(/start building the song here/i)).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeEnabled();
     expect(lastButton(/record idea|record memo/i)).toBeEnabled();
-    expect(screen.getByText(/saved to this song/i)).toBeInTheDocument();
+    // The pill opens on a neutral truth — "Saved" would be a false claim on an
+    // untouched room.
+    expect(screen.getByText(/every idea stays here/i)).toBeInTheDocument();
   });
 
   it("adds a named song part (Verse) and keeps it after remount", async () => {
@@ -44,7 +51,7 @@ describe("Feature 04 song whiteboard canvas", () => {
     const verseBtn = await screen.findByRole("button", { name: /^verse$/i }, { timeout: 3000 });
     fireEvent.click(verseBtn);
 
-    expect(await screen.findByRole("button", { name: /lyric card: verse 1/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /lyric idea: verse 1/i })).toBeInTheDocument();
     await waitFor(() => {
       expect(localStorage.getItem("cog:canvas-cards-1")).toContain("Verse 1");
     });
@@ -52,7 +59,7 @@ describe("Feature 04 song whiteboard canvas", () => {
     view.unmount();
     renderCanvas();
 
-    expect(await screen.findByRole("button", { name: /lyric card: verse 1/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /lyric idea: verse 1/i })).toBeInTheDocument();
   });
 
   it("keeps viewer mode readable and blocks creation with product copy", async () => {

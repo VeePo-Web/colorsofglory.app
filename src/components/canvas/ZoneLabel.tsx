@@ -1,4 +1,5 @@
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
+import { ROOT_HEIGHT, ROOT_TOP } from "@/lib/canvas/canvasGeometry";
 
 /**
  * The two zone header labels: "Ideas Tree" and "Final Song".
@@ -6,9 +7,10 @@ import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
  * Compact by design: the floating Ideas/Final quick-nav pills are now the
  * primary zone indicator, so these in-canvas markers stay small and sit BELOW
  * the root song card (which anchors the top-left of the Ideas zone) rather
- * than colliding with it.
+ * than colliding with it. DERIVED from the root box so a root-height change
+ * can never shingle the label under the card again.
  */
-const LABEL_TOP = 188;
+const LABEL_TOP = ROOT_TOP + ROOT_HEIGHT + 24;
 
 const ZoneMarker = ({
   left,
@@ -49,7 +51,7 @@ const ZoneMarker = ({
     >
       {title}
     </p>
-    <p style={{ fontSize: 12, color: "#999", fontFamily: "var(--font-body)", lineHeight: 1.45 }}>
+    <p style={{ fontSize: 12, color: "var(--cog-warm-gray, #6B6459)", fontFamily: "var(--font-body)", lineHeight: 1.45 }}>
       {sub}
     </p>
   </div>

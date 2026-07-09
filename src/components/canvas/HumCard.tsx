@@ -71,7 +71,9 @@ const HumCard = memo(({ card, color }: CardFaceProps) => {
         {barHeights.map((h, i) => (
           <div
             key={i}
-            style={{ width: BAR_WIDTH + 1, height: Math.round(h * HUM_MAX_BAR_HEIGHT), borderRadius: 3, backgroundColor: color.base, opacity: h * 0.65 + 0.25, flexShrink: 0 }}
+            // Waveforms are ALWAYS system gold (locked design token) — identity
+            // stays in the stripe, dot, and label.
+            style={{ width: BAR_WIDTH + 1, height: Math.round(h * HUM_MAX_BAR_HEIGHT), borderRadius: 3, backgroundColor: "var(--cog-gold, #B8953A)", opacity: h * 0.65 + 0.25, flexShrink: 0 }}
           />
         ))}
       </div>

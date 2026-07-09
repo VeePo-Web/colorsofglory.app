@@ -88,6 +88,10 @@ export function useGesture(
   // Cached here so the 60fps move path never forces a layout read.
   const containerOffset = useRef<{ left: number; top: number }>({ left: 0, top: 0 });
 
+  // Recent single-pointer pan movement (screen px + timestamps) for release
+  // inertia. Cleared on every pointerdown and on pinch.
+  const velocitySamples = useRef<Array<{ dx: number; dy: number; t: number }>>([]);
+
   // Cursor broadcast throttle
   const lastCursorBroadcast = useRef(0);
 
@@ -99,9 +103,13 @@ export function useGesture(
 
   function clampPan(x: number, y: number, z: number, viewW: number, viewH: number) {
     const margin = 120;
+    // When the zoomed canvas is smaller than the viewport on an axis, center it
+    // instead of pinning to a corner (lo > hi would otherwise snap to `hi`).
+    const loX = viewW - canvasWidth * z - margin;
+    const loY = viewH - canvasHeight * z - margin;
     return {
-      x: clamp(x, viewW - canvasWidth * z - margin, margin),
-      y: clamp(y, viewH - canvasHeight * z - margin, margin),
+      x: loX > margin ? (viewW - canvasWidth * z) / 2 : clamp(x, loX, margin),
+      y: loY > margin ? (viewH - canvasHeight * z) / 2 : clamp(y, loY, margin),
     };
   }
 
@@ -133,15 +141,18 @@ export function useGesture(
   const onPointerDown = useCallback((e: PointerEvent) => {
     // Only respond to touch or left-button drag
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    // Never start a pan when the press lands on an interactive control (a card,
-    // a quick-nav pill, a dock button). The gesture container captures the
-    // pointer on down; without this bail it would swallow the control's click
-    // (the overlay controls read as dead). Those controls run their own
-    // handlers — the canvas just steps aside. Empty canvas background still pans.
-    if (isInteractiveTarget(e.target)) return;
+    // A press on an interactive control (card, quick-nav pill, dock button)
+    // never starts a ONE-finger pan — the control runs its own handlers and
+    // the canvas steps aside. BUT if another pointer is already panning, this
+    // second finger joins the gesture regardless of what it landed on, so a
+    // pinch that begins with one finger on a card still zooms instead of
+    // half-panning (the card side aborts its own drag on the same signal —
+    // see CanvasCard's second-pointer guard).
+    const interactive = isInteractiveTarget(e.target);
+    if (interactive && pointers.current.size === 0) return;
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    // A direct touch always wins over an in-flight panTo animation — cancel it so
-    // the finger and the easing curve don't fight over pan.current.
+    // A direct touch always wins over an in-flight panTo/inertia animation —
+    // cancel it so the finger and the easing curve don't fight over pan.current.
     if (panToRaf.current) {
       cancelAnimationFrame(panToRaf.current);
       panToRaf.current = 0;
@@ -154,10 +165,23 @@ export function useGesture(
       containerOffset.current = { left: r.left, top: r.top };
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    velocitySamples.current.length = 0;
   }, [containerRef]);
 
   const onPointerMove = useCallback((e: PointerEvent) => {
-    if (!pointers.current.has(e.pointerId)) return;
+    if (!pointers.current.has(e.pointerId)) {
+      // Adopt an untracked TOUCH pointer mid-gesture: when a pinch begins with
+      // one finger on a card, the card aborts its drag and releases capture —
+      // that finger's moves then bubble here and join the tracked finger so
+      // the pinch works. Touch-only (mouse hover also fires pointermove).
+      if (e.pointerType === "touch" && pointers.current.size >= 1) {
+        pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        prevPinchMid.current = null;
+        prevPinchDist.current = null;
+        velocitySamples.current.length = 0;
+      }
+      return;
+    }
 
     const viewEl = containerRef.current;
     if (!viewEl) return;
@@ -172,10 +196,18 @@ export function useGesture(
 
     if (pts.length === 1) {
       // Single pointer: pan
-      pan.current.x += curr.x - prev.x;
-      pan.current.y += curr.y - prev.y;
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      pan.current.x += dx;
+      pan.current.y += dy;
       const clamped = clampPan(pan.current.x, pan.current.y, zoom.current, viewW, viewH);
       pan.current = clamped;
+      // Keep a short velocity window for release inertia (touch only).
+      if (e.pointerType === "touch") {
+        const now = performance.now();
+        velocitySamples.current.push({ dx, dy, t: now });
+        while (velocitySamples.current.length > 5) velocitySamples.current.shift();
+      }
     } else if (pts.length >= 2) {
       // Two fingers: pinch-zoom + pan
       const [a, b] = pts;
@@ -227,16 +259,62 @@ export function useGesture(
   }, [containerRef, onCursorMove]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPointerUp = useCallback((e: PointerEvent) => {
-    pointers.current.delete(e.pointerId);
+    const wasTracked = pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) {
       prevPinchMid.current = null;
       prevPinchDist.current = null;
     }
     if (pointers.current.size === 0) {
+      // Release inertia: a flicked pan glides to rest instead of dead-stopping
+      // (Freeform feel). Skipped for cancel, reduced-motion, and slow lifts.
+      const samples = velocitySamples.current;
+      velocitySamples.current = [];
+      if (
+        wasTracked &&
+        e.type === "pointerup" &&
+        samples.length >= 3 &&
+        !prefersReducedMotion()
+      ) {
+        const windowMs = samples[samples.length - 1].t - samples[0].t;
+        if (windowMs > 0 && windowMs < 160) {
+          let vx = samples.reduce((s, p) => s + p.dx, 0) / windowMs; // px/ms
+          let vy = samples.reduce((s, p) => s + p.dy, 0) / windowMs;
+          const speed = Math.hypot(vx, vy);
+          if (speed > 0.25) {
+            const el = containerRef.current;
+            let last = performance.now();
+            const glide = (now: number) => {
+              const dt = now - last;
+              last = now;
+              const decay = Math.pow(0.94, dt / (1000 / 60));
+              vx *= decay;
+              vy *= decay;
+              pan.current.x += vx * dt;
+              pan.current.y += vy * dt;
+              if (el) {
+                pan.current = clampPan(
+                  pan.current.x, pan.current.y, zoom.current,
+                  el.clientWidth, el.clientHeight,
+                );
+              }
+              onTransform(pan.current.x, pan.current.y, zoom.current);
+              if (Math.hypot(vx, vy) > 0.02) {
+                panToRaf.current = requestAnimationFrame(glide);
+              } else {
+                panToRaf.current = 0;
+                onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+              }
+            };
+            if (panToRaf.current) cancelAnimationFrame(panToRaf.current);
+            panToRaf.current = requestAnimationFrame(glide);
+            return;
+          }
+        }
+      }
       // Gesture ended — sync to React state once
       onTransformEnd(pan.current.x, pan.current.y, zoom.current);
     }
-  }, [onTransformEnd]);
+  }, [onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mouse wheel zoom ──────────────────────────────────────────────────────
 
@@ -245,15 +323,25 @@ export function useGesture(
 
     const viewEl = containerRef.current;
     if (!viewEl) return;
-    const rect = viewEl.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    const delta = e.deltaY < 0 ? 1.1 : 0.9;
-    applyZoomAt(delta, screenX, screenY);
-
     const viewW = viewEl.clientWidth;
     const viewH = viewEl.clientHeight;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Trackpad pinch (and ctrl+wheel): magnitude-proportional zoom at the
+      // cursor — a fixed ×1.1 per tick rocketed across the zoom range.
+      const rect = viewEl.getBoundingClientRect();
+      applyZoomAt(
+        Math.exp(-e.deltaY * 0.0035),
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+    } else {
+      // Plain wheel / two-finger trackpad scroll: PAN (the Figma/FigJam
+      // standard) — previously there was no way to pan with a trackpad at all.
+      pan.current.x -= e.deltaX;
+      pan.current.y -= e.deltaY;
+    }
+
     const clamped = clampPan(pan.current.x, pan.current.y, zoom.current, viewW, viewH);
     pan.current = clamped;
 
@@ -353,6 +441,14 @@ export function useGesture(
   ) => {
     if (panToRaf.current) cancelAnimationFrame(panToRaf.current);
     const z = clamp(targetZoom, minZoom, maxZoom);
+    // Land only where a touch could pan to — an unclamped fly-to used to park
+    // the view where the next gesture instantly snapped it somewhere else.
+    const el = containerRef.current;
+    if (el) {
+      const c = clampPan(targetPanX, targetPanY, z, el.clientWidth, el.clientHeight);
+      targetPanX = c.x;
+      targetPanY = c.y;
+    }
     const startPanX = pan.current.x;
     const startPanY = pan.current.y;
     const startZoom = zoom.current;
@@ -380,7 +476,7 @@ export function useGesture(
       }
     }
     panToRaf.current = requestAnimationFrame(frame);
-  }, [onTransform, onTransformEnd, minZoom, maxZoom]);
+  }, [onTransform, onTransformEnd, minZoom, maxZoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Frame a canvas-space box in the viewport: choose the zoom that fits it
@@ -431,5 +527,26 @@ export function useGesture(
     onTransformEnd(c.x, c.y, zoom.current);
   }, [containerRef, onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef: pan, zoomRef: zoom };
+  // ── Drag-time pan (edge auto-pan while a card is being dragged) ────────────
+
+  /**
+   * Pan by a screen delta WITHOUT the per-call React state sync — safe to call
+   * every frame from a card drag's edge auto-pan loop. Caller must finish with
+   * endDragPan() so React state syncs once.
+   */
+  const dragPanBy = useCallback((dx: number, dy: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    pan.current.x += dx;
+    pan.current.y += dy;
+    pan.current = clampPan(pan.current.x, pan.current.y, zoom.current, el.clientWidth, el.clientHeight);
+    onTransform(pan.current.x, pan.current.y, zoom.current);
+  }, [onTransform]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Sync React state once after a dragPanBy sequence ends. */
+  const endDragPan = useCallback(() => {
+    onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+  }, [onTransformEnd]);
+
+  return { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, dragPanBy, endDragPan, panRef: pan, zoomRef: zoom };
 }

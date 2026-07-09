@@ -12,6 +12,9 @@ interface CardShellProps {
   top: number;
   /** Merge selection paints a gold keeper ring regardless of creator color. */
   mergeSelected?: boolean;
+  /** This card is sounding right now — gold "now playing" ring (system gold,
+   *  never a creator color, so it always reads as the system speaking). */
+  playing?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerMove?: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerUp?: (e: PointerEvent<HTMLDivElement>) => void;
@@ -41,6 +44,7 @@ const CardShell = memo(
       left,
       top,
       mergeSelected = false,
+      playing = false,
       onPointerDown,
       onPointerMove,
       onPointerUp,
@@ -55,7 +59,9 @@ const CardShell = memo(
     const isDimmed = state === "dimmed";
     const isSelected = state === "selected";
 
-    const border = mergeSelected
+    const border = playing
+      ? "2px solid var(--cog-gold, #B8953A)"
+      : mergeSelected
       ? "2px solid var(--cog-gold, #B8953A)"
       : isSelected
       ? `2px solid ${color.base}`
@@ -63,7 +69,9 @@ const CardShell = memo(
       ? `1.5px dashed ${color.dim}`
       : `1.5px solid ${color.base}2E`;
 
-    const boxShadow = mergeSelected
+    const boxShadow = playing
+      ? "0 0 0 5px rgba(184,149,58,0.22), 0 12px 32px rgba(184,149,58,0.28)"
+      : mergeSelected
       ? "0 0 0 4px rgba(184,149,58,0.20), 0 10px 28px rgba(28,26,23,0.12)"
       : isDimmed
       ? "none"
@@ -85,11 +93,13 @@ const CardShell = memo(
           borderLeft: mergeSelected || isSelected || isDimmed ? border : `1.5px solid ${color.base}2E`,
           border,
           boxShadow,
-          opacity: isDimmed ? 0.5 : 1,
-          cursor: isDimmed ? "not-allowed" : isSelected ? "default" : "grab",
+          opacity: isDimmed ? 0.55 : 1,
+          // Dimmed cards stay tappable — "nothing is deleted" means nothing is
+          // unreachable. They select (to read + restore) but never drag.
+          cursor: isDimmed ? "pointer" : isSelected ? "default" : "grab",
           userSelect: "none",
-          zIndex: isSelected ? 20 : 10,
-          transform: isSelected ? "scale(1.03) translateZ(0)" : "scale(1) translateZ(0)",
+          zIndex: playing ? 22 : isSelected ? 20 : 10,
+          transform: isSelected || playing ? "scale(1.03) translateZ(0)" : "scale(1) translateZ(0)",
           transition:
             "transform 180ms cubic-bezier(0.22,1,0.36,1), box-shadow 200ms ease, border-color 200ms ease, opacity 280ms ease",
           // Plays once on mount (React keeps cards mounted by key), so a newly
@@ -99,7 +109,6 @@ const CardShell = memo(
           animation: "cog-card-enter 360ms cubic-bezier(0.34,1.56,0.64,1)",
           padding: "13px 14px 12px 16px",
           boxSizing: "border-box",
-          pointerEvents: isDimmed ? "none" : "auto",
         }}
         onPointerDown={(e) => {
           e.stopPropagation(); // never let a card touch start a canvas pan
@@ -110,10 +119,10 @@ const CardShell = memo(
         onPointerCancel={onPointerCancel}
         onClick={(e) => {
           e.stopPropagation();
-          if (!isDimmed) onClick?.();
+          onClick?.();
         }}
         onKeyDown={(e) => {
-          if ((e.key === " " || e.key === "Enter") && !isDimmed) {
+          if (e.key === " " || e.key === "Enter") {
             e.preventDefault();
             onClick?.();
           }
@@ -122,7 +131,7 @@ const CardShell = memo(
         role="button"
         aria-pressed={isSelected}
         aria-label={ariaLabel}
-        tabIndex={isDimmed ? -1 : 0}
+        tabIndex={0}
         data-canvas-card="true"
       >
         {/* Creator identity stripe — the writer's color down the left edge */}

@@ -23,6 +23,9 @@ export interface CanvasMetronomeApi {
   beatsPerBar: number;
   toggle: () => Promise<void>;
   setBpm: (bpm: number) => void;
+  /** Hard stop — recording starts silence the click so it can never bleed
+   *  into a take (the project's never-bleed invariant). */
+  stop: () => void;
 }
 
 export function useCanvasMetronome(songId: string): CanvasMetronomeApi {
@@ -90,5 +93,11 @@ export function useCanvasMetronome(songId: string): CanvasMetronomeApi {
     [songId],
   );
 
-  return { running, bpm, beat, beatsPerBar, toggle, setBpm };
+  const stop = useCallback(() => {
+    engineRef.current?.stop();
+    setRunning(false);
+    setBeat(-1);
+  }, []);
+
+  return { running, bpm, beat, beatsPerBar, toggle, setBpm, stop };
 }

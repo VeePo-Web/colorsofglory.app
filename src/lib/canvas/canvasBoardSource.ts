@@ -1,5 +1,7 @@
 import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
 import { DEMO_BOARD } from "@/lib/canvas/demoBoard";
+import { cardWidth, clampToBoard } from "@/lib/canvas/canvasGeometry";
+import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardTree } from "@/lib/canvas/canvasTypes";
 
 /**
@@ -21,6 +23,22 @@ import type { CanvasBoardCard, CanvasBoardTree } from "@/lib/canvas/canvasTypes"
 
 const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
 
+/**
+ * Migration guard: boards saved on the old 2400px canvas can hold positions
+ * outside the new 1600px board (or on the wrong side of the moved divider).
+ * Clamp every card into bounds AND into its own tree's half so nothing loads
+ * unreachable or visually mis-zoned.
+ */
+function normalizeCard(card: CanvasBoardCard): CanvasBoardCard {
+  const w = cardWidth(card.type);
+  const clamped = clampToBoard(card.x, card.y, card.type);
+  let x = clamped.x;
+  const y = clamped.y;
+  if (card.tree === "ideas" && x + w / 2 >= DIVIDER_X) x = DIVIDER_X - w - 24;
+  if (card.tree === "final" && x + w / 2 < DIVIDER_X) x = DIVIDER_X + 24;
+  return x === card.x && y === card.y ? card : { ...card, x, y };
+}
+
 /** The board to open with: a saved board wins (even if empty), else the demo
  *  route's sample tree (through this seam, never inline), else an empty room. */
 export function initialBoard(songId: string): CanvasBoardCard[] {
@@ -30,7 +48,7 @@ export function initialBoard(songId: string): CanvasBoardCard[] {
     // clears their canvas must not have demo cards resurrected on reload.
     if (stored) {
       const parsed = JSON.parse(stored) as CanvasBoardCard[];
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.map(normalizeCard);
     }
   } catch {
     // Fall through to a clean start.

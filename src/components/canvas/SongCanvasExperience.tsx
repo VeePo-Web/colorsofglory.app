@@ -26,7 +26,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
-import CogBrand from "@/components/cog/CogBrand";
+import CrownMark from "@/components/cog/CrownMark";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
 import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
@@ -89,7 +89,7 @@ import MergeActionBar from "@/components/canvas/MergeActionBar";
 import CompareModeSheet from "@/components/canvas/CompareModeSheet";
 import FinalArrangementBar from "@/components/canvas/FinalArrangementBar";
 import CanvasMetronomeToggle from "@/components/canvas/CanvasMetronomeToggle";
-import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
+import type { CanvasBoardCard, CanvasBoardCardType, CanvasContributionType } from "@/lib/canvas/canvasTypes";
 import {
   useListenPath,
   useCompareMode,
@@ -99,6 +99,7 @@ import {
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "@/lib/canvas/features";
+import { useCapabilities } from "@/lib/permissions";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -199,7 +200,14 @@ const SongCanvasExperience = () => {
   const songTitle = useSongTitle(songId);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isViewer = searchParams.get("role") === "viewer";
+  // Real permissions come from E1's capability system (server role — a URL
+  // can't grant edit). `?role=viewer` remains honored as a RESTRICT-only hint
+  // (invite previews land with it), never as a grant. The showcase demo room
+  // stays fully usable for everyone — it's a sandbox, not a shared song.
+  const caps = useCapabilities(songId);
+  const isDemoRoom = songId === "demo";
+  const isViewer = !isDemoRoom && (caps.isViewer || searchParams.get("role") === "viewer");
+  const canReview = isDemoRoom || caps.isOwner;
   // Fresh arrival from an accepted invite (?invite=1) — show the one-time
   // "you joined as [role]" welcome toast so they know where they stand.
   const isInviteArrival = searchParams.get("invite") === "1";
@@ -223,7 +231,9 @@ const SongCanvasExperience = () => {
 
   const [cards, setCards] = useState<CanvasCard[]>(() => initialBoard(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
+  // Neutral opening line — "Saved" would be a false claim on an empty room.
+  // Short on purpose: the pill shares a 390px row with the metronome + invite.
+  const [canvasStatus, setCanvasStatus] = useState("Every idea stays here.");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
   const [activeLayer, setActiveLayer] = useState<LayerId>(() => {
     const layer = searchParams.get("layer");
@@ -347,7 +357,9 @@ const SongCanvasExperience = () => {
         );
         setSelectedId(null);
         setIsDragOver(false);
-        setCanvasStatus("Moved. Undo?");
+        // Undo lives in the toast (useFinalArrangement) — the pill only states
+        // what happened; it was never tappable.
+        setCanvasStatus("Moved to Final.");
       },
       returnToIdeas: (finalCardId, sourceId) => {
         setCards((prev) =>
@@ -360,7 +372,7 @@ const SongCanvasExperience = () => {
             ),
         );
         setSelectedId(null);
-        setCanvasStatus("Moved. Undo?");
+        setCanvasStatus("Returned to Ideas.");
       },
       patchCards: (patches) => {
         setCards((prev) =>
@@ -378,10 +390,14 @@ const SongCanvasExperience = () => {
   );
 
   // ── D2 feature hooks — the canvas verbs ─────────────────────────────────────
+  // The board follows playback: each listen-path step flies the viewport to
+  // the sounding card (wired through a ref — jumpToCardId is defined below).
+  const followPlaybackRef = useRef<(cardId: string) => void>(() => {});
   const listenPath = useListenPath({
     cards,
     mutations: featureMutations,
     initialQueue: featureMeta.listenPath,
+    onStepChange: (cardId) => followPlaybackRef.current(cardId),
   });
   const compare = useCompareMode({
     cards,
@@ -400,9 +416,33 @@ const SongCanvasExperience = () => {
     isViewer,
     mutations: featureMutations,
     finalSlot: finalColumnSlot,
+    ideaSlot: ideaColumnSlot,
     onMoment: showSavedMoment,
   });
   const metronome = useCanvasMetronome(songId);
+
+  // ── One bottom surface at a time ────────────────────────────────────────────
+  // Merge, arrange, and the listen transport used to stack into a wall that
+  // buried the tab bar and the Record dock. The listen path restores COLLAPSED
+  // (a pill) and expands on demand; entering arrange clears a merge selection.
+  const [pathExpanded, setPathExpanded] = useState(false);
+  const prevQueueLen = useRef(listenPath.queue.length);
+  useEffect(() => {
+    // Auto-expand when the songwriter grows the queue by hand; a restored
+    // saved path stays a quiet pill.
+    if (listenPath.queue.length > prevQueueLen.current) setPathExpanded(true);
+    prevQueueLen.current = listenPath.queue.length;
+  }, [listenPath.queue.length]);
+  useEffect(() => {
+    if (arrangement.arranging) {
+      setPathExpanded(false);
+      merge.clearSelection();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrangement.arranging]);
+  useEffect(() => {
+    if (merge.selection.length > 0) setPathExpanded(false);
+  }, [merge.selection.length]);
 
   // Card drag position updates flow up through the onMove prop; see CanvasStage.
 
@@ -453,6 +493,37 @@ const SongCanvasExperience = () => {
 
   // Move-to-Final / return-to-Ideas mechanics live in useFinalArrangement (D2).
 
+  // Collab-ready identity + time stamps on every card this device creates.
+  // `contributor` (display name) stays for rendering; createdBy carries the
+  // real user id when a session exists. Ids are UUIDs so concurrent creates
+  // can't collide and can round-trip to canvas_cards later.
+  const CONTRIBUTION_BY_TYPE: Record<CanvasCardType, CanvasContributionType> = useMemo(
+    () => ({
+      lyric: "lyrics", voice: "melody", hum: "melody", chord: "chords",
+      section: "arrangement", scripture: "meaning", note: "feedback",
+    }),
+    [],
+  );
+  const stampNewCard = useCallback(
+    (partial: Omit<CanvasCard, "id" | "contributor" | "accent" | "status">): CanvasCard => {
+      const now = new Date().toISOString();
+      return {
+        id: `card-${crypto.randomUUID()}`,
+        contributor: currentUserName,
+        status: "raw",
+        accent: getCreatorColor(currentUserName).base,
+        createdBy: profile?.user_id ?? undefined,
+        createdAt: now,
+        updatedAt: now,
+        lastActivityAt: now,
+        reviewState: "none",
+        contributionType: CONTRIBUTION_BY_TYPE[partial.type],
+        ...partial,
+      };
+    },
+    [currentUserName, profile?.user_id, CONTRIBUTION_BY_TYPE],
+  );
+
   const addCard = useCallback((type: CanvasCardType) => {
     if (isViewer) return;
     const ideaIndex = cards.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
@@ -465,21 +536,17 @@ const SongCanvasExperience = () => {
       scripture: "Scripture note",
       section: "New section",
     };
-    const newCard: CanvasCard = {
-      id: `card-${Date.now()}`,
+    const newCard = stampNewCard({
       tree: "ideas",
       type,
       title: titleByType[type],
       body: "",
       meta: "",
-      section: "Raw idea",
-      contributor: currentUserName,
-      status: "raw",
-      accent: getCreatorColor(currentUserName).base,
+      section: type === "scripture" ? "Meaning" : "Raw idea",
       // A single tidy column under the root, so ideas read like a scrollable
       // feed instead of a scatter dumped off-screen in 2D space.
       ...ideaColumnSlot(ideaIndex),
-    };
+    });
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
@@ -488,7 +555,7 @@ const SongCanvasExperience = () => {
     // they dismiss (the card persists).
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
-  }, [cards, isViewer, currentUserName]);
+  }, [cards, isViewer, stampNewCard]);
 
   // Add a named song PART (Verse / Chorus / …) — the songwriter's real mental
   // model. Repeatable parts auto-number (Verse 1, Verse 2). Opens the editor.
@@ -502,38 +569,44 @@ const SongCanvasExperience = () => {
       section = `${section} ${n}`;
     }
     const title =
-      choice.section === "Raw idea"
-        ? choice.type === "chord" ? "Chord idea" : choice.type === "note" ? "New idea" : "Lyric"
+      choice.section === "Raw idea" || choice.section === "Meaning"
+        ? choice.type === "chord"
+          ? "Chord idea"
+          : choice.type === "scripture"
+          ? "Scripture note"
+          : choice.type === "note"
+          ? "New idea"
+          : "Lyric"
         : section;
-    const newCard: CanvasCard = {
-      id: `card-${Date.now()}`,
+    const newCard = stampNewCard({
       tree: "ideas",
       type: choice.type,
       title,
       body: "",
       meta: "",
       section,
-      contributor: currentUserName,
-      status: "raw",
-      accent: getCreatorColor(currentUserName).base,
       ...ideaColumnSlot(ideaIndex),
-    };
+    });
     setCards((prev) => [newCard, ...prev]);
     setSelectedId(newCard.id);
     setCanvasStatus("Saved to this song.");
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
-  }, [cards, isViewer, currentUserName]);
+  }, [cards, isViewer, stampNewCard]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
     if (isViewer) return;
+    // Never-bleed invariant: the speaker click must not bake into the take.
+    // The beat can be restarted after the take; losing a click is recoverable,
+    // a ruined recording is not.
+    if (metronome.running) metronome.stop();
     recordingParentIdRef.current = parentId ?? null;
     setRecordingSection(parentId ? "Layer" : "Raw idea");
     setRecordingNote("");
     const started = await startRecording();
     setRecordingFlow(started ? "recording" : "idle");
-  }, [isViewer, startRecording]);
+  }, [isViewer, startRecording, metronome]);
 
   const handleStopRecording = useCallback(async () => {
     const result = await stopRecording();
@@ -558,6 +631,8 @@ const SongCanvasExperience = () => {
       setCards((prev) => prev.map((c) =>
         c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
       ));
+      // The listen queue tracks the same rename, or its entry goes phantom.
+      if (memoId) listenPath.replaceCardId(pendingId, memoId);
       setCanvasStatus("Saved to this song.");
     } catch {
       setCards((prev) => prev.map((c) =>
@@ -565,7 +640,8 @@ const SongCanvasExperience = () => {
       ));
       setCanvasStatus("You can keep adding ideas. We'll finish saving when you're back online.");
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listenPath.replaceCardId]);
 
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
@@ -603,6 +679,7 @@ const SongCanvasExperience = () => {
 
     setCards((prev) => {
       const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
+      const now = new Date().toISOString();
       const newCard: CanvasCard = {
         id: pending.id, tree: "ideas", type: "voice",
         title: name, body: "", meta: formatDuration(rec.durationMs),
@@ -610,6 +687,9 @@ const SongCanvasExperience = () => {
         ...ideaColumnSlot(ideaIndex),
         parentMemoId, durationMs: rec.durationMs,
         isProcessing: true,
+        createdBy: profile?.user_id ?? undefined,
+        createdAt: now, updatedAt: now, lastActivityAt: now,
+        reviewState: "none", contributionType: "melody",
       };
       return [newCard, ...prev];
     });
@@ -617,7 +697,7 @@ const SongCanvasExperience = () => {
     if (!parentMemoId) setFocusCardId(pending.id);
 
     await flushCanvasUpload(pending.id);
-  }, [pendingRecording, showSavedMoment, songId, currentUserName, flushCanvasUpload]);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName, profile?.user_id, flushCanvasUpload]);
 
   // Recovery sweep: a canvas take whose upload was interrupted last session is
   // still safe in the cache. Replay each on load — a reconnected device heals
@@ -646,12 +726,8 @@ const SongCanvasExperience = () => {
     void handleStartRecording(baseId);
   }, [handleStartRecording]);
 
-  const chooseLayer = (layer: LayerId) => {
-    setActiveLayer(layer);
-    const show = layer !== "room" && layer !== "ideas";
-    setShowWorkPanel(show);
-    navigate(`/songs/${songId}/canvas?layer=${layer}`, { replace: false });
-  };
+  // Layer switching is owned by SongTabBar + ?layer= deep links (the header
+  // chip strip that duplicated it is gone).
 
   // Layers live inside their base's stack, not loose on the board.
   const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
@@ -739,6 +815,44 @@ const SongCanvasExperience = () => {
     return counts;
   }, [cards]);
 
+  // Clone a card's slot (same exact section, empty body) so the songwriter can
+  // write "Chorus take B" and immediately compare A vs B — the paved path into
+  // F21 that never existed.
+  const handleNewVariant = useCallback(
+    (cardId: string) => {
+      const src = cards.find((c) => c.id === cardId);
+      if (!src || isViewer) return;
+      const ideaIndex = cards.filter((c) => c.tree === "ideas" && !c.parentMemoId).length;
+      const variant = stampNewCard({
+        tree: "ideas",
+        type: src.type === "voice" || src.type === "hum" ? "lyric" : src.type,
+        title: `${src.section || src.title} — another take`,
+        body: "",
+        meta: "",
+        section: src.section,
+        ...ideaColumnSlot(ideaIndex),
+      });
+      setCards((prev) => [variant, ...prev]);
+      setSelectedId(variant.id);
+      setFocusCardId(variant.id);
+      setEditCardId(variant.id);
+    },
+    [cards, isViewer, stampNewCard],
+  );
+
+  // Un-dim a kept reference — "nothing is deleted" means nothing is stuck.
+  const handleRestoreCard = useCallback((cardId: string) => {
+    setCards((prev) =>
+      prev.map((c) =>
+        c.id === cardId
+          ? { ...c, isDimmedReference: false, dimReason: undefined, status: "raw" }
+          : c,
+      ),
+    );
+    setSelectedId(null);
+    setCanvasStatus("Idea brought back.");
+  }, []);
+
   // Per-card wiring for CanvasStage's render loop — the exact closures the old
   // inline loop built, handed across the D1 boundary as a selector. CanvasStage
   // renders the pixels; what each callback DOES stays here with the D2 hooks.
@@ -774,6 +888,12 @@ const SongCanvasExperience = () => {
     onEdit: !isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined,
     onMore: () => setMoreCardId(card.id),
     finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
+    onRestore: !isViewer && card.isDimmedReference ? () => handleRestoreCard(card.id) : undefined,
+    // "Now sounding" ring: the active listen-path step while playing, or the
+    // take auditioning in compare mode.
+    playing:
+      (listenPath.playing && listenPath.queue[listenPath.step] === card.id) ||
+      compare.playingId === card.id,
   });
 
   // Everyone whose hand is on this song — derived from who contributed cards.
@@ -1008,26 +1128,65 @@ const SongCanvasExperience = () => {
   }, [showWorkPanel, closeWorkPanel]);
 
   // Bring a just-created card into view once it's on the board (add / record).
+  // If it landed inside a collapsed section cluster, fan that cluster open
+  // first — a fresh capture must land VISIBLY, never fly to empty space where
+  // its hidden card would be.
   useEffect(() => {
     if (!focusCardId) return;
     const card = cards.find((c) => c.id === focusCardId);
-    if (card) {
-      jumpToCard(card);
-      setFocusCardId(null);
+    if (!card) return;
+    const owningCluster = clusterFlagList.find((cl) => cl.cardIds.includes(card.id));
+    if (owningCluster && !expandedClusters.has(owningCluster.id)) {
+      setExpandedClusters((prev) => new Set(prev).add(owningCluster.id));
     }
-  }, [focusCardId, cards, jumpToCard]);
+    jumpToCard(card);
+    setFocusCardId(null);
+  }, [focusCardId, cards, jumpToCard, clusterFlagList, expandedClusters]);
 
-  // Write the idea's words into a card (title / body / section).
+  // Playback follows the board: wire the listen path's step changes to the
+  // same fly-to used everywhere else (declared as a ref because the hook
+  // mounts before these callbacks exist).
+  useEffect(() => {
+    followPlaybackRef.current = (cardId: string) => {
+      const target = cards.find((c) => c.id === cardId);
+      if (target) jumpToCard(target);
+    };
+  }, [cards, jumpToCard]);
+
+  // First frame: compose the opening shot around the root + Ideas zone once
+  // the viewport API exists. The old fixed pan clipped the root card ~30px
+  // off a 390px screen.
+  const didInitialFrame = useRef(false);
+  useEffect(() => {
+    if (didInitialFrame.current || !viewportApiRef.current) return;
+    didInitialFrame.current = true;
+    goToZone("ideas");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Write the idea's words into a card (title / body / section / meta).
   const handleSaveCardEdit = useCallback(
-    (cardId: string, draft: { title: string; body: string; section: string }) => {
+    (cardId: string, draft: { title: string; body: string; section: string; meta?: string }) => {
+      const now = new Date().toISOString();
       setCards((prev) =>
         prev.map((c) =>
-          c.id === cardId ? { ...c, title: draft.title, body: draft.body, section: draft.section } : c,
+          c.id === cardId
+            ? {
+                ...c,
+                title: draft.title,
+                body: draft.body,
+                section: draft.section,
+                meta: draft.meta ?? c.meta,
+                updatedAt: now,
+                lastActivityAt: now,
+                updatedBy: profile?.user_id ?? c.updatedBy,
+              }
+            : c,
         ),
       );
       setCanvasStatus("Saved to this song.");
     },
-    [],
+    [profile?.user_id],
   );
 
   const jumpToCardId = useCallback(
@@ -1217,6 +1376,34 @@ const SongCanvasExperience = () => {
     [suggestionReviewItems, pendingReview],
   );
 
+  // On-board marker for the same queue: a calm gold dot (never red) on each
+  // card awaiting review, through the render layer's adornment slot.
+  const pendingReviewIds = useMemo(
+    () => new Set(pendingReview.map((p) => p.id)),
+    [pendingReview],
+  );
+  const renderCardAdornment = useCallback(
+    (card: CanvasCard) =>
+      canReview && !isViewer && pendingReviewIds.has(card.id) ? (
+        <span
+          role="img"
+          aria-label="Awaiting your review"
+          style={{
+            position: "absolute",
+            top: -5,
+            right: -5,
+            width: 12,
+            height: 12,
+            borderRadius: "50%",
+            backgroundColor: "var(--cog-gold, #B8953A)",
+            border: "2px solid #FAFAF6",
+            boxShadow: "0 1px 4px rgba(184,149,58,0.45)",
+          }}
+        />
+      ) : null,
+    [canReview, isViewer, pendingReviewIds],
+  );
+
   // Accept a line suggestion → replace the target card's body, drop the suggestion.
   const handleAcceptLine = useCallback((suggestionId: string) => {
     const s = lineSuggestions.find((x) => x.id === suggestionId);
@@ -1285,49 +1472,27 @@ const SongCanvasExperience = () => {
           Songs
         </button>
 
-        {/* Song title centered */}
-        <div className="flex flex-col items-center min-w-0 flex-1">
-          <CogBrand variant="stacked" size="sm" />
-          <h1
-            className="text-center font-bold leading-tight truncate"
-            style={{ fontSize: 15, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", marginTop: 4, maxWidth: 180 }}
-          >
-            {songTitle}
-          </h1>
-        </div>
-
-        {/* Layer chips */}
-        <div
-          className="flex gap-1 overflow-x-auto flex-shrink-0"
-          style={{ maxWidth: 220 }}
+        {/* Song title — the serif name of the room, given space to breathe.
+            The six-chip layer strip is gone: it duplicated the SongTabBar in a
+            220px scroll window and squeezed the title to 40px at 390px wide. */}
+        <h1
+          className="min-w-0 flex-1 text-center font-bold leading-tight truncate"
+          style={{ fontSize: "clamp(17px, 4.6vw, 22px)", color: "var(--cog-charcoal)", fontFamily: "var(--font-display)" }}
         >
-          {LAYERS.map((layer) => {
-            const Icon = layer.icon;
-            const active = activeLayer === layer.id;
-            return (
-              <button
-                key={layer.id}
-                type="button"
-                onClick={() => chooseLayer(layer.id)}
-                aria-pressed={active}
-                className="flex min-h-8 shrink-0 items-center gap-1 rounded-xl px-2.5 text-[11px] font-semibold transition-all duration-150 active:scale-[0.97]"
-                style={{
-                  backgroundColor: active ? "#FFFFFF" : "transparent",
-                  border: active ? "1px solid rgba(181,147,90,0.30)" : "1px solid transparent",
-                  color: active ? "var(--cog-gold)" : "var(--cog-muted)",
-                  boxShadow: active ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                <Icon size={12} strokeWidth={1.8} />
-                {layer.label}
-              </button>
-            );
-          })}
+          {songTitle}
+        </h1>
+
+        {/* Just the crown mark — the full wordmark wrapped to three lines at
+            390px and shoved the title off-center. */}
+        <div className="flex flex-shrink-0 items-center" style={{ minWidth: 64, justifyContent: "flex-end" }} aria-hidden="true">
+          <CrownMark size={22} color="#B5935A" />
         </div>
       </header>
 
-      <div className="relative z-30 mx-auto flex w-full max-w-[1180px] items-center justify-between gap-3 px-5 pb-2">
-        <div className="flex min-w-0 items-center gap-1.5">
+      {/* Both rows wrap on narrow screens — the owner's "Review N" pill must
+          never be pushed off the right edge of a 390px phone. */}
+      <div className="relative z-30 mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-5 pb-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <p
             aria-live="polite"
             className="truncate rounded-full px-3 py-1.5 text-[11px] font-semibold"
@@ -1346,7 +1511,7 @@ const SongCanvasExperience = () => {
           >
             <History size={16} strokeWidth={1.9} />
           </button>
-          {!isViewer && reviewQueueItems.length > 0 && (
+          {canReview && !isViewer && reviewQueueItems.length > 0 && (
             <button
               type="button"
               onClick={() => setShowReviewQueue(true)}
@@ -1432,6 +1597,7 @@ const SongCanvasExperience = () => {
           selectedId={selectedId}
           isDropActive={isDragOver}
           getCardInteractions={getCardInteractions}
+          cardAdornment={renderCardAdornment}
           viewportApiRef={viewportApiRef}
           overlay={
             <>
@@ -1483,7 +1649,9 @@ const SongCanvasExperience = () => {
               </div>
               {showFirstRun && (
                 <FirstActionPrompt
-                  onHum={() => addCard("hum")}
+                  // "Tap to record" OPENS THE RECORDER — the chip used to
+                  // create a silent text card wearing a fake waveform.
+                  onHum={() => { void handleStartRecording(); }}
                   onLyric={() => addCard("lyric")}
                   onChords={() => addCard("chord")}
                 />
@@ -1571,7 +1739,7 @@ const SongCanvasExperience = () => {
               onClick={closeWorkPanel}
               aria-hidden="true"
               style={{
-                position: "fixed", inset: 0, zIndex: 70,
+                position: "fixed", inset: 0, zIndex: 799,
                 backgroundColor: "rgba(26,26,26,0.5)",
                 animation: "cog-fade-in 220ms ease",
               }}
@@ -1581,7 +1749,7 @@ const SongCanvasExperience = () => {
               aria-modal="true"
               aria-label={`${LAYERS.find((l) => l.id === activeLayer)?.label ?? "Song"} panel`}
               style={{
-                position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 71,
+                position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
                 backgroundColor: "#FAFAF6",
                 borderRadius: "24px 24px 0 0",
                 borderTop: "1px solid rgba(0,0,0,0.08)",
@@ -1632,34 +1800,49 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
-      <MergeActionBar
-        selection={merge.selection}
-        cards={[...ideasCards, ...finalCards]}
-        onRemove={merge.removeFromSelection}
-        onMerge={merge.executeMerge}
-        onClear={merge.clearSelection}
-      />
-      <ListenPathBar
-        queue={listenPath.queue}
-        cards={[...ideasCards, ...finalCards]}
-        step={listenPath.step}
-        playing={listenPath.playing}
-        onPlayPause={listenPath.playPause}
-        onPrev={listenPath.prev}
-        onNext={listenPath.next}
-        onStepTo={listenPath.goTo}
-        onRemove={listenPath.removeCard}
-        onClear={listenPath.clear}
-        onSave={listenPath.save}
-      />
+      {/* One bottom surface at a time: an active arrange session owns the
+          bottom; a merge selection hides the (collapsed) listen pill's
+          expanded state; pills coexist quietly. */}
+      {!arrangement.arranging && (
+        <MergeActionBar
+          selection={merge.selection}
+          cards={[...ideasCards, ...finalCards]}
+          onRemove={merge.removeFromSelection}
+          onMerge={merge.executeMerge}
+          onClear={merge.clearSelection}
+        />
+      )}
+      {!arrangement.arranging && merge.selection.length === 0 && (
+        <ListenPathBar
+          queue={listenPath.queue}
+          cards={[...ideasCards, ...finalCards]}
+          step={listenPath.step}
+          playing={listenPath.playing}
+          collapsed={!pathExpanded}
+          onExpand={() => setPathExpanded(true)}
+          onCollapse={() => setPathExpanded(false)}
+          onPlayPause={listenPath.playPause}
+          onPrev={listenPath.prev}
+          onNext={listenPath.next}
+          onStepTo={listenPath.goTo}
+          onRemove={listenPath.removeCard}
+          onClear={listenPath.clear}
+          onSave={listenPath.save}
+        />
+      )}
       <FinalArrangementBar
         arranging={arrangement.arranging}
         canArrange={arrangement.canArrange}
+        canPlay={arrangement.orderedFinalCards.length >= 2}
         orderedCards={arrangement.orderedFinalCards}
         onBegin={arrangement.begin}
         onMove={arrangement.moveBy}
         onSave={arrangement.save}
         onCancel={arrangement.cancel}
+        onPlayFinal={() => {
+          setPathExpanded(true);
+          listenPath.playAll(arrangement.orderedFinalCards.map((c) => c.id));
+        }}
       />
       {compare.pair && (
         <CompareModeSheet
@@ -1728,6 +1911,13 @@ const SongCanvasExperience = () => {
           items={recapItems}
           onJumpToCard={jumpToCardId}
           onDismiss={() => setShowRecap(false)}
+          // The gold CTA opens the real review queue when there is one to
+          // open; otherwise the sheet renders an honest "Got it".
+          onReview={
+            canReview && !isViewer && reviewQueueItems.length > 0
+              ? () => setShowReviewQueue(true)
+              : undefined
+          }
         />
       )}
 
@@ -1779,7 +1969,7 @@ const SongCanvasExperience = () => {
         return (
           <Suspense fallback={null}>
             <CardEditSheet
-              initial={{ title: c.title, body: c.body, section: c.section }}
+              initial={{ title: c.title, body: c.body, section: c.section, meta: c.meta || undefined }}
               kind={kindByType[c.type] ?? "Idea"}
               accent={c.accent}
               onSave={(draft) => handleSaveCardEdit(c.id, draft)}
@@ -1811,12 +2001,20 @@ const SongCanvasExperience = () => {
             onClick: () => setLineSuggest({ cardId: c.id, originalLine: c.body, sectionLabel: c.section }),
           });
         }
-        // F21 — audition this idea against its same-section variant.
+        // F21 — audition this idea against its same-section variant, or offer
+        // the paved path to CREATE the variant when none exists yet.
         if (!isViewer && compare.canCompare(c)) {
           actions.push({
             id: "compare",
             label: "Compare A vs B",
             onClick: () => compare.open(c.id),
+          });
+        } else if (!isViewer && c.tree === "ideas" && !c.isDimmedReference) {
+          actions.push({
+            id: "variant",
+            label: "Write another take to compare",
+            tone: "muted",
+            onClick: () => handleNewVariant(c.id),
           });
         }
         const inPath = listenPath.queue.includes(c.id);
@@ -1898,7 +2096,7 @@ const SongCanvasExperience = () => {
         <CoachMark
           targetRef={ideasTourRef}
           lead="Two spaces, one song."
-          body="Explore ideas on the left. Drag the keepers to Final on the right."
+          body="Explore ideas on the left. Tap a keeper, then → Final — or drag it across."
           onGotIt={ideasTour.gotIt}
           onSkip={ideasTour.skip}
           isFinal={ideasTour.isFinal}

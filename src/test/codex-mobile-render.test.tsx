@@ -149,17 +149,18 @@ describe("Codex 390px mobile render smoke", () => {
     expect(screen.getByRole("button", { name: /change number/i })).toBeInTheDocument();
   });
 
-  it("renders the chords page at the primary mobile width", () => {
+  it("renders the chords page at the primary mobile width", async () => {
     renderRoute("/songs/1/chords", "/songs/:id/chords", <ChordsPage />);
 
-    expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
+    // Song title resolves through react-query from the getSong mock.
+    expect(await screen.findByRole("heading", { name: /river of mercy/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText(/chord chart/i)).toBeInTheDocument();
   });
 
   it("renders the song whiteboard at the primary mobile width", async () => {
     renderRoute("/songs/1/canvas", "/songs/:id/canvas", <SongCanvasPage />);
 
-    expect(screen.getByRole("heading", { name: /grace in the waiting/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /river of mercy/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText(/everything for this song stays connected here/i)).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: /lyrics/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /voice memos/i })).toBeInTheDocument();

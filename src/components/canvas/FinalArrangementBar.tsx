@@ -1,69 +1,102 @@
-import { ChevronDown, ChevronUp, ListOrdered } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, ListOrdered, Play } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
 
 /**
  * FinalArrangementBar — F23 Final Arrangement mode.
  *
- * Collapsed: a quiet "Arrange final ▸" pill (shown when ≥2 final sections and
- * the viewer can edit). Active: a bottom toolbar listing the final sections in
- * running order with single-pointer / keyboard up-down controls, Save + Cancel.
+ * Collapsed: a quiet "Play final" + "Arrange final" pill pair (shown when ≥2
+ * final sections; Play appears for everyone, Arrange only when the viewer can
+ * edit). The Final tree IS the ordered arrangement, so hearing it is one tap —
+ * hand-building an 18-tap listen path was the only way before. Active: a
+ * bottom toolbar listing the final sections in running order with
+ * single-pointer / keyboard up-down controls, Save + Cancel.
  * D2 owns this order model + persistence (useFinalArrangement); the on-canvas
  * drag visual is D1's.
  */
 interface FinalArrangementBarProps {
   arranging: boolean;
   canArrange: boolean;
+  /** ≥2 final cards exist — "Play final" shows regardless of edit rights. */
+  canPlay: boolean;
   orderedCards: CanvasBoardCard[];
   onBegin: () => void;
   onMove: (id: string, delta: number) => void;
   onSave: () => void;
   onCancel: () => void;
+  /** Play the whole Final tree top-to-bottom. */
+  onPlayFinal: () => void;
 }
 
 const FinalArrangementBar = ({
   arranging,
   canArrange,
+  canPlay,
   orderedCards,
   onBegin,
   onMove,
   onSave,
   onCancel,
+  onPlayFinal,
 }: FinalArrangementBarProps) => {
   const reducedMotion = usePrefersReducedMotion();
 
   if (!arranging) {
-    if (!canArrange) return null;
+    if (!canArrange && !canPlay) return null;
+    const pillStyle: React.CSSProperties = {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      minHeight: 44,
+      padding: "0 14px",
+      borderRadius: 999,
+      backgroundColor: "#FFFFFF",
+      border: "1px solid rgba(184,149,58,0.40)",
+      color: "var(--cog-gold, #B8953A)",
+      fontFamily: "var(--font-body)",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer",
+      boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
+      transition: reducedMotion ? "none" : "transform 150ms ease",
+    };
     return (
-      <button
-        type="button"
-        onClick={onBegin}
-        aria-label="Arrange the final song order"
+      <div
         style={{
           position: "fixed",
           right: 16,
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 148px)",
-          zIndex: 640,
+          zIndex: 520,
           display: "flex",
-          alignItems: "center",
-          gap: 6,
-          minHeight: 40,
-          padding: "0 14px",
-          borderRadius: 999,
-          backgroundColor: "#FFFFFF",
-          border: "1px solid rgba(184,149,58,0.40)",
-          color: "var(--cog-gold, #B8953A)",
-          fontFamily: "var(--font-body)",
-          fontSize: 12,
-          fontWeight: 700,
-          cursor: "pointer",
-          boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
-          transition: reducedMotion ? "none" : "transform 150ms ease",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 8,
         }}
       >
-        <ListOrdered size={14} strokeWidth={2} aria-hidden="true" />
-        Arrange final ▸
-      </button>
+        {canPlay && (
+          <button
+            type="button"
+            onClick={onPlayFinal}
+            aria-label="Play the final song in order"
+            style={{ ...pillStyle, backgroundColor: "var(--cog-gold, #B8953A)", color: "#FFFFFF", border: "none", boxShadow: "0 4px 14px rgba(184,149,58,0.35)" }}
+          >
+            <Play size={13} strokeWidth={2.4} fill="currentColor" aria-hidden="true" />
+            Play final
+          </button>
+        )}
+        {canArrange && (
+          <button
+            type="button"
+            onClick={onBegin}
+            aria-label="Arrange the final song order"
+            style={pillStyle}
+          >
+            <ListOrdered size={14} strokeWidth={2} aria-hidden="true" />
+            Arrange final
+            <ChevronRight size={13} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -76,7 +109,7 @@ const FinalArrangementBar = ({
         bottom: 0,
         left: 0,
         right: 0,
-        zIndex: 690,
+        zIndex: 540,
         backgroundColor: "var(--cog-cream-light, #FAFAF6)",
         borderTop: "1px solid rgba(184,149,58,0.40)",
         boxShadow: "0 -8px 32px rgba(0,0,0,0.12)",
@@ -118,9 +151,9 @@ const FinalArrangementBar = ({
           type="button"
           onClick={onCancel}
           style={{
-            height: 28,
-            padding: "0 10px",
-            borderRadius: 8,
+            minHeight: 40,
+            padding: "0 12px",
+            borderRadius: 10,
             backgroundColor: "rgba(28,26,23,0.06)",
             border: "none",
             cursor: "pointer",
@@ -137,9 +170,9 @@ const FinalArrangementBar = ({
           type="button"
           onClick={onSave}
           style={{
-            height: 28,
-            padding: "0 12px",
-            borderRadius: 8,
+            minHeight: 40,
+            padding: "0 14px",
+            borderRadius: 10,
             backgroundColor: "var(--cog-gold, #B8953A)",
             border: "none",
             cursor: "pointer",

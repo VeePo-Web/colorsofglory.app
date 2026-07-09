@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Play, Pause, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ListMusic, Play, Pause, X } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
 
 /**
- * ListenPathBar — fixed bottom bar for F20 Listen Path.
+ * ListenPathBar — F20 Listen Path transport.
  *
- * Slides up from the bottom (rAF-deferred entry) whenever the queue has ≥ 1 card.
- * zIndex 700 — safely below StackSheet scrim (799) and sheet (800).
+ * Two states:
+ *  - COLLAPSED (default, incl. a saved path restored on a fresh visit): a
+ *    compact pill above the tab bar. A restored full-height bar used to bury
+ *    the Record dock and bottom navigation on every visit until the user
+ *    destroyed their queue with Clear.
+ *  - EXPANDED: the full transport (chips, prev/play/next, Clear/Save) with a
+ *    one-tap collapse chevron that never clears the queue.
  *
  * Presentation only: the playback state machine (real sequenced audio,
  * auto-advance, dwell) lives in useListenPath — this bar is a controlled
@@ -20,6 +25,9 @@ interface ListenPathBarProps {
   cards: CanvasBoardCard[];
   step: number;
   playing: boolean;
+  collapsed: boolean;
+  onExpand: () => void;
+  onCollapse: () => void;
   onPlayPause: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -34,6 +42,9 @@ const ListenPathBar = ({
   cards,
   step,
   playing,
+  collapsed,
+  onExpand,
+  onCollapse,
   onPlayPause,
   onPrev,
   onNext,
@@ -55,6 +66,61 @@ const ListenPathBar = ({
 
   if (queue.length === 0) return null;
 
+  if (collapsed) {
+    return (
+      <div
+        role="toolbar"
+        aria-label={`Listen Path — ${queue.length} ${queue.length === 1 ? "card" : "cards"}`}
+        style={{
+          position: "fixed",
+          left: 16,
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)",
+          zIndex: 520,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          borderRadius: 999,
+          backgroundColor: "rgba(255,255,255,0.94)",
+          border: "1px solid rgba(184,149,58,0.35)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          backdropFilter: "blur(8px)",
+          paddingLeft: 4,
+          paddingRight: 4,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onPlayPause}
+          aria-label={playing ? "Pause listen path" : "Play listen path"}
+          style={{
+            width: 44, height: 44, borderRadius: "50%",
+            border: "none", cursor: "pointer",
+            backgroundColor: playing ? "var(--cog-gold, #B8953A)" : "rgba(184,149,58,0.12)",
+            color: playing ? "#FFF" : "var(--cog-gold, #B8953A)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          {playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" style={{ marginLeft: 2 }} />}
+        </button>
+        <button
+          type="button"
+          onClick={onExpand}
+          aria-label={`Open Listen Path — ${queue.length} ${queue.length === 1 ? "card" : "cards"}, stop ${step + 1}`}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            minHeight: 44, padding: "0 12px 0 4px",
+            border: "none", background: "none", cursor: "pointer",
+            fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700,
+            color: "var(--cog-charcoal, #1C1A17)",
+          }}
+        >
+          <ListMusic size={14} strokeWidth={2} style={{ color: "var(--cog-gold, #B8953A)" }} aria-hidden="true" />
+          Path · {queue.length}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       role="toolbar"
@@ -64,7 +130,7 @@ const ListenPathBar = ({
         bottom: 0,
         left: 0,
         right: 0,
-        zIndex: 700,
+        zIndex: 540,
         backgroundColor: "var(--cog-cream-light, #FAFAF6)",
         borderTop: "1px solid rgba(28,26,23,0.10)",
         boxShadow: "0 -8px 32px rgba(0,0,0,0.12)",
@@ -122,9 +188,9 @@ const ListenPathBar = ({
           type="button"
           onClick={onClear}
           style={{
-            height: 28,
-            padding: "0 10px",
-            borderRadius: 8,
+            minHeight: 40,
+            padding: "0 12px",
+            borderRadius: 10,
             backgroundColor: "rgba(28,26,23,0.06)",
             border: "none",
             cursor: "pointer",
@@ -142,9 +208,9 @@ const ListenPathBar = ({
           type="button"
           onClick={onSave}
           style={{
-            height: 28,
-            padding: "0 12px",
-            borderRadius: 8,
+            minHeight: 40,
+            padding: "0 14px",
+            borderRadius: 10,
             backgroundColor: "var(--cog-gold, #B8953A)",
             border: "none",
             cursor: "pointer",
@@ -154,9 +220,29 @@ const ListenPathBar = ({
             color: "#FFF",
             boxShadow: "0 2px 8px rgba(184,149,58,0.30)",
           }}
-          aria-label="Save listen path as arrangement"
+          aria-label="Save this listen path to replay later"
         >
-          Save path ↗
+          Save path
+        </button>
+        {/* Collapse — tuck the transport away WITHOUT clearing the queue */}
+        <button
+          type="button"
+          onClick={onCollapse}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            backgroundColor: "rgba(28,26,23,0.06)",
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--cog-warm-gray, #6B6459)",
+          }}
+          aria-label="Minimize the listen path"
+        >
+          <ChevronDown size={18} strokeWidth={2} />
         </button>
       </div>
 
@@ -355,14 +441,16 @@ const ChipItem = ({ card, index, isActive, color, onTap, onRemove }: ChipItemPro
       </span>
     )}
 
-    {/* Remove */}
+    {/* Remove — 28px visual, padded to a real touch target with clearance
+        from the seek area so a thumb never seeks when it meant to remove */}
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onRemove(); }}
       aria-label={`Remove ${card.title} from path`}
       style={{
-        width: 20,
-        height: 20,
+        width: 28,
+        height: 28,
+        marginLeft: 4,
         borderRadius: "50%",
         backgroundColor: "rgba(28,26,23,0.10)",
         border: "none",
@@ -375,7 +463,7 @@ const ChipItem = ({ card, index, isActive, color, onTap, onRemove }: ChipItemPro
         padding: 0,
       }}
     >
-      <X size={10} strokeWidth={2.5} />
+      <X size={12} strokeWidth={2.5} />
     </button>
   </div>
 );

@@ -36,11 +36,12 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
         bottom: 0,
         left: 0,
         right: 0,
-        zIndex: 695,
+        zIndex: 540,
         backgroundColor: "var(--cog-cream-light, #FAFAF6)",
         borderTop: "1px solid rgba(184,149,58,0.25)",
         boxShadow: "0 -8px 32px rgba(0,0,0,0.12)",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)",
+        borderRadius: "20px 20px 0 0",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
         transform: visible && selection.length > 0 ? "translateY(0)" : "translateY(100%)",
         transition: reducedMotion ? "none" : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
       }}
@@ -89,7 +90,8 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
             fontSize: 12,
             fontWeight: 600,
             color: "var(--cog-warm-gray, #6B6459)",
-            padding: "4px 8px",
+            minHeight: 44,
+            padding: "4px 12px",
             borderRadius: 8,
           }}
           aria-label="Cancel merge"

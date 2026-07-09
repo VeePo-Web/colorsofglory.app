@@ -71,7 +71,9 @@ const VoiceMemoCard = memo(({ card, color }: CardFaceProps) => {
             key={i}
             style={{
               width: BAR_WIDTH, height: Math.round(h * MAX_BAR_HEIGHT), borderRadius: 3,
-              backgroundColor: color.base, opacity: h * 0.5 + 0.18, flexShrink: 0,
+              // Waveforms are ALWAYS system gold (locked design token) — the
+              // creator's identity lives in the stripe, dot, and name.
+              backgroundColor: "var(--cog-gold, #B8953A)", opacity: h * 0.5 + 0.18, flexShrink: 0,
             }}
           />
         ))}

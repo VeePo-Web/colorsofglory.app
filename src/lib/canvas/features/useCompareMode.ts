@@ -31,15 +31,26 @@ interface UseCompareModeArgs {
   onMoment?: (title: string, destination: string, detail?: string) => void;
 }
 
+/**
+ * Two variants of the same part compare against each other even when the host
+ * auto-numbered them ("Chorus 1" / "Chorus 2" are the same FAMILY). Exact
+ * section matches still win so "Verse 1" prefers another "Verse 1" over
+ * "Verse 2" when both exist.
+ */
+export function sectionFamily(section: string): string {
+  return section.trim().toLowerCase().replace(/\s+\d+$/, "");
+}
+
 function findPartner(cards: CanvasBoardCard[], card: CanvasBoardCard): CanvasBoardCard | undefined {
-  return cards.find(
+  const candidates = cards.filter(
     (c) =>
       c.id !== card.id &&
       c.tree === card.tree &&
-      c.section === card.section &&
+      sectionFamily(c.section) === sectionFamily(card.section) &&
       !c.isDimmedReference &&
       !c.parentMemoId,
   );
+  return candidates.find((c) => c.section === card.section) ?? candidates[0];
 }
 
 export function useCompareMode({ cards, isViewer, mutations, onMoment }: UseCompareModeArgs): CompareModeApi {

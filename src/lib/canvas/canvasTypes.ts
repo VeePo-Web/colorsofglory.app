@@ -95,6 +95,18 @@ export type CanvasBoardCardStatus =
 /** Why a card is rendered dimmed — always kept, never deleted. */
 export type CanvasBoardDimReason = "moved_to_final" | "merged" | "compare_kept";
 
+/** Owner-review lifecycle for a collaborator's idea (COG Product 11). */
+export type CanvasReviewState = "none" | "pending" | "kept" | "approved" | "dismissed";
+
+/** What kind of work this card credits its creator with (credits ledger). */
+export type CanvasContributionType =
+  | "lyrics"
+  | "melody"
+  | "chords"
+  | "arrangement"
+  | "meaning"
+  | "feedback";
+
 export interface CanvasBoardCard {
   id: string;
   tree: CanvasBoardTree;
@@ -119,6 +131,24 @@ export interface CanvasBoardCard {
   isProcessing?: boolean;
   /** Provenance: the two idea cards this section was merged from (F22). */
   mergedFrom?: [string, string];
+  /** Provenance: the Ideas card a Final copy was promoted from (F23). Replaces
+   *  the legacy "-final" id-suffix convention; both are honored on read. */
+  sourceCardId?: string;
+
+  // ── Collaboration-ready metadata ─────────────────────────────────────────
+  // Populated wherever identity/time is known today; the collaboration agent
+  // maps these 1:1 onto canvas_cards columns. See CANVAS_COLLABORATION_HANDOFF.md.
+  /** Creating user's id (auth user id). `contributor` stays the display name. */
+  createdBy?: string;
+  updatedBy?: string;
+  /** ISO timestamps. */
+  createdAt?: string;
+  updatedAt?: string;
+  lastActivityAt?: string;
+  /** Comments attached to this card (comment surface is future work). */
+  commentCount?: number;
+  reviewState?: CanvasReviewState;
+  contributionType?: CanvasContributionType;
 }
 
 export interface SongCanvasState {

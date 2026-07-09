@@ -6,30 +6,32 @@ interface FirstActionPromptProps {
   onChords: () => void;
 }
 
+// Warm-earth chips only — the locked palette has no corporate blue. The mic
+// chip opens the REAL recorder (see host wiring), so its promise is kept.
 const CHIPS = [
   {
     id: "hum",
     icon: Mic,
     label: "Hum a melody",
     sub: "Tap to record an idea",
-    color: "#B5935A",
-    bg: "rgba(181,147,90,0.10)",
+    color: "#B8953A",
+    bg: "rgba(184,149,58,0.10)",
   },
   {
     id: "lyric",
     icon: PenLine,
     label: "Write a lyric",
     sub: "First line, verse, chorus",
-    color: "#4D8FD2",
-    bg: "rgba(77,143,210,0.10)",
+    color: "#C0754F",
+    bg: "rgba(192,117,79,0.10)",
   },
   {
     id: "chords",
     icon: Music,
     label: "Add chords",
     sub: "Key, BPM, progression",
-    color: "#53AB8B",
-    bg: "rgba(83,171,139,0.10)",
+    color: "#8F9B5A",
+    bg: "rgba(143,155,90,0.10)",
   },
 ] as const;
 
@@ -126,7 +128,7 @@ const FirstActionPrompt = ({ onHum, onLyric, onChords }: FirstActionPromptProps)
                   </p>
                   <p
                     className="text-[0.8125rem]"
-                    style={{ color: "#666", fontFamily: "var(--font-body)" }}
+                    style={{ color: "var(--cog-warm-gray, #6B6459)", fontFamily: "var(--font-body)" }}
                   >
                     {chip.sub}
                   </p>

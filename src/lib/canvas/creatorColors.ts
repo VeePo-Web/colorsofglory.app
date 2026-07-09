@@ -12,12 +12,16 @@ export interface CreatorColor {
   dim: string;    // 35% opacity — dimmed border
 }
 
+// Warm-earth hues only: the locked palette forbids corporate blue/cool tones,
+// and system gold (#B8953A) is RESERVED for system states (CTAs, merge ring,
+// waveforms) — no collaborator hashes to it, so a gold ring always means the
+// system, never a person.
 export const AURORA_COLORS: Record<string, CreatorColor> = {
-  gold:   { base: '#D4AE5C', dark: '#A07830', glow: 'rgba(212,174,92,0.18)',  bg: 'rgba(212,174,92,0.09)',  dim: 'rgba(212,174,92,0.35)'  },
-  teal:   { base: '#53AB8B', dark: '#2E7A60', glow: 'rgba(83,171,139,0.18)',  bg: 'rgba(83,171,139,0.09)',  dim: 'rgba(83,171,139,0.35)'  },
-  purple: { base: '#8070C4', dark: '#5040A0', glow: 'rgba(128,112,196,0.18)', bg: 'rgba(128,112,196,0.09)', dim: 'rgba(128,112,196,0.35)' },
-  blue:   { base: '#4D8FD2', dark: '#2A5EA0', glow: 'rgba(77,143,210,0.18)',  bg: 'rgba(77,143,210,0.09)',  dim: 'rgba(77,143,210,0.35)'  },
-  rose:   { base: '#C26A95', dark: '#8A3A65', glow: 'rgba(194,106,149,0.18)', bg: 'rgba(194,106,149,0.09)', dim: 'rgba(194,106,149,0.35)' },
+  clay: { base: '#C0754F', dark: '#8A4A2B', glow: 'rgba(192,117,79,0.18)',  bg: 'rgba(192,117,79,0.09)',  dim: 'rgba(192,117,79,0.35)'  },
+  sage: { base: '#53AB8B', dark: '#2E7A60', glow: 'rgba(83,171,139,0.18)',  bg: 'rgba(83,171,139,0.09)',  dim: 'rgba(83,171,139,0.35)'  },
+  plum: { base: '#A16E9E', dark: '#6E4470', glow: 'rgba(161,110,158,0.18)', bg: 'rgba(161,110,158,0.09)', dim: 'rgba(161,110,158,0.35)' },
+  rose: { base: '#C26A95', dark: '#8A3A65', glow: 'rgba(194,106,149,0.18)', bg: 'rgba(194,106,149,0.09)', dim: 'rgba(194,106,149,0.35)' },
+  moss: { base: '#8F9B5A', dark: '#5C6633', glow: 'rgba(143,155,90,0.18)',  bg: 'rgba(143,155,90,0.09)',  dim: 'rgba(143,155,90,0.35)'  },
 } as const;
 
 const COLOR_KEYS = Object.keys(AURORA_COLORS);
@@ -38,11 +42,11 @@ export function getCreatorInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-// Status chip color mapping
+// Status chip color mapping — warm tones only (no corporate blue/purple).
 export const STATUS_COLORS: Record<string, { bg: string; text: string; icon?: string }> = {
-  raw:         { bg: 'rgba(0,0,0,0.05)',            text: '#999' },
-  shortlisted: { bg: 'rgba(77,143,210,0.12)',       text: '#2A5EA0' },
+  raw:         { bg: 'rgba(28,26,23,0.05)',         text: '#6B6459' },
+  shortlisted: { bg: 'rgba(184,149,58,0.14)',       text: '#8A6D2A' },
   approved:    { bg: 'rgba(83,171,139,0.12)',       text: '#2E7A60',   icon: '✓' },
-  review:      { bg: 'rgba(128,112,196,0.12)',      text: '#5040A0' },
+  review:      { bg: 'rgba(161,110,158,0.14)',      text: '#6E4470' },
   meaning:     { bg: 'rgba(212,174,92,0.12)',       text: '#A07830',   icon: '✦' },
 };

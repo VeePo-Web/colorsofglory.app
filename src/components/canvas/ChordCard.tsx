@@ -64,8 +64,11 @@ const ChordCard = memo(({ card, color }: CardFaceProps) => {
                   style={{
                     fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)",
                     padding: "3px 8px", borderRadius: 9999,
-                    backgroundColor: `${color.base}18`, border: `1px solid ${color.base}38`,
-                    color: color.dark, letterSpacing: "0.02em",
+                    // The locked chord-chip signature: gold-pale bg, charcoal
+                    // text — never a creator color.
+                    backgroundColor: "var(--cog-gold-pale, #E8D5A0)",
+                    border: "1px solid rgba(184,149,58,0.35)",
+                    color: "var(--cog-charcoal, #1C1A17)", letterSpacing: "0.02em",
                   }}
                 >
                   {chord}

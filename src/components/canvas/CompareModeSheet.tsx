@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GitCompare, Pause, Play, X } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
+import { Z } from "@/lib/canvas/zLayers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -210,9 +211,7 @@ const CompareModeSheet = ({
   onClose,
 }: CompareModeSheetProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [isDone, setIsDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   // Idempotency: block double-tap on the CTA
@@ -222,40 +221,25 @@ const CompareModeSheet = ({
   const labelA = `${section} A`;
   const labelB = `${section} B`;
 
-  const handleChoose = useCallback(async () => {
-    if (!selectedId || isSaving || decisionKeyRef.current) return;
-    decisionKeyRef.current = `choose-${Date.now()}`;
-    setIsSaving(true);
-    setError(null);
-    try {
-      // Brief optimistic delay — real save happens in onChoose via parent state
-      await new Promise<void>((res) => setTimeout(res, 420));
-      onChoose(selectedId);
-      setIsDone(true);
-      setTimeout(onClose, 800);
-    } catch {
-      decisionKeyRef.current = null;
-      setIsSaving(false);
-      setError("We could not save this direction. Please try again.");
-    }
-  }, [selectedId, isSaving, onChoose, onClose]);
+  // The decision is a synchronous local state change — no fake latency
+  // theater. A short "saved" beat gives the choice a moment to land, then the
+  // sheet closes itself.
+  const handleChoose = useCallback(() => {
+    if (!selectedId || decisionKeyRef.current) return;
+    decisionKeyRef.current = "choose";
+    onChoose(selectedId);
+    setIsDone(true);
+    setTimeout(onClose, 500);
+  }, [selectedId, onChoose, onClose]);
 
-  const handleKeepBoth = useCallback(async () => {
-    if (isSaving || decisionKeyRef.current) return;
-    decisionKeyRef.current = `both-${Date.now()}`;
-    setIsSaving(true);
-    setError(null);
-    try {
-      await new Promise<void>((res) => setTimeout(res, 280));
-      onKeepBoth();
-      setIsDone(true);
-      setTimeout(onClose, 700);
-    } catch {
-      decisionKeyRef.current = null;
-      setIsSaving(false);
-      setError("We could not save this decision. Please try again.");
-    }
-  }, [isSaving, onKeepBoth, onClose]);
+  const handleKeepBoth = useCallback(() => {
+    if (decisionKeyRef.current) return;
+    decisionKeyRef.current = "both";
+    onKeepBoth();
+    setIsDone(true);
+    setTimeout(onClose, 400);
+  }, [onKeepBoth, onClose]);
+  const isSaving = isDone;
 
   // Focus management: move focus into the sheet on open, trap Tab within it,
   // Escape to dismiss. Background stays inert behind the scrim + trap.
@@ -290,11 +274,7 @@ const CompareModeSheet = ({
     };
   }, [onClose]);
 
-  const statusText = isDone
-    ? "Direction saved."
-    : isSaving
-    ? "Saving direction..."
-    : null;
+  const statusText = isDone ? "Saved." : null;
 
   return (
     <>
@@ -306,7 +286,7 @@ const CompareModeSheet = ({
           position: "fixed",
           inset: 0,
           backgroundColor: "rgba(28, 26, 23, 0.48)",
-          zIndex: 60,
+          zIndex: Z.sheetBackdrop,
           animation: "cog-fade-in 200ms ease forwards",
         }}
       />
@@ -323,7 +303,7 @@ const CompareModeSheet = ({
           left: 0,
           right: 0,
           bottom: 0,
-          zIndex: 61,
+          zIndex: Z.sheet,
           backgroundColor: "var(--cog-cream)",
           borderRadius: "28px 28px 0 0",
           paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
@@ -441,14 +421,10 @@ const CompareModeSheet = ({
             fontWeight: 600,
             margin: 0,
             minHeight: 20,
-            color: error
-              ? "#C0392B"
-              : isDone
-              ? "var(--cog-gold)"
-              : "var(--cog-warm-gray)",
+            color: isDone ? "var(--cog-gold)" : "var(--cog-warm-gray)",
           }}
         >
-          {error ?? statusText ?? ""}
+          {statusText ?? ""}
         </p>
 
         {/* Actions */}

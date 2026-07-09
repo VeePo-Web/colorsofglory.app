@@ -28,7 +28,14 @@ export function useCoachMark(step: TourStep, enabled = true) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!enabled || !isStepPending(step)) return;
+    // A tip whose surface disarms (e.g. role resolves to view-only) must HIDE,
+    // not linger — a stale visible tip holds the screen while its released
+    // lock lets the next tip claim, stacking two tips at once.
+    if (!enabled) {
+      setVisible(false);
+      return;
+    }
+    if (!isStepPending(step)) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     let unsubscribe: (() => void) | null = null;

@@ -18,6 +18,9 @@ interface WhatChangedRecapSheetProps {
   items?: RecapItem[];
   /** Fly the canvas to a changed card (Product 12: rows deep-link to the change). */
   onJumpToCard?: (cardId: string) => void;
+  /** Open the owner review queue. When absent, the primary CTA is a plain
+   *  acknowledge — the gold button must never promise a review it can't open. */
+  onReview?: () => void;
 }
 
 // ─── Demo digest (replaced by server activity-feed data in production) ──────
@@ -43,17 +46,18 @@ const DEMO_ITEMS: RecapItem[] = [
  * cog-fade-in backdrop, cog-sheet-rise panel, Escape-to-dismiss, idempotency
  * guard on the primary CTA, prefers-reduced-motion safe.
  */
-const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItems, onJumpToCard }: WhatChangedRecapSheetProps) => {
-  const [phase, setPhase] = useState<"loading" | "ready">("loading");
-  const [ctaLabel, setCtaLabel] = useState("Review changes");
+const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItems, onJumpToCard, onReview }: WhatChangedRecapSheetProps) => {
+  // Items already in memory render instantly — no fake loading theater. The
+  // brief skeleton exists only for the demo path with nothing to show.
+  const [phase, setPhase] = useState<"loading" | "ready">(providedItems ? "ready" : "loading");
   const ctaRef = useRef<HTMLButtonElement>(null);
   const didDismiss = useRef(false);
 
-  // Simulate async fetch of activity digest — real impl calls the activity API.
   useEffect(() => {
+    if (providedItems) return;
     const t = window.setTimeout(() => setPhase("ready"), 560);
     return () => window.clearTimeout(t);
-  }, []);
+  }, [providedItems]);
 
   // Auto-focus primary CTA when the digest is ready (accessibility + UX).
   useEffect(() => {
@@ -69,11 +73,14 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
     return () => window.removeEventListener("keydown", onKey);
   }, [onDismiss]);
 
+  // The gold CTA does what it says: opens the review queue when the host
+  // wired one, otherwise it's an honest acknowledge.
+  const ctaLabel = onReview ? "Review changes" : "Got it";
   const handleReview = () => {
     if (didDismiss.current) return;
     didDismiss.current = true;
-    setCtaLabel("Opening review…");
-    window.setTimeout(onDismiss, 320);
+    onDismiss();
+    onReview?.();
   };
 
   // Respect the real digest when the caller passes one (even empty → honest
@@ -98,7 +105,7 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
           position: "fixed",
           inset: 0,
           backgroundColor: "rgba(28, 26, 23, 0.48)",
-          zIndex: 60,
+          zIndex: 799,
           animation: "cog-fade-in 200ms ease forwards",
         }}
       />
@@ -114,7 +121,7 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
           left: 0,
           right: 0,
           bottom: 0,
-          zIndex: 61,
+          zIndex: 800,
           backgroundColor: "var(--cog-cream)",
           borderRadius: "28px 28px 0 0",
           paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",

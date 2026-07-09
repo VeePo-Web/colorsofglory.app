@@ -14,6 +14,8 @@ export interface CardEditDraft {
   title: string;
   body: string;
   section: string;
+  /** Kind-specific metadata line — e.g. "Key of G · 74 BPM" on a chord card. */
+  meta?: string;
 }
 
 interface CardEditSheetProps {
@@ -30,8 +32,12 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
   const [title, setTitle] = useState(initial.title);
   const [body, setBody] = useState(initial.body);
   const [section, setSection] = useState(initial.section);
+  const [meta, setMeta] = useState(initial.meta ?? "");
   const titleRef = useRef<HTMLInputElement>(null);
   const didSave = useRef(false);
+
+  const isChord = kind === "Chord";
+  const isScripture = kind === "Scripture";
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -40,18 +46,39 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
     return () => { cancelAnimationFrame(t); window.clearTimeout(f); };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const buildDraft = (): CardEditDraft => ({
+    title: title.trim() || "Untitled idea",
+    body: body.trim(),
+    section: section.trim() || "Raw idea",
+    meta: meta.trim() || undefined,
+  });
 
   const save = () => {
     if (didSave.current) return;
     didSave.current = true;
-    onSave({ title: title.trim() || "Untitled idea", body: body.trim(), section: section.trim() || "Raw idea" });
+    onSave(buildDraft());
     onClose();
   };
+
+  // "Nothing is ever lost": Escape / backdrop tap SAVES the draft instead of
+  // discarding a just-composed lyric to a stray thumb.
+  const dismiss = () => {
+    if (didSave.current) { onClose(); return; }
+    didSave.current = true;
+    const changed =
+      title !== initial.title || body !== initial.body ||
+      section !== initial.section || meta !== (initial.meta ?? "");
+    if (changed) onSave(buildDraft());
+    onClose();
+  };
+  const dismissRef = useRef(dismiss);
+  dismissRef.current = dismiss;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismissRef.current(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const fieldStyle: React.CSSProperties = {
     width: "100%", borderRadius: 12, padding: "12px 14px",
@@ -63,7 +90,7 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
   return (
     <>
       <div
-        onClick={onClose}
+        onClick={dismiss}
         style={{
           position: "fixed", inset: 0, zIndex: 799,
           backgroundColor: "rgba(26,26,26,0.55)",
@@ -93,13 +120,13 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
         <div style={{ width: 40, height: 4, borderRadius: 9999, backgroundColor: "#CCC", margin: "12px auto 14px" }} aria-hidden="true" />
         <button
           type="button"
-          onClick={onClose}
+          onClick={dismiss}
           style={{
             position: "absolute", top: 8, right: 16, width: 44, height: 44, borderRadius: "50%",
             backgroundColor: "rgba(0,0,0,0.05)", border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", color: "#666",
+            display: "flex", alignItems: "center", justifyContent: "center", color: "var(--cog-warm-gray)",
           }}
-          aria-label="Close editor"
+          aria-label="Close editor (your words are kept)"
         >
           <X size={18} />
         </button>
@@ -123,19 +150,41 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
         />
 
         <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--cog-warm-gray)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
-          The idea
+          {isChord ? "Progression" : isScripture ? "Verse & why it anchors the song" : "The idea"}
         </label>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Write the lyric, the thought, the direction…"
-          aria-label="Idea content"
+          placeholder={
+            isChord
+              ? "C - G - Am - F"
+              : isScripture
+              ? "Psalm 46:10 — Be still before the second verse turns upward."
+              : "Write the lyric, the thought, the direction…"
+          }
+          aria-label={isChord ? "Chord progression" : isScripture ? "Scripture and meaning" : "Idea content"}
           rows={4}
           autoCapitalize="sentences"
           autoCorrect="off"
           spellCheck={false}
           style={{ ...fieldStyle, marginBottom: 14, resize: "none", fontFamily: "var(--font-display)", lineHeight: 1.5 }}
         />
+
+        {isChord && (
+          <>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--cog-warm-gray)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
+              Key &amp; BPM
+            </label>
+            <input
+              value={meta}
+              onChange={(e) => setMeta(e.target.value)}
+              placeholder="Key of G · 74 BPM"
+              aria-label="Key and BPM"
+              autoCapitalize="words"
+              style={{ ...fieldStyle, marginBottom: 14 }}
+            />
+          </>
+        )}
 
         <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--cog-warm-gray)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
           Section

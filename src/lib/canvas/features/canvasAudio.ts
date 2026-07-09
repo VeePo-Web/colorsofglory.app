@@ -30,6 +30,7 @@ const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 
 let el: HTMLAudioElement | null = null;
 let playToken = 0;
+let currentMemoId: string | null = null;
 
 function element(): HTMLAudioElement {
   if (!el) {
@@ -42,6 +43,7 @@ function element(): HTMLAudioElement {
 /** Hard stop: silence + drop the current source. Invalidates in-flight plays. */
 export function stopCanvasAudio(): void {
   playToken++;
+  currentMemoId = null;
   if (el) {
     el.pause();
     el.removeAttribute("src");
@@ -69,6 +71,20 @@ export async function playMemoOnCanvas(
 ): Promise<boolean> {
   const token = ++playToken;
   const audio = element();
+  // RESUME, don't restart: if this memo is already loaded and merely paused
+  // mid-take, continue from where it stopped — every pause→play used to yank
+  // the take back to 0:00.
+  if (currentMemoId === memoId && audio.src && !audio.ended && audio.currentTime > 0) {
+    audio.onended = () => { if (token === playToken) handlers.onEnded?.(); };
+    audio.onerror = () => { if (token === playToken) handlers.onError?.(); };
+    try {
+      await audio.play();
+      return token === playToken;
+    } catch {
+      if (token === playToken) handlers.onError?.();
+      return false;
+    }
+  }
   audio.pause();
   try {
     let url: string;
@@ -81,6 +97,7 @@ export async function playMemoOnCanvas(
     }
     if (token !== playToken) return false;
     audio.src = url;
+    currentMemoId = memoId;
     audio.onended = () => {
       if (token === playToken) handlers.onEnded?.();
     };

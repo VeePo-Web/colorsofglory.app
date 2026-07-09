@@ -1,4 +1,4 @@
-import { CANVAS_WIDTH, DIVIDER_X } from "./canvasConstants";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, DIVIDER_X } from "./canvasConstants";
 import type { CanvasBoardCardType } from "./canvasTypes";
 
 /**
@@ -48,26 +48,44 @@ export const DRAG_THRESHOLD_PX = 7;
 /**
  * New cards flow into a tidy vertical column per zone, under the labels, so the
  * board reads like a scrollable feed of ideas instead of a 2D scatter. Past
- * COLUMN_ROWS the feed WRAPS into the next sub-column so a busy song (40+
+ * COLUMN_ROWS the feed WRAPS into the next sub-column so a busy song (30+
  * ideas) tiles neatly inside its zone instead of running off the bottom of the
- * canvas. Sub-column step keeps every card inside its half (ideas stay left of
- * the divider, finals inside the right edge).
+ * canvas. COLUMN_GAP exceeds a card's real rendered height (~170px with the
+ * creator line), so auto-placed cards never shingle over each other. Each zone
+ * holds MAX_SUBCOLS sub-columns; past that the last sub-column simply grows
+ * downward — cards never cross into the other tree's half.
  */
 export const COLUMN_TOP = 272;
-export const COLUMN_GAP = 156;
+export const COLUMN_GAP = 208;
 export const COLUMN_ROWS = 10;
 export const SUBCOLUMN_STEP = 228;
+export const MAX_SUBCOLS = 3;
 export const IDEAS_COLUMN_X = 80;
 export const FINAL_COLUMN_X = DIVIDER_X + 80;
 
 const wrap = (baseX: number, index: number) => {
-  const col = Math.floor(index / COLUMN_ROWS);
-  const row = index % COLUMN_ROWS;
+  const rawCol = Math.floor(index / COLUMN_ROWS);
+  const col = Math.min(rawCol, MAX_SUBCOLS - 1);
+  const row = col < rawCol ? index - (MAX_SUBCOLS - 1) * COLUMN_ROWS : index % COLUMN_ROWS;
   return { x: baseX + col * SUBCOLUMN_STEP, y: COLUMN_TOP + row * COLUMN_GAP };
 };
 
 export const ideaColumnSlot = (index: number) => wrap(IDEAS_COLUMN_X, index);
 export const finalColumnSlot = (index: number) => wrap(FINAL_COLUMN_X, index);
+
+// ─── Board bounds ──────────────────────────────────────────────────────────
+
+const BOARD_MARGIN = 24;
+
+/**
+ * Clamp a card position so it can never be dropped (or migrated) outside the
+ * pannable board — a card flung past the edge used to be stranded forever
+ * because viewport pan clamps to the canvas bounds.
+ */
+export const clampToBoard = (x: number, y: number, type: CanvasBoardCardType) => ({
+  x: Math.min(Math.max(x, BOARD_MARGIN), CANVAS_WIDTH - cardWidth(type) - BOARD_MARGIN),
+  y: Math.min(Math.max(y, BOARD_MARGIN), CANVAS_HEIGHT - CARD_MIN_HEIGHT - BOARD_MARGIN - 48),
+});
 
 // ─── Root song card box ────────────────────────────────────────────────────
 

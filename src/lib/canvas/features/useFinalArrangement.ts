@@ -35,6 +35,9 @@ interface UseFinalArrangementArgs {
   mutations: Pick<CanvasFeatureMutations, "patchCards" | "promoteToFinal" | "returnToIdeas">;
   /** Column slot for the Nth final card (host layout constant). */
   finalSlot: (index: number) => { x: number; y: number };
+  /** Column slot for the Nth ideas card — used when a final card with no
+   *  Ideas source returns across the divider (patched in place, never deleted). */
+  ideaSlot: (index: number) => { x: number; y: number };
   onMoment?: (title: string, destination: string, detail?: string) => void;
 }
 
@@ -43,6 +46,7 @@ export function useFinalArrangement({
   isViewer,
   mutations,
   finalSlot,
+  ideaSlot,
   onMoment,
 }: UseFinalArrangementArgs): FinalArrangementApi {
   const [arranging, setArranging] = useState(false);
@@ -111,6 +115,7 @@ export function useFinalArrangement({
       const finalCopy: CanvasBoardCard = {
         ...source,
         id: `${cardId}-final`,
+        sourceCardId: cardId,
         tree: "final",
         isDimmedReference: false,
         dimReason: undefined,
@@ -133,13 +138,41 @@ export function useFinalArrangement({
   const moveToIdeas = useCallback(
     (finalCardId: string) => {
       if (isViewer) return;
-      const sourceId = finalCardId.endsWith("-final")
+      const finalCard = cards.find((c) => c.id === finalCardId);
+      if (!finalCard) return;
+      // Real provenance first; the legacy "-final" id suffix stays honored.
+      const suffixSource = finalCardId.endsWith("-final")
         ? finalCardId.slice(0, -"-final".length)
         : null;
-      mutations.returnToIdeas(finalCardId, sourceId);
+      const sourceId =
+        finalCard.sourceCardId && cards.some((c) => c.id === finalCard.sourceCardId)
+          ? finalCard.sourceCardId
+          : suffixSource && cards.some((c) => c.id === suffixSource)
+          ? suffixSource
+          : null;
+      if (sourceId) {
+        // The dimmed Ideas source exists: drop the copy, wake the source.
+        mutations.returnToIdeas(finalCardId, sourceId);
+      } else {
+        // No source on the board (backend-hydrated / demo final). NEVER delete
+        // — this was the one hard-destroy in a never-delete system. Patch the
+        // card itself back into the Ideas tree.
+        const ideaCount = cards.filter((c) => c.tree === "ideas" && !c.parentMemoId).length;
+        const before = {
+          id: finalCard.id,
+          patch: { tree: finalCard.tree, status: finalCard.status, x: finalCard.x, y: finalCard.y },
+        };
+        mutations.patchCards([
+          { id: finalCardId, patch: { tree: "ideas", status: "raw", ...ideaSlot(ideaCount) } },
+        ]);
+        toast("Returned to Ideas", {
+          duration: 7000,
+          action: { label: "Undo", onClick: () => mutations.patchCards([before]) },
+        });
+      }
       onMoment?.("Returned idea", "Ideas tree", "Arrangement");
     },
-    [isViewer, mutations, onMoment],
+    [isViewer, cards, mutations, ideaSlot, onMoment],
   );
 
   return {

@@ -35,6 +35,10 @@ export interface ListenPathApi {
   goTo: (index: number) => void;
   /** Persist the sequence as the song's saved listen path. */
   save: () => void;
+  /** Replace the queue with `ids` and start playing from the top ("Play Final"). */
+  playAll: (ids: string[]) => void;
+  /** A pending upload's card id became the real memo id — keep the queue true. */
+  replaceCardId: (oldId: string, newId: string) => void;
 }
 
 interface UseListenPathArgs {
@@ -42,9 +46,11 @@ interface UseListenPathArgs {
   mutations: Pick<CanvasFeatureMutations, "saveListenPath">;
   /** Restored queue from the store, applied once on mount. */
   initialQueue?: string[];
+  /** Fired when playback lands on a step — the host flies the board there. */
+  onStepChange?: (cardId: string) => void;
 }
 
-export function useListenPath({ cards, mutations, initialQueue }: UseListenPathArgs): ListenPathApi {
+export function useListenPath({ cards, mutations, initialQueue, onStepChange }: UseListenPathArgs): ListenPathApi {
   const [queue, setQueue] = useState<string[]>(() => initialQueue ?? []);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -54,6 +60,8 @@ export function useListenPath({ cards, mutations, initialQueue }: UseListenPathA
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const dwellRef = useRef<number | null>(null);
+  const onStepChangeRef = useRef(onStepChange);
+  onStepChangeRef.current = onStepChange;
 
   const clearDwell = useCallback(() => {
     if (dwellRef.current != null) {
@@ -84,10 +92,17 @@ export function useListenPath({ cards, mutations, initialQueue }: UseListenPathA
       setStep(index);
       setPlaying(true);
       const card = cardsRef.current.find((c) => c.id === q[index]);
-      const isAudio =
-        card && (card.type === "voice" || card.type === "hum") && !card.isProcessing;
-      const memoId = isAudio ? memoIdForCard(card.id) : null;
       const advance = () => playStep(index + 1);
+      if (!card) {
+        // A queue entry whose card left the board: skip instantly — never
+        // dwell 3.5s of dead silence on a phantom stop.
+        advance();
+        return;
+      }
+      onStepChangeRef.current?.(card.id);
+      const isAudio =
+        (card.type === "voice" || card.type === "hum") && !card.isProcessing;
+      const memoId = isAudio ? memoIdForCard(card.id) : null;
       if (memoId) {
         void playMemoOnCanvas(memoId, {
           onEnded: advance,
@@ -156,10 +171,32 @@ export function useListenPath({ cards, mutations, initialQueue }: UseListenPathA
 
   const save = useCallback(() => {
     mutations.saveListenPath(queueRef.current);
-    toast("Listen path saved", {
+    // Honest copy: the interim store is device-local until A4/Lovable land.
+    toast("Listen path saved on this device", {
       description: `${queueRef.current.length} ${queueRef.current.length === 1 ? "card" : "cards"} in order`,
     });
   }, [mutations]);
+
+  /** Seed the queue from an ordered id list and play from the top. */
+  const playAll = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      setQueue(ids);
+      queueRef.current = ids;
+      playStep(0);
+    },
+    [playStep],
+  );
+
+  /** Keep queue + saved path truthful when a pending card id becomes real. */
+  const replaceCardId = useCallback((oldId: string, newId: string) => {
+    setQueue((prev) => {
+      if (!prev.includes(oldId)) return prev;
+      const next = prev.map((id) => (id === oldId ? newId : id));
+      queueRef.current = next;
+      return next;
+    });
+  }, []);
 
   // Keep step valid as the queue shrinks; silence on empty.
   useEffect(() => {
@@ -178,5 +215,5 @@ export function useListenPath({ cards, mutations, initialQueue }: UseListenPathA
     };
   }, [clearDwell]);
 
-  return { queue, step, playing, toggleCard, removeCard, clear, playPause, next, prev, goTo, save };
+  return { queue, step, playing, toggleCard, removeCard, clear, playPause, next, prev, goTo, save, playAll, replaceCardId };
 }
