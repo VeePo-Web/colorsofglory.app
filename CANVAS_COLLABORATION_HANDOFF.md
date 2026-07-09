@@ -137,16 +137,45 @@ from names once ids flow — use `getCreatorColor(userId)` and the roster's
 
 ## 4. Remaining collaboration work (in order)
 
-1. Render `canvas_cards` rows + write through the RPCs (ends the
-   single-device illusion; realtime `onCardChange` re-hydration is already
-   wired).
-2. Identity resolver: user ids + roster colors end the literal-"You"
-   stamping in `canvasLoader.ts`.
-3. `song_suggestions` table → cross-device line suggestions + review queue.
-4. Comments on cards (populate `commentCount`, adornment badge).
-5. Server recap anchor + entity deep-links.
+> **Update (same day, follow-up pass):** items 1, 2, and 5 are now DONE:
+> - `hydrateBoard` (canvasBoardSource) reads BOTH `voice_memos` and
+>   `canvas_cards` (Capture-mode ideas now appear on the board), returning
+>   per-source `memosOk/cardsOk` flags; the host merge is upsert-and-prune
+>   (server truth for content/processing, local truth for board state; prunes
+>   only when a source responded; skips the server mirror of a memo uploaded
+>   this session).
+> - Server-owned card ids are `db-card-<uuid>` / `db-voice-<uuid>` (EXACT
+>   match via `isServerCardId`/`serverCardId`). They persist to localStorage
+>   like everything else (offline reads — e.g. the credits ledger — depend on
+>   it); the hydrate merge prunes rows the server stopped returning, so
+>   deleted rows can't resurrect. Server rows use MOVE semantics on
+>   promote/return (`movesInPlace`), so no derived ghost ids are ever minted.
+>   Board-state truth: server wins tree/section/x/y for `db-card-*` rows
+>   unless the card is DIRTY (a 15s grace window after this device's own
+>   write, tracked in `dirtyServerCards`; writes serialize per card id).
+> - Write-through RPCs: drag → `canvas_move_card`, arrangement slot swaps →
+>   `canvas_bulk_move`, edits → `updateCanvasCard` + `canvas_set_section`,
+>   promote/return → `canvas_promote_to_final` / `canvas_set_section` with
+>   MOVE semantics for server rows (`movesInPlace` in useFinalArrangement) —
+>   all fire-and-forget non-fatal (`syncServer`).
+> - Identity: `createdBy` + roster resolver ends the literal-"You";
+>   `isMine()` compares user ids first; unresolved contributors render as
+>   nothing (never fabricated).
+> - Recap: `getSongLastSeen` reads the server anchor BEFORE `markSongSeen`
+>   advances it — the new-device recap works.
+
+1. ~~Render `canvas_cards` rows + write through the RPCs~~ **DONE** (above).
+2. ~~Identity resolver~~ **DONE** (above); `canvasLoader.ts` is now unused
+   legacy — delete when convenient.
+3. `song_suggestions` table → cross-device line suggestions + review queue
+   (still the top Lovable ask).
+4. Comments on cards (populate `commentCount`, adornment badge — visual
+   grammar reserved in CANVAS_VISUAL_HANDOFF.md §4).
+5. ~~Server recap anchor~~ **DONE**; entity deep-links from recap rows remain.
 6. Conflict-safe editing (RPCs are last-write-wins today; version stamps
-   exist on the type).
+   exist on the type). Note the interim merge rule: local x/y/tree win over
+   the server on hydrate for cards this device holds — a failed RPC write
+   self-heals only after a reload; acceptable until a store lands.
 7. Perf follow-up (documented, not blocking): split the viewport context
    value/functions so gesture-end doesn't re-render every card; drive the
    divider glow via ref/class instead of stage state.

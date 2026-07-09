@@ -1,8 +1,15 @@
-import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import { supabase } from "@/integrations/supabase/client";
+import { listCanvasCards, type CanvasCard as ServerCanvasCard } from "@/integrations/cog/canvas";
+import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { DEMO_BOARD } from "@/lib/canvas/demoBoard";
-import { cardWidth, clampToBoard } from "@/lib/canvas/canvasGeometry";
+import {
+  cardWidth,
+  clampToBoard,
+  finalColumnSlot,
+  ideaColumnSlot,
+} from "@/lib/canvas/canvasGeometry";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
-import type { CanvasBoardCard, CanvasBoardTree } from "@/lib/canvas/canvasTypes";
+import type { CanvasBoardCard, CanvasBoardCardType, CanvasBoardTree } from "@/lib/canvas/canvasTypes";
 
 /**
  * canvasBoardSource — the INTERIM board store seam the render layer reads/writes
@@ -99,7 +106,28 @@ export function clusterFlags(cards: CanvasBoardCard[]): CardCluster[] {
   return out;
 }
 
-/** Persist the board (interim; A4's store owns this once it lands). */
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const SERVER_ID_RE = new RegExp(`^db-(voice|card)-${UUID}$`, "i");
+const SERVER_CARD_RE = new RegExp(`^db-card-(${UUID})$`, "i");
+
+/** True for cards whose truth lives on the server (hydrated rows). EXACT
+ *  match — a locally derived id like `db-voice-<uuid>-final` is a LOCAL card
+ *  (a prefix match once let the pruner destroy promoted copies). */
+export function isServerCardId(id: string): boolean {
+  return SERVER_ID_RE.test(id);
+}
+
+/** The canvas_cards uuid behind a hydrated board card id (null for local
+ *  cards and voice-memo mirrors — memos have no server board position). */
+export function serverCardId(id: string): string | null {
+  const m = SERVER_CARD_RE.exec(id);
+  return m ? m[1] : null;
+}
+
+/** Persist the board (interim; A4's store owns this once it lands). Server
+ *  rows ARE persisted — they carry local board state (a promoted memo's tree)
+ *  and feed offline reads like the credits ledger; the hydrate merge prunes
+ *  rows the server no longer returns, so nothing resurrects. */
 export function writeBoard(songId: string, cards: CanvasBoardCard[]): void {
   try {
     localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
@@ -108,37 +136,121 @@ export function writeBoard(songId: string, cards: CanvasBoardCard[]): void {
   }
 }
 
+const SERVER_KIND_TO_TYPE: Record<ServerCanvasCard["kind"], CanvasBoardCardType> = {
+  lyrics: "lyric",
+  chords: "chord",
+  scripture: "scripture",
+  idea: "note",
+  section: "section",
+};
+
+const TYPE_TITLES: Record<CanvasBoardCardType, string> = {
+  lyric: "Lyric", voice: "Voice memo", hum: "Hum", chord: "Chord idea",
+  note: "Idea", scripture: "Scripture note", section: "Section",
+};
+
+export interface HydratedBoard {
+  cards: CanvasBoardCard[];
+  /** Whether each source answered — the host prunes stale db-* cards ONLY for
+   *  sources that actually responded (never on an offline failure). */
+  memosOk: boolean;
+  cardsOk: boolean;
+}
+
+function formatDurationMs(ms: number | null): string {
+  if (!ms) return "0:00";
+  const total = Math.floor(ms / 1000);
+  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
+}
+
 /**
- * Pull this song's real voice memos from the backend (via the canvasLoader
- * adapter) shaped as board cards. The host merges these in by id so a
- * collaborator's new memo appears without a reload. Empty/failed → [].
+ * Pull this song's server board: voice memos AND canvas_cards rows (the rows
+ * Capture mode's Say-It-Structured writes — this is where an idea captured on
+ * the porch shows up in the song's room). Contributor display names resolve in
+ * the host from the roster (`createdBy` carries the user id); "" means
+ * unresolved, never a fabricated "You".
  */
-export async function hydrateBoard(songId: string): Promise<CanvasBoardCard[]> {
-  try {
-    const db = await loadVoiceMemosForCanvas(songId);
-    return db.nodes
-      .filter((node) => node.objectType === "idea_card")
-      .map((node): CanvasBoardCard | null => {
-        const card = db.cards[node.objectId];
-        if (!card) return null;
-        return {
-          id: card.id,
-          tree: "ideas",
-          type: "voice",
-          title: card.title,
-          body: card.body || card.preview || "",
-          meta: card.preview || "Voice memo",
-          section: "Raw idea",
-          contributor: card.contributorName,
-          status: "raw",
-          accent: card.contributorColor,
-          x: node.x,
-          y: node.y,
-        };
-      })
-      .filter((card): card is CanvasBoardCard => Boolean(card));
-  } catch {
-    // The local canvas remains usable when backend hydration is unavailable.
-    return [];
+export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
+  const [memosRes, cardsRes] = await Promise.allSettled([
+    supabase
+      .from("voice_memos")
+      .select("id, title, duration_ms, status, created_at, author_user_id")
+      .eq("song_id", songId)
+      .not("status", "in", '("failed","deleted")')
+      // Newest first — an ascending window pinned the 60 OLDEST memos and a
+      // busy song's fresh takes never reached other devices.
+      .order("created_at", { ascending: false })
+      .limit(120),
+    listCanvasCards(songId),
+  ]);
+
+  const out: CanvasBoardCard[] = [];
+  let memosOk = false;
+  let cardsOk = false;
+
+  if (memosRes.status === "fulfilled" && !memosRes.value.error && memosRes.value.data) {
+    memosOk = true;
+    // Reverse so slot fallbacks still lay out oldest-at-top.
+    [...memosRes.value.data].reverse().forEach((row, i) => {
+      const isProcessing = row.status === "uploading" || row.status === "uploaded";
+      out.push({
+        id: `db-voice-${row.id}`,
+        tree: "ideas",
+        type: "voice",
+        title: row.title || `Voice memo ${i + 1}`,
+        body: "",
+        meta: formatDurationMs(row.duration_ms),
+        section: "Raw idea",
+        contributor: "",
+        status: "raw",
+        // Deterministic from the author id (roster names refine later) — an
+        // empty accent broke every `${accent}30` concatenation downstream.
+        accent: getCreatorColor(row.author_user_id ?? row.id).base,
+        ...ideaColumnSlot(i),
+        durationMs: row.duration_ms ?? undefined,
+        isProcessing,
+        createdBy: row.author_user_id ?? undefined,
+        createdAt: row.created_at,
+        updatedAt: row.created_at,
+        lastActivityAt: row.created_at,
+        reviewState: "none",
+        contributionType: "melody",
+      });
+    });
   }
+
+  if (cardsRes.status === "fulfilled") {
+    cardsOk = true;
+    cardsRes.value.forEach((row, i) => {
+      const type = SERVER_KIND_TO_TYPE[row.kind] ?? "note";
+      const tree: CanvasBoardTree = row.tree_kind === "final" ? "final" : "ideas";
+      const fallback = tree === "final" ? finalColumnSlot(i) : ideaColumnSlot(i);
+      const serverPositioned = row.x != null && row.y != null;
+      out.push({
+        id: `db-card-${row.id}`,
+        tree,
+        type,
+        title: row.label || row.section_label || TYPE_TITLES[type],
+        body: row.body,
+        meta: "",
+        section: row.section_label ?? row.section_kind ?? "Raw idea",
+        contributor: "",
+        status: tree === "final" ? "approved" : "raw",
+        accent: getCreatorColor(row.created_by || row.id).base,
+        x: row.x ?? fallback.x,
+        y: row.y ?? fallback.y,
+        serverPositioned,
+        createdBy: row.created_by,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        lastActivityAt: row.updated_at,
+        reviewState: "none",
+        contributionType:
+          type === "lyric" ? "lyrics" : type === "chord" ? "chords"
+          : type === "scripture" ? "meaning" : type === "section" ? "arrangement" : "feedback",
+      });
+    });
+  }
+
+  return { cards: out.map(normalizeCard), memosOk, cardsOk };
 }

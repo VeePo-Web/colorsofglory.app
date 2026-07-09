@@ -134,6 +134,9 @@ export interface CanvasBoardCard {
   /** Provenance: the Ideas card a Final copy was promoted from (F23). Replaces
    *  the legacy "-final" id-suffix convention; both are honored on read. */
   sourceCardId?: string;
+  /** Hydration flag: this server row carries a REAL x/y (vs a client-side
+   *  fallback slot) — only then may the merge apply server positions. */
+  serverPositioned?: boolean;
 
   // ── Collaboration-ready metadata ─────────────────────────────────────────
   // Populated wherever identity/time is known today; the collaboration agent

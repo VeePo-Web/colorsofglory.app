@@ -1,4 +1,5 @@
 import type { CreatorColor } from "@/lib/canvas/creatorColors";
+import type { GloryTone } from "@/lib/canvas/glorySpectrum";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 
 /**
@@ -6,6 +7,10 @@ import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
  * only: it paints the inner content that makes a card read as EXACTLY its type
  * (a lyric in Playfair, a voice as a waveform, a hum as raw bars, a chord as
  * chips, a note on ruled paper) at a glance, before a word is read.
+ *
+ * Two color systems, two questions:
+ *   `tone`  (glory spectrum) — WHAT kind of material: icon, eyebrow, stripe.
+ *   `color` (creator)        — WHO made it: the dot + name only.
  *
  * The frame (CardShell), position, drag visuals, selection ring, the uniform
  * badges (listen-path #, arrangement #, merge ring, pending marker) and the
@@ -16,5 +21,8 @@ import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 export interface CardFaceProps {
   card: CanvasBoardCard;
   color: CreatorColor;
+  tone: GloryTone;
   selected: boolean;
+  /** This card is sounding right now — waveforms breathe. */
+  playing?: boolean;
 }

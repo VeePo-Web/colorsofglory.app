@@ -9,6 +9,8 @@ const markSongSeen = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/integrations/cog/activity", () => ({
   getActivitySince: (songId: string, since: string | null) => getActivitySince(songId, since),
   markSongSeen: (songId: string) => markSongSeen(songId),
+  // New-device fallback anchor — null means "first visit anywhere".
+  getSongLastSeen: async () => null,
 }));
 
 vi.mock("@/integrations/cog/auth", () => ({
@@ -56,9 +58,13 @@ describe("CanvasRecapGate — 'what changed since you left' (Product 12)", () =>
     renderWithQuery(<CanvasRecapGate songId="song1" />);
 
     expect(screen.queryByText("What changed since you left")).not.toBeInTheDocument();
+    // Anchor + server mark now land AFTER the server last-seen read (the
+    // new-device fallback must be read before mark_song_seen advances it).
+    await waitFor(() => {
+      expect(localStorage.getItem("cog:canvas-last-visit-song1")).toBeTruthy();
+      expect(markSongSeen).toHaveBeenCalledWith("song1");
+    });
     expect(getActivitySince).not.toHaveBeenCalled();
-    expect(localStorage.getItem("cog:canvas-last-visit-song1")).toBeTruthy();
-    expect(markSongSeen).toHaveBeenCalledWith("song1");
   });
 
   it("shows a capped digest of OTHERS' changes on return", async () => {

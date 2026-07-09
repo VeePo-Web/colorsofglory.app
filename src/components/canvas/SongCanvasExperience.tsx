@@ -60,7 +60,21 @@ import {
   listPendingUploads,
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { initialBoard, writeBoard, hydrateBoard, clusterFlags } from "@/lib/canvas/canvasBoardSource";
+import {
+  initialBoard,
+  writeBoard,
+  hydrateBoard,
+  clusterFlags,
+  isServerCardId,
+  serverCardId,
+} from "@/lib/canvas/canvasBoardSource";
+import {
+  bulkMoveCards,
+  moveCard as moveServerCard,
+  promoteCardToFinal,
+  setCardSection,
+  updateCanvasCard,
+} from "@/integrations/cog/canvas";
 import type { SectionClusterData } from "@/components/canvas/SectionCluster";
 import {
   addLineSuggestion,
@@ -100,6 +114,7 @@ import {
   type CanvasFeatureMeta,
 } from "@/lib/canvas/features";
 import { useCapabilities } from "@/lib/permissions";
+import { REVIEW_TONE } from "@/lib/canvas/glorySpectrum";
 
 const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
@@ -229,6 +244,38 @@ const SongCanvasExperience = () => {
     return full || "You";
   }, [profile]);
 
+  // Fire-and-forget server sync: the board is local-first; a failed write
+  // (offline, RLS) never blocks the songwriter. Realtime hydration reconciles.
+  // Writes SERIALIZE per key (card id) so promote→undo can never land on the
+  // server out of order, and each write marks its card dirty for a grace
+  // window so a hydrate racing the ack can't yank the card backwards.
+  const writeChains = useRef(new Map<string, Promise<unknown>>());
+  const dirtyServerCards = useRef(new Map<string, number>());
+  const DIRTY_GRACE_MS = 15_000;
+  const markDirty = useCallback((cardId: string) => {
+    dirtyServerCards.current.set(cardId, Date.now());
+  }, []);
+  const isDirty = useCallback((cardId: string) => {
+    const at = dirtyServerCards.current.get(cardId);
+    return at != null && Date.now() - at < DIRTY_GRACE_MS;
+  }, []);
+  const syncServer = useCallback((write: () => Promise<unknown>, key?: string) => {
+    if (key) markDirty(key);
+    const prev = key ? writeChains.current.get(key) ?? Promise.resolve() : Promise.resolve();
+    const nextP = prev
+      .then(write)
+      .catch(() => {
+        /* non-fatal — the local board stays usable */
+      });
+    if (key) {
+      writeChains.current.set(key, nextP);
+      void nextP.finally(() => {
+        // Keep the dirty window alive from the LAST write, not the first.
+        if (dirtyServerCards.current.has(key)) markDirty(key);
+      });
+    }
+  }, [markDirty]);
+
   const [cards, setCards] = useState<CanvasCard[]>(() => initialBoard(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Neutral opening line — "Saved" would be a false claim on an empty room.
@@ -256,6 +303,59 @@ const SongCanvasExperience = () => {
   const [viewZone, setViewZone] = useState<"ideas" | "final">("ideas");
   // Real room roster — the same source the People surface reads.
   const songMembers = useSongCollaborators(songId);
+
+  // ── Identity resolver — the end of the literal "You" ─────────────────────
+  // Server rows carry user IDS (createdBy); display names + colors resolve
+  // through the roster (and self). Unresolved stays "" — never fabricated.
+  const identityByUserId = useMemo(() => {
+    const map = new Map<string, { name: string; color: string }>();
+    for (const m of songMembers) {
+      const name = `${m.firstName} ${m.lastName}`.trim() || m.firstName;
+      // Canvas accents resolve through the canvas's own warm palette (hashed
+      // from the stable user id) — NEVER roster avatarColor, whose legacy set
+      // includes a corporate blue and a near-system gold.
+      map.set(m.userId, { name, color: getCreatorColor(m.userId).base });
+    }
+    if (profile?.user_id) {
+      map.set(profile.user_id, {
+        name: currentUserName,
+        // Hash the ID, not the name — so my cards wear ONE color on every
+        // device, whether they were created locally or hydrated.
+        color: getCreatorColor(profile.user_id).base,
+      });
+    }
+    return map;
+  }, [songMembers, profile?.user_id, currentUserName]);
+  const identityRef = useRef(identityByUserId);
+  identityRef.current = identityByUserId;
+
+  /** Is this card mine? IDs when both sides are known; names as the fallback;
+   *  calm default (true) while identity is still resolving — an unresolved
+   *  card must never ping the review queue. */
+  const isMine = useCallback(
+    (c: CanvasCard) => {
+      if (c.createdBy && profile?.user_id) return c.createdBy === profile.user_id;
+      if (!c.createdBy && c.contributor) return c.contributor.includes(currentUserName);
+      return true;
+    },
+    [profile?.user_id, currentUserName],
+  );
+
+  // When the roster lands after hydration, name the cards that arrived first.
+  useEffect(() => {
+    if (identityByUserId.size === 0) return;
+    setCards((prev) => {
+      let changed = false;
+      const next = prev.map((c) => {
+        if (c.contributor || !c.createdBy) return c;
+        const who = identityByUserId.get(c.createdBy);
+        if (!who) return c;
+        changed = true;
+        return { ...c, contributor: who.name, accent: who.color };
+      });
+      return changed ? next : prev;
+    });
+  }, [identityByUserId]);
   // Viewport pan/zoom API, bridged out of <CanvasViewport> for presence-jump.
   const viewportApiRef = useRef<ViewportCtx | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -381,12 +481,26 @@ const SongCanvasExperience = () => {
             return found ? { ...c, ...found.patch } : c;
           }),
         );
+        // Position patches on server rows (arrangement slot swaps, undo
+        // restores) write through in one bulk move — every device sees the
+        // same running order.
+        const moves = patches
+          .map((p) => {
+            const sid = serverCardId(p.id);
+            if (sid && p.patch.x != null && p.patch.y != null) {
+              markDirty(p.id);
+              return { id: sid, x: Math.round(p.patch.x), y: Math.round(p.patch.y) };
+            }
+            return null;
+          })
+          .filter((m): m is { id: string; x: number; y: number } => m !== null);
+        if (moves.length > 0) syncServer(() => bulkMoveCards(moves));
       },
       saveListenPath: (orderedCardIds) => {
         setFeatureMeta((m) => ({ ...m, listenPath: orderedCardIds }));
       },
     }),
-    [],
+    [syncServer, markDirty],
   );
 
   // ── D2 feature hooks — the canvas verbs ─────────────────────────────────────
@@ -417,6 +531,20 @@ const SongCanvasExperience = () => {
     mutations: featureMutations,
     finalSlot: finalColumnSlot,
     ideaSlot: ideaColumnSlot,
+    // EVERY server-hydrated card moves in place (a locally minted `-final`
+    // ghost id would desync from its server row); canvas_cards tree changes
+    // write through so co-writers see the promotion. Voice memos have no
+    // server tree — their arrangement state lives in this board's storage.
+    movesInPlace: (cardId) => isServerCardId(cardId),
+    onTreeChange: (cardId, tree) => {
+      const sid = serverCardId(cardId);
+      if (!sid) return;
+      const section = cards.find((c) => c.id === cardId)?.section ?? null;
+      syncServer(
+        () => (tree === "final" ? promoteCardToFinal(sid) : setCardSection(sid, section, "ideas")),
+        cardId,
+      );
+    },
     onMoment: showSavedMoment,
   });
   const metronome = useCanvasMetronome(songId);
@@ -458,18 +586,86 @@ const SongCanvasExperience = () => {
     writeBoard(songId, cards);
   }, [cards, songId]);
 
-  // Pull this song's real voice memos from the backend (through the board source
-  // seam) and merge in the ones we don't already have. Reused on mount AND on
-  // every realtime event, so a collaborator's new memo appears without a reload.
+  // Pull this song's server board (voice memos + canvas_cards — the rows
+  // Capture mode writes) and reconcile: UPSERT content on cards we already
+  // show, APPEND new arrivals with resolved identity, PRUNE server cards the
+  // server no longer returns (only when that source actually responded, so an
+  // offline failure never wipes the board). Reused on mount AND on every
+  // realtime event, so a collaborator's work appears without a reload.
   const hydrateVoiceMemos = useCallback(async () => {
-    const dbCards = await hydrateBoard(songId);
-    if (dbCards.length === 0) return;
+    const res = await hydrateBoard(songId);
+    if (!res.memosOk && !res.cardsOk) return;
     setCards((prev) => {
-      const existing = new Set(prev.map((card) => card.id));
-      const fresh = dbCards.filter((card) => !existing.has(card.id));
-      return fresh.length > 0 ? [...prev, ...fresh] : prev;
+      const fresh = new Map(res.cards.map((c) => [c.id, c]));
+      // A memo we uploaded THIS session keeps its raw-uuid card; skip the
+      // server mirror so one take never shows twice.
+      const localMemoIds = new Set(
+        prev.filter((c) => !isServerCardId(c.id)).map((c) => c.id),
+      );
+      let changed = false;
+      const next: CanvasCard[] = [];
+      for (const c of prev) {
+        const server = fresh.get(c.id);
+        if (server) {
+          fresh.delete(c.id);
+          // Server truth for content + (canvas_cards only) board state, so a
+          // co-writer's move/promote/section-change appears here live. A card
+          // this device just wrote to stays LOCAL-truth for a grace window
+          // (dirty) so a hydrate racing the RPC ack can't yank it backwards.
+          const dirty = isDirty(c.id);
+          const isBoardRow = c.id.startsWith("db-card-");
+          const merged: CanvasCard = {
+            ...c,
+            title: dirty ? c.title : server.title || c.title,
+            body: dirty ? c.body : server.body,
+            meta: server.meta || c.meta,
+            durationMs: server.durationMs ?? c.durationMs,
+            isProcessing: server.isProcessing,
+            createdBy: server.createdBy ?? c.createdBy,
+            createdAt: server.createdAt ?? c.createdAt,
+            updatedAt: server.updatedAt ?? c.updatedAt,
+            lastActivityAt: server.lastActivityAt ?? c.lastActivityAt,
+            ...(isBoardRow && !dirty
+              ? {
+                  tree: server.tree,
+                  section: server.section,
+                  status: c.tree === server.tree ? c.status : server.status,
+                  ...(server.serverPositioned ? { x: server.x, y: server.y } : {}),
+                }
+              : {}),
+          };
+          const cardChanged =
+            merged.title !== c.title || merged.body !== c.body || merged.meta !== c.meta ||
+            merged.isProcessing !== c.isProcessing || merged.createdBy !== c.createdBy ||
+            merged.updatedAt !== c.updatedAt || merged.durationMs !== c.durationMs ||
+            merged.tree !== c.tree || merged.section !== c.section ||
+            merged.x !== c.x || merged.y !== c.y || merged.status !== c.status;
+          if (cardChanged) changed = true;
+          next.push(cardChanged ? merged : c);
+          continue;
+        }
+        if (isServerCardId(c.id)) {
+          const sourceAnswered = c.id.startsWith("db-voice-") ? res.memosOk : res.cardsOk;
+          if (sourceAnswered) {
+            changed = true; // row is gone on the server — let it go here too
+            continue;
+          }
+        }
+        next.push(c);
+      }
+      const additions = [...fresh.values()]
+        .filter((c) => {
+          const raw = c.id.startsWith("db-voice-") ? c.id.slice("db-voice-".length) : null;
+          return !(raw && localMemoIds.has(raw));
+        })
+        .map((c) => {
+          const who = c.createdBy ? identityRef.current.get(c.createdBy) : undefined;
+          return who ? { ...c, contributor: who.name, accent: who.color } : c;
+        });
+      if (additions.length > 0) changed = true;
+      return changed ? [...next, ...additions] : prev;
     });
-  }, [songId]);
+  }, [songId, isDirty]);
 
   // Mount hydration + live room channel. Any change in the song's room nudges a
   // re-hydrate; the merge dedupes by id so nothing flickers or duplicates.
@@ -489,7 +685,10 @@ const SongCanvasExperience = () => {
   /** Called by CanvasStage's pointer-capture card drag with the new canvas-space position. */
   const handleCardMove = useCallback((id: string, x: number, y: number) => {
     setCards((prev) => prev.map((c) => c.id === id ? { ...c, x, y } : c));
-  }, []);
+    // Server rows persist their position for every device in the room.
+    const sid = serverCardId(id);
+    if (sid) syncServer(() => moveServerCard(sid, Math.round(x), Math.round(y)), id);
+  }, [syncServer]);
 
   // Move-to-Final / return-to-Ideas mechanics live in useFinalArrangement (D2).
 
@@ -511,7 +710,7 @@ const SongCanvasExperience = () => {
         id: `card-${crypto.randomUUID()}`,
         contributor: currentUserName,
         status: "raw",
-        accent: getCreatorColor(currentUserName).base,
+        accent: getCreatorColor(profile?.user_id ?? currentUserName).base,
         createdBy: profile?.user_id ?? undefined,
         createdAt: now,
         updatedAt: now,
@@ -628,9 +827,13 @@ const SongCanvasExperience = () => {
   const flushCanvasUpload = useCallback(async (pendingId: string) => {
     try {
       const memoId = await flushPendingUpload(pendingId);
-      setCards((prev) => prev.map((c) =>
-        c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
-      ));
+      setCards((prev) => prev
+        // The realtime event can hydrate the server mirror (db-voice-<memoId>)
+        // BEFORE this swap lands — drop it here so one take never shows twice.
+        .filter((c) => !(memoId && c.id === `db-voice-${memoId}`))
+        .map((c) =>
+          c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
+        ));
       // The listen queue tracks the same rename, or its entry goes phantom.
       if (memoId) listenPath.replaceCardId(pendingId, memoId);
       setCanvasStatus("Saved to this song.");
@@ -1168,25 +1371,34 @@ const SongCanvasExperience = () => {
   const handleSaveCardEdit = useCallback(
     (cardId: string, draft: { title: string; body: string; section: string; meta?: string }) => {
       const now = new Date().toISOString();
+      let sectionChanged = false;
       setCards((prev) =>
-        prev.map((c) =>
-          c.id === cardId
-            ? {
-                ...c,
-                title: draft.title,
-                body: draft.body,
-                section: draft.section,
-                meta: draft.meta ?? c.meta,
-                updatedAt: now,
-                lastActivityAt: now,
-                updatedBy: profile?.user_id ?? c.updatedBy,
-              }
-            : c,
-        ),
+        prev.map((c) => {
+          if (c.id !== cardId) return c;
+          sectionChanged = c.section !== draft.section;
+          return {
+            ...c,
+            title: draft.title,
+            body: draft.body,
+            section: draft.section,
+            meta: draft.meta ?? c.meta,
+            updatedAt: now,
+            lastActivityAt: now,
+            updatedBy: profile?.user_id ?? c.updatedBy,
+          };
+        }),
       );
+      // Server rows: the words travel to every device in the room.
+      const sid = serverCardId(cardId);
+      if (sid) {
+        syncServer(async () => {
+          await updateCanvasCard(sid, { label: draft.title, body: draft.body });
+          if (sectionChanged) await setCardSection(sid, draft.section);
+        }, cardId);
+      }
       setCanvasStatus("Saved to this song.");
     },
-    [profile?.user_id],
+    [profile?.user_id, syncServer],
   );
 
   const jumpToCardId = useCallback(
@@ -1240,9 +1452,10 @@ const SongCanvasExperience = () => {
       (c) =>
         !seen.has(c.id) &&
         !c.parentMemoId &&
-        c.contributor &&
-        // Exclude anything I authored — including merges credited "Me & Sarah".
-        !c.contributor.includes(currentUserName),
+        (c.createdBy || c.contributor) &&
+        // Exclude anything I authored — ids first, names as the fallback
+        // (merges credited "Me & Sarah" stay excluded).
+        !isMine(c),
     );
     for (const c of cards) seen.add(c.id);
     if (fresh.length === 0 || Date.now() < arrivalWarmupRef.current) return;
@@ -1261,22 +1474,22 @@ const SongCanvasExperience = () => {
         action: { label: "See", onClick: () => jumpToCard(first) },
       });
     }
-  }, [cards, currentUserName, jumpToCard]);
+  }, [cards, isMine, jumpToCard]);
 
   // The recap digest, from the room's real cards: what other hands added,
   // latest first, each row a deep link to its card (COG Product 12).
   const recapItems = useMemo(
     () =>
       cards
-        .filter((c) => !c.parentMemoId && c.contributor && c.contributor !== currentUserName)
+        .filter((c) => !c.parentMemoId && (c.createdBy || c.contributor) && !isMine(c))
         .slice(0, 5)
         .map((c) => ({
           id: `recap-${c.id}`,
-          text: `${c.contributor} added "${c.title}" · ${c.section}`,
-          dotColor: c.accent,
+          text: `${c.contributor || "A co-writer"} added "${c.title}" · ${c.section}`,
+          dotColor: c.accent || "var(--cog-gold)",
           targetCardId: c.id,
         })),
-    [cards, currentUserName],
+    [cards, isMine],
   );
 
   // Real activity for the People-layer "What changed" card — co-writers' cards,
@@ -1285,16 +1498,16 @@ const SongCanvasExperience = () => {
   const layerActivity = useMemo(
     () =>
       cards
-        .filter((c) => !c.parentMemoId && c.contributor && c.contributor !== currentUserName)
+        .filter((c) => !c.parentMemoId && (c.createdBy || c.contributor) && !isMine(c))
         .slice(0, 4)
         .map((c) => ({
           id: `act-${c.id}`,
-          actor: c.contributor.split(" ")[0] || c.contributor,
+          actor: c.contributor.split(" ")[0] || c.contributor || "A co-writer",
           summary: `added "${c.title}"`,
           context: c.section,
-          color: c.accent,
+          color: c.accent || "var(--cog-gold)",
         })),
-    [cards, currentUserName],
+    [cards, isMine],
   );
 
   // Ideas a co-writer added that the owner hasn't acted on yet: still in Ideas,
@@ -1317,19 +1530,19 @@ const SongCanvasExperience = () => {
             !c.isDimmedReference &&
             !c.reviewed &&
             c.status !== "approved" &&
-            c.contributor &&
-            c.contributor !== currentUserName,
+            (c.createdBy || c.contributor) &&
+            !isMine(c),
         )
         .map((c) => ({
           id: c.id,
           title: c.title,
           body: c.body,
           section: c.section,
-          contributor: c.contributor,
-          accent: c.accent,
+          contributor: c.contributor || "A co-writer",
+          accent: c.accent || "var(--cog-gold)",
           kind: KIND_BY_TYPE[c.type] ?? "Idea",
         })),
-    [cards, currentUserName, KIND_BY_TYPE],
+    [cards, isMine, KIND_BY_TYPE],
   );
 
   // Keep-in-Ideas: mark reviewed so it leaves the queue but stays on the board.
@@ -1395,9 +1608,10 @@ const SongCanvasExperience = () => {
             width: 12,
             height: 12,
             borderRadius: "50%",
-            backgroundColor: "var(--cog-gold, #B8953A)",
+            // Warm amber — attention, never alarm (glory spectrum REVIEW_TONE).
+            backgroundColor: REVIEW_TONE.base,
             border: "2px solid #FAFAF6",
-            boxShadow: "0 1px 4px rgba(184,149,58,0.45)",
+            boxShadow: `0 1px 5px ${REVIEW_TONE.glow}`,
           }}
         />
       ) : null,

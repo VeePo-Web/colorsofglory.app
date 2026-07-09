@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getActivitySince, markSongSeen } from "@/integrations/cog/activity";
+import { getActivitySince, getSongLastSeen, markSongSeen } from "@/integrations/cog/activity";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { buildRecapDigest, type RecapEntry } from "./recapDigest";
 
@@ -8,9 +8,10 @@ import { buildRecapDigest, type RecapEntry } from "./recapDigest";
  * D3 collab: "what changed since you left" (Product 12).
  *
  * The visit anchor is a client-side timestamp per song — snapshotted on
- * mount, then advanced so a refresh mid-session stays quiet. The server-side
- * `mark_song_seen` RPC is also called (fire-and-forget) so E2's future
- * activity surfaces share the same last-seen truth.
+ * mount, then advanced so a refresh mid-session stays quiet. When THIS device
+ * has no local anchor (new phone, cleared cache) the server-side last_seen_at
+ * is the fallback — the recap moment used to be suppressed exactly when it
+ * mattered most. The read happens BEFORE mark_song_seen advances the value.
  *
  * Calm rules: nothing shows on a first visit, nothing shows when only YOU
  * changed things, at most 5 grouped lines, one snapshot per visit.
@@ -23,32 +24,54 @@ export function useCanvasRecap(songId: string) {
   const [dismissed, setDismissed] = useState(false);
 
   // Snapshot the previous visit BEFORE advancing the anchor.
-  const [anchor] = useState<string | null>(() => {
+  // undefined = still resolving (may fall back to the server); null = truly
+  // first visit anywhere → no recap.
+  const [anchor, setAnchor] = useState<string | null | undefined>(() => {
     try {
-      return localStorage.getItem(LAST_VISIT_KEY(songId));
+      return localStorage.getItem(LAST_VISIT_KEY(songId)) ?? undefined;
     } catch {
-      return null;
+      return undefined;
     }
   });
 
   // This visit becomes the next baseline (client + server, both non-fatal).
+  // Order matters: the server anchor is READ first (new-device fallback),
+  // only then advanced — otherwise mark_song_seen erases the very timestamp
+  // the recap needs.
   useEffect(() => {
     if (!songId) return;
-    try {
-      localStorage.setItem(LAST_VISIT_KEY(songId), new Date().toISOString());
-    } catch {
-      /* storage unavailable — recap simply won't trigger next time */
-    }
-    markSongSeen(songId).catch(() => {
-      /* server last-seen is a nice-to-have until E2 consumes it */
-    });
+    let live = true;
+    const hasLocal = (() => {
+      try {
+        return localStorage.getItem(LAST_VISIT_KEY(songId)) != null;
+      } catch {
+        return false;
+      }
+    })();
+    (async () => {
+      if (!hasLocal) {
+        const serverSeen = await getSongLastSeen(songId).catch(() => null);
+        if (live) setAnchor(serverSeen);
+      }
+      try {
+        localStorage.setItem(LAST_VISIT_KEY(songId), new Date().toISOString());
+      } catch {
+        /* storage unavailable — recap simply won't trigger next time */
+      }
+      markSongSeen(songId).catch(() => {
+        /* server last-seen stays best-effort */
+      });
+    })();
+    return () => {
+      live = false;
+    };
   }, [songId]);
 
   const query = useQuery({
     queryKey: ["canvas-recap", songId, anchor],
-    queryFn: () => getActivitySince(songId, anchor),
-    // First visit (no anchor) or unresolved identity → no recap.
-    enabled: Boolean(songId && anchor && user?.id),
+    queryFn: () => getActivitySince(songId, anchor as string),
+    // First visit anywhere (no anchor) or unresolved identity → no recap.
+    enabled: Boolean(songId && typeof anchor === "string" && user?.id),
     staleTime: Infinity, // one snapshot per visit — never refetch mid-recap
     retry: false,
   });

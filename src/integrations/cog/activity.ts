@@ -70,6 +70,25 @@ export async function markSongSeen(song_id: string): Promise<void> {
   if (error) throw toCogError(error);
 }
 
+/**
+ * Read the caller's server-side last_seen_at for a song — the recap anchor on
+ * a NEW device (where the local anchor doesn't exist yet). markSongSeen has
+ * been writing this all along; this is the read half.
+ */
+export async function getSongLastSeen(song_id: string): Promise<string | null> {
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth?.user?.id;
+  if (!uid) return null;
+  const { data, error } = await supabase
+    .from("song_notification_prefs")
+    .select("last_seen_at")
+    .eq("song_id", song_id)
+    .eq("user_id", uid)
+    .maybeSingle();
+  if (error) throw toCogError(error);
+  return data?.last_seen_at ?? null;
+}
+
 export type RecapDigest = { digest: string; rows: ActivityDigestRow[] };
 
 /** AI-generated one-paragraph recap of activity since a timestamp. */

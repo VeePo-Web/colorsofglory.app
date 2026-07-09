@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { GLORY_RECORDING_AURA } from "@/lib/canvas/glorySpectrum";
 import RecordingWaveform from "./RecordingWaveform";
 import RecordingTimer from "./RecordingTimer";
 import SectionChip from "./SectionChip";
@@ -112,9 +113,33 @@ const RecordingSheet = ({
             }}
           />
 
-          {/* Waveform */}
-          <div style={{ marginTop: 22, marginBottom: 18 }}>
-            <RecordingWaveform analyserNode={analyserNode} />
+          {/* Waveform — bathed in a soft glory aura while the take is live
+              (the auth-code light, holding the singer). Opacity-only breathe;
+              reduced-motion holds it still. */}
+          <div style={{ position: "relative", marginTop: 22, marginBottom: 18 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: "-42px -64px",
+                borderRadius: "50%",
+                background: GLORY_RECORDING_AURA,
+                animation: isStopping ? "none" : "cog-rec-aura 2.6s ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+            <div style={{ position: "relative" }}>
+              <RecordingWaveform analyserNode={analyserNode} />
+            </div>
+            <style>{`
+              @keyframes cog-rec-aura {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50%       { opacity: 0.72; transform: scale(1.05); }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                [style*="cog-rec-aura"] { animation: none !important; }
+              }
+            `}</style>
           </div>
 
           {/* Timer */}

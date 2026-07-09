@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { GLORY_CROWN_GRADIENT } from "@/lib/canvas/glorySpectrum";
 import { ROOT_HEIGHT, ROOT_LEFT, ROOT_TOP, ROOT_WIDTH } from "@/lib/canvas/canvasGeometry";
 
 interface SongRootCardProps {
@@ -31,12 +32,26 @@ const SongRootCard = ({ title }: SongRootCardProps) => (
       overflow: "hidden",
     }}
   >
-    {/* Gold crown bar along the top edge */}
+    {/* The glory crown — the auth-code spectrum as a soft bar along the top
+        edge. The root song wears the whole spectrum; every card below carries
+        one tone of it. */}
     <div
       aria-hidden="true"
       style={{
         position: "absolute", top: 0, left: 0, right: 0, height: 4,
-        background: "linear-gradient(90deg, #D4AE5C, #B8953A 55%, rgba(184,149,58,0.2))",
+        background: GLORY_CROWN_GRADIENT,
+        opacity: 0.9,
+      }}
+    />
+    {/* A whisper of the crown's light bleeding into the card surface */}
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute", top: 4, left: 0, right: 0, height: 26,
+        background: GLORY_CROWN_GRADIENT,
+        opacity: 0.07,
+        filter: "blur(10px)",
+        pointerEvents: "none",
       }}
     />
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>

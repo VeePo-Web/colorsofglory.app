@@ -9,35 +9,37 @@ import type { CardFaceProps } from "./cardFace";
  * sanctuary, not a note app), word count + status chip. Expands to full body
  * when selected. Presentational only — see cardFace.ts.
  */
-const LyricCard = memo(({ card, color, selected }: CardFaceProps) => {
+const LyricCard = memo(({ card, color, tone, selected }: CardFaceProps) => {
   const initials = getCreatorInitials(card.contributor);
   const statusMeta = STATUS_COLORS[card.status] ?? STATUS_COLORS.raw;
   const wordCount = (card.body || "").split(/\s+/).filter(Boolean).length;
 
   return (
     <>
-      {/* Creator dot — authorship, top-right */}
-      <div
-        style={{
-          position: "absolute", top: 11, right: 11,
-          width: 22, height: 22, borderRadius: "50%",
-          backgroundColor: color.base,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 8, fontWeight: 800, color: "#FFFFFF", letterSpacing: -0.3,
-          border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
-        }}
-        title={card.contributor}
-        aria-hidden="true"
-      >
-        {initials}
-      </div>
-
-      {/* Icon + section label */}
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: color.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <FileText size={13} strokeWidth={1.8} style={{ color: color.base }} />
+      {/* Creator dot — authorship (WHO), top-right */}
+      {card.contributor && (
+        <div
+          style={{
+            position: "absolute", top: 11, right: 11,
+            width: 22, height: 22, borderRadius: "50%",
+            backgroundColor: color.base,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 8, fontWeight: 800, color: "#FFFFFF", letterSpacing: -0.3,
+            border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
+          }}
+          title={card.contributor}
+          aria-hidden="true"
+        >
+          {initials}
         </div>
-        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "var(--cog-muted)", fontFamily: "var(--font-body)", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      )}
+
+      {/* Type icon + section label — the material's rose tone (WHAT) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <FileText size={13} strokeWidth={1.8} style={{ color: tone.base }} />
+        </div>
+        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: tone.dark, fontFamily: "var(--font-body)", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {card.section}
         </span>
       </div>

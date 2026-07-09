@@ -9,7 +9,7 @@ import type { CardFaceProps } from "./cardFace";
  * lyric). Scripture cards swap to an open-book icon and a gold ✦ so a verse
  * reads as a spiritual anchor, not a to-do. Presentational only — see cardFace.ts.
  */
-const NoteCard = memo(({ card, color, selected }: CardFaceProps) => {
+const NoteCard = memo(({ card, color, tone, selected }: CardFaceProps) => {
   const initials = getCreatorInitials(card.contributor);
   const isScripture = card.type === "scripture";
   const Icon = isScripture ? BookOpen : StickyNote;
@@ -17,27 +17,29 @@ const NoteCard = memo(({ card, color, selected }: CardFaceProps) => {
 
   return (
     <>
-      {/* Creator dot */}
-      <div
-        style={{
-          position: "absolute", top: 11, right: 11,
-          width: 22, height: 22, borderRadius: "50%", backgroundColor: color.base,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 8, fontWeight: 800, color: "#FFF",
-          border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
-        }}
-        title={card.contributor}
-        aria-hidden="true"
-      >
-        {initials}
-      </div>
-
-      {/* Icon + section */}
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: color.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon size={13} strokeWidth={1.8} style={{ color: color.base }} />
+      {/* Creator dot (WHO) */}
+      {card.contributor && (
+        <div
+          style={{
+            position: "absolute", top: 11, right: 11,
+            width: 22, height: 22, borderRadius: "50%", backgroundColor: color.base,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 8, fontWeight: 800, color: "#FFF",
+            border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
+          }}
+          title={card.contributor}
+          aria-hidden="true"
+        >
+          {initials}
         </div>
-        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
+      )}
+
+      {/* Type icon + section — sage for meaning anchors, parchment for notes (WHAT) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon size={13} strokeWidth={1.8} style={{ color: tone.base }} />
+        </div>
+        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: tone.dark, fontFamily: "var(--font-body)" }}>
           {isScripture ? "✦ " : ""}{label}
         </span>
       </div>

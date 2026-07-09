@@ -4,6 +4,7 @@ import CanvasViewport, {
   type ViewportCtx,
 } from "@/components/canvas/CanvasViewport";
 import CanvasDivider from "@/components/canvas/CanvasDivider";
+import ZoneFields from "@/components/canvas/ZoneFields";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import SongRootCard from "@/components/canvas/SongRootCard";
 import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
@@ -133,6 +134,7 @@ const CanvasStage = ({
     >
       {/* Canvas content — all positioned absolutely in canvas space */}
       {viewportApiRef && <CanvasViewportBridge apiRef={viewportApiRef} />}
+      <ZoneFields isDropActive={isDropActive || dragZone === "final"} />
       <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
       <SongRootCard title={songTitle} />
       <ZoneLabels />
@@ -177,9 +179,21 @@ const CanvasStage = ({
         0%, 100% { opacity: 1; transform: scale(1); }
         50%       { opacity: 0.4; transform: scale(0.75); }
       }
+      /* A sounding waveform breathes — GPU scaleY only, staggered per bar. */
+      @keyframes cog-wave-play {
+        0%, 100% { transform: scaleY(1); }
+        50%       { transform: scaleY(0.55); }
+      }
+      /* The room's light breathes, slowly — glory, not a screensaver. */
+      @keyframes cog-glory-breathe {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.82; }
+      }
       @media (prefers-reduced-motion: reduce) {
         [style*="cog-card-enter"] { animation: none !important; }
         [style*="cog-card-pulse-dot"] { animation: none !important; }
+        [style*="cog-wave-play"] { animation: none !important; }
+        [style*="cog-glory-breathe"] { animation: none !important; }
         /* Cards + clusters settle instantly (no transform/opacity easing) — the
            inline transitions are neutralized so nothing slides or springs. */
         [data-canvas-card], [data-canvas-nopan], [data-canvas-nopan] * {

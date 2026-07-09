@@ -1,4 +1,5 @@
 import { Mic, PenLine, Music } from "lucide-react";
+import { GLORY, GLORY_PALE_GOLD, TYPE_TONE } from "@/lib/canvas/glorySpectrum";
 
 interface FirstActionPromptProps {
   onHum: () => void;
@@ -6,32 +7,32 @@ interface FirstActionPromptProps {
   onChords: () => void;
 }
 
-// Warm-earth chips only — the locked palette has no corporate blue. The mic
-// chip opens the REAL recorder (see host wiring), so its promise is kept.
+// Each chip wears the glory tone its card will wear — the first tap teaches
+// the canvas's color language. The mic chip opens the REAL recorder.
 const CHIPS = [
   {
     id: "hum",
     icon: Mic,
     label: "Hum a melody",
     sub: "Tap to record an idea",
-    color: "#B8953A",
-    bg: "rgba(184,149,58,0.10)",
+    color: GLORY.gold.base,
+    bg: GLORY.gold.bg,
   },
   {
     id: "lyric",
     icon: PenLine,
     label: "Write a lyric",
     sub: "First line, verse, chorus",
-    color: "#C0754F",
-    bg: "rgba(192,117,79,0.10)",
+    color: TYPE_TONE.lyric.base,
+    bg: TYPE_TONE.lyric.bg,
   },
   {
     id: "chords",
     icon: Music,
     label: "Add chords",
     sub: "Key, BPM, progression",
-    color: "#8F9B5A",
-    bg: "rgba(143,155,90,0.10)",
+    color: GLORY_PALE_GOLD.base,
+    bg: GLORY_PALE_GOLD.bg,
   },
 ] as const;
 
@@ -54,9 +55,26 @@ const FirstActionPrompt = ({ onHum, onLyric, onChords }: FirstActionPromptProps)
       style={{ pointerEvents: "none", zIndex: 50 }}
       aria-label="Start your first idea"
     >
+      {/* Glory aura — the auth-code light gathered behind the invitation */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          width: 480,
+          height: 480,
+          borderRadius: "50%",
+          background:
+            `radial-gradient(50% 50% at 50% 50%, ${GLORY.gold.base}1F 0%, transparent 70%), ` +
+            `radial-gradient(60% 60% at 34% 40%, ${GLORY.crimson.base}0F 0%, transparent 70%), ` +
+            `radial-gradient(60% 60% at 66% 40%, ${GLORY.cobalt.base}0D 0%, transparent 70%), ` +
+            `radial-gradient(60% 60% at 50% 68%, ${GLORY.sage.base}0D 0%, transparent 70%)`,
+          animation: "cog-glory-breathe 14s ease-in-out infinite",
+        }}
+      />
       <div
         className="flex flex-col items-center rounded-3xl px-6 py-6 mx-4"
         style={{
+          position: "relative",
           backgroundColor: "rgba(255,255,255,0.92)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",

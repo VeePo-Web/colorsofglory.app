@@ -7,6 +7,7 @@ import HumCard from "@/components/canvas/HumCard";
 import ChordCard from "@/components/canvas/ChordCard";
 import NoteCard from "@/components/canvas/NoteCard";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import { PLAYBACK_TONE, TYPE_TONE } from "@/lib/canvas/glorySpectrum";
 import { cardWidth, clampToBoard, DRAG_THRESHOLD_PX } from "@/lib/canvas/canvasGeometry";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
@@ -142,6 +143,7 @@ const CanvasCard = memo(function CanvasCard({
   const justDragged = useRef(false);
 
   const color = getCreatorColor(card.contributor);
+  const tone = TYPE_TONE[card.type] ?? TYPE_TONE.note;
   const isVoice = card.type === "voice" || card.type === "hum";
   const state: CardInteractionState = card.isDimmedReference ? "dimmed" : selected ? "selected" : "default";
   const Face = FACES[card.type] ?? LyricCard;
@@ -344,6 +346,7 @@ const CanvasCard = memo(function CanvasCard({
     <CardShell
       ref={elRef}
       color={color}
+      tone={tone}
       state={state}
       mergeSelected={mergeSelected}
       playing={playing}
@@ -375,10 +378,12 @@ const CanvasCard = memo(function CanvasCard({
       )}
 
       {/* The typed face */}
-      <Face card={card} color={color} selected={selected} />
+      <Face card={card} color={color} tone={tone} selected={selected} playing={playing} />
 
-      {/* Who wrote it — collaboration made visible (color always paired with name) */}
-      {!card.isDimmedReference && (
+      {/* Who wrote it — collaboration made visible (color always paired with
+          name). Unresolved identity ("" until the roster loads) shows nothing
+          rather than a fabricated name. */}
+      {!card.isDimmedReference && card.contributor && (
         <p style={{ marginTop: 8, fontSize: 10.5, fontWeight: 700, color: color.dark, fontFamily: "var(--font-body)", letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {card.contributor}
         </p>
@@ -448,16 +453,17 @@ const CanvasCard = memo(function CanvasCard({
         </div>
       )}
 
-      {/* Listen-path stop number — bottom-left gold badge */}
+      {/* Listen-path stop number — playback wears the soft-blue tone */}
       {listenIndex != null && (
         <div
           aria-hidden="true"
           style={{
             position: "absolute", bottom: 8, left: 8,
             width: 22, height: 22, borderRadius: "50%",
-            backgroundColor: "var(--cog-gold, #B8953A)", color: "#FFF", fontSize: 10, fontWeight: 800,
+            // dark register: white 10px text on .base fails AA (4.05:1)
+            backgroundColor: PLAYBACK_TONE.dark, color: "#FFF", fontSize: 10, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(184,149,58,0.40)", fontFamily: "var(--font-body)",
+            boxShadow: `0 2px 8px ${PLAYBACK_TONE.glow}`, fontFamily: "var(--font-body)",
           }}
         >
           {listenIndex + 1}

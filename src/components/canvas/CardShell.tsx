@@ -1,19 +1,26 @@
 import { forwardRef, memo, type ReactNode, type PointerEvent, type KeyboardEvent } from "react";
 import type { CreatorColor } from "@/lib/canvas/creatorColors";
+import {
+  GLORY_PLAYING_SHADOW,
+  GLORY_SELECTED_SHADOW,
+  PLAYBACK_TONE,
+  type GloryTone,
+} from "@/lib/canvas/glorySpectrum";
 import { CARD_MIN_HEIGHT } from "@/lib/canvas/canvasGeometry";
 
 export type CardInteractionState = "default" | "selected" | "dimmed";
 
 interface CardShellProps {
   color: CreatorColor;
+  /** Glory-spectrum tone of the card's TYPE — paints the identity stripe. */
+  tone: GloryTone;
   state: CardInteractionState;
   width: number;
   left: number;
   top: number;
-  /** Merge selection paints a gold keeper ring regardless of creator color. */
+  /** Merge selection paints a gold keeper ring regardless of tone. */
   mergeSelected?: boolean;
-  /** This card is sounding right now — gold "now playing" ring (system gold,
-   *  never a creator color, so it always reads as the system speaking). */
+  /** This card is sounding right now — soft-blue playback halo. */
   playing?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerMove?: (e: PointerEvent<HTMLDivElement>) => void;
@@ -39,6 +46,7 @@ const CardShell = memo(
   forwardRef<HTMLDivElement, CardShellProps>(function CardShell(
     {
       color,
+      tone,
       state,
       width,
       left,
@@ -59,24 +67,28 @@ const CardShell = memo(
     const isDimmed = state === "dimmed";
     const isSelected = state === "selected";
 
+    // Rings speak the system's language: gold = selection/merge (you're
+    // holding this), soft blue = playback (this is sounding). The card's TYPE
+    // tone lives in the stripe; the resting border stays quiet cream so a
+    // full board never reads as a rainbow of frames.
     const border = playing
-      ? "2px solid var(--cog-gold, #B8953A)"
+      ? `2px solid ${PLAYBACK_TONE.base}`
       : mergeSelected
       ? "2px solid var(--cog-gold, #B8953A)"
       : isSelected
-      ? `2px solid ${color.base}`
+      ? "2px solid var(--cog-gold, #B8953A)"
       : isDimmed
-      ? `1.5px dashed ${color.dim}`
-      : `1.5px solid ${color.base}2E`;
+      ? `1.5px dashed ${tone.dim}`
+      : "1.5px solid rgba(28,26,23,0.08)";
 
     const boxShadow = playing
-      ? "0 0 0 5px rgba(184,149,58,0.22), 0 12px 32px rgba(184,149,58,0.28)"
+      ? GLORY_PLAYING_SHADOW
       : mergeSelected
       ? "0 0 0 4px rgba(184,149,58,0.20), 0 10px 28px rgba(28,26,23,0.12)"
       : isDimmed
       ? "none"
       : isSelected
-      ? `0 0 0 4px ${color.base}22, 0 16px 36px ${color.glow}, 0 2px 6px rgba(28,26,23,0.08)`
+      ? GLORY_SELECTED_SHADOW
       : `0 6px 20px rgba(28,26,23,0.08), 0 1px 3px rgba(28,26,23,0.06)`;
 
     return (
@@ -90,7 +102,6 @@ const CardShell = memo(
           minHeight: CARD_MIN_HEIGHT,
           borderRadius: 18,
           backgroundColor: isDimmed ? "rgba(255,252,247,0.72)" : "#FFFCF7",
-          borderLeft: mergeSelected || isSelected || isDimmed ? border : `1.5px solid ${color.base}2E`,
           border,
           boxShadow,
           opacity: isDimmed ? 0.55 : 1,
@@ -134,12 +145,13 @@ const CardShell = memo(
         tabIndex={0}
         data-canvas-card="true"
       >
-        {/* Creator identity stripe — the writer's color down the left edge */}
+        {/* Material identity stripe — the card TYPE's glory tone down the
+            left edge (lyric rose, voice gold, hum amber, meaning green…). */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute", left: 6, top: 13, bottom: 13, width: 4, borderRadius: 4,
-            background: `linear-gradient(180deg, ${color.base}, ${color.base}66)`,
+            background: `linear-gradient(180deg, ${tone.base}, ${tone.base}59)`,
             opacity: isDimmed ? 0.5 : 1,
           }}
         />

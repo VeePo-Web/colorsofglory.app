@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GitCompare, Pause, Play, X } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
+import { COMPARE_A_TONE, COMPARE_B_TONE, type GloryTone } from "@/lib/canvas/glorySpectrum";
 import { Z } from "@/lib/canvas/zLayers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,6 +26,8 @@ interface CompareModeSheetProps {
 interface IdeaCardViewProps {
   card: CanvasBoardCard;
   label: string;
+  /** Two-tone spectral edge: take A wears rose, take B wears violet. */
+  tone: GloryTone;
   isPlaying: boolean;
   isSelected: boolean;
   onTogglePlay: () => void;
@@ -34,6 +37,7 @@ interface IdeaCardViewProps {
 const IdeaCardView = ({
   card,
   label,
+  tone,
   isPlaying,
   isSelected,
   onTogglePlay,
@@ -52,9 +56,10 @@ const IdeaCardView = ({
         textAlign: "left",
         borderRadius: 20,
         backgroundColor: "var(--cog-cream-light)",
-        border: isSelected ? `2px solid ${card.accent}` : "2px solid transparent",
+        border: isSelected ? `2px solid ${tone.base}` : "2px solid transparent",
+        borderLeft: isSelected ? `2px solid ${tone.base}` : `2px solid ${tone.dim}`,
         boxShadow: isSelected
-          ? `0 8px 28px ${card.accent}30`
+          ? `0 0 0 4px ${tone.bg}, 0 8px 28px ${tone.glow}`
           : "0 4px 16px rgba(0,0,0,0.07)",
         padding: "16px 16px 14px",
         cursor: "pointer",
@@ -75,7 +80,7 @@ const IdeaCardView = ({
             fontWeight: 800,
             textTransform: "uppercase",
             letterSpacing: "0.14em",
-            color: card.accent,
+            color: tone.dark,
             fontFamily: "var(--font-body)",
           }}
         >
@@ -151,7 +156,7 @@ const IdeaCardView = ({
         <p
           style={{
             fontSize: 11,
-            color: card.accent,
+            color: tone.dark,
             fontFamily: "var(--font-body)",
             fontWeight: 600,
             margin: 0,
@@ -175,11 +180,11 @@ const IdeaCardView = ({
             display: "flex",
             alignItems: "center",
             gap: 7,
-            minHeight: 36,
-            paddingInline: 14,
+            minHeight: 44,
+            paddingInline: 16,
             borderRadius: 999,
-            backgroundColor: isPlaying ? card.accent : `${card.accent}1A`,
-            color: isPlaying ? "#FFF" : card.accent,
+            backgroundColor: isPlaying ? tone.dark : tone.bg,
+            color: isPlaying ? "#FFF" : tone.dark,
             fontSize: 12,
             fontWeight: 700,
             fontFamily: "var(--font-body)",
@@ -391,6 +396,7 @@ const CompareModeSheet = ({
           <IdeaCardView
             card={cards[0]}
             label={labelA}
+            tone={COMPARE_A_TONE}
             isPlaying={playingId === cards[0].id}
             isSelected={selectedId === cards[0].id}
             onTogglePlay={() => onTogglePlay(cards[0].id)}
@@ -401,6 +407,7 @@ const CompareModeSheet = ({
           <IdeaCardView
             card={cards[1]}
             label={labelB}
+            tone={COMPARE_B_TONE}
             isPlaying={playingId === cards[1].id}
             isSelected={selectedId === cards[1].id}
             onTogglePlay={() => onTogglePlay(cards[1].id)}

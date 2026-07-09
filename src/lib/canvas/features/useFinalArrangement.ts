@@ -38,6 +38,14 @@ interface UseFinalArrangementArgs {
   /** Column slot for the Nth ideas card — used when a final card with no
    *  Ideas source returns across the divider (patched in place, never deleted). */
   ideaSlot: (index: number) => { x: number; y: number };
+  /**
+   * Server-owned cards use MOVE semantics (the row changes tree), not the
+   * local copy+dim model — matching what canvas_promote_to_final does on the
+   * server. Returns true when `cardId` should move in place.
+   */
+  movesInPlace?: (cardId: string) => boolean;
+  /** Fired after an in-place tree change so the host can sync the server row. */
+  onTreeChange?: (cardId: string, tree: "ideas" | "final") => void;
   onMoment?: (title: string, destination: string, detail?: string) => void;
 }
 
@@ -47,6 +55,8 @@ export function useFinalArrangement({
   mutations,
   finalSlot,
   ideaSlot,
+  movesInPlace,
+  onTreeChange,
   onMoment,
 }: UseFinalArrangementArgs): FinalArrangementApi {
   const [arranging, setArranging] = useState(false);
@@ -112,6 +122,30 @@ export function useFinalArrangement({
       if (isViewer) return;
       const source = cards.find((c) => c.id === cardId);
       if (!source || source.tree !== "ideas" || source.isDimmedReference) return;
+      if (movesInPlace?.(cardId)) {
+        // Server row: MOVE it (canvas_promote_to_final changes the row's tree
+        // — a local ghost copy would desync on the next hydrate).
+        const before = {
+          id: cardId,
+          patch: { tree: source.tree, status: source.status, x: source.x, y: source.y },
+        };
+        mutations.patchCards([
+          { id: cardId, patch: { tree: "final", status: "approved", ...finalSlot(orderedFinalCards.length) } },
+        ]);
+        onTreeChange?.(cardId, "final");
+        onMoment?.("Approved idea", "Final tree", "Arrangement");
+        toast("Idea moved to Final", {
+          duration: 7000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              mutations.patchCards([before]);
+              onTreeChange?.(cardId, "ideas");
+            },
+          },
+        });
+        return;
+      }
       const finalCopy: CanvasBoardCard = {
         ...source,
         id: `${cardId}-final`,
@@ -132,7 +166,7 @@ export function useFinalArrangement({
         },
       });
     },
-    [isViewer, cards, orderedFinalCards.length, finalSlot, mutations, onMoment],
+    [isViewer, cards, orderedFinalCards.length, finalSlot, mutations, movesInPlace, onTreeChange, onMoment],
   );
 
   const moveToIdeas = useCallback(
@@ -165,14 +199,21 @@ export function useFinalArrangement({
         mutations.patchCards([
           { id: finalCardId, patch: { tree: "ideas", status: "raw", ...ideaSlot(ideaCount) } },
         ]);
+        onTreeChange?.(finalCardId, "ideas");
         toast("Returned to Ideas", {
           duration: 7000,
-          action: { label: "Undo", onClick: () => mutations.patchCards([before]) },
+          action: {
+            label: "Undo",
+            onClick: () => {
+              mutations.patchCards([before]);
+              onTreeChange?.(finalCardId, "final");
+            },
+          },
         });
       }
       onMoment?.("Returned idea", "Ideas tree", "Arrangement");
     },
-    [isViewer, cards, mutations, ideaSlot, onMoment],
+    [isViewer, cards, mutations, ideaSlot, onTreeChange, onMoment],
   );
 
   return {

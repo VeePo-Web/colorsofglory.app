@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useGesture } from "@/hooks/useGesture";
+import { GLORY_FIELD_BACKGROUND } from "@/lib/canvas/glorySpectrum";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -211,18 +212,19 @@ const CanvasViewport = ({
           }
         }}
       >
-        {/* Warm song-room glow — fixed behind the transforming layer, always
-            centered in the viewport. This is the brand "spiritual warmth"
-            signature; it replaces the old dot grid so the canvas reads as a
-            private song room, not a Miro/diagram board. */}
+        {/* The room's light — the auth-code ROYGB glow, expanded into a
+            workspace. Five ultra-soft spectral washes around a warm gold
+            center, fixed behind the transforming layer so it always fills the
+            viewport. It breathes on a 14s cycle (opacity only, GPU-free of
+            layout; reduced-motion holds it still). One div, zero per-card cost. */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background:
-              "radial-gradient(ellipse 80% 55% at 50% 40%, rgba(184,149,58,0.12) 0%, rgba(184,149,58,0) 70%)",
+            background: GLORY_FIELD_BACKGROUND,
+            animation: "cog-glory-breathe 14s ease-in-out infinite",
           }}
         />
 

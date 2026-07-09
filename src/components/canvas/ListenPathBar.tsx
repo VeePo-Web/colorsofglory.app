@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ListMusic, Play, Pause, X } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
-import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import { PLAYBACK_TONE } from "@/lib/canvas/glorySpectrum";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
 
@@ -81,13 +81,18 @@ const ListenPathBar = ({
           gap: 2,
           borderRadius: 999,
           backgroundColor: "rgba(255,255,255,0.94)",
-          border: "1px solid rgba(184,149,58,0.35)",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          border: `1px solid ${PLAYBACK_TONE.dim}`,
+          boxShadow: playing
+            ? `0 4px 18px ${PLAYBACK_TONE.glow}`
+            : "0 4px 16px rgba(0,0,0,0.12)",
           backdropFilter: "blur(8px)",
           paddingLeft: 4,
           paddingRight: 4,
+          transition: "box-shadow 240ms ease",
         }}
       >
+        {/* The play control stays GOLD — primary actions are always gold
+            (locked decision #5). Cobalt marks playback INDICATORS only. */}
         <button
           type="button"
           onClick={onPlayPause}
@@ -98,6 +103,7 @@ const ListenPathBar = ({
             backgroundColor: playing ? "var(--cog-gold, #B8953A)" : "rgba(184,149,58,0.12)",
             color: playing ? "#FFF" : "var(--cog-gold, #B8953A)",
             display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "background-color 180ms ease, color 180ms ease",
           }}
         >
           {playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" style={{ marginLeft: 2 }} />}
@@ -114,7 +120,7 @@ const ListenPathBar = ({
             color: "var(--cog-charcoal, #1C1A17)",
           }}
         >
-          <ListMusic size={14} strokeWidth={2} style={{ color: "var(--cog-gold, #B8953A)" }} aria-hidden="true" />
+          <ListMusic size={14} strokeWidth={2} style={{ color: PLAYBACK_TONE.base }} aria-hidden="true" />
           Path · {queue.length}
         </button>
       </div>
@@ -260,7 +266,6 @@ const ListenPathBar = ({
         {queue.map((id, index) => {
           const card = cardMap.get(id);
           if (!card) return null;
-          const color = getCreatorColor(card.contributor);
           const isActive = index === step;
           return (
             <ChipItem
@@ -268,7 +273,9 @@ const ListenPathBar = ({
               card={card}
               index={index}
               isActive={isActive}
-              color={color}
+              // Playback speaks soft blue everywhere — chips match the
+              // now-sounding ring and the on-card stop badges.
+              color={{ base: PLAYBACK_TONE.base, glow: PLAYBACK_TONE.glow }}
               onTap={() => onStepTo(index)}
               onRemove={() => onRemove(id)}
             />
