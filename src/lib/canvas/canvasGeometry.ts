@@ -46,23 +46,28 @@ export const DRAG_THRESHOLD_PX = 7;
 // ─── Idea/Final column placement ──────────────────────────────────────────
 
 /**
- * New cards flow into a single tidy vertical column per zone, under the labels,
- * so the board reads like a scrollable feed of ideas instead of a 2D scatter.
+ * New cards flow into a tidy vertical column per zone, under the labels, so the
+ * board reads like a scrollable feed of ideas instead of a 2D scatter. Past
+ * COLUMN_ROWS the feed WRAPS into the next sub-column so a busy song (40+
+ * ideas) tiles neatly inside its zone instead of running off the bottom of the
+ * canvas. Sub-column step keeps every card inside its half (ideas stay left of
+ * the divider, finals inside the right edge).
  */
 export const COLUMN_TOP = 272;
 export const COLUMN_GAP = 156;
+export const COLUMN_ROWS = 10;
+export const SUBCOLUMN_STEP = 228;
 export const IDEAS_COLUMN_X = 80;
 export const FINAL_COLUMN_X = DIVIDER_X + 80;
 
-export const ideaColumnSlot = (index: number) => ({
-  x: IDEAS_COLUMN_X,
-  y: COLUMN_TOP + index * COLUMN_GAP,
-});
+const wrap = (baseX: number, index: number) => {
+  const col = Math.floor(index / COLUMN_ROWS);
+  const row = index % COLUMN_ROWS;
+  return { x: baseX + col * SUBCOLUMN_STEP, y: COLUMN_TOP + row * COLUMN_GAP };
+};
 
-export const finalColumnSlot = (index: number) => ({
-  x: FINAL_COLUMN_X,
-  y: COLUMN_TOP + index * COLUMN_GAP,
-});
+export const ideaColumnSlot = (index: number) => wrap(IDEAS_COLUMN_X, index);
+export const finalColumnSlot = (index: number) => wrap(FINAL_COLUMN_X, index);
 
 // ─── Root song card box ────────────────────────────────────────────────────
 
