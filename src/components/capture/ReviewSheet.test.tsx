@@ -109,3 +109,126 @@ describe("ReviewSheet — never a dead end", () => {
     );
   });
 });
+
+/**
+ * F12 hybrid pipeline — the on-device deterministic split is the INSTANT
+ * preview and the guaranteed fallback when the server transcript never lands
+ * (offline, AI credits exhausted, poll timeout). The spoken structure must
+ * survive; low-confidence markers must be one-tap resolvable.
+ */
+describe("ReviewSheet — on-device structure fallback (F12)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const liveBlocks = [
+    {
+      id: "b0",
+      marker: { atMs: 0, kind: "unlabeled" as const, source: "manual" as const, label: "Idea" },
+      words: [{ text: "warming", startMs: 0, endMs: 400 }],
+      text: "warming up",
+    },
+    {
+      id: "b1",
+      marker: {
+        atMs: 1000,
+        contentStartMs: 1600,
+        kind: "chorus" as const,
+        source: "voice" as const,
+        label: "Chorus",
+        confidence: 0.9,
+      },
+      words: [{ text: "you", startMs: 1600, endMs: 1800 }],
+      text: "you are my rock",
+    },
+  ];
+
+  function renderWithLive(extra: Record<string, unknown> = {}) {
+    render(
+      <MemoryRouter>
+        <ReviewSheet
+          open
+          takeId="take-1"
+          songId="song-1"
+          songTitle="Grace"
+          storagePath="takes/take-1.webm"
+          durationMs={4200}
+          pendingBlocks={[]}
+          liveBlocks={liveBlocks}
+          onClose={vi.fn()}
+          onCommitted={vi.fn()}
+          {...extra}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the spoken sections instantly and keeps them when the server never lands", async () => {
+    renderWithLive();
+
+    // The Chorus block from the on-device split is editable immediately —
+    // label input + body textarea — with the announcement stripped.
+    const label = await screen.findByDisplayValue("Chorus");
+    expect(label).toBeTruthy();
+    const body = await screen.findByDisplayValue("you are my rock");
+    expect(body).toBeTruthy();
+    // No empty manual fallback block was injected — the structure IS the content.
+    expect(screen.queryByText(/Transcription couldn't finish/)).toBeNull();
+  });
+
+  it("commits the fallback structure with section kinds intact", async () => {
+    renderWithLive();
+    await screen.findByDisplayValue("Chorus");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to song" }));
+
+    await waitFor(() => expect(commitTakeToCanvas).toHaveBeenCalledTimes(1));
+    const payload = (commitTakeToCanvas as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const chorus = payload.blocks.find((b: { label: string }) => b.label === "Chorus");
+    expect(chorus).toMatchObject({
+      kind: "lyrics",
+      section_kind: "chorus",
+      text: "you are my rock",
+    });
+  });
+
+  it("flags a low-confidence marker and splits on one tap", async () => {
+    renderWithLive({
+      candidateMarkers: [
+        {
+          atMs: 3000,
+          kind: "bridge",
+          source: "voice",
+          label: "Bridge",
+          confidence: 0.3,
+        },
+      ],
+    });
+
+    // Flagged, not silently applied.
+    expect(await screen.findByText(/split here\?/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+
+    // One tap → a Bridge block exists now, and the flag is resolved.
+    await screen.findByDisplayValue("Bridge");
+    expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();
+  });
+
+  it("dismissing a flagged marker keeps the take unstructured at that moment", async () => {
+    renderWithLive({
+      candidateMarkers: [
+        {
+          atMs: 3000,
+          kind: "bridge",
+          source: "voice",
+          label: "Bridge",
+          confidence: 0.3,
+        },
+      ],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "It's a lyric" }));
+    expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();
+    expect(screen.queryByDisplayValue("Bridge")).toBeNull();
+  });
+});

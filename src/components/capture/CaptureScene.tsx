@@ -37,9 +37,14 @@ import MetronomeBar from "./MetronomeBar";
 import { useMetronome } from "@/hooks/useMetronome";
 import LatestPeekStrip from "./LatestPeekStrip";
 import HeardCuesStrip from "./HeardCuesStrip";
-import { buildTranscriptBlocks, detectSectionMarkers } from "@/lib/capture/sectionKeywords";
+import {
+  buildTranscriptBlocks,
+  detectSectionMarkers,
+  pendingCandidateMarkers,
+} from "@/lib/capture/sectionKeywords";
 import { detectMusicCues } from "@/lib/capture/musicCues";
-import type { SectionMarker } from "@/lib/capture/transcriptModel";
+import { detectSpokenCues } from "@/lib/capture/spokenCues";
+import type { SectionMarker, TranscriptBlock, TranscriptWord } from "@/lib/capture/transcriptModel";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
 import { setNavDirection, useSpatialEntrance } from "@/lib/nav/navDirection";
 import { preloadOnIdle } from "@/lib/nav/preloadOnIdle";
@@ -251,14 +256,113 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     return () => teardownRef.current();
   }, []);
 
-  const blocks = useMemo(() => {
+  const detection = useMemo(() => {
     const markers = detectSectionMarkers(live.words, manualMarkers);
-    return buildTranscriptBlocks(live.words, markers);
+    return {
+      blocks: buildTranscriptBlocks(live.words, markers),
+      // Low-confidence voice markers (a section word heard mid-phrase) — never
+      // applied silently; they ride into review for one-tap confirmation.
+      candidates: pendingCandidateMarkers(markers),
+    };
   }, [live.words, manualMarkers]);
+  const blocks = detection.blocks;
 
   // Spoken key / tempo / chords heard inside the take, so the idea arrives
   // song-ready without typing ("key of G, about 120 BPM, chords are G C D").
   const musicCues = useMemo(() => detectMusicCues(live.words), [live.words]);
+
+  // Spoken scripture references + note-to-self cues ("Psalm 23", "note —
+  // remember the key change") — the broader say-it-structured vocabulary.
+  const spokenCues = useMemo(() => detectSpokenCues(live.words), [live.words]);
+
+  // The structure of the take the moment it stopped — handed to the Review
+  // sheet as the instant preview + the offline/AI-failure fallback. Cleared
+  // when a new take starts or an OLD take is resumed from the peek strip.
+  const liveStructureRef = useRef<{
+    blocks: TranscriptBlock[];
+    candidates: SectionMarker[];
+  } | null>(null);
+
+  // Sung-take awareness: singing produces far fewer recognized words than
+  // speech. When the mic is clearly active but words barely arrive, coach
+  // (gently) that SPOKEN section names still structure a sung take.
+  const [sungLikely, setSungLikely] = useState(false);
+  const liveWordCountRef = useRef(0);
+  liveWordCountRef.current = live.words.length;
+  useEffect(() => {
+    if (phase !== "recording" || !analyserNode || !liveSupported) return;
+    let voicedMs = 0;
+    const buf = new Uint8Array(analyserNode.fftSize);
+    const id = window.setInterval(() => {
+      analyserNode.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i += 1) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      if (rms > 0.045) voicedMs += 1200;
+      if (voicedMs >= 6000) {
+        const wordsPerSec = liveWordCountRef.current / (voicedMs / 1000);
+        if (wordsPerSec < 0.5) setSungLikely(true);
+      }
+    }, 1200);
+    return () => window.clearInterval(id);
+  }, [phase, analyserNode, liveSupported]);
+
+  // Convert spoken cues into pending blocks at stop-time so they land in the
+  // review sheet as their own cards (scripture → H1 attach, note → idea,
+  // key/tempo/chords → one chords block). Song captures only — the same rule
+  // as the rail's text tools: text blocks persist inside a song.
+  const appendSpokenCueBlocks = useCallback(
+    (words: TranscriptWord[]) => {
+      if (!songId || words.length === 0) return;
+      const cues = detectSpokenCues(words);
+      const music = detectMusicCues(words);
+      const additions: PendingBlock[] = [];
+      for (const s of cues.scriptures) {
+        additions.push({
+          id: `cue-scripture-${s.atMs}`,
+          kind: "scripture",
+          section_kind: null,
+          label: s.reference,
+          text: "",
+          start_ms: s.atMs,
+          end_ms: s.endMs,
+        });
+      }
+      for (const n of cues.notes) {
+        additions.push({
+          id: `cue-note-${n.atMs}`,
+          kind: "idea",
+          section_kind: null,
+          label: "Note",
+          text: n.text,
+          start_ms: n.atMs,
+          end_ms: n.endMs,
+        });
+      }
+      if (music.key || music.tempo || music.chords.length > 0) {
+        const atMs = music.key?.atMs ?? music.tempo?.atMs ?? music.chords[0]?.atMs ?? 0;
+        const parts = [
+          music.key ? `Key: ${music.key.key}` : null,
+          music.tempo ? `${music.tempo.bpm} BPM` : null,
+          music.chords.length > 0 ? music.chords.map((c) => c.chord).join(" ") : null,
+        ].filter(Boolean);
+        additions.push({
+          id: `cue-chords-${atMs}`,
+          kind: "chords",
+          section_kind: null,
+          label: "Chords",
+          text: parts.join(" · "),
+          start_ms: atMs,
+          end_ms: atMs,
+        });
+      }
+      if (additions.length > 0) setPendingBlocks((prev) => [...prev, ...additions]);
+    },
+    [songId],
+  );
 
   const handleAudioFile = useCallback(
     async (file: File, fileDurationMs: number) => {
@@ -374,6 +478,13 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         setStatus("idle");
         return;
       }
+      // Freeze this take's spoken structure for the review sheet, exactly as
+      // the manual stop path does — an interrupted take keeps its sections.
+      liveStructureRef.current = {
+        blocks: detection.blocks,
+        candidates: detection.candidates,
+      };
+      appendSpokenCueBlocks(live.words);
       if (result.reason === "interrupted") {
         toast("Saved — the mic was interrupted, but your idea is safe.", { duration: 3600 });
       } else if (result.reason === "max-duration") {
@@ -386,7 +497,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       });
       void handleAudioFile(file, result.durationMs);
     },
-    [handleAudioFile, stopLive, stopMetro],
+    [handleAudioFile, stopLive, stopMetro, detection, live.words, appendSpokenCueBlocks],
   );
 
   useEffect(() => {
@@ -401,6 +512,13 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       stopLive();
       stopMetro();
       if (!result) return;
+      // Freeze the spoken structure of THIS take before anything async — the
+      // review sheet shows it instantly and falls back to it if AI fails.
+      liveStructureRef.current = {
+        blocks: detection.blocks,
+        candidates: detection.candidates,
+      };
+      appendSpokenCueBlocks(live.words);
       const file = new File([result.blob], `take-${Date.now()}.webm`, {
         type: result.mimeType || "audio/webm",
       });
@@ -413,6 +531,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     // the singer comes in on the downbeat.
     setManualMarkers([]);
     setStatus("listening");
+    setSungLikely(false);
+    liveStructureRef.current = null;
     live.stop();
     live.reset();
     if (clickOn && metroBpm) {
@@ -436,7 +556,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         /* recognition is optional; the take keeps recording regardless */
       }
     }
-  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm]);
+  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm, detection, appendSpokenCueBlocks]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -500,6 +620,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     setReview((r) => ({ ...r, open: false }));
     setPendingBlocks([]);
     setManualMarkers([]);
+    liveStructureRef.current = null;
     setStatus("idle");
   }, []);
 
@@ -508,6 +629,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       setReview((r) => ({ ...r, open: false }));
       setPendingBlocks([]);
       setManualMarkers([]);
+      liveStructureRef.current = null;
       setStatus("idle");
       setRibbon({
         open: true,
@@ -526,6 +648,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         toast.message("Take is still uploading", { description: "Try again in a moment." });
         return;
       }
+      // A RESUMED take is not the one we just recorded — its structure comes
+      // from the server transcript, never from this session's live snapshot.
+      liveStructureRef.current = null;
       // Through A3's cog layer — the strip already knows the song title, so no
       // extra embedded read is needed here.
       const takeRow = await getTakeWithTranscript(takeId).catch(() => null);
@@ -818,6 +943,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         <LiveTranscript
           blocks={blocks}
           partial={phase === "recording" ? live.partial : ""}
+          coachCopy={
+            phase === "recording" && sungLikely
+              ? "Singing it? Beautiful. Say the section names — “verse”, “chorus” — and I'll structure it for you."
+              : null
+          }
           status={
             phase === "recording"
               ? "listening"
@@ -827,8 +957,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           }
         />
 
-        {/* "Heard" cues — quiet confirmation the app caught the key/tempo/chords. */}
-        {!review.open && <HeardCuesStrip cues={musicCues} />}
+        {/* "Heard" cues — quiet confirmation the app caught the key/tempo/
+            chords/scripture/notes spoken inside the take. */}
+        {!review.open && <HeardCuesStrip cues={musicCues} spoken={spokenCues} />}
 
         {pendingBlocks.length > 0 && phase !== "recording" && !review.open && (
           <p
@@ -868,6 +999,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           storagePath={review.storagePath}
           durationMs={review.durationMs}
           pendingBlocks={pendingBlocks}
+          liveBlocks={liveStructureRef.current?.blocks}
+          candidateMarkers={liveStructureRef.current?.candidates}
           onClose={handleReviewClose}
           onCommitted={handleReviewCommitted}
         />

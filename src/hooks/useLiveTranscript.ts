@@ -14,12 +14,41 @@ import type { TranscriptWord } from "@/lib/capture/transcriptModel";
  *   most mobile non-iOS, some embedded webviews), `supported` is false and the
  *   caller should fall back to the server-side `transcribe-take` batch path.
  *
- * Production note: Web Speech does not give per-word timestamps. We
- * distribute the words evenly across the wall-clock window each result
- * arrived in. That's accurate enough for the capture scene's "verse 1 → split
- * here" behavior; the server-side transcript (with real timing) takes over in
- * the Review Sheet.
+ * Production note: Web Speech does not give per-word timestamps. We lay the
+ * words out RIGHT-ALIGNED inside the wall-clock window each final result
+ * arrived in, capping each word's synthetic span: a recognizer finalizes just
+ * after speech ends, so the words belong at the window's end and any silence
+ * that preceded them becomes a visible GAP before the first word. That gap is
+ * exactly the prosody signal the section matcher's command-vs-content
+ * confidence uses ("…[pause] chorus" = announcement). The server transcript
+ * (real Whisper word timing) takes over in the Review Sheet.
  */
+
+/** Longest plausible span for one spoken word (ms) in the synthetic layout. */
+const MAX_SYNTH_WORD_MS = 320;
+
+/**
+ * Distribute a final result's tokens inside its arrival window. Dense speech
+ * fills the window evenly (unchanged behavior); a window that is much longer
+ * than its word count (silence, then a phrase) right-aligns the words so the
+ * leading quiet stays a gap instead of being smeared across the words.
+ * Pure — exported for unit tests.
+ */
+export function layoutFinalWords(
+  tokens: string[],
+  windowStartMs: number,
+  windowEndMs: number,
+): TranscriptWord[] {
+  if (tokens.length === 0) return [];
+  const span = Math.max(1, windowEndMs - windowStartMs);
+  const per = Math.min(MAX_SYNTH_WORD_MS, span / tokens.length);
+  const firstStart = windowEndMs - per * tokens.length;
+  return tokens.map((text, j) => ({
+    text,
+    startMs: Math.round(firstStart + j * per),
+    endMs: Math.round(firstStart + (j + 1) * per),
+  }));
+}
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -148,12 +177,7 @@ export function useLiveTranscript(
           if (tokens.length === 0) continue;
           const windowStart = lastEmittedAtRef.current;
           const windowEnd = Math.max(windowStart + 1, nowOffset);
-          const step = (windowEnd - windowStart) / tokens.length;
-          for (let j = 0; j < tokens.length; j += 1) {
-            const startMs = Math.round(windowStart + j * step);
-            const endMs = Math.round(windowStart + (j + 1) * step);
-            newFinals.push({ text: tokens[j], startMs, endMs });
-          }
+          newFinals.push(...layoutFinalWords(tokens, windowStart, windowEnd));
           lastEmittedAtRef.current = windowEnd;
         } else {
           interim += (interim ? " " : "") + transcript;

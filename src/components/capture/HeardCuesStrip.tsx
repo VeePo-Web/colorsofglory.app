@@ -1,8 +1,11 @@
-import { KeyRound, Music3, Timer } from "lucide-react";
+import { BookOpen, KeyRound, Music3, StickyNote, Timer } from "lucide-react";
 import type { MusicCues } from "@/lib/capture/musicCues";
+import type { SpokenCues } from "@/lib/capture/spokenCues";
 
 interface HeardCuesStripProps {
   cues: MusicCues;
+  /** Spoken scripture references + note-to-self cues (say-it-structured). */
+  spoken?: SpokenCues;
   className?: string;
 }
 
@@ -28,8 +31,15 @@ const chipStyle: React.CSSProperties = {
  * the idea arrives song-ready without typing. Read-only and calm — it never
  * nags or blocks; it just reassures.
  */
-const HeardCuesStrip = ({ cues, className }: HeardCuesStripProps) => {
-  const hasAny = cues.key != null || cues.tempo != null || cues.chords.length > 0;
+const HeardCuesStrip = ({ cues, spoken, className }: HeardCuesStripProps) => {
+  const scriptures = spoken?.scriptures ?? [];
+  const notes = spoken?.notes ?? [];
+  const hasAny =
+    cues.key != null ||
+    cues.tempo != null ||
+    cues.chords.length > 0 ||
+    scriptures.length > 0 ||
+    notes.length > 0;
   if (!hasAny) return null;
 
   return (
@@ -68,6 +78,18 @@ const HeardCuesStrip = ({ cues, className }: HeardCuesStripProps) => {
             {cues.chords.map((c) => c.chord).join("  ")}
           </span>
         )}
+        {scriptures.map((s) => (
+          <span key={`${s.reference}-${s.atMs}`} style={chipStyle}>
+            <BookOpen size={13} style={{ color: "var(--cog-gold)" }} />
+            {s.reference}
+          </span>
+        ))}
+        {notes.map((n) => (
+          <span key={`note-${n.atMs}`} style={chipStyle}>
+            <StickyNote size={13} style={{ color: "var(--cog-gold)" }} />
+            {n.text.length > 26 ? `${n.text.slice(0, 26)}…` : n.text}
+          </span>
+        ))}
       </div>
     </div>
   );

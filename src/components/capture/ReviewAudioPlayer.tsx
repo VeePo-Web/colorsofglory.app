@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Play, Pause } from "lucide-react";
 
 interface ReviewAudioPlayerProps {
   src: string;
   /** Fallback duration (ms) until the audio element reports its own metadata. */
   durationMs?: number;
+  /** Fired when a section clip finishes or is interrupted (full-take play, seek). */
+  onClipStop?: () => void;
+}
+
+export interface ReviewAudioPlayerHandle {
+  /**
+   * Play just one section's slice of the take — seek to `startSec`, pause at
+   * `endSec`. Derived + non-destructive: it's the same full-take element with
+   * a stop point, so the raw recording is untouched.
+   */
+  playClip: (startSec: number, endSec: number) => void;
+  stopClip: () => void;
 }
 
 function fmt(sec: number): string {
@@ -20,8 +32,13 @@ function fmt(sec: number): string {
  * review sheet reads as intentional (Adobe / Apple Music standard) rather than
  * a raw browser widget.
  */
-const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
+const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerProps>(
+  ({ src, durationMs, onClipStop }, ref) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // End boundary (sec) of the section clip in flight, if any.
+  const clipEndRef = useRef<number | null>(null);
+  const onClipStopRef = useRef(onClipStop);
+  onClipStopRef.current = onClipStop;
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState((durationMs ?? 0) / 1000);
@@ -34,8 +51,23 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
     const onMeta = () => {
       if (isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
     };
-    const onTime = () => setCurrent(audio.currentTime);
-    const onEnd = () => setPlaying(false);
+    const onTime = () => {
+      setCurrent(audio.currentTime);
+      const clipEnd = clipEndRef.current;
+      if (clipEnd != null && audio.currentTime >= clipEnd) {
+        audio.pause();
+        clipEndRef.current = null;
+        setPlaying(false);
+        onClipStopRef.current?.();
+      }
+    };
+    const onEnd = () => {
+      setPlaying(false);
+      if (clipEndRef.current != null) {
+        clipEndRef.current = null;
+        onClipStopRef.current?.();
+      }
+    };
 
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("timeupdate", onTime);
@@ -47,12 +79,43 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("ended", onEnd);
       audioRef.current = null;
+      clipEndRef.current = null;
     };
   }, [src]);
+
+  const clearClip = () => {
+    if (clipEndRef.current != null) {
+      clipEndRef.current = null;
+      onClipStopRef.current?.();
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    playClip: (startSec: number, endSec: number) => {
+      const audio = audioRef.current;
+      if (!audio || endSec <= startSec) return;
+      audio.currentTime = Math.max(0, startSec);
+      clipEndRef.current = endSec;
+      void audio.play().then(() => setPlaying(true)).catch(() => {
+        clipEndRef.current = null;
+        setPlaying(false);
+        onClipStopRef.current?.();
+      });
+    },
+    stopClip: () => {
+      const audio = audioRef.current;
+      if (audio && clipEndRef.current != null) audio.pause();
+      clipEndRef.current = null;
+      setPlaying(false);
+      onClipStopRef.current?.();
+    },
+  }), []);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
+    // The main transport always plays the FULL take — leaving a clip window.
+    clearClip();
     if (playing) {
       audio.pause();
       setPlaying(false);
@@ -64,6 +127,7 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
   const seek = (value: number) => {
     const audio = audioRef.current;
     if (!audio) return;
+    clearClip();
     audio.currentTime = value;
     setCurrent(value);
   };
@@ -175,6 +239,8 @@ const ReviewAudioPlayer = ({ src, durationMs }: ReviewAudioPlayerProps) => {
       `}</style>
     </div>
   );
-};
+});
+
+ReviewAudioPlayer.displayName = "ReviewAudioPlayer";
 
 export default ReviewAudioPlayer;

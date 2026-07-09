@@ -50,6 +50,15 @@ export interface SectionMarker {
   source: "voice" | "manual";
   /** Display label, user-editable in the Review sheet. */
   label: string;
+  /**
+   * 0..1 likelihood that this voice marker was an ANNOUNCEMENT ("…[pause]
+   * verse two") rather than the word sung as a lyric ("every verse of this
+   * psalm"). Derived from word-timestamp pauses and phrasing — the Dragon
+   * NaturallySpeaking command-vs-content lesson. Markers below the apply
+   * threshold are NEVER used to split silently; they surface in review for
+   * one-tap confirmation. Unset (manual chips, server blocks) means 1.
+   */
+  confidence?: number;
 }
 
 export interface TranscriptBlock {

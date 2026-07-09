@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { TranscriptBlock } from "@/lib/capture/transcriptModel";
 
@@ -7,6 +8,11 @@ interface LiveTranscriptProps {
   status: "idle" | "listening" | "transcribing" | "ready" | "skipped";
   /** Optional in-flight partial word(s) from on-device live STT. */
   partial?: string;
+  /**
+   * Gentle mid-take guidance ("Singing? Speak the section names…"). Shown
+   * under the transcript, never modal — coaching, not interruption.
+   */
+  coachCopy?: string | null;
   onWordTap?: (atMs: number) => void;
 }
 
@@ -73,7 +79,7 @@ const ListeningPulse = ({ copy }: { copy: string }) => (
   </div>
 );
 
-const SectionDivider = ({ label }: { label: string }) => (
+const SectionDivider = ({ label, fresh }: { label: string; fresh?: boolean }) => (
   <motion.div
     layout
     initial={{ opacity: 0, y: -4 }}
@@ -89,6 +95,7 @@ const SectionDivider = ({ label }: { label: string }) => (
   >
     <span style={{ flex: 1, height: 1, background: "rgba(184,149,58,0.35)" }} />
     <span
+      className={fresh ? "cog-section-fresh" : undefined}
       style={{
         fontFamily: "var(--font-body)",
         fontSize: 10,
@@ -105,13 +112,45 @@ const SectionDivider = ({ label }: { label: string }) => (
       {label}
     </span>
     <span style={{ flex: 1, height: 1, background: "rgba(184,149,58,0.35)" }} />
+    {fresh && (
+      <style>{`
+        .cog-section-fresh {
+          animation: cog-section-bloom 1.4s var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)) 1;
+        }
+        @keyframes cog-section-bloom {
+          0%   { box-shadow: 0 0 0 0 rgba(184,149,58,0.45); }
+          60%  { box-shadow: 0 0 0 9px rgba(184,149,58,0); }
+          100% { box-shadow: 0 0 0 0 rgba(184,149,58,0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .cog-section-fresh { animation: none; }
+        }
+      `}</style>
+    )}
   </motion.div>
 );
 
-const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscriptProps) => {
+const LiveTranscript = ({ blocks, status, partial = "", coachCopy, onWordTap }: LiveTranscriptProps) => {
   const populated = blocks.filter((b) => b.words.length > 0);
   const hasBlocks = populated.length > 0;
   const hasPartial = partial.trim().length > 0;
+
+  // Auto-follow while listening: a long take grows past the pane, and the
+  // words being formed RIGHT NOW must stay visible — that's the live magic.
+  // Instant (non-smooth) scroll so reduced-motion users get no animation.
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  const followKey = `${populated.length}:${populated[populated.length - 1]?.words.length ?? 0}:${partial}`;
+  useEffect(() => {
+    if (status !== "listening") return;
+    const pane = paneRef.current;
+    if (pane) pane.scrollTop = pane.scrollHeight;
+  }, [followKey, status]);
+
+  // The newest section chip blooms once as it materializes.
+  const freshBlockId =
+    status === "listening" && populated.length > 0
+      ? populated[populated.length - 1].id
+      : null;
 
   return (
     <section
@@ -121,7 +160,7 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
     >
       {!hasBlocks && !hasPartial && (
         status === "listening" ? (
-          <ListeningPulse copy={STATUS_COPY.listening} />
+          <ListeningPulse copy={coachCopy ?? STATUS_COPY.listening} />
         ) : STATUS_COPY[status] ? (
           <p
             style={{
@@ -140,12 +179,15 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
 
       {(hasBlocks || hasPartial) && (
         <div
+          ref={paneRef}
           style={{
             background: "var(--cog-cream-light, #faf7f2)",
             border: "1px solid rgba(184,149,58,0.22)",
             borderRadius: 20,
             padding: "16px 18px",
             boxShadow: "0 6px 20px rgba(28,26,23,0.05)",
+            maxHeight: "38dvh",
+            overflowY: "auto",
           }}
         >
           <AnimatePresence initial={false}>
@@ -154,7 +196,9 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
               const showDivider = block.marker.kind !== "unlabeled";
               return (
                 <div key={block.id}>
-                  {showDivider && <SectionDivider label={block.marker.label} />}
+                  {showDivider && (
+                    <SectionDivider label={block.marker.label} fresh={block.id === freshBlockId} />
+                  )}
                   <motion.p
                     layout
                     initial={{ opacity: 0, y: 4 }}
@@ -210,6 +254,22 @@ const LiveTranscript = ({ blocks, status, partial = "", onWordTap }: LiveTranscr
             </p>
           )}
         </div>
+      )}
+
+      {coachCopy && (hasBlocks || hasPartial) && status === "listening" && (
+        <p
+          aria-live="polite"
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: 12.5,
+            color: "var(--cog-warm-gray, #6b6459)",
+            textAlign: "center",
+            margin: "10px auto 0",
+            maxWidth: 300,
+          }}
+        >
+          {coachCopy}
+        </p>
       )}
     </section>
   );

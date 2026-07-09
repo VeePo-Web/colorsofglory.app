@@ -16,7 +16,10 @@ import type {
 
 const ORDINAL_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12,
   first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+  sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
 };
 
 interface KeywordRule {
@@ -31,6 +34,14 @@ interface KeywordRule {
   takesOrdinal?: boolean;
   /** Fixed ordinal baked into the phrase ("first verse" → 1). */
   fixedOrdinal?: number;
+  /** Display label that beats the generated one ("Final Chorus", "Drop"). */
+  labelOverride?: string;
+  /**
+   * "second time" — a repeat call whose section KIND comes from the previous
+   * detected marker ("chorus … second time" → Chorus 2). Skipped entirely when
+   * nothing precedes it, so ordinary lyrics can't trigger it cold.
+   */
+  repeatPrevious?: boolean;
 }
 
 // Order matters — longer phrases win, so list multi-word rules first.
@@ -44,12 +55,21 @@ const RULES: KeywordRule[] = [
   { tokens: ["first", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 1 },
   { tokens: ["second", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 2 },
   { tokens: ["third", "verse"], kind: "verse", takesOrdinal: false, fixedOrdinal: 3 },
+  { tokens: ["last", "chorus"], kind: "chorus", takesOrdinal: false, labelOverride: "Final Chorus" },
+  { tokens: ["final", "chorus"], kind: "chorus", takesOrdinal: false, labelOverride: "Final Chorus" },
+  { tokens: ["double", "chorus"], kind: "chorus", takesOrdinal: false, labelOverride: "Double Chorus" },
+  // "the drop" — the chorus-energy moment in modern worship/CCM writing.
+  // Two-token on purpose: a bare "drop" is far too often a lyric verb.
+  { tokens: ["the", "drop"], kind: "chorus", takesOrdinal: false, labelOverride: "Drop" },
+  // Repeat call: "…second time…" re-announces whatever section came last.
+  { tokens: ["second", "time"], kind: "verse", takesOrdinal: false, repeatPrevious: true },
   { tokens: ["verse"], kind: "verse" },
   { tokens: ["chorus"], kind: "chorus" },
   { tokens: ["refrain"], kind: "chorus" },
   { tokens: ["hook"], kind: "hook" },
   { tokens: ["bridge"], kind: "bridge" },
   { tokens: ["turnaround"], kind: "bridge" },
+  { tokens: ["channel"], kind: "pre-chorus" },
   { tokens: ["intro"], kind: "intro" },
   { tokens: ["outro"], kind: "outro" },
   { tokens: ["ending"], kind: "outro" },
@@ -57,6 +77,7 @@ const RULES: KeywordRule[] = [
   { tokens: ["tag"], kind: "tag" },
   { tokens: ["vamp"], kind: "tag" },
   { tokens: ["interlude"], kind: "interlude" },
+  { tokens: ["instrumental"], kind: "interlude", labelOverride: "Instrumental" },
   { tokens: ["breakdown"], kind: "interlude" },
 ];
 
@@ -103,15 +124,64 @@ function canonicalizeTokens(tokens: string[]): string[] {
  */
 const LEADING_FILLERS = new Set<string>([
   "okay", "ok", "alright", "alrighty", "right",
-  "and", "so", "now", "then",
+  "and", "so", "now", "then", "next",
   "this", "that", "its", "it",
   "is", "was",
   "the", "a", "an",
   "lets", "let", "us",
-  "going", "to", "into",
+  "going", "gonna", "to", "into", "onto",
   "do", "try", "play",
-  "uh", "um", "like",
+  "uh", "um", "like", "well",
+  "here", "heres", "comes",
 ]);
+
+/**
+ * A filler is only absorbed into the marker phrase when it runs CONTINUOUSLY
+ * into it. Across a real pause the same word is almost certainly the tail of
+ * the lyric ("…I am here <pause> chorus") — absorbing it would eat a lyric
+ * word, which is worse than a slightly untidy announcement.
+ */
+const FILLER_MAX_GAP_MS = 600;
+
+/**
+ * Words that, when they run straight into a section word with no pause, mark
+ * it as part of a sung phrase rather than an announcement ("EVERY verse OF
+ * this psalm", "IN the chorus of heaven").
+ */
+const CONTENT_PRECEDERS = new Set<string>([
+  "every", "each", "that", "those", "these",
+  "of", "in", "from", "with", "through",
+  "your", "my", "our", "his", "her", "their",
+  "whole", "same", "little", "sweet",
+]);
+
+/** Pause length that clearly separates an announcement from surrounding speech. */
+const CLEAR_PAUSE_MS = 550;
+/**
+ * A softer but still audible breath. Continuous phrasing (words sung/spoken in
+ * one flow) sits under ~150ms between words on real Whisper timings and at 0
+ * on the live path's synthetic layout — so 200ms is already a deliberate gap.
+ */
+const SOFT_PAUSE_MS = 200;
+
+/**
+ * Markers at or above this confidence are APPLIED (they split the take).
+ * Below it they are surfaced as candidates for one-tap confirmation in the
+ * Review sheet — never silently applied, never silently dropped (the Dragon
+ * NaturallySpeaking command-vs-content lesson).
+ */
+export const APPLY_CONFIDENCE_THRESHOLD = 0.5;
+
+/** Does this marker actually split the take? Manual chips always do. */
+export function isAppliedMarker(m: SectionMarker): boolean {
+  if (m.source === "manual") return true;
+  return (m.confidence ?? 1) >= APPLY_CONFIDENCE_THRESHOLD;
+}
+
+/** Low-confidence voice markers — flagged for review, never auto-applied. */
+export function pendingCandidateMarkers(markers: SectionMarker[]): SectionMarker[] {
+  return markers.filter((m) => m.source === "voice" && !isAppliedMarker(m));
+}
 
 function normalizeToken(t: string): string {
   return t.toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -167,6 +237,11 @@ function consumeOrdinalVariant(
   if (t1 && /^[b-e]$/.test(t1)) {
     return { ordinal, variant: t1.toUpperCase(), consumed: 2 };
   }
+  // "chorus second TIME" / "verse two ROUND"? — absorb the repeat word so it
+  // never leaks into the section body.
+  if (t1 === "time" && ORDINAL_WORDS[t0] != null) {
+    return { ordinal, consumed: 2 };
+  }
   return { ordinal, consumed: 1 };
 }
 
@@ -193,11 +268,15 @@ function defaultLabel(
   return base;
 }
 
-/** Pre-fill ordinals for repeated verses if none were spoken. */
+/**
+ * Pre-fill ordinals for repeated verses if none were spoken. Only APPLIED
+ * markers advance the count — an unconfirmed low-confidence candidate must
+ * not shift the numbering of the sections that actually split the take.
+ */
 function backfillVerseOrdinals(markers: SectionMarker[]): SectionMarker[] {
   let verseCount = 0;
   return markers.map((m) => {
-    if (m.kind !== "verse") return m;
+    if (m.kind !== "verse" || !isAppliedMarker(m)) return m;
     verseCount += 1;
     if (m.ordinal != null) return m;
     const next = { ...m, ordinal: verseCount };
@@ -225,6 +304,9 @@ export function detectSectionMarkers(
     for (const rule of RULES) {
       const slice = canonical.slice(i, i + rule.tokens.length).join(" ");
       if (slice === rule.tokens.join(" ")) {
+        // A repeat call ("second time") only means something after a section
+        // has already been announced — cold, it's just lyric words.
+        if (rule.repeatPrevious && found.length === 0) continue;
         matched = { rule, len: rule.tokens.length };
         break;
       }
@@ -238,7 +320,12 @@ export function detectSectionMarkers(
     let ordinal: number | undefined;
     let variant: string | undefined;
     let consumed = matched.len;
-    if (matched.rule.fixedOrdinal != null) {
+    let kind = matched.rule.kind;
+    if (matched.rule.repeatPrevious) {
+      // "second time" → repeat the previous section as its second pass.
+      kind = found[found.length - 1].kind;
+      ordinal = 2;
+    } else if (matched.rule.fixedOrdinal != null) {
       // "first verse" → ordinal baked in; nothing more to absorb.
       ordinal = matched.rule.fixedOrdinal;
     } else if (matched.rule.takesOrdinal !== false) {
@@ -249,11 +336,14 @@ export function detectSectionMarkers(
       consumed += ov.consumed;
     }
 
-    // Walk backwards over leading-filler tokens so the marker absorbs them.
+    // Walk backwards over leading-filler tokens so the marker absorbs them —
+    // but only while the words run CONTINUOUSLY into the phrase. Across a real
+    // pause the same word is the lyric's tail, not part of the announcement.
     let phraseStart = i;
     while (
       phraseStart > 0 &&
       LEADING_FILLERS.has(tokens[phraseStart - 1]) &&
+      words[phraseStart].startMs - words[phraseStart - 1].endMs < FILLER_MAX_GAP_MS &&
       // Don't consume tokens that already belong to an earlier marker's body.
       (found.length === 0 || words[phraseStart - 1].startMs > (found[found.length - 1].contentStartMs ?? found[found.length - 1].atMs))
     ) {
@@ -264,14 +354,47 @@ export function detectSectionMarkers(
     const lastConsumedIdx = i + consumed - 1;
     const lastConsumedWord = words[lastConsumedIdx] ?? startWord;
 
+    // ---- Command-vs-content confidence (the Dragon lesson) ----------------
+    // An announcement arrives after a breath and often pauses again before the
+    // content; a section word sung as a lyric runs mid-phrase with no pause.
+    const prevWord = words[phraseStart - 1];
+    let confidence: number;
+    if (!prevWord) {
+      confidence = 0.95; // very start of the take = announcement
+    } else {
+      const gapBefore = phraseStartWord.startMs - prevWord.endMs;
+      if (gapBefore >= CLEAR_PAUSE_MS) confidence = 0.9;
+      else if (gapBefore >= SOFT_PAUSE_MS) confidence = 0.72;
+      else confidence = 0.35;
+      if (gapBefore < CLEAR_PAUSE_MS && CONTENT_PRECEDERS.has(tokens[phraseStart - 1])) {
+        confidence -= 0.2; // "every verse…", "in the chorus…"
+      }
+    }
+    const spokeOrdinal = ordinal != null && !matched.rule.repeatPrevious;
+    if (spokeOrdinal) confidence += 0.2; // "verse two" is rarely a lyric
+    if (phraseStart < i) confidence += 0.08; // "okay, this is the…" framing
+    const nextWord = words[i + consumed];
+    if (!nextWord) {
+      confidence += 0.12; // trailing announcement at the very end of the take
+    } else {
+      const gapAfter = nextWord.startMs - lastConsumedWord.endMs;
+      if (gapAfter < CLEAR_PAUSE_MS && canonical[i + consumed] === "of") {
+        confidence -= 0.2; // "…chorus of heaven", "…verse of this psalm"
+      } else if (gapAfter >= SOFT_PAUSE_MS) {
+        confidence += 0.12; // breath after announcing
+      }
+    }
+    confidence = Math.min(0.99, Math.max(0.05, confidence));
+
     found.push({
       atMs: phraseStartWord.startMs,
       contentStartMs: lastConsumedWord.endMs,
-      kind: matched.rule.kind,
+      kind,
       ordinal,
       variant,
       source: "voice",
-      label: defaultLabel(matched.rule.kind, ordinal, variant),
+      confidence,
+      label: matched.rule.labelOverride ?? defaultLabel(kind, ordinal, variant),
     });
     i += consumed;
   }
@@ -292,12 +415,17 @@ export function detectSectionMarkers(
   return backfillVerseOrdinals(merged);
 }
 
-/** Split a word stream into transcript blocks using the detected markers. */
+/**
+ * Split a word stream into transcript blocks using the detected markers.
+ * Low-confidence voice markers are EXCLUDED here — a doubtful "verse" spoken
+ * inside a lyric never silently restructures the take; it rides along as a
+ * candidate for one-tap confirmation in review instead.
+ */
 export function buildTranscriptBlocks(
   words: TranscriptWord[],
   markers: SectionMarker[],
 ): TranscriptBlock[] {
-  const sorted = [...markers].sort((a, b) => a.atMs - b.atMs);
+  const sorted = markers.filter(isAppliedMarker).sort((a, b) => a.atMs - b.atMs);
   const effective: SectionMarker[] = sorted.length === 0 || sorted[0].atMs > 0
     ? [
         {

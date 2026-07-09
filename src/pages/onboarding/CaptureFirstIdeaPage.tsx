@@ -42,10 +42,18 @@ const CaptureFirstIdeaPage = () => {
         Capture the first idea
       </h1>
       <p
-        className="text-[1rem] text-center mb-14 leading-relaxed mx-auto"
+        className="text-[1rem] text-center mb-3 leading-relaxed mx-auto"
         style={{ color: "var(--cog-warm-gray)", maxWidth: 280 }}
       >
         Record a melody, lyric thought, chord idea, or prayer moment.
+      </p>
+      {/* The say-it-structured aha, planted before the first tap: speak the
+          section names and the take arrives already structured (F12). */}
+      <p
+        className="text-[0.875rem] text-center mb-11 leading-relaxed mx-auto"
+        style={{ color: "var(--cog-gold)", maxWidth: 290, fontFamily: "var(--font-body)" }}
+      >
+        Say “verse” or “chorus” as you go — your words land already structured.
       </p>
 
       {/* Large gold mic button — centered, prominent, matches reference.

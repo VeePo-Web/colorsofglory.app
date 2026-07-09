@@ -12,12 +12,26 @@ export type TranscriptBlock = {
   text: string;
   start_ms: number;
   end_ms: number;
+  /**
+   * 0..1 segmentation confidence from the server pass (regex 1.0; LLM-repaired
+   * boundaries may be lower). Optional + additive — older payloads lack it.
+   * See docs/TRANSCRIPTION-CONTRACT.md.
+   */
+  confidence?: number;
 };
 
 export type TranscriptPayload = {
   model: string;
   blocks: TranscriptBlock[];
   raw_text: string;
+  /**
+   * Whisper word-level timing (optional + additive). Powers per-section audio
+   * clipping for takes reopened after this session's live words are gone.
+   * Contract: docs/TRANSCRIPTION-CONTRACT.md (Lovable ask: docs/prompts/L12).
+   */
+  words?: { text: string; start_ms: number; end_ms: number }[];
+  /** Which pass produced `blocks` — additive metadata for observability. */
+  segmentation?: "regex" | "llm" | "llm_fallback_regex";
 };
 
 export type TranscriptStatus = "idle" | "processing" | "ready" | "failed";
