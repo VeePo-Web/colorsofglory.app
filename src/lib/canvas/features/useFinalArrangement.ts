@@ -104,6 +104,14 @@ export function useFinalArrangement({
 
   const save = useCallback(() => {
     const previous = snapshotRef.current;
+    // Commit the running order as CLEAN column slots in one atomic patch:
+    // kills y-ties (two cards at the same y made moveBy a no-op) and lands as
+    // a single bulk server write instead of a race of pair-swaps.
+    const reslotted = orderedFinalCards.map((c, i) => ({
+      id: c.id,
+      patch: finalSlot(i),
+    }));
+    if (reslotted.length > 0) mutations.patchCards(reslotted);
     setArranging(false);
     onMoment?.("Arrangement saved", "Final tree", "Running order");
     toast("Running order saved", {
@@ -115,7 +123,7 @@ export function useFinalArrangement({
         },
       },
     });
-  }, [mutations, onMoment]);
+  }, [orderedFinalCards, finalSlot, mutations, onMoment]);
 
   const moveToFinal = useCallback(
     (cardId: string) => {

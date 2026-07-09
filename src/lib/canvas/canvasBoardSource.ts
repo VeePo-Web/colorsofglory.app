@@ -1,6 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
 import { listCanvasCards, type CanvasCard as ServerCanvasCard } from "@/integrations/cog/canvas";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import {
+  decodeSuggestion,
+  SUGGESTION_SECTION_KIND,
+  type PendingLineSuggestion,
+} from "@/lib/canvas/lineSuggestions";
 import { DEMO_BOARD } from "@/lib/canvas/demoBoard";
 import {
   cardWidth,
@@ -151,10 +156,50 @@ const TYPE_TITLES: Record<CanvasBoardCardType, string> = {
 
 export interface HydratedBoard {
   cards: CanvasBoardCard[];
+  /** Line-suggestion carrier rows, routed OFF the board into the review lane. */
+  suggestions: PendingLineSuggestion[];
   /** Whether each source answered — the host prunes stale db-* cards ONLY for
    *  sources that actually responded (never on an offline failure). */
   memosOk: boolean;
   cardsOk: boolean;
+}
+
+// ─── Review tombstones ──────────────────────────────────────────────────────
+// The server has no review_state column yet, so an owner's "Not this one" on a
+// server row would resurrect on the next hydrate. Tombstones remember the
+// decision on THIS device (cross-device decisions need the backend column —
+// filed in the handoff). Undo removes the tombstone.
+
+const TOMBSTONES_KEY = (songId: string) => `cog:canvas-tombstones-${songId}`;
+
+export function readTombstones(songId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(TOMBSTONES_KEY(songId));
+    const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function addTombstone(songId: string, cardId: string): void {
+  const next = readTombstones(songId);
+  next.add(cardId);
+  try {
+    localStorage.setItem(TOMBSTONES_KEY(songId), JSON.stringify([...next]));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+export function removeTombstone(songId: string, cardId: string): void {
+  const next = readTombstones(songId);
+  next.delete(cardId);
+  try {
+    localStorage.setItem(TOMBSTONES_KEY(songId), JSON.stringify([...next]));
+  } catch {
+    /* non-fatal */
+  }
 }
 
 function formatDurationMs(ms: number | null): string {
@@ -185,6 +230,7 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
   ]);
 
   const out: CanvasBoardCard[] = [];
+  const suggestions: PendingLineSuggestion[] = [];
   let memosOk = false;
   let cardsOk = false;
 
@@ -222,6 +268,26 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
   if (cardsRes.status === "fulfilled") {
     cardsOk = true;
     cardsRes.value.forEach((row, i) => {
+      // Carrier rows are proposals, not board material — route them to the
+      // review lane and never paint them as cards.
+      if (row.section_kind === SUGGESTION_SECTION_KIND) {
+        const payload = decodeSuggestion(row.body);
+        if (payload) {
+          suggestions.push({
+            id: row.id,
+            songId,
+            cardId: row.parent_card_id ? `db-card-${row.parent_card_id}` : "",
+            originalLine: payload.originalLine,
+            proposedLine: payload.proposedLine,
+            contributor: payload.contributor,
+            section: payload.section,
+            createdAt: new Date(row.created_at).getTime(),
+            fromServer: true,
+            createdBy: row.created_by,
+          });
+        }
+        return;
+      }
       const type = SERVER_KIND_TO_TYPE[row.kind] ?? "note";
       const tree: CanvasBoardTree = row.tree_kind === "final" ? "final" : "ideas";
       const fallback = tree === "final" ? finalColumnSlot(i) : ideaColumnSlot(i);
@@ -252,5 +318,5 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
     });
   }
 
-  return { cards: out.map(normalizeCard), memosOk, cardsOk };
+  return { cards: out.map(normalizeCard), suggestions, memosOk, cardsOk };
 }

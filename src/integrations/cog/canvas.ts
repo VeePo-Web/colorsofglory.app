@@ -53,6 +53,36 @@ export async function commitTakeToCanvas(input: CommitTakeInput): Promise<Commit
   return call<CommitTakeResult>("commit-take", input);
 }
 
+export type CreateCanvasCardInput = {
+  song_id: string;
+  kind: CanvasCard["kind"];
+  label?: string | null;
+  body: string;
+  section_kind?: string | null;
+  section_label?: string | null;
+  tree_kind?: "ideas" | "final";
+  x?: number | null;
+  y?: number | null;
+  parent_card_id?: string | null;
+  created_by?: string;
+};
+
+/**
+ * Insert a canvas card directly (the client-side create path the engine audit
+ * named as the missing persistence primitive). RLS is the wall — a rejected
+ * insert is non-fatal for callers using the local-first pattern (the card
+ * simply stays device-local until a backend contract lands).
+ */
+export async function createCanvasCard(input: CreateCanvasCardInput): Promise<CanvasCard> {
+  const { data, error } = await db
+    .from("canvas_cards")
+    .insert({ position: 0, ...input })
+    .select("*")
+    .single();
+  if (error) throw toCogError(error);
+  return data as CanvasCard;
+}
+
 export async function listCanvasCards(song_id: string): Promise<CanvasCard[]> {
   const { data, error } = await db
     .from("canvas_cards")

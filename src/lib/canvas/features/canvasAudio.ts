@@ -62,6 +62,21 @@ export interface CanvasPlayHandlers {
 }
 
 /**
+ * Warm the signed-URL cache for a memo BEFORE it's needed — the biggest gap
+ * between listen-path tracks is the URL round-trip on advance. Fire-and-forget.
+ */
+export async function preloadMemo(memoId: string): Promise<void> {
+  const cached = urlCache.get(memoId);
+  if (cached && Date.now() - cached.fetchedAt < URL_TTL_MS) return;
+  try {
+    const url = await getPlaybackUrl(memoId);
+    urlCache.set(memoId, { url, fetchedAt: Date.now() });
+  } catch {
+    // Preload is best-effort; playback will fetch on demand.
+  }
+}
+
+/**
  * Play a memo through the shared element. Any previous canvas playback stops
  * first. Resolves true if this request is still the active one after start.
  */

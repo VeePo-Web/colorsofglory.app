@@ -58,11 +58,40 @@ const OwnerReviewQueueSheet = ({
   const [phase, setPhase] = useState<Phase>("summary");
   const [index, setIndex] = useState(0);
   const acted = useRef<Set<string>>(new Set());
+  const sheetRef = useRef<HTMLDivElement>(null);
 
+  // Focus discipline: focus moves INTO the dialog on open, Tab cycles inside
+  // it, Escape closes, and focus returns to the opener — a keyboard or
+  // screen-reader owner must never Tab-walk the canvas behind the review.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    sheetRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !sheetRef.current) return;
+      const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === sheetRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
   }, [onClose]);
 
   // Grouped counts by plain-language kind for the summary hero.
@@ -98,6 +127,8 @@ const OwnerReviewQueueSheet = ({
         }}
       />
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Needs your review"

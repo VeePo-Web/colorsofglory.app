@@ -210,6 +210,19 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
         )}
       </div>
 
+      {/* Non-destructive reassurance — the user is TOLD before committing */}
+      <p
+        style={{
+          margin: "0 16px 8px",
+          fontFamily: "var(--font-body)",
+          fontSize: 11,
+          color: "var(--cog-warm-gray, #6B6459)",
+          lineHeight: 1.4,
+        }}
+      >
+        Both originals stay on the board — merging never deletes.
+      </p>
+
       {/* Merge CTA */}
       <div style={{ padding: "0 16px 8px" }}>
         <button

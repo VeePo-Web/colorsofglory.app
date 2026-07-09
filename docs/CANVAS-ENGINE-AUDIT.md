@@ -7,6 +7,44 @@
 > The audit brief's "where it actually is" claims described the pre-rescue codebase and were
 > treated as STALE; every mechanic below was re-verified against the current code.
 
+## ADDENDUM — 2026-07-09: the build pass that answered this audit
+
+A follow-up commit implemented the audit's top findings. Now FIXED:
+
+- **The create spine** — `createCanvasCard` (integrations/cog/canvas.ts) + a
+  local-first insert/swap in the host (`persistNewCard`): canvas-born lyric/
+  chord/scripture/note/section cards AND merged sections become `canvas_cards`
+  rows and reach every device (graceful local fallback when RLS/network says no).
+- **Line suggestions TRAVEL** — carrier rows over `canvas_cards`
+  (`section_kind: "line_suggestion"`, JSON payload, routed off the board by
+  `hydrateBoard` into the review lane; resolved rows are deleted). UUID ids;
+  the fake 200ms latency + the offline refusal are gone (local-first outbox).
+- **The two silent reverts** — `handleAcceptLine` now writes through
+  (`updateCanvasCard` + dirty window), and dismissed server cards get local
+  TOMBSTONES consulted by the hydrate, so decisions stay decided (cross-device
+  decision truth still needs the `review_state` column — the Lovable ask stands).
+- **Listen Path** — the step follows the playing card when earlier stops are
+  removed; the NEXT stop's signed URL preloads while the current one sounds;
+  Clear has Undo; steps announce via aria-live.
+- **One person, one color** — presence/self/roster/cards all hash the user id
+  through the warm canvas palette; the legacy avatar palette (incl. corporate
+  blue) no longer leaks onto canvas surfaces. ONE sage (glorySpectrum)
+  everywhere Final speaks; merge credits the real merger (no more "Alice & Bob").
+- **Arrangement save is atomic** — re-slots through `finalColumnSlot(i)` in one
+  patch → one `canvas_bulk_move`, killing y-ties and pair-swap races.
+- **ScripturePicker is wired** — "Find the verse" inside the scripture card
+  editor: structured book/chapter/verse, real passage fetch, 3 translations;
+  the reference rides in the card title + meta.
+- **A11y/perf** — focus traps in the review + suggestion sheets, Compare's
+  nested-button fixed + its reduced-motion classes applied, honest roster
+  aria-label, merge non-destruction caption, realtime re-hydrates debounced.
+
+Still open (backend-shaped or next passes): `song_suggestions` proper table +
+`review_state`/`status` columns (cross-device decision truth), gapless
+double-buffer audio, entry-based listen queue (repeats/reorder),
+section-occupancy presence, loudness-match/blind-mode compare, the
+god-component carve.
+
 ## Scoreboard
 
 | # | Mechanic | Verdict | Gap-to-worldclass |

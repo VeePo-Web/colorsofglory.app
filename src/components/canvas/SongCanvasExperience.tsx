@@ -70,16 +70,27 @@ import {
 } from "@/lib/canvas/canvasBoardSource";
 import {
   bulkMoveCards,
+  createCanvasCard,
+  deleteCanvasCard,
   moveCard as moveServerCard,
   promoteCardToFinal,
   setCardSection,
   updateCanvasCard,
+  type CanvasCard as ServerCanvasCardRow,
 } from "@/integrations/cog/canvas";
+import {
+  addTombstone,
+  readTombstones,
+  removeTombstone,
+} from "@/lib/canvas/canvasBoardSource";
+import { GLORY } from "@/lib/canvas/glorySpectrum";
 import type { SectionClusterData } from "@/components/canvas/SectionCluster";
 import {
   addLineSuggestion,
+  encodeSuggestion,
   listLineSuggestions,
   removeLineSuggestion,
+  SUGGESTION_SECTION_KIND,
   type PendingLineSuggestion,
 } from "@/lib/canvas/lineSuggestions";
 import StackSheet from "@/components/voice/StackSheet";
@@ -276,6 +287,58 @@ const SongCanvasExperience = () => {
     }
   }, [markDirty]);
 
+  // ── The create spine: a canvas-born card becomes a canvas_cards row ────────
+  // Local-first: the card exists instantly with a local uuid; when the insert
+  // lands, its id swaps to the server form (db-card-<uuid>) so every device in
+  // the room hydrates it. A rejected insert (RLS, offline, local song id) is
+  // non-fatal — the card simply stays device-local, exactly as before.
+  const replaceQueueIdRef = useRef<(oldId: string, newId: string) => void>(() => {});
+  const swapCardId = useCallback((oldId: string, newId: string) => {
+    setCards((prev) =>
+      prev
+        // The realtime hydrate may have mirrored the row already — never two.
+        .filter((c) => c.id !== newId)
+        .map((c) =>
+          c.id === oldId
+            ? { ...c, id: newId }
+            : c.sourceCardId === oldId
+            ? { ...c, sourceCardId: newId }
+            : c,
+        ),
+    );
+    setSelectedId((s) => (s === oldId ? newId : s));
+    setEditCardId((s) => (s === oldId ? newId : s));
+    setMoreCardId((s) => (s === oldId ? newId : s));
+    replaceQueueIdRef.current(oldId, newId);
+  }, []);
+
+  const SERVER_KIND_BY_TYPE: Partial<Record<CanvasCardType, ServerCanvasCardRow["kind"]>> = useMemo(
+    () => ({ lyric: "lyrics", chord: "chords", scripture: "scripture", note: "idea", section: "section" }),
+    [],
+  );
+  const persistNewCard = useCallback(
+    (card: CanvasCard) => {
+      if (isDemoRoom) return;
+      const kind = SERVER_KIND_BY_TYPE[card.type];
+      if (!kind) return; // voice/hum live in voice_memos, not canvas_cards
+      syncServer(async () => {
+        const row = await createCanvasCard({
+          song_id: songId,
+          kind,
+          label: card.title,
+          body: card.body,
+          section_label: card.section,
+          tree_kind: card.tree,
+          x: Math.round(card.x),
+          y: Math.round(card.y),
+          created_by: profile?.user_id,
+        });
+        swapCardId(card.id, `db-card-${row.id}`);
+      }, card.id);
+    },
+    [isDemoRoom, songId, profile?.user_id, syncServer, swapCardId, SERVER_KIND_BY_TYPE],
+  );
+
   const [cards, setCards] = useState<CanvasCard[]>(() => initialBoard(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Neutral opening line — "Saved" would be a false claim on an empty room.
@@ -423,6 +486,20 @@ const SongCanvasExperience = () => {
   const featureMutations = useMemo<CanvasFeatureMutations>(
     () => ({
       applyMerge: (idA, idB, merged) => {
+        // Credit the MERGER (the person acting), not a fabricated joint name —
+        // the sources stay visible in meta + mergedFrom provenance.
+        const now = new Date().toISOString();
+        const stamped: CanvasBoardCard = {
+          ...merged,
+          contributor: currentUserName,
+          accent: getCreatorColor(profile?.user_id ?? currentUserName).base,
+          createdBy: profile?.user_id ?? undefined,
+          createdAt: now,
+          updatedAt: now,
+          lastActivityAt: now,
+          reviewState: "none",
+          contributionType: "arrangement",
+        };
         setCards((prev) =>
           prev
             .map((c) =>
@@ -430,9 +507,12 @@ const SongCanvasExperience = () => {
                 ? { ...c, isDimmedReference: true, dimReason: "merged" as const }
                 : c,
             )
-            .concat(merged),
+            .concat(stamped),
         );
         setSelectedId(null);
+        // The new section flies into view AND becomes room-truth.
+        setFocusCardId(stamped.id);
+        persistNewCard(stamped);
       },
       revertMerge: (mergedId, idA, idB) => {
         setCards((prev) =>
@@ -500,7 +580,7 @@ const SongCanvasExperience = () => {
         setFeatureMeta((m) => ({ ...m, listenPath: orderedCardIds }));
       },
     }),
-    [syncServer, markDirty],
+    [syncServer, markDirty, currentUserName, profile?.user_id, persistNewCard],
   );
 
   // ── D2 feature hooks — the canvas verbs ─────────────────────────────────────
@@ -513,6 +593,9 @@ const SongCanvasExperience = () => {
     initialQueue: featureMeta.listenPath,
     onStepChange: (cardId) => followPlaybackRef.current(cardId),
   });
+  // The create spine renames cards (local uuid → db-card-<uuid>); the listen
+  // queue must follow the rename (ref breaks the declaration cycle).
+  replaceQueueIdRef.current = listenPath.replaceCardId;
   const compare = useCompareMode({
     cards,
     isViewer,
@@ -592,9 +675,23 @@ const SongCanvasExperience = () => {
   // server no longer returns (only when that source actually responded, so an
   // offline failure never wipes the board). Reused on mount AND on every
   // realtime event, so a collaborator's work appears without a reload.
+  // Suggestions that arrived over the wire (carrier rows) — the server lane.
+  const [serverSuggestions, setServerSuggestions] = useState<PendingLineSuggestion[]>([]);
+
   const hydrateVoiceMemos = useCallback(async () => {
     const res = await hydrateBoard(songId);
     if (!res.memosOk && !res.cardsOk) return;
+    if (res.cardsOk) {
+      // Resolve proposer names through the roster where the payload lacks one.
+      setServerSuggestions(
+        res.suggestions.map((s) => ({
+          ...s,
+          contributor:
+            s.contributor ||
+            (s.createdBy ? identityRef.current.get(s.createdBy)?.name ?? "" : ""),
+        })),
+      );
+    }
     setCards((prev) => {
       const fresh = new Map(res.cards.map((c) => [c.id, c]));
       // A memo we uploaded THIS session keeps its raw-uuid card; skip the
@@ -653,8 +750,12 @@ const SongCanvasExperience = () => {
         }
         next.push(c);
       }
+      // "Not this one" must stay decided: rows the owner dismissed on this
+      // device are tombstoned and never re-appended by a later hydrate.
+      const tombstones = readTombstones(songId);
       const additions = [...fresh.values()]
         .filter((c) => {
+          if (tombstones.has(c.id)) return false;
           const raw = c.id.startsWith("db-voice-") ? c.id.slice("db-voice-".length) : null;
           return !(raw && localMemoIds.has(raw));
         })
@@ -667,17 +768,29 @@ const SongCanvasExperience = () => {
     });
   }, [songId, isDirty]);
 
-  // Mount hydration + live room channel. Any change in the song's room nudges a
-  // re-hydrate; the merge dedupes by id so nothing flickers or duplicates.
+  // Mount hydration + live room channel. Realtime events DEBOUNCE into one
+  // trailing hydrate (a burst of co-writer edits used to trigger a full board
+  // fetch+merge per event — a re-render storm on every device in the room).
+  const hydrateTimerRef = useRef<number | null>(null);
   useEffect(() => {
     void hydrateVoiceMemos();
+    const schedule = () => {
+      if (hydrateTimerRef.current != null) window.clearTimeout(hydrateTimerRef.current);
+      hydrateTimerRef.current = window.setTimeout(() => {
+        hydrateTimerRef.current = null;
+        void hydrateVoiceMemos();
+      }, 600);
+    };
     const unsubscribe = subscribeSongRoom(songId, {
-      onActivity: () => void hydrateVoiceMemos(),
-      onCardChange: () => void hydrateVoiceMemos(),
-      onTakeChange: () => void hydrateVoiceMemos(),
-      onCaptureChange: () => void hydrateVoiceMemos(),
+      onActivity: schedule,
+      onCardChange: schedule,
+      onTakeChange: schedule,
+      onCaptureChange: schedule,
     });
-    return unsubscribe;
+    return () => {
+      if (hydrateTimerRef.current != null) window.clearTimeout(hydrateTimerRef.current);
+      unsubscribe();
+    };
   }, [songId, hydrateVoiceMemos]);
 
   // ── Card manipulation ──────────────────────────────────────────────────────
@@ -754,7 +867,8 @@ const SongCanvasExperience = () => {
     // they dismiss (the card persists).
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
-  }, [cards, isViewer, stampNewCard]);
+    persistNewCard(newCard);
+  }, [cards, isViewer, stampNewCard, persistNewCard]);
 
   // Add a named song PART (Verse / Chorus / …) — the songwriter's real mental
   // model. Repeatable parts auto-number (Verse 1, Verse 2). Opens the editor.
@@ -791,7 +905,8 @@ const SongCanvasExperience = () => {
     setCanvasStatus("Saved to this song.");
     setFocusCardId(newCard.id);
     setEditCardId(newCard.id);
-  }, [cards, isViewer, stampNewCard]);
+    persistNewCard(newCard);
+  }, [cards, isViewer, stampNewCard, persistNewCard]);
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
@@ -1039,8 +1154,9 @@ const SongCanvasExperience = () => {
       setSelectedId(variant.id);
       setFocusCardId(variant.id);
       setEditCardId(variant.id);
+      persistNewCard(variant);
     },
-    [cards, isViewer, stampNewCard],
+    [cards, isViewer, stampNewCard, persistNewCard],
   );
 
   // Un-dim a kept reference — "nothing is deleted" means nothing is stuck.
@@ -1125,7 +1241,9 @@ const SongCanvasExperience = () => {
     return {
       userId: profile.user_id,
       name: currentUserName,
-      color: getCreatorColor(currentUserName).base,
+      // ID-hashed — the same warm hue this person's cards wear, on every
+      // surface, on every device. One person, one color.
+      color: getCreatorColor(profile.user_id).base,
       initials: getCreatorInitials(currentUserName),
     };
   }, [profile?.user_id, currentUserName]);
@@ -1550,37 +1668,50 @@ const SongCanvasExperience = () => {
     setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, reviewed: true } : c)));
   }, []);
 
-  // Not-this-one: archive from the board, with a calm Undo (never a hard delete).
+  // Not-this-one: archive from the board, with a calm Undo (never a hard
+  // delete). Server rows get a TOMBSTONE so the next hydrate can't quietly
+  // resurrect a decision the owner already made.
   const handleDismissReview = useCallback((cardId: string) => {
     let removed: CanvasCard | undefined;
     setCards((prev) => {
       removed = prev.find((c) => c.id === cardId);
       return prev.filter((c) => c.id !== cardId);
     });
+    if (isServerCardId(cardId)) addTombstone(songId, cardId);
     toast("Idea set aside", {
       duration: 7000,
       action: {
         label: "Undo",
-        onClick: () => { if (removed) setCards((prev) => [removed as CanvasCard, ...prev]); },
+        onClick: () => {
+          if (isServerCardId(cardId)) removeTombstone(songId, cardId);
+          if (removed) setCards((prev) => [removed as CanvasCard, ...prev]);
+        },
       },
     });
-  }, []);
+  }, [songId]);
 
   // Line suggestions (Feature 19) become their own review items, so a
   // "replace just this line" flows through the SAME owner accept/keep motion.
+  // Two lanes, one list: carrier rows that traveled over the wire + this
+  // device's local outbox (dedupe favors the server copy).
+  const allSuggestions = useMemo(() => {
+    const seen = new Set(serverSuggestions.map((s) => s.id));
+    return [...serverSuggestions, ...lineSuggestions.filter((s) => !seen.has(s.id))];
+  }, [serverSuggestions, lineSuggestions]);
+
   const suggestionReviewItems = useMemo(
     () =>
-      lineSuggestions.map((s) => ({
+      allSuggestions.map((s) => ({
         id: s.id,
         title: "Line change",
         body: "",
         section: s.section,
-        contributor: s.contributor,
-        accent: getCreatorColor(s.contributor).base,
+        contributor: s.contributor || "A co-writer",
+        accent: getCreatorColor(s.createdBy ?? s.contributor ?? s.id).base,
         kind: "Line suggestion",
         suggestion: { originalLine: s.originalLine, proposedLine: s.proposedLine },
       })),
-    [lineSuggestions],
+    [allSuggestions],
   );
 
   // One unified queue: pending ideas + pending line suggestions.
@@ -1618,19 +1749,42 @@ const SongCanvasExperience = () => {
     [canReview, isViewer, pendingReviewIds],
   );
 
-  // Accept a line suggestion → replace the target card's body, drop the suggestion.
-  const handleAcceptLine = useCallback((suggestionId: string) => {
-    const s = lineSuggestions.find((x) => x.id === suggestionId);
-    if (!s) return;
-    setCards((prev) => prev.map((c) => (c.id === s.cardId ? { ...c, body: s.proposedLine } : c)));
-    setLineSuggestions(removeLineSuggestion(songId, suggestionId));
-    showSavedMoment("Line updated", "Lyrics", s.section);
-  }, [lineSuggestions, songId, showSavedMoment]);
+  // A decided suggestion leaves EVERY device's queue: server-lane rows are
+  // deleted (their job is done — the decision lives in the card), local-lane
+  // entries drop from the outbox.
+  const resolveSuggestion = useCallback(
+    (s: PendingLineSuggestion) => {
+      if (s.fromServer) syncServer(() => deleteCanvasCard(s.id));
+      setServerSuggestions((prev) => prev.filter((x) => x.id !== s.id));
+      setLineSuggestions(removeLineSuggestion(songId, s.id));
+    },
+    [songId, syncServer],
+  );
 
-  // Keep original → drop the suggestion without touching the line.
+  // Accept a line suggestion → replace the target card's body AND write it
+  // through — an accepted line used to silently revert on the next hydrate.
+  const handleAcceptLine = useCallback((suggestionId: string) => {
+    const s = allSuggestions.find((x) => x.id === suggestionId);
+    if (!s) return;
+    const now = new Date().toISOString();
+    setCards((prev) =>
+      prev.map((c) =>
+        c.id === s.cardId
+          ? { ...c, body: s.proposedLine, updatedAt: now, lastActivityAt: now, updatedBy: profile?.user_id ?? c.updatedBy }
+          : c,
+      ),
+    );
+    const sid = serverCardId(s.cardId);
+    if (sid) syncServer(() => updateCanvasCard(sid, { body: s.proposedLine }), s.cardId);
+    resolveSuggestion(s);
+    showSavedMoment("Line updated", "Lyrics", s.section);
+  }, [allSuggestions, profile?.user_id, syncServer, resolveSuggestion, showSavedMoment]);
+
+  // Keep original → the line is untouched; the proposal is resolved.
   const handleKeepLine = useCallback((suggestionId: string) => {
-    setLineSuggestions(removeLineSuggestion(songId, suggestionId));
-  }, [songId]);
+    const s = allSuggestions.find((x) => x.id === suggestionId);
+    if (s) resolveSuggestion(s);
+  }, [allSuggestions, resolveSuggestion]);
 
   const dockActions = useMemo(
     () => [
@@ -1762,7 +1916,9 @@ const SongCanvasExperience = () => {
               othersHereNow > 0
                 ? `${othersHereNow} ${othersHereNow === 1 ? "person is" : "people are"} here now — invite someone`
                 : presenceStack.length > 0
-                ? `In this room: ${presenceStack.length} ${presenceStack.length === 1 ? "person" : "people"} — invite someone`
+                // Honest when presence is the FALLBACK roster: these people
+                // write here; they are not necessarily here right now.
+                ? `${presenceStack.length} ${presenceStack.length === 1 ? "person writes" : "people write"} here — invite someone`
                 : "Invite someone into this song"
             }
           >
@@ -1777,11 +1933,11 @@ const SongCanvasExperience = () => {
                   >
                     <span
                       className="absolute inline-flex h-full w-full rounded-full opacity-60"
-                      style={{ backgroundColor: "#53AB8B", animation: "cog-live-ping 1.8s cubic-bezier(0,0,0.2,1) infinite" }}
+                      style={{ backgroundColor: GLORY.sage.base, animation: "cog-live-ping 1.8s cubic-bezier(0,0,0.2,1) infinite" }}
                     />
                     <span
                       className="relative inline-flex h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: "#53AB8B", border: "1.5px solid #FAFAF6" }}
+                      style={{ backgroundColor: GLORY.sage.base, border: "1.5px solid #FAFAF6" }}
                     />
                   </span>
                 )}
@@ -1840,7 +1996,7 @@ const SongCanvasExperience = () => {
                         onClick={() => goToZone(zone)}
                         className="flex min-h-9 items-center rounded-full px-4 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
                         style={{
-                          backgroundColor: active ? (zone === "ideas" ? "var(--cog-gold)" : "#53AB8B") : "transparent",
+                          backgroundColor: active ? (zone === "ideas" ? "var(--cog-gold)" : GLORY.sage.base) : "transparent",
                           color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
                           fontFamily: "var(--font-body)",
                         }}
@@ -2274,21 +2430,50 @@ const SongCanvasExperience = () => {
           sectionLabel={lineSuggest.sectionLabel}
           onSend={(text) => {
             if (!lineSuggest) return;
-            // Persist into the owner's review queue instead of vanishing on a
-            // toast. The sheet plays its own "Suggestion sent" confirmation
-            // and then calls onDismiss to unmount — don't unmount here.
-            setLineSuggestions(
-              addLineSuggestion({
-                id: `ls-${Date.now()}`,
-                songId,
-                cardId: lineSuggest.cardId,
-                originalLine: lineSuggest.originalLine,
-                proposedLine: text,
-                contributor: currentUserName,
-                section: lineSuggest.sectionLabel,
-                createdAt: Date.now(),
-              }),
-            );
+            // Local-first, never lost: the suggestion lands in the outbox
+            // immediately; when its target is a server card, it then TRAVELS
+            // as a canvas_cards carrier row so the owner's phone receives it.
+            const local: PendingLineSuggestion = {
+              id: crypto.randomUUID(),
+              songId,
+              cardId: lineSuggest.cardId,
+              originalLine: lineSuggest.originalLine,
+              proposedLine: text,
+              contributor: currentUserName,
+              section: lineSuggest.sectionLabel,
+              createdAt: Date.now(),
+            };
+            setLineSuggestions(addLineSuggestion(local));
+            const targetSid = serverCardId(local.cardId);
+            if (!isDemoRoom && targetSid) {
+              void (async () => {
+                try {
+                  const row = await createCanvasCard({
+                    song_id: songId,
+                    kind: "idea",
+                    section_kind: SUGGESTION_SECTION_KIND,
+                    parent_card_id: targetSid,
+                    label: "Line suggestion",
+                    body: encodeSuggestion({
+                      originalLine: local.originalLine,
+                      proposedLine: local.proposedLine,
+                      section: local.section,
+                      contributor: currentUserName,
+                    }),
+                    created_by: profile?.user_id,
+                  });
+                  // The wire owns it now — retire the local copy so the owner
+                  // (or this user reviewing solo) never sees it twice.
+                  setLineSuggestions(removeLineSuggestion(songId, local.id));
+                  setServerSuggestions((prev) => [
+                    { ...local, id: row.id, fromServer: true, createdBy: profile?.user_id },
+                    ...prev.filter((x) => x.id !== row.id),
+                  ]);
+                } catch {
+                  /* stays in the local outbox — never lost */
+                }
+              })();
+            }
           }}
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}

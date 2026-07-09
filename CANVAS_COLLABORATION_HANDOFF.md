@@ -165,10 +165,20 @@ from names once ids flow — use `getCreatorColor(userId)` and the roster's
 >   advances it — the new-device recap works.
 
 1. ~~Render `canvas_cards` rows + write through the RPCs~~ **DONE** (above).
+   **Also DONE (engine-audit build pass):** the CREATE spine —
+   `createCanvasCard` insert + local→server id swap (`persistNewCard` in the
+   host) makes canvas-born cards and merged sections room-truth, local-first
+   with graceful fallback.
 2. ~~Identity resolver~~ **DONE** (above); `canvasLoader.ts` is now unused
-   legacy — delete when convenient.
-3. `song_suggestions` table → cross-device line suggestions + review queue
-   (still the top Lovable ask).
+   legacy — delete when convenient. Colors now hash the USER ID on every
+   canvas surface (presence/self/roster/cards) — one person, one color.
+3. `song_suggestions` table → **interim SHIPPED**: suggestions travel as
+   `canvas_cards` CARRIER ROWS (`section_kind: "line_suggestion"`, JSON
+   payload, `parent_card_id` = target; hydrate routes them into the review
+   lane; deciding deletes the row). The proper table remains the Lovable ask —
+   migrate the carrier when it lands (and add `review_state`/`status` columns
+   so owner decisions cross devices; today "Not this one" holds via local
+   tombstones only).
 4. Comments on cards (populate `commentCount`, adornment badge — visual
    grammar reserved in CANVAS_VISUAL_HANDOFF.md §4).
 5. ~~Server recap anchor~~ **DONE**; entity deep-links from recap rows remain.

@@ -7,7 +7,7 @@ import HumCard from "@/components/canvas/HumCard";
 import ChordCard from "@/components/canvas/ChordCard";
 import NoteCard from "@/components/canvas/NoteCard";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
-import { PLAYBACK_TONE, TYPE_TONE } from "@/lib/canvas/glorySpectrum";
+import { GLORY, PLAYBACK_TONE, TYPE_TONE } from "@/lib/canvas/glorySpectrum";
 import { cardWidth, clampToBoard, DRAG_THRESHOLD_PX } from "@/lib/canvas/canvasGeometry";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
@@ -367,9 +367,10 @@ const CanvasCard = memo(function CanvasCard({
           style={{
             position: "absolute", top: -10, left: -10,
             minWidth: 24, height: 24, padding: "0 6px", borderRadius: 12,
-            backgroundColor: "#53AB8B", color: "#FFF", fontSize: 12, fontWeight: 800,
+            // The glory spectrum's ONE sage — Final identity everywhere.
+            backgroundColor: GLORY.sage.dark, color: "#FFF", fontSize: 12, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(83,171,139,0.40)", border: "2px solid #FAFAF6",
+            boxShadow: `0 2px 8px ${GLORY.sage.glow}`, border: "2px solid #FAFAF6",
             fontFamily: "var(--font-body)",
           }}
         >

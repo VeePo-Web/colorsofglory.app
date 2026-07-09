@@ -46,9 +46,18 @@ const IdeaCardView = ({
   const isVoice = card.type === "voice" || card.type === "hum";
 
   return (
-    <button
-      type="button"
+    // role=button div, NOT <button>: the play control nests inside, and a
+    // button-in-button is invalid HTML that confuses VoiceOver focus.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       aria-pressed={isSelected}
       aria-label={`${label}: ${card.title} by ${card.contributor}${isSelected ? ", selected" : ""}`}
       style={{
@@ -201,7 +210,7 @@ const IdeaCardView = ({
           {isPlaying ? "Pause" : `Play ${label}`}
         </button>
       )}
-    </button>
+    </div>
   );
 };
 
@@ -286,6 +295,7 @@ const CompareModeSheet = ({
       {/* ── Backdrop ─────────────────────────────────────────────────────── */}
       <div
         role="presentation"
+        className="cog-compare-backdrop"
         onClick={onClose}
         style={{
           position: "fixed",
@@ -303,6 +313,7 @@ const CompareModeSheet = ({
         role="dialog"
         aria-modal="true"
         aria-label={`Compare ${section} ideas`}
+        className="cog-compare-sheet"
         style={{
           position: "fixed",
           left: 0,

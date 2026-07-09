@@ -1,4 +1,5 @@
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
+import { GLORY } from "@/lib/canvas/glorySpectrum";
 import { ROOT_HEIGHT, ROOT_TOP } from "@/lib/canvas/canvasGeometry";
 
 /**
@@ -60,7 +61,7 @@ const ZoneMarker = ({
 const ZoneLabels = () => (
   <>
     <ZoneMarker left={48} eyebrow="Ideas Tree" title="Every idea, unfiltered" sub="Nothing is deleted — capture and explore." color="#B5935A" />
-    <ZoneMarker left={DIVIDER_X + 48} eyebrow="Final Song" title="Ready to worship" sub="The chosen arrangement, in order." color="#53AB8B" />
+    <ZoneMarker left={DIVIDER_X + 48} eyebrow="Final Song" title="Ready to worship" sub="The chosen arrangement, in order." color={GLORY.sage.dark} />
   </>
 );
 

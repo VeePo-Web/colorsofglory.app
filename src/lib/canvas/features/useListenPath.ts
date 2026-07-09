@@ -6,6 +6,7 @@ import {
   memoIdForCard,
   pauseCanvasAudio,
   playMemoOnCanvas,
+  preloadMemo,
   stopCanvasAudio,
 } from "./canvasAudio";
 
@@ -103,6 +104,14 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
       const isAudio =
         (card.type === "voice" || card.type === "hum") && !card.isProcessing;
       const memoId = isAudio ? memoIdForCard(card.id) : null;
+      // Tighten the seam to the NEXT stop: warm its signed URL while this one
+      // sounds, so the advance doesn't wait on a network round-trip.
+      const nextCard = cardsRef.current.find((c) => c.id === q[index + 1]);
+      const nextMemoId =
+        nextCard && (nextCard.type === "voice" || nextCard.type === "hum") && !nextCard.isProcessing
+          ? memoIdForCard(nextCard.id)
+          : null;
+      if (nextMemoId) void preloadMemo(nextMemoId);
       if (memoId) {
         void playMemoOnCanvas(memoId, {
           onEnded: advance,
@@ -121,8 +130,12 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
   const toggleCard = useCallback(
     (id: string) => {
       setQueue((prev) => {
-        if (prev.includes(id)) {
-          if (prev.indexOf(id) === step) stopPlayback();
+        const idx = prev.indexOf(id);
+        if (idx !== -1) {
+          if (idx === step) stopPlayback();
+          // The step FOLLOWS the playing card: removing an earlier stop must
+          // not silently shift which card the pointer means.
+          else if (idx < step) setStep((s) => Math.max(0, s - 1));
           return prev.filter((x) => x !== id);
         }
         return [...prev, id];
@@ -134,7 +147,9 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
   const removeCard = useCallback(
     (id: string) => {
       setQueue((prev) => {
-        if (prev.indexOf(id) === step) stopPlayback();
+        const idx = prev.indexOf(id);
+        if (idx === step) stopPlayback();
+        else if (idx !== -1 && idx < step) setStep((s) => Math.max(0, s - 1));
         return prev.filter((x) => x !== id);
       });
     },
@@ -142,10 +157,26 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
   );
 
   const clear = useCallback(() => {
+    // Clearing a hand-built path deserves an Undo — it's minutes of curation.
+    const prevQueue = queueRef.current;
+    const prevStep = step;
     stopPlayback();
     setQueue([]);
     setStep(0);
-  }, [stopPlayback]);
+    if (prevQueue.length > 1) {
+      toast("Listen path cleared", {
+        duration: 7000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            setQueue(prevQueue);
+            queueRef.current = prevQueue;
+            setStep(Math.min(prevStep, prevQueue.length - 1));
+          },
+        },
+      });
+    }
+  }, [step, stopPlayback]);
 
   const playPause = useCallback(() => {
     if (playing) {

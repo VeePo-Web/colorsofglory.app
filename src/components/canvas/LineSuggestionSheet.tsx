@@ -8,7 +8,8 @@ import { X } from "lucide-react";
  * "review"  mode: owner sees the proposed line and chooses Accept or Keep Original.
  *
  * The original line is always shown so context is preserved.
- * iOS-safe: Escape listener, idempotency refs, offline guard, sent-pop confirmation.
+ * iOS-safe: Escape listener, idempotency refs, sent-pop confirmation. Saving
+ * is local-first (an outbox holds it offline), so send never refuses.
  */
 
 export type LineSuggestionMode = "create" | "review";
@@ -39,10 +40,11 @@ const LineSuggestionSheet = ({
   onDismiss,
 }: LineSuggestionSheetProps) => {
   const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "offline">("idle");
+  const [status, setStatus] = useState<"idle" | "sent">("idle");
   const didSubmit = useRef(false);
   const didDismiss = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus on mount (create mode)
   useEffect(() => {
@@ -52,11 +54,35 @@ const LineSuggestionSheet = ({
     }
   }, [mode]);
 
-  // Escape dismisses
+  // Escape dismisses + Tab stays inside the dialog + focus returns after.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") handleDismiss(); };
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleDismiss();
+        return;
+      }
+      if (e.key !== "Tab" || !sheetRef.current) return;
+      const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === sheetRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,14 +94,12 @@ const LineSuggestionSheet = ({
 
   const handleSend = () => {
     if (didSubmit.current || !draft.trim() || status !== "idle") return;
-    if (!navigator.onLine) { setStatus("offline"); return; }
+    // No fake latency, no offline refusal: the save is LOCAL-FIRST (the
+    // outbox keeps it even offline; it travels when the network allows).
     didSubmit.current = true;
-    setStatus("sending");
-    setTimeout(() => {
-      setStatus("sent");
-      onSend?.(draft.trim());
-      setTimeout(handleDismiss, 820);
-    }, 200);
+    setStatus("sent");
+    onSend?.(draft.trim());
+    setTimeout(handleDismiss, 820);
   };
 
   const handleAccept = () => {
@@ -151,6 +175,8 @@ const LineSuggestionSheet = ({
 
       {/* Panel */}
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={mode === "create" ? "Suggest a line change" : "Review line suggestion"}
@@ -209,7 +235,6 @@ const LineSuggestionSheet = ({
                       setDraft(e.target.value);
                       autoResize(e.target);
                     }
-                    if (status === "offline") setStatus("idle");
                   }}
                   placeholder="Write an alternative lyric line…"
                   rows={2}
@@ -221,7 +246,7 @@ const LineSuggestionSheet = ({
                   enterKeyHint="done"
                   style={{
                     width: "100%",
-                    border: isOverLimit ? "1.5px solid rgba(224,84,64,0.6)" : "1.5px solid var(--cog-border-gold)",
+                    border: isOverLimit ? "1.5px solid rgba(206,122,59,0.65)" : "1.5px solid var(--cog-border-gold)",
                     borderRadius: 12,
                     padding: "12px 14px",
                     paddingBottom: showCounter ? 28 : 12,
@@ -240,16 +265,11 @@ const LineSuggestionSheet = ({
                   aria-label="Suggested lyric line"
                 />
                 {showCounter && (
-                  <span style={{ position: "absolute", bottom: 8, right: 12, fontFamily: "var(--font-body)", fontSize: "0.75rem", color: charsLeft < 20 ? "#E05440" : "var(--cog-muted)" }}>
+                  <span style={{ position: "absolute", bottom: 8, right: 12, fontFamily: "var(--font-body)", fontSize: "0.75rem", color: charsLeft < 20 ? "#96551F" : "var(--cog-muted)" }}>
                     {charsLeft}
                   </span>
                 )}
               </div>
-              {status === "offline" && (
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "#E05440", marginTop: 6 }} role="alert" aria-live="polite">
-                  You're offline — reconnect to send.
-                </p>
-              )}
             </div>
           )}
 
@@ -286,7 +306,7 @@ const LineSuggestionSheet = ({
               onPointerLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
               aria-label="Send suggestion"
             >
-              {status === "sending" ? "Sending…" : "Send suggestion"}
+              Send suggestion
             </button>
           ) : (
             <div style={{ display: "flex", gap: 10 }}>

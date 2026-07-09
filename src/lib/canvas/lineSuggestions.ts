@@ -1,11 +1,16 @@
 /**
  * Pending line suggestions (Feature 19) — the frontend store.
  *
- * When a co-writer proposes a replacement for one lyric line, it can't just
- * toast and vanish (the owner must decide). Until the backend owns this, each
- * suggestion is persisted locally per song so it survives a reload and shows
- * up in the owner's review queue. Same "a captured idea is never lost" creed
- * as the pending-upload cache; kept deliberately tiny and synchronous.
+ * Two lanes:
+ *  - SERVER lane: when the target lyric is a server card (db-card-*), the
+ *    suggestion travels as a CARRIER ROW in canvas_cards (kind "idea",
+ *    section_kind "line_suggestion", parent_card_id = the target, body = the
+ *    JSON payload below). It reaches the owner's phone through the exact
+ *    hydrate + realtime path every other card uses — no new table needed
+ *    (song_suggestions remains the proper long-term home; this is the bridge).
+ *  - LOCAL lane: local-card targets, the demo room, and failed inserts keep
+ *    the localStorage outbox so a proposal is never lost ("a captured idea is
+ *    never lost" creed).
  */
 
 export interface PendingLineSuggestion {
@@ -18,6 +23,34 @@ export interface PendingLineSuggestion {
   contributor: string;
   section: string;
   createdAt: number;
+  /** This suggestion lives as a canvas_cards carrier row (id = the row uuid);
+   *  resolving it deletes that row so it leaves every device's queue. */
+  fromServer?: boolean;
+  /** Proposer's user id (server lane) — names resolve through the roster. */
+  createdBy?: string;
+}
+
+/** section_kind marker for carrier rows — hydrateBoard routes these OFF the
+ *  board and into the suggestions store. */
+export const SUGGESTION_SECTION_KIND = "line_suggestion";
+
+export interface SuggestionPayload {
+  originalLine: string;
+  proposedLine: string;
+  section: string;
+  contributor: string;
+}
+
+export const encodeSuggestion = (p: SuggestionPayload): string => JSON.stringify(p);
+
+export function decodeSuggestion(body: string): SuggestionPayload | null {
+  try {
+    const p = JSON.parse(body) as SuggestionPayload;
+    if (typeof p?.proposedLine !== "string" || typeof p?.originalLine !== "string") return null;
+    return { ...p, section: p.section ?? "", contributor: p.contributor ?? "" };
+  } catch {
+    return null;
+  }
 }
 
 const KEY = (songId: string) => `cog:line-suggestions-${songId}`;

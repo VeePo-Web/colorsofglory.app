@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { BookOpen, X } from "lucide-react";
+import ScripturePicker from "@/components/capture/ScripturePicker";
 
 /**
  * CardEditSheet — write the actual idea into a canvas card.
@@ -38,6 +39,9 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
 
   const isChord = kind === "Chord";
   const isScripture = kind === "Scripture";
+  // The structured verse picker (book/chapter/verse, real passage fetch) —
+  // the faith-first heart, finally one tap from the canvas.
+  const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -148,6 +152,41 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
           autoCapitalize="sentences"
           style={{ ...fieldStyle, marginBottom: 14 }}
         />
+
+        {isScripture && !showPicker && (
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8, width: "100%",
+              minHeight: 48, padding: "0 14px", marginBottom: 14,
+              borderRadius: 12, cursor: "pointer",
+              backgroundColor: "rgba(110,155,99,0.10)",
+              border: "1.5px solid rgba(110,155,99,0.35)",
+              color: "#48703F", fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
+            }}
+            aria-label="Find the verse — search by book, chapter, and verse"
+          >
+            <BookOpen size={16} strokeWidth={1.8} />
+            Find the verse
+          </button>
+        )}
+        {isScripture && showPicker && (
+          <div style={{ marginBottom: 14 }}>
+            <ScripturePicker
+              onPicked={(label, text) => {
+                // The reference becomes the card's name; the passage lands
+                // above the writer's own "why". Ref also rides in meta for
+                // future tap-through.
+                setTitle(label);
+                setMeta(label);
+                setBody((prev) => (prev.trim() ? `${text}\n\n${prev}` : text));
+                setShowPicker(false);
+              }}
+              onFallback={() => setShowPicker(false)}
+            />
+          </div>
+        )}
 
         <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--cog-warm-gray)", marginBottom: 6, fontFamily: "var(--font-body)" }}>
           {isChord ? "Progression" : isScripture ? "Verse & why it anchors the song" : "The idea"}
