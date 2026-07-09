@@ -8,8 +8,14 @@ import ChordCard from "@/components/canvas/ChordCard";
 import NoteCard from "@/components/canvas/NoteCard";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { cardWidth, DRAG_THRESHOLD_PX } from "@/lib/canvas/canvasGeometry";
+import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
 import type { CardFaceProps } from "@/components/canvas/cardFace";
+
+export type CanvasZone = "ideas" | "final";
+
+/** Which tree a card center at this x lives in. */
+const zoneOfX = (centerX: number): CanvasZone => (centerX >= DIVIDER_X ? "final" : "ideas");
 
 /**
  * The per-card wiring the host hands across the D1 boundary. CanvasCard renders
@@ -19,8 +25,14 @@ export interface CanvasCardInteractions {
   onSelect: () => void;
   onMoveToFinal: () => void;
   onMoveToIdeas: () => void;
-  /** Commit a finished drag: the card's new canvas-space position. */
+  /** Commit a finished drag within the same tree: the card's new position. */
   onMove: (id: string, x: number, y: number) => void;
+  /**
+   * A card was dropped across the divider into the OTHER tree. D1 reports the
+   * zone + position only; D2 owns what that MEANS (move-to-final / return-to
+   * -ideas + its own placement). Absent → cross-tree drop just repositions.
+   */
+  onCardDrop?: (id: string, zone: CanvasZone, x: number, y: number) => void;
   layerCount?: number;
   onOpenStack?: () => void;
   canCompare?: boolean;
@@ -40,6 +52,11 @@ interface CanvasCardProps extends CanvasCardInteractions {
   selected: boolean;
   /** D3 slot: a calm per-card marker (e.g. pending-review dot), never red. */
   adornment?: ReactNode;
+  /**
+   * Reports the tree the card is being dragged over (for the divider glow), and
+   * null when the drag ends. Owned by CanvasStage — never a data mutation.
+   */
+  onDragZone?: (zone: CanvasZone | null) => void;
 }
 
 const FACES: Record<CanvasBoardCardType, ComponentType<CardFaceProps>> = {
@@ -78,6 +95,8 @@ const CanvasCard = memo(function CanvasCard({
   onMoveToFinal,
   onMoveToIdeas,
   onMove,
+  onCardDrop,
+  onDragZone,
   layerCount = 0,
   onOpenStack,
   canCompare = false,
@@ -98,6 +117,7 @@ const CanvasCard = memo(function CanvasCard({
     startScreen: { x: number; y: number };
     startCard: { x: number; y: number };
     lastX: number; lastY: number; moved: boolean;
+    zone: CanvasZone;
   } | null>(null);
   const justDragged = useRef(false);
 
@@ -124,6 +144,7 @@ const CanvasCard = memo(function CanvasCard({
       startScreen: { x: e.clientX, y: e.clientY },
       startCard: { x: card.x, y: card.y },
       lastX: card.x, lastY: card.y, moved: false,
+      zone: card.tree,
     };
   };
 
@@ -152,6 +173,18 @@ const CanvasCard = memo(function CanvasCard({
     st.lastX = newX; st.lastY = newY;
     const el = elRef.current;
     if (el) { el.style.left = `${newX}px`; el.style.top = `${newY}px`; }
+    // Report which tree the card center is over → the divider glows gold as it
+    // crosses toward Final. Only on change, so no per-frame parent churn.
+    const zone = zoneOfX(newX + cardWidth(card.type) / 2);
+    if (zone !== st.zone) { st.zone = zone; onDragZone?.(zone); }
+  };
+
+  const endDragVisuals = () => {
+    const el = elRef.current;
+    if (el) {
+      el.style.transform = ""; el.style.zIndex = ""; el.style.boxShadow = "";
+      el.style.cursor = ""; el.style.transition = "";
+    }
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -159,15 +192,36 @@ const CanvasCard = memo(function CanvasCard({
     if (!st) return;
     e.currentTarget.releasePointerCapture(st.pointerId);
     drag.current = null;
-    const el = elRef.current;
-    if (el) {
-      // Hand transform/shadow/z/left/top back to React's style prop.
-      el.style.transform = ""; el.style.zIndex = ""; el.style.boxShadow = "";
-      el.style.cursor = ""; el.style.transition = "";
-    }
-    if (st.moved) {
-      justDragged.current = true;
+    onDragZone?.(null);
+    endDragVisuals();
+    if (!st.moved) return; // a tap → onClick selects it
+    justDragged.current = true;
+    const dropZone = zoneOfX(st.lastX + cardWidth(card.type) / 2);
+    if (dropZone !== card.tree && onCardDrop) {
+      // Crossed the divider — D2 decides the meaning + final placement.
+      onCardDrop(card.id, dropZone, st.lastX, st.lastY);
+    } else {
+      // Same tree (or no drop handler wired): just commit the new position.
       onMove(card.id, st.lastX, st.lastY);
+    }
+  };
+
+  // Aborted drag (pointercancel) → return-spring to where it started; never a
+  // half-committed position. Reduced-motion just snaps back (no transition).
+  const onPointerCancel = () => {
+    const st = drag.current;
+    if (!st) return;
+    drag.current = null;
+    onDragZone?.(null);
+    const el = elRef.current;
+    if (el && st.moved) {
+      el.style.transform = ""; el.style.zIndex = ""; el.style.boxShadow = ""; el.style.cursor = "";
+      el.style.transition = "left 320ms cubic-bezier(0.34,1.56,0.64,1), top 320ms cubic-bezier(0.34,1.56,0.64,1)";
+      el.style.left = `${st.startCard.x}px`;
+      el.style.top = `${st.startCard.y}px`;
+      window.setTimeout(() => { if (elRef.current) elRef.current.style.transition = ""; }, 340);
+    } else {
+      endDragVisuals();
     }
   };
 
@@ -195,7 +249,7 @@ const CanvasCard = memo(function CanvasCard({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onClick={handleClick}
     >
       {/* Arrangement position — the song's set-list number (Final cards) */}

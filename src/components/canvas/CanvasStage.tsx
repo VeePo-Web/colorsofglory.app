@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import CanvasViewport, {
   useCanvasViewport,
   type ViewportCtx,
@@ -7,7 +7,7 @@ import CanvasDivider from "@/components/canvas/CanvasDivider";
 import ZoneLabels from "@/components/canvas/ZoneLabel";
 import SongRootCard from "@/components/canvas/SongRootCard";
 import CanvasBranchConnectors from "@/components/canvas/CanvasBranchConnectors";
-import CanvasCard, { type CanvasCardInteractions } from "@/components/canvas/CanvasCard";
+import CanvasCard, { type CanvasCardInteractions, type CanvasZone } from "@/components/canvas/CanvasCard";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 
 export type { CanvasCardInteractions };
@@ -104,7 +104,12 @@ const CanvasStage = ({
   initialPan,
   className,
   style,
-}: CanvasStageProps) => (
+}: CanvasStageProps) => {
+  // The tree a card is currently being dragged over — drives the divider's gold
+  // glow as a card crosses toward Final. Pure visual state (D1's lane).
+  const [dragZone, setDragZone] = useState<CanvasZone | null>(null);
+
+  return (
   <>
     <CanvasViewport
       className={className}
@@ -119,7 +124,7 @@ const CanvasStage = ({
       <CanvasBranchConnectors ideasCards={ideasCards} finalCards={finalCards} />
       <SongRootCard title={songTitle} />
       <ZoneLabels />
-      <CanvasDivider isDropActive={isDropActive} />
+      <CanvasDivider isDropActive={isDropActive || dragZone === "final"} />
 
       {/* Render all cards */}
       {[...ideasCards, ...finalCards].map((card) => (
@@ -128,6 +133,7 @@ const CanvasStage = ({
           card={card}
           selected={selectedId === card.id}
           adornment={cardAdornment?.(card)}
+          onDragZone={setDragZone}
           {...getCardInteractions(card)}
         />
       ))}
@@ -156,6 +162,7 @@ const CanvasStage = ({
       }
     `}</style>
   </>
-);
+  );
+};
 
 export default CanvasStage;

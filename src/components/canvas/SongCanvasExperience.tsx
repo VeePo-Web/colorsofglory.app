@@ -693,6 +693,12 @@ const SongCanvasExperience = () => {
     onMoveToFinal: () => arrangement.moveToFinal(card.id),
     onMoveToIdeas: () => arrangement.moveToIdeas(card.id),
     onMove: handleCardMove,
+    // A card dragged across the divider into the other tree: D1 reports the
+    // zone, D2 owns the meaning (promote / return + its own placement).
+    onCardDrop: (id, zone) => {
+      if (zone === "final") arrangement.moveToFinal(id);
+      else arrangement.moveToIdeas(id);
+    },
     layerCount: layerCountByBase[card.id] ?? 0,
     onOpenStack:
       card.type === "voice" || card.type === "hum"
