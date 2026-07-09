@@ -4,7 +4,7 @@ import { Search, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
 import CreateCodeDialog from "@/components/admin/CreateCodeDialog";
-import { TableSkeleton } from "@/components/admin/AdminUI";
+import { PromptDialog, TableSkeleton } from "@/components/admin/AdminUI";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,10 +71,12 @@ export default function CodesPage() {
     return rows;
   }, [codes, founderNameById, q, status, sort, now]);
 
+  const [deactivateTarget, setDeactivateTarget] = useState<CodeRow | null>(null);
   const deactivate = useMutation({
     mutationFn: (id: string) => adminDeactivateCode(id),
     onSuccess: () => {
       toast.success("Code deactivated");
+      setDeactivateTarget(null);
       qc.invalidateQueries({ queryKey: qk.admin.root() });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -184,10 +186,7 @@ export default function CodesPage() {
                   <td className="px-4 py-2 text-xs text-[var(--cog-muted)]">{new Date(c.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-right">
                     {c.status === "active" && (
-                      <Button
-                        variant="outline" size="sm"
-                        onClick={() => { if (confirm(`Deactivate code ${c.value}?`)) deactivate.mutate(c.id); }}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => setDeactivateTarget(c)}>
                         Deactivate
                       </Button>
                     )}
@@ -198,6 +197,17 @@ export default function CodesPage() {
           </tbody>
         </table>
       </div>
+
+      <PromptDialog
+        open={!!deactivateTarget}
+        title={`Deactivate ${deactivateTarget?.value ?? "code"}?`}
+        description="New redemptions stop immediately. Users already attributed through this code keep their referrer, and the deactivation is recorded in the audit log."
+        confirmLabel="Deactivate"
+        tone="danger"
+        busy={deactivate.isPending}
+        onConfirm={() => deactivateTarget && deactivate.mutate(deactivateTarget.id)}
+        onOpenChange={(o) => { if (!o) setDeactivateTarget(null); }}
+      />
     </AdminShell>
   );
 }

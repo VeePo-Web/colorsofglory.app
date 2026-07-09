@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   adminListPayouts,
   adminReferrerLedger,
+  adminFraudFlags,
   approvePayout,
   markPayoutPaid,
   markPayoutFailed,
@@ -26,11 +27,24 @@ const STATUS_TONE: Record<string, string> = {
   failed: "text-[#b3261e]",
 };
 
+function approveDescription(
+  r: PayoutRow,
+  payeeByKey: ReadonlyMap<string, { name: string | null; payout_method: string | null }>,
+) {
+  const kind = r.founder_id ? "founder" : "user";
+  const payee = payeeByKey.get(`${kind}:${r.founder_id ?? r.user_id ?? ""}`);
+  const who = payee?.name ?? `${kind} ${(r.founder_id ?? r.user_id ?? "").slice(0, 8)}…`;
+  const via = payee?.payout_method ? ` via ${payee.payout_method}` : "";
+  return `Approve ${money(r.amount_cents, r.currency)} to ${who}${via}? Approval commits this payout for payment — it can only be walked back by marking it failed, with a reason, before it's paid.`;
+}
+
 function friendlyError(e: unknown): string {
   const m = (e as Error)?.message ?? String(e);
   if (m.includes("no_payout_method")) return "Recipient has no payout method on file — they must set one before approval.";
+  if (m.includes("recipient_fraud_flagged")) return "Recipient has an open fraud flag — resolve it in Fraud review before approving.";
   if (m.includes("payout_not_draft")) return "That payout is no longer a draft.";
   if (m.includes("payout_not_approved")) return "That payout isn't approved yet.";
+  if (m.includes("payout_not_failable")) return "Only approved or processing payouts can be marked failed.";
   if (m.includes("payout_not_failed")) return "Only failed payouts can be retried.";
   if (m.includes("provider_id_required")) return "Enter the provider payout / transfer id so this payment can be reconciled.";
   if (m.includes("reason_required")) return "Add a reason so the failed payout is auditable.";
@@ -56,7 +70,16 @@ export default function PayoutBatchesPage() {
     ledger.map((l) => [`${l.referrer_type}:${l.referrer_id}`, l] as const),
   );
 
-  const [dlg, setDlg] = useState<{ kind: "paid" | "failed"; id: string } | null>(null);
+  // Open fraud flags — an approved payout to a flagged recipient is exactly
+  // the mistake this console must make impossible, so surface it on the row.
+  const { data: flags = [] } = useQuery({
+    queryKey: qk.admin.fraudFlags(true),
+    queryFn: () => adminFraudFlags(true, 200),
+    staleTime: 15_000,
+  });
+  const flaggedSubjects = new Set(flags.map((f) => `${f.subject_type}:${f.subject_id}`));
+
+  const [dlg, setDlg] = useState<{ kind: "approve" | "paid" | "failed"; row: PayoutRow } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.admin.payoutBatches() });
@@ -64,20 +87,17 @@ export default function PayoutBatchesPage() {
     fn().then(() => { toast.success(okMsg); invalidate(); }).catch((e) => toast.error(friendlyError(e)));
 
   const confirmDialog = (value: string) => {
-    if (!dlg) return;
-    const { kind, id } = dlg;
+    if (!dlg || busy) return;
+    const { kind, row } = dlg;
     setBusy(true);
-    const op = kind === "paid" ? markPayoutPaid(id, value) : markPayoutFailed(id, value);
-    op.then(() => { toast.success(kind === "paid" ? "Marked paid" : "Marked failed"); invalidate(); })
+    const op =
+      kind === "approve" ? approvePayout(row.id)
+      : kind === "paid" ? markPayoutPaid(row.id, value)
+      : markPayoutFailed(row.id, value);
+    op.then(() => { toast.success(kind === "approve" ? "Approved" : kind === "paid" ? "Marked paid" : "Marked failed"); invalidate(); })
       .catch((e) => toast.error(friendlyError(e)))
       .finally(() => { setBusy(false); setDlg(null); });
   };
-
-  const approve = useMutation({
-    mutationFn: (id: string) => approvePayout(id),
-    onSuccess: () => { toast.success("Approved"); invalidate(); },
-    onError: (e) => toast.error(friendlyError(e)),
-  });
 
   return (
     <AdminShell title="Payout batches">
@@ -109,6 +129,10 @@ export default function PayoutBatchesPage() {
               const fallbackId = (r.founder_id ?? r.user_id ?? "").slice(0, 8);
               const recipientName = payee?.name ?? (fallbackId ? `${kind} ${fallbackId}…` : "—");
               const method = payee?.payout_method ?? null;
+              const flagged =
+                (r.founder_id && flaggedSubjects.has(`founder:${r.founder_id}`)) ||
+                (payee && flaggedSubjects.has(`user:${payee.recipient_user_id}`)) ||
+                (r.user_id && flaggedSubjects.has(`user:${r.user_id}`));
               return (
                 <tr key={r.id} className="border-t border-[var(--cog-border)]">
                   <td className="px-4 py-2 font-mono text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
@@ -117,6 +141,7 @@ export default function PayoutBatchesPage() {
                     <div className="text-xs text-[var(--cog-muted)]">
                       <span className="uppercase tracking-wider">{kind}</span>
                       {method ? <span> · {method}</span> : <span className="text-[#b3261e]"> · no payout method</span>}
+                      {flagged && <span className="text-[#b3261e]"> · ⚠ open fraud flag</span>}
                     </div>
                   </td>
                   <td className="px-4 py-2 text-right font-mono">{money(r.amount_cents, r.currency)}</td>
@@ -129,12 +154,19 @@ export default function PayoutBatchesPage() {
                   <td className="px-4 py-2 font-mono text-xs text-[var(--cog-muted)]">{r.provider_payout_id ?? "—"}</td>
                   <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
                     {r.status === "draft" && (
-                      <Button size="sm" disabled={approve.isPending} onClick={() => approve.mutate(r.id)}>Approve</Button>
+                      <Button
+                        size="sm"
+                        disabled={busy || !!flagged}
+                        title={flagged ? "Recipient has an open fraud flag — resolve it in Fraud review first." : undefined}
+                        onClick={() => setDlg({ kind: "approve", row: r })}
+                      >
+                        Approve
+                      </Button>
                     )}
                     {r.status === "approved" && (
                       <>
-                        <Button size="sm" onClick={() => setDlg({ kind: "paid", id: r.id })}>Mark paid</Button>
-                        <Button size="sm" variant="outline" onClick={() => setDlg({ kind: "failed", id: r.id })}>Mark failed</Button>
+                        <Button size="sm" onClick={() => setDlg({ kind: "paid", row: r })}>Mark paid</Button>
+                        <Button size="sm" variant="outline" onClick={() => setDlg({ kind: "failed", row: r })}>Mark failed</Button>
                       </>
                     )}
                     {r.status === "failed" && (
@@ -150,11 +182,12 @@ export default function PayoutBatchesPage() {
 
       <PromptDialog
         open={!!dlg}
-        title={dlg?.kind === "paid" ? "Mark payout paid" : "Mark payout failed"}
-        label={dlg?.kind === "paid" ? "Provider payout / transfer id" : "Failure reason"}
+        title={dlg?.kind === "approve" ? "Approve payout" : dlg?.kind === "paid" ? "Mark payout paid" : "Mark payout failed"}
+        description={dlg?.kind === "approve" ? approveDescription(dlg.row, payeeByKey) : undefined}
+        label={dlg?.kind === "approve" ? undefined : dlg?.kind === "paid" ? "Provider payout / transfer id" : "Failure reason"}
         placeholder={dlg?.kind === "paid" ? "e.g. tr_… or PayPal batch id" : "e.g. invalid account"}
-        required
-        confirmLabel={dlg?.kind === "paid" ? "Mark paid" : "Mark failed"}
+        required={dlg?.kind !== "approve"}
+        confirmLabel={dlg?.kind === "approve" ? "Approve payout" : dlg?.kind === "paid" ? "Mark paid" : "Mark failed"}
         tone={dlg?.kind === "failed" ? "danger" : "default"}
         busy={busy}
         onConfirm={confirmDialog}
