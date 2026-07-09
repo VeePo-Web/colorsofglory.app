@@ -23,6 +23,7 @@ import {
   History,
   UserPlus,
   Inbox,
+  Maximize2,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
@@ -34,7 +35,20 @@ import type { ViewportCtx } from "@/components/canvas/CanvasViewport";
 import CanvasStage, { type CanvasCardInteractions } from "@/components/canvas/CanvasStage";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
-import { COLUMN_TOP, ideaColumnSlot, finalColumnSlot } from "@/lib/canvas/canvasGeometry";
+import {
+  COLUMN_TOP,
+  CARD_MIN_HEIGHT,
+  CARD_WIDTH,
+  FINAL_COLUMN_X,
+  IDEAS_COLUMN_X,
+  ROOT_HEIGHT,
+  ROOT_LEFT,
+  ROOT_TOP,
+  ROOT_WIDTH,
+  cardWidth,
+  ideaColumnSlot,
+  finalColumnSlot,
+} from "@/lib/canvas/canvasGeometry";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
@@ -840,17 +854,64 @@ const SongCanvasExperience = () => {
     setSelectedId(card.id);
   }, []);
 
-  // One-tap navigation to a zone's column — no more panning a 2D void to find
-  // Final (it lives 1200px to the right of Ideas).
+  // The canvas-space bounding box of a set of cards (+ optionally the root
+  // card), used by every semantic-nav framing move. Card footprints come from
+  // canvasGeometry so the frame always matches what's painted.
+  const boundsOfCards = useCallback(
+    (list: CanvasCard[], includeRoot: boolean) => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of list) {
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + cardWidth(c.type));
+        maxY = Math.max(maxY, c.y + CARD_MIN_HEIGHT);
+      }
+      if (includeRoot || !Number.isFinite(minX)) {
+        minX = Math.min(minX, ROOT_LEFT);
+        minY = Math.min(minY, ROOT_TOP);
+        maxX = Math.max(maxX, ROOT_LEFT + ROOT_WIDTH);
+        maxY = Math.max(maxY, ROOT_TOP + ROOT_HEIGHT);
+      }
+      return { minX, minY, maxX, maxY };
+    },
+    [],
+  );
+
+  const viewportDims = useCallback(() => {
+    const area = canvasAreaRef.current;
+    return {
+      vw: area?.clientWidth ?? window.innerWidth,
+      vh: area?.clientHeight ?? window.innerHeight,
+    };
+  }, []);
+
+  // Fit-to-view — the whole song (root + every card) framed in one calm move.
+  // The primary "show me everything" gesture on a phone that can't see it all.
+  const fitAll = useCallback(() => {
+    const { vw, vh } = viewportDims();
+    viewportApiRef.current?.fitTo(boundsOfCards([...ideasCards, ...finalCards], true), vw, vh, 72, 560);
+    setSelectedId(null);
+  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
+
+  // One-tap navigation to a zone — frames that zone's cards (Ideas includes the
+  // root it branches from). Primary mobile nav: the phone can't show both zones,
+  // so one tap flies to and frames each.
   const goToZone = useCallback((zone: "ideas" | "final") => {
     setViewZone(zone);
-    const area = canvasAreaRef.current;
-    const vw = area?.clientWidth ?? window.innerWidth;
-    const vh = area?.clientHeight ?? window.innerHeight;
-    const columnCenterX = (zone === "ideas" ? 80 : DIVIDER_X + 80) + 100;
-    // Land the column's top comfortably: horizontally centred-ish, near the top.
-    viewportApiRef.current?.panTo(columnCenterX, COLUMN_TOP + 40, vw * 0.42, vh * 0.3, 420);
-  }, []);
+    const { vw, vh } = viewportDims();
+    const zoneCards = zone === "ideas" ? ideasCards : finalCards;
+    if (zoneCards.length > 0) {
+      viewportApiRef.current?.fitTo(boundsOfCards(zoneCards, zone === "ideas"), vw, vh, 72, 480);
+      return;
+    }
+    // Empty zone: frame its column area (Ideas also shows the root card) so the
+    // jump is never a leap into blank space.
+    const colX = zone === "ideas" ? IDEAS_COLUMN_X : FINAL_COLUMN_X;
+    const box = zone === "ideas"
+      ? { minX: ROOT_LEFT, minY: ROOT_TOP, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 }
+      : { minX: colX - 40, minY: COLUMN_TOP - 60, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 };
+    viewportApiRef.current?.fitTo(box, vw, vh, 72, 480);
+  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
 
   const closeWorkPanel = useCallback(() => {
     setShowWorkPanel(false);
@@ -1291,15 +1352,16 @@ const SongCanvasExperience = () => {
           viewportApiRef={viewportApiRef}
           overlay={
             <>
-              {/* Ideas ⇄ Final quick-nav — the phone can't show both zones at
-                  once, so one tap flies to each. Floating, thumb-reachable. */}
+              {/* Semantic nav — the PRIMARY way to move on a phone that can't
+                  show both zones at once. One tap frames Ideas or Final; Fit
+                  frames the whole song. Pinch/pan stay as a secondary path. */}
               <div
-                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2"
+                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5"
                 style={{ top: 12 }}
-                role="tablist"
-                aria-label="Jump between Ideas and Final"
               >
                 <div
+                  role="tablist"
+                  aria-label="Jump between Ideas and Final"
                   ref={ideasTourRef}
                   className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
@@ -1325,6 +1387,16 @@ const SongCanvasExperience = () => {
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  onClick={fitAll}
+                  className="pointer-events-auto flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                  aria-label="Fit the whole song to view"
+                >
+                  <Maximize2 size={13} strokeWidth={2.2} />
+                  Fit
+                </button>
               </div>
               {showFirstRun && (
                 <FirstActionPrompt
