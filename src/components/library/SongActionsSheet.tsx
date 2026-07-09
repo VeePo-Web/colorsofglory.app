@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks } from "lucide-react";
+import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks, Pencil, Trash2, LogOut } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -18,13 +18,21 @@ interface SongActionsSheetProps {
   onSelectMode: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
+  /** Owner only — opens the rename dialog on the page. */
+  onRename: () => void;
+  /** Owner only — fires after the inline confirm; permanent. */
+  onDelete: () => void;
+  /** Invited songs only — fires after the inline confirm. */
+  onLeave: () => void;
   onClose: () => void;
 }
 
 /**
  * SongActionsSheet — the press-and-hold menu for a song (Apple's contextual
- * layer, as a thumb-first bottom sheet). Organization actions only: open the
- * room, place the song in albums instantly, archive or restore. Never Delete.
+ * layer, as a thumb-first bottom sheet). Role-aware: owners get the full
+ * organization set (open, rename, albums, archive/restore) plus Delete behind
+ * an inline confirm; invited members get open + Leave. Nothing destructive
+ * happens on a single tap.
  */
 const SongActionsSheet = ({
   song,
@@ -38,10 +46,16 @@ const SongActionsSheet = ({
   onSelectMode,
   onArchive,
   onUnarchive,
+  onRename,
+  onDelete,
+  onLeave,
   onClose,
 }: SongActionsSheetProps) => {
   const [visible, setVisible] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const archived = song.status === "archived";
+  const isOwner = song.my_role === "owner";
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -137,8 +151,21 @@ const SongActionsSheet = ({
             </span>
           </button>
 
+          {/* Rename — the title is the owner's to shape, any time */}
+          {isOwner && (
+            <button onClick={onRename} className={rowClass} style={{ minHeight: 48 }}>
+              <Pencil size={16} strokeWidth={1.9} style={{ color: "var(--cog-warm-gray)" }} />
+              <span
+                className="flex-1 text-[0.9375rem]"
+                style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+              >
+                Rename song
+              </span>
+            </button>
+          )}
+
           {/* Pin — held at the top of the library, Apple Notes style */}
-          {!archived && (
+          {isOwner && !archived && (
             <button onClick={onTogglePin} className={rowClass} style={{ minHeight: 48 }}>
               {pinned ? (
                 <PinOff size={16} strokeWidth={1.9} style={{ color: "var(--cog-warm-gray)" }} />
@@ -180,7 +207,7 @@ const SongActionsSheet = ({
             ))}
 
           {/* Albums — instant placement, Apple "Add to Playlist" pattern */}
-          {!archived && (
+          {isOwner && !archived && (
             <>
               <p
                 className="px-3 pb-1 pt-3 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
@@ -233,35 +260,128 @@ const SongActionsSheet = ({
           )}
 
           {/* Select many — Apple Photos batch mode, seeded with this song */}
-          <div className="mx-3 my-2" style={{ borderTop: "1px solid var(--cog-border)" }} />
-          <button onClick={onSelectMode} className={rowClass} style={{ minHeight: 52 }}>
-            <ListChecks size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
-            <span
-              className="flex-1 text-[0.9375rem]"
-              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
-            >
-              Select songs
-            </span>
-          </button>
+          {isOwner && (
+            <>
+              <div className="mx-3 my-2" style={{ borderTop: "1px solid var(--cog-border)" }} />
+              <button onClick={onSelectMode} className={rowClass} style={{ minHeight: 52 }}>
+                <ListChecks size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
+                <span
+                  className="flex-1 text-[0.9375rem]"
+                  style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+                >
+                  Select songs
+                </span>
+              </button>
 
-          {/* Archive / Restore — never Delete */}
-          <button onClick={archived ? onUnarchive : onArchive} className={rowClass} style={{ minHeight: 52 }}>
-            {archived ? (
-              <ArchiveRestore size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
-            ) : (
-              <Archive size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
-            )}
-            <span
-              className="flex-1 text-[0.9375rem]"
-              style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-            >
-              {archived ? "Restore song" : "Archive song"}
-            </span>
-          </button>
-          {!archived && (
-            <p className="px-3 pb-2 text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
-              Archived songs stay safe and readable in the Archived tab.
-            </p>
+              {/* Archive / Restore — always reversible */}
+              <button onClick={archived ? onUnarchive : onArchive} className={rowClass} style={{ minHeight: 52 }}>
+                {archived ? (
+                  <ArchiveRestore size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
+                ) : (
+                  <Archive size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
+                )}
+                <span
+                  className="flex-1 text-[0.9375rem]"
+                  style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                >
+                  {archived ? "Restore song" : "Archive song"}
+                </span>
+              </button>
+              {!archived && (
+                <p className="px-3 pb-2 text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+                  Archived songs stay safe and readable in the Archived tab.
+                </p>
+              )}
+
+              {/* Delete — the one destructive action; inline confirm, never one tap */}
+              <div className="mx-3 my-2" style={{ borderTop: "1px solid var(--cog-border)" }} />
+              {confirmingDelete ? (
+                <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ minHeight: 52 }}>
+                  <span
+                    className="min-w-0 flex-1 text-[0.875rem]"
+                    style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+                  >
+                    Delete “{song.title}”? This can’t be undone.
+                  </span>
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    autoFocus
+                    className="shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+                    style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", minHeight: 44 }}
+                  >
+                    Keep
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+                    style={{ color: "#C0392B", fontFamily: "var(--font-body)", minHeight: 44 }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  className={rowClass}
+                  style={{ minHeight: 52 }}
+                >
+                  <Trash2 size={17} strokeWidth={2} style={{ color: "#C0392B" }} />
+                  <span
+                    className="flex-1 text-[0.9375rem]"
+                    style={{ color: "#C0392B", fontFamily: "var(--font-body)" }}
+                  >
+                    Delete song
+                  </span>
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Leave — an invited member steps out of the room; rejoining needs
+              a fresh invite, so it gets the same inline-confirm respect */}
+          {!isOwner && (
+            <>
+              <div className="mx-3 my-2" style={{ borderTop: "1px solid var(--cog-border)" }} />
+              {confirmingLeave ? (
+                <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ minHeight: 52 }}>
+                  <span
+                    className="min-w-0 flex-1 text-[0.875rem]"
+                    style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+                  >
+                    Leave “{song.title}”? You’ll need a new invite to rejoin.
+                  </span>
+                  <button
+                    onClick={() => setConfirmingLeave(false)}
+                    autoFocus
+                    className="shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+                    style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", minHeight: 44 }}
+                  >
+                    Stay
+                  </button>
+                  <button
+                    onClick={onLeave}
+                    className="shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold transition-transform duration-150 active:scale-95"
+                    style={{ color: "#C0392B", fontFamily: "var(--font-body)", minHeight: 44 }}
+                  >
+                    Leave
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingLeave(true)}
+                  className={rowClass}
+                  style={{ minHeight: 52 }}
+                >
+                  <LogOut size={17} strokeWidth={2} style={{ color: "var(--cog-warm-gray)" }} />
+                  <span
+                    className="flex-1 text-[0.9375rem]"
+                    style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                  >
+                    Leave this song
+                  </span>
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

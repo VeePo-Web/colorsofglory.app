@@ -252,3 +252,15 @@ export const archiveSong = async (song_id: string): Promise<void> => {
     .eq("id", song_id);
   if (error) throw toCogError(error);
 };
+
+/**
+ * Rename a song (owner only — same RLS UPDATE policy as `archiveSong`).
+ * Filed with A3 by F1 (catalog card actions); see docs/CATALOG-CONTRACT.md.
+ */
+export const renameSong = async (song_id: string, title: string): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ title })
+    .eq("id", song_id);
+  if (error) throw toCogError(error);
+};

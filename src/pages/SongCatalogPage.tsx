@@ -31,6 +31,9 @@ import {
   createSong,
   archiveSong,
   unarchiveSong,
+  renameSong,
+  leaveSong,
+  deleteSong,
   type SongCard as SongRow,
 } from "@/integrations/cog/songs";
 import { useSongs } from "@/hooks/useAppQueries";
@@ -90,6 +93,8 @@ const SongCatalogPage = () => {
     initialSongIds?: string[];
   }>({ open: false, album: null });
   const [actionsSong, setActionsSong] = useState<SongRow | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SongRow | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [pins, setPins] = useState<string[]>(() => loadPins());
   const pinnedIds = useMemo(() => new Set(pins), [pins]);
 
@@ -186,9 +191,11 @@ const SongCatalogPage = () => {
     }
 
     const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
+    const born = (s: SongRow) => new Date(s.created_at ?? 0).getTime() || 0;
     const sorted = [...list];
     if (prefs.sort === "alpha") sorted.sort((a, b) => a.title.localeCompare(b.title));
     else if (prefs.sort === "ideas") sorted.sort((a, b) => b.voice_memo_count - a.voice_memo_count);
+    else if (prefs.sort === "created") sorted.sort((a, b) => born(b) - born(a));
     else sorted.sort((a, b) => time(b) - time(a));
     // Pinned songs hold the top of Owned whatever the sort (Apple Notes).
     if (activeTab === "Owned" && !activeAlbum && pinnedIds.size > 0) {
@@ -296,6 +303,61 @@ const SongCatalogPage = () => {
     } catch {
       setSongs(prev);
       toast.error(archived ? "Couldn't archive that song" : "Couldn't restore that song");
+    }
+  };
+
+  // Rename / delete / leave — the card actions the data layer always had but
+  // the UI never surfaced. All optimistic with rollback; a refetch afterwards
+  // reconciles the 60s-stale catalog cache so the change never "un-happens".
+  const openRename = (song: SongRow) => {
+    setActionsSong(null);
+    setRenameValue(song.title);
+    setRenameTarget(song);
+  };
+
+  const submitRename = async () => {
+    if (!renameTarget) return;
+    const song = renameTarget;
+    const title = renameValue.trim();
+    if (!title) return;
+    setRenameTarget(null);
+    if (title === song.title) return;
+    const prev = songs;
+    setSongs((s) => s.map((x) => (x.id === song.id ? { ...x, title } : x)));
+    try {
+      await renameSong(song.id, title);
+      void songsQuery.refetch();
+    } catch {
+      setSongs(prev);
+      toast.error("Couldn't rename that song");
+    }
+  };
+
+  const handleDelete = async (song: SongRow) => {
+    setActionsSong(null);
+    const prev = songs;
+    setSongs((s) => s.filter((x) => x.id !== song.id));
+    try {
+      await deleteSong(song.id);
+      toast(`Deleted “${song.title}”`);
+      void songsQuery.refetch();
+    } catch {
+      setSongs(prev);
+      toast.error("Couldn't delete that song");
+    }
+  };
+
+  const handleLeave = async (song: SongRow) => {
+    setActionsSong(null);
+    const prev = songs;
+    setSongs((s) => s.filter((x) => x.id !== song.id));
+    try {
+      await leaveSong(song.id);
+      toast(`You left “${song.title}”. Ask the owner for a new invite to rejoin.`);
+      void songsQuery.refetch();
+    } catch {
+      setSongs(prev);
+      toast.error("Couldn't leave that song");
     }
   };
 
@@ -419,7 +481,7 @@ const SongCatalogPage = () => {
       setNavDirection("right");
       navigate("/");
     },
-    disabled: dialogOpen || albumSheet.open || actionsSong !== null,
+    disabled: dialogOpen || albumSheet.open || actionsSong !== null || renameTarget !== null,
   });
   const enterClass = useSpatialEntrance(useLocation().pathname);
 
@@ -605,6 +667,18 @@ const SongCatalogPage = () => {
           />
         )}
 
+        {/* Live match count while searching — the tabs already carry the browse
+            counts; this line answers "how many did my search find?" */}
+        {!selecting && !reorderingAlbum && query.trim() !== "" && visibleSongs.length > 0 && (
+          <p
+            aria-live="polite"
+            className="-mt-2 mb-3 px-1 text-[0.75rem] font-medium"
+            style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+          >
+            {visibleSongs.length} {visibleSongs.length === 1 ? "match" : "matches"}
+          </p>
+        )}
+
         {/* Open app → one tap → drive: jump straight back into the last
             practice session (song or album), exactly where it left off. */}
         {!selecting && <PracticeResumeCard />}
@@ -748,10 +822,7 @@ const SongCatalogPage = () => {
               : EMPTY_COPY[activeTab]
           }
           onOpen={(id) => { setNavDirection("up"); navigate(`/songs/${id}/canvas`); }}
-          onSongActions={(song) => {
-            // Organization actions are the owner's — invited songs stay tap-to-open only.
-            if (song.my_role === "owner") setActionsSong(song);
-          }}
+          onSongActions={(song) => setActionsSong(song)}
           onSwipeArchive={activeAlbum ? undefined : (song) => setSongStatus(song, song.status !== "archived")}
           onSwipeRemoveFromAlbum={activeAlbum ? (song) => removeSongFromAlbum(activeAlbum.id, song) : undefined}
           pinnedIds={pinnedIds}
@@ -868,6 +939,9 @@ const SongCatalogPage = () => {
           onSelectMode={() => enterSelect(actionsSong.id)}
           onArchive={() => setSongStatus(actionsSong, true)}
           onUnarchive={() => setSongStatus(actionsSong, false)}
+          onRename={() => openRename(actionsSong)}
+          onDelete={() => handleDelete(actionsSong)}
+          onLeave={() => handleLeave(actionsSong)}
           onClose={() => setActionsSong(null)}
         />
       )}
@@ -909,6 +983,46 @@ const SongCatalogPage = () => {
             >
               <Mic size={15} />
               {creating ? "Creating…" : "Start brainstorm"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename — the title changes, the room and everything in it stays */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Rename this song</DialogTitle>
+            <DialogDescription>
+              Its lyrics, voice memos, and people stay exactly as they are.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitRename();
+            }}
+            aria-label="Song title"
+            className="w-full rounded-xl border px-4 py-3 text-[1rem] outline-none"
+            style={{ borderColor: "var(--cog-border)", color: "var(--cog-charcoal)" }}
+          />
+          <DialogFooter>
+            <button
+              onClick={() => setRenameTarget(null)}
+              className="rounded-xl px-4 py-2 text-[0.9375rem]"
+              style={{ color: "var(--cog-warm-gray)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitRename}
+              disabled={!renameValue.trim()}
+              className="rounded-xl px-4 py-2 text-[0.9375rem] font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: "var(--cog-gold)" }}
+            >
+              Save name
             </button>
           </DialogFooter>
         </DialogContent>

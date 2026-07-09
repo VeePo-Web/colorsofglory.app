@@ -5,7 +5,7 @@
  */
 export type LibraryView = "grid" | "list";
 export type LibraryDensity = 2 | 3;
-export type LibrarySort = "recent" | "alpha" | "ideas";
+export type LibrarySort = "recent" | "created" | "alpha" | "ideas";
 
 export interface LibraryPrefs {
   view: LibraryView;
@@ -30,7 +30,7 @@ export function loadLibraryPrefs(): LibraryPrefs {
       view: parsed.view === "list" ? "list" : "grid",
       density: parsed.density === 3 ? 3 : 2,
       sort:
-        parsed.sort === "alpha" || parsed.sort === "ideas"
+        parsed.sort === "alpha" || parsed.sort === "ideas" || parsed.sort === "created"
           ? parsed.sort
           : "recent",
     };
@@ -49,6 +49,7 @@ export function saveLibraryPrefs(prefs: LibraryPrefs): void {
 
 export const SORT_LABELS: Record<LibrarySort, string> = {
   recent: "Recently edited",
+  created: "Recently created",
   alpha: "A to Z",
   ideas: "Most ideas",
 };

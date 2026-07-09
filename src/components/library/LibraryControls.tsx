@@ -17,7 +17,7 @@ interface LibraryControlsProps {
   onViewCycle: () => void;
 }
 
-const SORT_ORDER: LibrarySort[] = ["recent", "alpha", "ideas"];
+const SORT_ORDER: LibrarySort[] = ["recent", "created", "alpha", "ideas"];
 
 /**
  * LibraryControls — the Apple-Library control row: iOS search field,
