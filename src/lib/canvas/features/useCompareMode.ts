@@ -1,8 +1,15 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasFeatureMutations } from "./mutations";
-import { memoIdForCard, pauseCanvasAudio, playMemoOnCanvas, stopCanvasAudio } from "./canvasAudio";
+import {
+  getCanvasPlayback,
+  memoIdForCard,
+  pauseCanvasAudio,
+  playMemoOnCanvas,
+  preloadMemo,
+  stopCanvasAudio,
+} from "./canvasAudio";
 
 /**
  * useCompareMode — the F21 state machine: open two same-section variants side
@@ -20,6 +27,9 @@ export interface CompareModeApi {
   open: (cardId: string) => void;
   close: () => void;
   togglePlay: (cardId: string) => void;
+  /** Flip to the OTHER take at the SAME playhead — the A|B rhythm. Starts
+   *  from the top when nothing is sounding yet. */
+  switchPlay: (cardId: string) => void;
   choose: (winnerId: string) => void;
   keepBoth: () => void;
 }
@@ -87,6 +97,17 @@ export function useCompareMode({ cards, isViewer, mutations, onMoment }: UseComp
     setPairIds(null);
   }, []);
 
+  // Warm both takes the moment the sheet opens — the first tap (and every
+  // switch) should sound instantly, not after a signed-URL round-trip.
+  useEffect(() => {
+    if (!pair) return;
+    for (const c of pair) {
+      const memoId = memoIdForCard(c.id);
+      if (memoId) void preloadMemo(memoId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairIds]);
+
   const togglePlay = useCallback(
     (cardId: string) => {
       if (playingId === cardId) {
@@ -101,8 +122,33 @@ export function useCompareMode({ cards, isViewer, mutations, onMoment }: UseComp
         onEnded: () => setPlayingId((prev) => (prev === cardId ? null : prev)),
         onError: () => setPlayingId((prev) => (prev === cardId ? null : prev)),
       });
+      // Prime the OTHER side so the A↔B flip is instant.
+      const other = pair?.find((c) => c.id !== cardId);
+      const otherMemo = other ? memoIdForCard(other.id) : null;
+      if (otherMemo) void preloadMemo(otherMemo);
     },
-    [playingId],
+    [playingId, pair],
+  );
+
+  const switchPlay = useCallback(
+    (cardId: string) => {
+      if (playingId === cardId) return; // already the audible side
+      const memoId = memoIdForCard(cardId);
+      if (!memoId) return;
+      // Same bar, other take: carry the playhead across the flip.
+      const { memoId: soundingMemo, position } = getCanvasPlayback();
+      const startAt = playingId && soundingMemo ? position : undefined;
+      setPlayingId(cardId);
+      void playMemoOnCanvas(memoId, {
+        startAt,
+        onEnded: () => setPlayingId((prev) => (prev === cardId ? null : prev)),
+        onError: () => setPlayingId((prev) => (prev === cardId ? null : prev)),
+      });
+      const other = pair?.find((c) => c.id !== cardId);
+      const otherMemo = other ? memoIdForCard(other.id) : null;
+      if (otherMemo) void preloadMemo(otherMemo);
+    },
+    [playingId, pair],
   );
 
   const choose = useCallback(
@@ -138,5 +184,5 @@ export function useCompareMode({ cards, isViewer, mutations, onMoment }: UseComp
     toast("Both ideas stay active");
   }, []);
 
-  return { pair, playingId, canCompare, open, close, togglePlay, choose, keepBoth };
+  return { pair, playingId, canCompare, open, close, togglePlay, switchPlay, choose, keepBoth };
 }

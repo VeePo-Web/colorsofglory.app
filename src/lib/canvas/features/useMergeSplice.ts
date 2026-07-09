@@ -14,6 +14,8 @@ export interface MergeSpliceApi {
   toggleSelect: (id: string) => void;
   removeFromSelection: (id: string) => void;
   clearSelection: () => void;
+  /** Reverse A and B — the preview updates live, so order is a choice, not a surprise. */
+  swapSelection: () => void;
   executeMerge: () => void;
 }
 
@@ -40,6 +42,10 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
   }, []);
 
   const clearSelection = useCallback(() => setSelection([]), []);
+
+  const swapSelection = useCallback(() => {
+    setSelection((prev) => (prev.length === 2 ? [prev[1], prev[0]] : prev));
+  }, []);
 
   const executeMerge = useCallback(() => {
     if (isViewer || selection.length !== 2) return;
@@ -80,5 +86,5 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
     });
   }, [isViewer, selection, cards, mutations, onMoment]);
 
-  return { selection, toggleSelect, removeFromSelection, clearSelection, executeMerge };
+  return { selection, toggleSelect, removeFromSelection, clearSelection, swapSelection, executeMerge };
 }

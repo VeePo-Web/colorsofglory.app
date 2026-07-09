@@ -39,11 +39,22 @@ A follow-up commit implemented the audit's top findings. Now FIXED:
   nested-button fixed + its reduced-motion classes applied, honest roster
   aria-label, merge non-destruction caption, realtime re-hydrates debounced.
 
+**Second addendum (same day, audio-truth pass):** also now DONE —
+- **Gapless advance** — canvasAudio is a two-element pool: the next take is
+  fully primed (src + buffering) on a spare element while the current one
+  sounds; advancing swaps elements instead of re-fetching.
+- **Compare's A|B rhythm** — `switchPlay` flips takes at the SAME playhead
+  (`startAt`), both sides preload on open, and the sheet gains one big
+  thumb-reachable A|B toggle (rose/violet, instant switch).
+- **Merge preview** — the bar shows the combined section LIVE before commit,
+  with a "Swap order" flip; merges are no longer blind.
+- **Tactile drag** — a quiet haptic bump on lift and a firmer one on a
+  cross-tree drop (the drop that changes the song's shape).
+
 Still open (backend-shaped or next passes): `song_suggestions` proper table +
-`review_state`/`status` columns (cross-device decision truth), gapless
-double-buffer audio, entry-based listen queue (repeats/reorder),
-section-occupancy presence, loudness-match/blind-mode compare, the
-god-component carve.
+`review_state`/`status` columns (cross-device decision truth), entry-based
+listen queue (repeats/reorder), section-occupancy presence,
+loudness-match/blind-mode compare, the god-component carve.
 
 ## Scoreboard
 

@@ -13,6 +13,8 @@ interface CompareModeSheetProps {
   playingId: string | null;
   /** Real A/B audition toggle — one take at a time, never overlapping. */
   onTogglePlay: (cardId: string) => void;
+  /** Flip to the other take at the SAME playhead (the A|B rhythm). */
+  onSwitchPlay?: (cardId: string) => void;
   /** Called with the winning card id when the songwriter chooses a direction. */
   onChoose: (winnerId: string) => void;
   /** Called when the songwriter keeps both ideas active. */
@@ -220,6 +222,7 @@ const CompareModeSheet = ({
   cards,
   playingId,
   onTogglePlay,
+  onSwitchPlay,
   onChoose,
   onKeepBoth,
   onClose,
@@ -401,6 +404,66 @@ const CompareModeSheet = ({
         >
           Tap a card to select a direction. Neither idea will be deleted.
         </p>
+
+        {/* The A|B rhythm — one big thumb-reachable toggle that flips takes
+            at the SAME playhead. Only when both sides actually carry audio. */}
+        {onSwitchPlay &&
+          cards.every((c) => c.type === "voice" || c.type === "hum") && (
+            <div style={{ padding: "0 16px 14px" }}>
+              <div
+                role="group"
+                aria-label="Flip between take A and take B at the same spot"
+                style={{
+                  display: "flex",
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  border: "1.5px solid rgba(28,26,23,0.10)",
+                }}
+              >
+                {cards.map((c, i) => {
+                  const tone = i === 0 ? COMPARE_A_TONE : COMPARE_B_TONE;
+                  const audible = playingId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => (audible ? onTogglePlay(c.id) : onSwitchPlay(c.id))}
+                      aria-pressed={audible}
+                      aria-label={
+                        audible
+                          ? `Pause take ${i === 0 ? "A" : "B"}`
+                          : `Hear take ${i === 0 ? "A" : "B"} from the same spot`
+                      }
+                      style={{
+                        flex: 1,
+                        minHeight: 56,
+                        border: "none",
+                        cursor: "pointer",
+                        backgroundColor: audible ? tone.dark : "var(--cog-cream-light)",
+                        color: audible ? "#FFF" : tone.dark,
+                        fontFamily: "var(--font-body)",
+                        fontSize: 17,
+                        fontWeight: 800,
+                        letterSpacing: "0.06em",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        transition: "background-color 140ms ease, color 140ms ease",
+                      }}
+                    >
+                      {audible ? (
+                        <Pause size={16} strokeWidth={2.5} aria-hidden="true" />
+                      ) : (
+                        <Play size={16} strokeWidth={2.5} aria-hidden="true" />
+                      )}
+                      {i === 0 ? "A" : "B"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
         {/* Cards — stacked vertically (mobile-first) */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 16px 20px" }}>

@@ -2180,6 +2180,7 @@ const SongCanvasExperience = () => {
           onRemove={merge.removeFromSelection}
           onMerge={merge.executeMerge}
           onClear={merge.clearSelection}
+          onSwap={merge.swapSelection}
         />
       )}
       {!arrangement.arranging && merge.selection.length === 0 && (
@@ -2219,6 +2220,7 @@ const SongCanvasExperience = () => {
           cards={compare.pair}
           playingId={compare.playingId}
           onTogglePlay={compare.togglePlay}
+          onSwitchPlay={compare.switchPlay}
           onChoose={compare.choose}
           onKeepBoth={compare.keepBoth}
           onClose={compare.close}

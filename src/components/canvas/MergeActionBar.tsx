@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArrowLeftRight } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { usePrefersReducedMotion } from "@/lib/canvas/features/usePrefersReducedMotion";
@@ -9,9 +10,11 @@ interface MergeActionBarProps {
   onRemove: (id: string) => void;
   onMerge: () => void;
   onClear: () => void;
+  /** Reverse A and B — the live preview below updates instantly. */
+  onSwap?: () => void;
 }
 
-const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeActionBarProps) => {
+const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear, onSwap }: MergeActionBarProps) => {
   const [visible, setVisible] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
 
@@ -209,6 +212,95 @@ const MergeActionBar = ({ selection, cards, onRemove, onMerge, onClear }: MergeA
           </div>
         )}
       </div>
+
+      {/* LIVE PREVIEW — the merge is a choice you can SEE before committing,
+          never a blind combine. Swap flips which idea leads. */}
+      {canMerge && selectedCards.length === 2 && (
+        <div style={{ margin: "0 16px 10px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                color: "var(--cog-muted, #A09689)",
+              }}
+            >
+              The new section
+            </span>
+            {onSwap && (
+              <button
+                type="button"
+                onClick={onSwap}
+                aria-label="Swap which idea comes first"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  minHeight: 32,
+                  padding: "0 10px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: "rgba(28,26,23,0.05)",
+                  color: "var(--cog-warm-gray, #6B6459)",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}
+              >
+                <ArrowLeftRight size={12} strokeWidth={2} aria-hidden="true" />
+                Swap order
+              </button>
+            )}
+          </div>
+          <div
+            style={{
+              borderRadius: 12,
+              padding: "10px 12px",
+              backgroundColor: "#FFFCF7",
+              border: "1.5px dashed rgba(184,149,58,0.35)",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 4px",
+                fontFamily: "var(--font-display)",
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--cog-charcoal, #1C1A17)",
+              }}
+            >
+              {selectedCards[0].title} + {selectedCards[1].title}
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-display)",
+                fontSize: 12,
+                lineHeight: 1.55,
+                color: "var(--cog-warm-gray, #6B6459)",
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: 4,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {[selectedCards[0].body, selectedCards[1].body].filter(Boolean).join(" · ") ||
+                "Both ideas, joined in this order."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Non-destructive reassurance — the user is TOLD before committing */}
       <p

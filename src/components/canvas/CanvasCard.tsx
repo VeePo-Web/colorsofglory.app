@@ -99,6 +99,13 @@ const EDGE_PAN_ZONE = 52;
 /** Max auto-pan speed in screen px per frame. */
 const EDGE_PAN_SPEED = 16;
 
+/** Quiet tactile bump (same guard pattern as usePracticePlayer). */
+function vibrate(pattern: number | number[]): void {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try { navigator.vibrate(pattern); } catch { /* not supported */ }
+  }
+}
+
 const CanvasCard = memo(function CanvasCard({
   card,
   selected,
@@ -289,13 +296,15 @@ const CanvasCard = memo(function CanvasCard({
       st.moved = true;
       const el = elRef.current;
       if (el) {
-        // Physical lift the instant a real drag begins (Apple/CapCut feel).
+        // Physical lift the instant a real drag begins (Apple/CapCut feel):
+        // scale + rotate + a small tactile bump under the finger.
         el.style.transform = "scale(1.06) rotate(1.5deg) translateZ(0)";
         el.style.zIndex = "50";
         el.style.boxShadow = `0 24px 60px ${color.glow}, 0 0 0 2px ${color.base}`;
         el.style.cursor = "grabbing";
         el.style.transition = "none";
       }
+      vibrate(8);
       st.edgeRaf = requestAnimationFrame(edgePanFrame);
     }
     applyDragPosition();
@@ -317,6 +326,8 @@ const CanvasCard = memo(function CanvasCard({
     const dropZone = zoneOfX(clamped.x + cardWidth(card.type) / 2);
     if (dropZone !== card.tree && onCardDrop) {
       // Crossed the divider — D2 decides the meaning + final placement.
+      // A slightly firmer bump: this drop CHANGED the song's shape.
+      vibrate(12);
       onCardDrop(card.id, dropZone, clamped.x, clamped.y);
     } else {
       // Same tree (or no drop handler wired): just commit the new position.
