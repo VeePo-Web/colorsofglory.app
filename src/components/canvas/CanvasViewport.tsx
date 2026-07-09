@@ -213,7 +213,7 @@ const CanvasViewport = ({
 
 /**
  * Hook for child components that need to convert between screen and canvas
- * coordinates (e.g., CanvasCardEl for pointer-capture drag).
+ * coordinates (e.g., CanvasCard for pointer-capture drag).
  * Must be used inside a <CanvasViewport> ancestor.
  */
 export function useCanvasViewport(): ViewportCtx {
