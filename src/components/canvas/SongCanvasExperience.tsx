@@ -23,6 +23,7 @@ import {
   History,
   UserPlus,
   Inbox,
+  Maximize2,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CogBrand from "@/components/cog/CogBrand";
@@ -34,7 +35,20 @@ import type { ViewportCtx } from "@/components/canvas/CanvasViewport";
 import CanvasStage, { type CanvasCardInteractions } from "@/components/canvas/CanvasStage";
 import FirstActionPrompt from "@/components/canvas/FirstActionPrompt";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
-import { COLUMN_TOP, ideaColumnSlot, finalColumnSlot } from "@/lib/canvas/canvasGeometry";
+import {
+  COLUMN_TOP,
+  CARD_MIN_HEIGHT,
+  CARD_WIDTH,
+  FINAL_COLUMN_X,
+  IDEAS_COLUMN_X,
+  ROOT_HEIGHT,
+  ROOT_LEFT,
+  ROOT_TOP,
+  ROOT_WIDTH,
+  cardWidth,
+  ideaColumnSlot,
+  finalColumnSlot,
+} from "@/lib/canvas/canvasGeometry";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import RecordingSheet from "@/components/voice/RecordingSheet";
@@ -46,7 +60,8 @@ import {
   listPendingUploads,
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { loadVoiceMemosForCanvas } from "@/lib/canvas/canvasLoader";
+import { initialBoard, writeBoard, hydrateBoard, clusterFlags } from "@/lib/canvas/canvasBoardSource";
+import type { SectionClusterData } from "@/components/canvas/SectionCluster";
 import {
   addLineSuggestion,
   listLineSuggestions,
@@ -125,82 +140,11 @@ const LAYERS: Array<{ id: LayerId; label: string; icon: ElementType }> = [
   { id: "people", label: "People",  icon: Users },
 ];
 
-// ─── Initial card data ────────────────────────────────────────────────────────
+// ─── Card data ──────────────────────────────────────────────────────────────
+// The board (real backend rows + the demo sample tree) and its persistence live
+// behind canvasBoardSource — the interim A4 store seam. This component owns NO
+// hardcoded card array and touches localStorage for cards nowhere directly.
 
-const INITIAL_CARDS: CanvasCard[] = [
-  {
-    id: "hum-1",
-    tree: "ideas",
-    type: "hum",
-    title: "First melody hum",
-    body: "Soft lift into the chorus. Keep the ache in the first two notes.",
-    meta: "0:12 voice",
-    section: "Verse 1",
-    contributor: "Parker",
-    status: "raw",
-    accent: getCreatorColor("Parker").base,
-    x: 80,
-    y: 200,
-  },
-  {
-    id: "verse-line",
-    tree: "ideas",
-    type: "lyric",
-    title: "Verse image",
-    body: "I waited in the quiet / You painted morning gold.",
-    meta: "Lyric fragment",
-    section: "Verse 1",
-    contributor: "Sarah",
-    status: "shortlisted",
-    accent: getCreatorColor("Sarah").base,
-    x: 320,
-    y: 200,
-  },
-  {
-    id: "meaning-psalm",
-    tree: "ideas",
-    type: "scripture",
-    title: "Meaning anchor",
-    body: "Psalm 46:10 — Be still before the second verse turns upward.",
-    meta: "Scripture",
-    section: "Meaning",
-    contributor: "Parker",
-    status: "meaning",
-    accent: getCreatorColor("Parker").base,
-    x: 80,
-    y: 440,
-  },
-  {
-    id: "chorus-core",
-    tree: "final",
-    type: "section",
-    title: "Chorus center",
-    body: "You are glory in the waiting / Fire in the night.",
-    meta: "Approved lyric",
-    section: "Chorus",
-    contributor: "Parker",
-    status: "approved",
-    accent: getCreatorColor("Parker").base,
-    x: DIVIDER_X + 80,
-    y: 200,
-  },
-  {
-    id: "chord-bed",
-    tree: "final",
-    type: "chord",
-    title: "Warm progression",
-    body: "C - G - Am - F, 74 BPM. Let the bridge breathe.",
-    meta: "Key C",
-    section: "Arrangement",
-    contributor: "Caleb",
-    status: "approved",
-    accent: getCreatorColor("Caleb").base,
-    x: DIVIDER_X + 80,
-    y: 420,
-  },
-];
-
-const CARDS_KEY = (songId: string) => `cog:canvas-cards-${songId}`;
 // Interim store persistence for non-card feature state (saved listen path).
 // This key + the CanvasFeatureMutations impl below ARE the A4 replacement
 // seam — see docs/CANVAS-FEATURES-CONTRACT.md.
@@ -215,24 +159,6 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
   }
 };
 const SHOW_LEGACY_CANVAS_FABS = false;
-
-const getStoredCards = (songId: string): CanvasCard[] => {
-  try {
-    const stored = localStorage.getItem(CARDS_KEY(songId));
-    // Respect a saved board exactly — including an empty one. A songwriter who
-    // clears their canvas must not have demo cards resurrected on reload.
-    if (stored) {
-      const parsed = JSON.parse(stored) as CanvasCard[];
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {
-    // Fall through to a clean start.
-  }
-  // No saved board yet: a real song is a private, empty room (the first-action
-  // prompt guides the first idea). Only the explicit demo route shows samples,
-  // so no real song is ever pre-filled with someone else's words.
-  return songId === "demo" ? INITIAL_CARDS : [];
-};
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -295,7 +221,7 @@ const SongCanvasExperience = () => {
     return full || "You";
   }, [profile]);
 
-  const [cards, setCards] = useState<CanvasCard[]>(() => getStoredCards(songId));
+  const [cards, setCards] = useState<CanvasCard[]>(() => initialBoard(songId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState("Saved to this song.");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
@@ -489,46 +415,20 @@ const SongCanvasExperience = () => {
   }, [searchParams]);
 
   useEffect(() => {
-    localStorage.setItem(CARDS_KEY(songId), JSON.stringify(cards));
+    writeBoard(songId, cards);
   }, [cards, songId]);
 
-  // Pull any voice memos for this song from the backend and merge in the ones
-  // we don't already have. Reused on mount AND on every realtime event, so a
-  // collaborator's new memo/layer appears in the room without a reload.
+  // Pull this song's real voice memos from the backend (through the board source
+  // seam) and merge in the ones we don't already have. Reused on mount AND on
+  // every realtime event, so a collaborator's new memo appears without a reload.
   const hydrateVoiceMemos = useCallback(async () => {
-    try {
-      const db = await loadVoiceMemosForCanvas(songId);
-      const dbCards: CanvasCard[] = db.nodes
-        .filter((node) => node.objectType === "idea_card")
-        .map((node): CanvasCard | null => {
-          const card = db.cards[node.objectId];
-          if (!card) return null;
-          return {
-            id: card.id,
-            tree: "ideas" as const,
-            type: "voice" as const,
-            title: card.title,
-            body: card.body || card.preview || "",
-            meta: card.preview || "Voice memo",
-            section: "Raw idea",
-            contributor: card.contributorName,
-            status: "raw" as const,
-            accent: card.contributorColor,
-            x: node.x,
-            y: node.y,
-          };
-        })
-        .filter((card): card is CanvasCard => Boolean(card));
-
-      if (dbCards.length === 0) return;
-      setCards((prev) => {
-        const existing = new Set(prev.map((card) => card.id));
-        const fresh = dbCards.filter((card) => !existing.has(card.id));
-        return fresh.length > 0 ? [...prev, ...fresh] : prev;
-      });
-    } catch {
-      // The local canvas remains usable when backend hydration is unavailable.
-    }
+    const dbCards = await hydrateBoard(songId);
+    if (dbCards.length === 0) return;
+    setCards((prev) => {
+      const existing = new Set(prev.map((card) => card.id));
+      const fresh = dbCards.filter((card) => !existing.has(card.id));
+      return fresh.length > 0 ? [...prev, ...fresh] : prev;
+    });
   }, [songId]);
 
   // Mount hydration + live room channel. Any change in the song's room nudges a
@@ -757,6 +657,55 @@ const SongCanvasExperience = () => {
   const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
   const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
 
+  // ── Section clusters (Step 8) ──────────────────────────────────────────────
+  // WHICH dense sections collapse is the store's flag (clusterFlags = interim
+  // A4 seam); the render layer only presents them. A tapped-open cluster fans
+  // its members back onto the board.
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
+  const boardCards = useMemo(() => [...ideasCards, ...finalCards], [ideasCards, finalCards]);
+  const clusterFlagList = useMemo(() => clusterFlags(boardCards), [boardCards]);
+
+  // Collapsed clusters → SectionClusterData for the render layer; their member
+  // ids are hidden from the card render so a stack replaces the loose cards.
+  const { clusterData, hiddenCardIds } = useMemo(() => {
+    const byId = new Map(boardCards.map((c) => [c.id, c]));
+    const hidden = new Set<string>();
+    const data: SectionClusterData[] = [];
+    for (const cl of clusterFlagList) {
+      if (expandedClusters.has(cl.id)) continue; // expanded → members render loose
+      const members = cl.cardIds.map((id) => byId.get(id)).filter(Boolean) as CanvasCard[];
+      if (members.length === 0) continue;
+      members.forEach((m) => hidden.add(m.id));
+      // Present the stack at the group's top-left card; color = most frequent hand.
+      const anchor = members.reduce((a, b) => (b.y < a.y ? b : a));
+      const tally = new Map<string, number>();
+      for (const m of members) tally.set(m.contributor, (tally.get(m.contributor) ?? 0) + 1);
+      const topContributor = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? anchor.contributor;
+      data.push({
+        id: cl.id,
+        sectionLabel: cl.sectionLabel,
+        x: anchor.x,
+        y: anchor.y,
+        color: getCreatorColor(topContributor),
+        cards: members.map((m) => ({
+          id: m.id, title: m.title, body: m.body, contributor: m.contributor, type: m.type, x: m.x, y: m.y,
+        })),
+      });
+    }
+    return { clusterData: data, hiddenCardIds: hidden };
+  }, [clusterFlagList, expandedClusters, boardCards]);
+
+  // What the render surface draws: every card minus the ones tucked in a
+  // collapsed stack (D2/D3 still operate on the full ideasCards/finalCards).
+  const stageIdeasCards = useMemo(
+    () => (hiddenCardIds.size ? ideasCards.filter((c) => !hiddenCardIds.has(c.id)) : ideasCards),
+    [ideasCards, hiddenCardIds],
+  );
+  const stageFinalCards = useMemo(
+    () => (hiddenCardIds.size ? finalCards.filter((c) => !hiddenCardIds.has(c.id)) : finalCards),
+    [finalCards, hiddenCardIds],
+  );
+
   // First-run guide is driven by an ACTUALLY empty board, not a one-time visit
   // flag — so it guides a new song, returns if the room is ever cleared (never
   // a dead-end blank), and never overlays a song that already has ideas.
@@ -800,6 +749,12 @@ const SongCanvasExperience = () => {
     onMoveToFinal: () => arrangement.moveToFinal(card.id),
     onMoveToIdeas: () => arrangement.moveToIdeas(card.id),
     onMove: handleCardMove,
+    // A card dragged across the divider into the other tree: D1 reports the
+    // zone, D2 owns the meaning (promote / return + its own placement).
+    onCardDrop: (id, zone) => {
+      if (zone === "final") arrangement.moveToFinal(id);
+      else arrangement.moveToIdeas(id);
+    },
     layerCount: layerCountByBase[card.id] ?? 0,
     onOpenStack:
       card.type === "voice" || card.type === "hum"
@@ -961,17 +916,83 @@ const SongCanvasExperience = () => {
     setSelectedId(card.id);
   }, []);
 
-  // One-tap navigation to a zone's column — no more panning a 2D void to find
-  // Final (it lives 1200px to the right of Ideas).
+  // The canvas-space bounding box of a set of cards (+ optionally the root
+  // card), used by every semantic-nav framing move. Card footprints come from
+  // canvasGeometry so the frame always matches what's painted.
+  const boundsOfCards = useCallback(
+    (list: CanvasCard[], includeRoot: boolean) => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of list) {
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + cardWidth(c.type));
+        maxY = Math.max(maxY, c.y + CARD_MIN_HEIGHT);
+      }
+      if (includeRoot || !Number.isFinite(minX)) {
+        minX = Math.min(minX, ROOT_LEFT);
+        minY = Math.min(minY, ROOT_TOP);
+        maxX = Math.max(maxX, ROOT_LEFT + ROOT_WIDTH);
+        maxY = Math.max(maxY, ROOT_TOP + ROOT_HEIGHT);
+      }
+      return { minX, minY, maxX, maxY };
+    },
+    [],
+  );
+
+  const viewportDims = useCallback(() => {
+    const area = canvasAreaRef.current;
+    return {
+      vw: area?.clientWidth ?? window.innerWidth,
+      vh: area?.clientHeight ?? window.innerHeight,
+    };
+  }, []);
+
+  // Fit-to-view — the whole song (root + every card) framed in one calm move.
+  // The primary "show me everything" gesture on a phone that can't see it all.
+  const fitAll = useCallback(() => {
+    const { vw, vh } = viewportDims();
+    viewportApiRef.current?.fitTo(boundsOfCards([...ideasCards, ...finalCards], true), vw, vh, 72, 560);
+    setSelectedId(null);
+  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
+
+  // Tap a cluster → fan its members back onto the board and frame them; tap
+  // again (or fit) to re-collapse. Framing reuses the semantic-nav fitTo.
+  const handleExpandCluster = useCallback((clusterId: string) => {
+    setExpandedClusters((prev) => {
+      const next = new Set(prev);
+      if (next.has(clusterId)) { next.delete(clusterId); return next; }
+      next.add(clusterId);
+      return next;
+    });
+    const flag = clusterFlagList.find((c) => c.id === clusterId);
+    if (!flag) return;
+    const ids = new Set(flag.cardIds);
+    const members = boardCards.filter((c) => ids.has(c.id));
+    if (members.length === 0) return;
+    const { vw, vh } = viewportDims();
+    // Wait a frame so the fanned-out cards exist before we frame them.
+    requestAnimationFrame(() => viewportApiRef.current?.fitTo(boundsOfCards(members, false), vw, vh, 90, 520));
+  }, [clusterFlagList, boardCards, boundsOfCards, viewportDims]);
+
+  // One-tap navigation to a zone — frames that zone's cards (Ideas includes the
+  // root it branches from). Primary mobile nav: the phone can't show both zones,
+  // so one tap flies to and frames each.
   const goToZone = useCallback((zone: "ideas" | "final") => {
     setViewZone(zone);
-    const area = canvasAreaRef.current;
-    const vw = area?.clientWidth ?? window.innerWidth;
-    const vh = area?.clientHeight ?? window.innerHeight;
-    const columnCenterX = (zone === "ideas" ? 80 : DIVIDER_X + 80) + 100;
-    // Land the column's top comfortably: horizontally centred-ish, near the top.
-    viewportApiRef.current?.panTo(columnCenterX, COLUMN_TOP + 40, vw * 0.42, vh * 0.3, 420);
-  }, []);
+    const { vw, vh } = viewportDims();
+    const zoneCards = zone === "ideas" ? ideasCards : finalCards;
+    if (zoneCards.length > 0) {
+      viewportApiRef.current?.fitTo(boundsOfCards(zoneCards, zone === "ideas"), vw, vh, 72, 480);
+      return;
+    }
+    // Empty zone: frame its column area (Ideas also shows the root card) so the
+    // jump is never a leap into blank space.
+    const colX = zone === "ideas" ? IDEAS_COLUMN_X : FINAL_COLUMN_X;
+    const box = zone === "ideas"
+      ? { minX: ROOT_LEFT, minY: ROOT_TOP, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 }
+      : { minX: colX - 40, minY: COLUMN_TOP - 60, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 };
+    viewportApiRef.current?.fitTo(box, vw, vh, 72, 480);
+  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
 
   const closeWorkPanel = useCallback(() => {
     setShowWorkPanel(false);
@@ -1404,23 +1425,26 @@ const SongCanvasExperience = () => {
           className="w-full h-full"
           initialZoom={0.8}
           songTitle={songTitle}
-          ideasCards={ideasCards}
-          finalCards={finalCards}
+          ideasCards={stageIdeasCards}
+          finalCards={stageFinalCards}
+          clusters={clusterData}
+          onExpandCluster={handleExpandCluster}
           selectedId={selectedId}
           isDropActive={isDragOver}
           getCardInteractions={getCardInteractions}
           viewportApiRef={viewportApiRef}
           overlay={
             <>
-              {/* Ideas ⇄ Final quick-nav — the phone can't show both zones at
-                  once, so one tap flies to each. Floating, thumb-reachable. */}
+              {/* Semantic nav — the PRIMARY way to move on a phone that can't
+                  show both zones at once. One tap frames Ideas or Final; Fit
+                  frames the whole song. Pinch/pan stay as a secondary path. */}
               <div
-                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2"
+                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5"
                 style={{ top: 12 }}
-                role="tablist"
-                aria-label="Jump between Ideas and Final"
               >
                 <div
+                  role="tablist"
+                  aria-label="Jump between Ideas and Final"
                   ref={ideasTourRef}
                   className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
@@ -1446,6 +1470,16 @@ const SongCanvasExperience = () => {
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  onClick={fitAll}
+                  className="pointer-events-auto flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                  aria-label="Fit the whole song to view"
+                >
+                  <Maximize2 size={13} strokeWidth={2.2} />
+                  Fit
+                </button>
               </div>
               {showFirstRun && (
                 <FirstActionPrompt

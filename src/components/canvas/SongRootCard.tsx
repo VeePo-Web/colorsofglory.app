@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { ROOT_HEIGHT, ROOT_LEFT, ROOT_TOP, ROOT_WIDTH } from "@/lib/canvas/canvasGeometry";
 
 interface SongRootCardProps {
   title: string;
@@ -8,17 +9,18 @@ interface SongRootCardProps {
  * The root song card — the anchor at the top-left of the Ideas zone that every
  * idea branches from. Treated as the special centre of the room: warm gradient
  * surface, a gold glow, a gold gradient crown bar, and the song title in
- * display serif.
+ * display serif. Its box comes from canvasGeometry so the connectors branch
+ * from the exact same rectangle it paints.
  */
 const SongRootCard = ({ title }: SongRootCardProps) => (
   <section
     aria-label="Root song card"
     style={{
       position: "absolute",
-      left: 80,
-      top: 48,
-      width: 420,
-      minHeight: 132,
+      left: ROOT_LEFT,
+      top: ROOT_TOP,
+      width: ROOT_WIDTH,
+      minHeight: ROOT_HEIGHT,
       borderRadius: 20,
       background: "linear-gradient(150deg, #FFFFFF 0%, #FFFBF2 100%)",
       border: "1.5px solid rgba(184,149,58,0.34)",

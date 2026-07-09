@@ -1,132 +1,144 @@
-import { memo, type ReactNode, type PointerEvent } from "react";
+import { forwardRef, memo, type ReactNode, type PointerEvent, type KeyboardEvent } from "react";
 import type { CreatorColor } from "@/lib/canvas/creatorColors";
+import { CARD_MIN_HEIGHT } from "@/lib/canvas/canvasGeometry";
 
-export type CardInteractionState = "default" | "selected" | "dragging" | "dimmed";
+export type CardInteractionState = "default" | "selected" | "dimmed";
 
 interface CardShellProps {
   color: CreatorColor;
   state: CardInteractionState;
-  width?: number;
+  width: number;
+  left: number;
+  top: number;
+  /** Merge selection paints a gold keeper ring regardless of creator color. */
+  mergeSelected?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void;
+  onPointerMove?: (e: PointerEvent<HTMLDivElement>) => void;
+  onPointerUp?: (e: PointerEvent<HTMLDivElement>) => void;
+  onPointerCancel?: (e: PointerEvent<HTMLDivElement>) => void;
   onClick?: () => void;
+  onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
   children: ReactNode;
   "aria-label": string;
-  className?: string;
-  isNew?: boolean;  // triggers card-enter animation
-  style?: React.CSSProperties;
 }
 
 /**
- * CardShell — the shared base for every canvas card type.
+ * CardShell — the shared frame for every canvas card face.
  *
- * Handles:
- *  - Creator color: left border (3px), box-shadow tint
- *  - All 4 interaction states: default / selected / dragging / dimmed
- *  - card-enter spring animation on isNew=true
- *  - Pointer event guard (stopPropagation prevents canvas pan on card touch)
+ * Owns: creator-color left stripe + tint, the three resting interaction states
+ * (default / selected / dimmed), the merge keeper ring, the enter animation,
+ * position, and the accessible button semantics. It never renders type-specific
+ * content (that's the face) and never handles the live drag transform — the
+ * orchestrator writes that straight to this element's ref for 60fps (see
+ * CanvasCard). Keyframes are injected ONCE by CanvasStage, not per instance.
  */
-const CardShell = memo(({
-  color,
-  state,
-  width = 200,
-  onPointerDown,
-  onClick,
-  children,
-  'aria-label': ariaLabel,
-  className = "",
-  isNew = false,
-  style,
-}: CardShellProps) => {
-  const isDimmed = state === "dimmed";
-  const isSelected = state === "selected";
-  const isDragging = state === "dragging";
+const CardShell = memo(
+  forwardRef<HTMLDivElement, CardShellProps>(function CardShell(
+    {
+      color,
+      state,
+      width,
+      left,
+      top,
+      mergeSelected = false,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel,
+      onClick,
+      onKeyDown,
+      children,
+      "aria-label": ariaLabel,
+    },
+    ref,
+  ) {
+    const isDimmed = state === "dimmed";
+    const isSelected = state === "selected";
 
-  const styles: React.CSSProperties = {
-    position: "absolute",
-    width,
-    borderRadius: 16,
-    backgroundColor: isDimmed ? "rgba(255,255,255,0.72)" : "#FFFFFF",
-    borderLeft: `3px solid ${isDimmed ? color.dim : color.base}`,
-    borderTop: `1px solid ${isDimmed ? color.dim : color.base + "28"}`,
-    borderRight: `1px solid ${isDimmed ? color.dim : color.base + "28"}`,
-    borderBottom: `1px solid ${isDimmed ? color.dim : color.base + "28"}`,
-    borderStyle: isDimmed ? "dashed" : "solid",
-    boxShadow: isDimmed
+    const border = mergeSelected
+      ? "2px solid var(--cog-gold, #B8953A)"
+      : isSelected
+      ? `2px solid ${color.base}`
+      : isDimmed
+      ? `1.5px dashed ${color.dim}`
+      : `1.5px solid ${color.base}2E`;
+
+    const boxShadow = mergeSelected
+      ? "0 0 0 4px rgba(184,149,58,0.20), 0 10px 28px rgba(28,26,23,0.12)"
+      : isDimmed
       ? "none"
       : isSelected
-      ? `0 12px 40px ${color.glow}, 0 0 0 2px ${color.base}`
-      : isDragging
-      ? `0 24px 60px ${color.glow}, 0 0 0 2px ${color.base}`
-      : `0 4px 20px ${color.glow}`,
-    opacity: isDimmed ? 0.42 : 1,
-    transform: isSelected
-      ? "scale(1.04) translateZ(0)"
-      : isDragging
-      ? "scale(1.06) rotate(1.5deg) translateZ(0)"
-      : "scale(1) translateZ(0)",
-    transition: isDragging
-      ? "none"
-      : "transform 180ms cubic-bezier(0.22,1,0.36,1), box-shadow 180ms ease, opacity 280ms ease",
-    cursor: isDimmed ? "not-allowed" : isDragging ? "grabbing" : isSelected ? "default" : "grab",
-    zIndex: isDragging ? 50 : isSelected ? 20 : 10,
-    padding: "13px 13px 13px 11px",
-    boxSizing: "border-box",
-    pointerEvents: isDimmed ? "none" : "auto",
-    // card-enter animation class applied via className
-    animation: isNew ? "card-enter 320ms cubic-bezier(0.34,1.56,0.64,1) both" : "none",
-  };
+      ? `0 0 0 4px ${color.base}22, 0 16px 36px ${color.glow}, 0 2px 6px rgba(28,26,23,0.08)`
+      : `0 6px 20px rgba(28,26,23,0.08), 0 1px 3px rgba(28,26,23,0.06)`;
 
-  return (
-    <>
-      {/* Inject keyframes once into the document */}
-      <style>{CARD_KEYFRAMES}</style>
-
+    return (
       <div
-        style={{ ...styles, ...style }}
-        className={className}
+        ref={ref}
+        style={{
+          position: "absolute",
+          left,
+          top,
+          width,
+          minHeight: CARD_MIN_HEIGHT,
+          borderRadius: 18,
+          backgroundColor: isDimmed ? "rgba(255,252,247,0.72)" : "#FFFCF7",
+          borderLeft: mergeSelected || isSelected || isDimmed ? border : `1.5px solid ${color.base}2E`,
+          border,
+          boxShadow,
+          opacity: isDimmed ? 0.5 : 1,
+          cursor: isDimmed ? "not-allowed" : isSelected ? "default" : "grab",
+          userSelect: "none",
+          zIndex: isSelected ? 20 : 10,
+          transform: isSelected ? "scale(1.03) translateZ(0)" : "scale(1) translateZ(0)",
+          transition:
+            "transform 180ms cubic-bezier(0.22,1,0.36,1), box-shadow 200ms ease, border-color 200ms ease, opacity 280ms ease",
+          // Plays once on mount (React keeps cards mounted by key), so a newly
+          // added card settles in with a calm spring; existing cards animate on
+          // first load. No fill → transform reverts to the inline value after,
+          // so selection scale still works. Reduced-motion disables it (Step 9).
+          animation: "cog-card-enter 360ms cubic-bezier(0.34,1.56,0.64,1)",
+          padding: "13px 14px 12px 16px",
+          boxSizing: "border-box",
+          pointerEvents: isDimmed ? "none" : "auto",
+        }}
         onPointerDown={(e) => {
-          e.stopPropagation(); // prevent canvas pan when touching a card
+          e.stopPropagation(); // never let a card touch start a canvas pan
           onPointerDown?.(e);
         }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onClick={(e) => {
           e.stopPropagation();
           if (!isDimmed) onClick?.();
         }}
-        role="button"
-        aria-pressed={isSelected}
-        aria-label={ariaLabel}
-        tabIndex={isDimmed ? -1 : 0}
         onKeyDown={(e) => {
           if ((e.key === " " || e.key === "Enter") && !isDimmed) {
             e.preventDefault();
             onClick?.();
           }
+          onKeyDown?.(e);
         }}
+        role="button"
+        aria-pressed={isSelected}
+        aria-label={ariaLabel}
+        tabIndex={isDimmed ? -1 : 0}
+        data-canvas-card="true"
       >
+        {/* Creator identity stripe — the writer's color down the left edge */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute", left: 6, top: 13, bottom: 13, width: 4, borderRadius: 4,
+            background: `linear-gradient(180deg, ${color.base}, ${color.base}66)`,
+            opacity: isDimmed ? 0.5 : 1,
+          }}
+        />
         {children}
       </div>
-    </>
-  );
-});
+    );
+  }),
+);
 
 CardShell.displayName = "CardShell";
-
 export default CardShell;
-
-// ─── Keyframes (injected once) ────────────────────────────────────────────────
-
-const CARD_KEYFRAMES = `
-  @keyframes card-enter {
-    from { opacity: 0; transform: scale(0.82) translateZ(0); }
-    to   { opacity: 1; transform: scale(1.0) translateZ(0); }
-  }
-  @keyframes card-fly-to-final {
-    0%   { transform: scale(1.0) translateZ(0); }
-    40%  { transform: scale(1.08) rotate(2deg) translateZ(0); }
-    100% { transform: scale(1.0) translateZ(0); }
-  }
-  @keyframes card-pulse-dot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.75); }
-  }
-`;

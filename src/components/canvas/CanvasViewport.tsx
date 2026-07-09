@@ -28,6 +28,16 @@ export interface ViewportCtx {
   screenToCanvas: (sx: number, sy: number) => { x: number; y: number };
   /** Animate pan so canvas point (cx, cy) lands at the viewport center */
   panTo: (cx: number, cy: number, vcx: number, vcy: number, ms?: number) => void;
+  /** Animate pan AND zoom together to explicit targets */
+  animateTo: (panX: number, panY: number, zoom: number, ms?: number) => void;
+  /** Frame a canvas-space box (fit-to-view, jump-to-zone, frame-a-cluster) */
+  fitTo: (
+    box: { minX: number; minY: number; maxX: number; maxY: number },
+    viewW: number,
+    viewH: number,
+    padding?: number,
+    ms?: number,
+  ) => void;
   /** Current zoom (read-only, updates after gesture ends) */
   zoom: number;
   /** Current pan (read-only, updates after gesture ends) */
@@ -110,7 +120,7 @@ const CanvasViewport = ({
     }
   }, [applyTransform]);
 
-  const { canvasToScreen, screenToCanvas, panTo, panRef, zoomRef } = useGesture(
+  const { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef, zoomRef } = useGesture(
     containerRef as React.RefObject<HTMLElement>,
     { panX: reactPan.x, panY: reactPan.y, zoom: reactZoom },
     {
@@ -154,6 +164,8 @@ const CanvasViewport = ({
       y: (sy - panRef.current.y) / zoomRef.current,
     }), [panRef, zoomRef]),
     panTo,
+    animateTo,
+    fitTo,
     zoom: reactZoom,
     panX: reactPan.x,
     panY: reactPan.y,
@@ -171,8 +183,24 @@ const CanvasViewport = ({
           cursor: "grab",
           ...style,
         }}
-        aria-label="Song canvas — drag to pan, pinch to zoom"
+        aria-label="Song canvas. Use the Ideas, Final, and Fit buttons above to move between parts of the song. You can also drag to pan and pinch to zoom, or focus the canvas and use arrow keys to pan and + / - to zoom."
         role="application"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          // Keyboard pan/zoom — only when the canvas itself (not a card/button)
+          // holds focus, so Tab-cycling through cards keeps its arrow behavior.
+          if (e.target !== e.currentTarget) return;
+          const STEP = 120;
+          switch (e.key) {
+            case "ArrowUp": e.preventDefault(); nudge(0, STEP); break;
+            case "ArrowDown": e.preventDefault(); nudge(0, -STEP); break;
+            case "ArrowLeft": e.preventDefault(); nudge(STEP, 0); break;
+            case "ArrowRight": e.preventDefault(); nudge(-STEP, 0); break;
+            case "+": case "=": e.preventDefault(); zoomBy(1.15); break;
+            case "-": case "_": e.preventDefault(); zoomBy(1 / 1.15); break;
+            default: break;
+          }
+        }}
       >
         {/* Warm song-room glow — fixed behind the transforming layer, always
             centered in the viewport. This is the brand "spiritual warmth"
@@ -213,7 +241,7 @@ const CanvasViewport = ({
 
 /**
  * Hook for child components that need to convert between screen and canvas
- * coordinates (e.g., CanvasCardEl for pointer-capture drag).
+ * coordinates (e.g., CanvasCard for pointer-capture drag).
  * Must be used inside a <CanvasViewport> ancestor.
  */
 export function useCanvasViewport(): ViewportCtx {

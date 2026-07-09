@@ -528,3 +528,70 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .nav-hint-nudge { animation: none; }
 }
+
+/* ---------- Creative action dock (canvas capture bar) ----------
+   A floating, thumb-reachable capture bar centered near the bottom of the
+   canvas: Practice · Record memo (primary, gold) · Add part. Rendered inside
+   the canvas overlay, so it's absolute to the viewport and rides above the
+   room but below sheets. Warm cream pills, gold reserved for the primary. */
+.cog-creation-dock {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Float clear of the fixed 72px SongTabBar so it never hides behind it. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  z-index: 42;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 252, 247, 0.92);
+  border: 1px solid var(--cog-border, rgba(28, 26, 23, 0.10));
+  box-shadow: 0 10px 30px rgba(28, 26, 23, 0.14), 0 2px 8px rgba(28, 26, 23, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  max-width: calc(100vw - 16px);
+}
+.cog-creation-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--cog-warm-gray, #6B6459);
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 150ms var(--cog-ease, cubic-bezier(0.25,0.46,0.45,0.94)),
+              background-color 150ms ease, opacity 150ms ease;
+}
+.cog-creation-action:hover { background: rgba(28, 26, 23, 0.05); }
+.cog-creation-action:active { transform: scale(0.96); }
+.cog-creation-action:disabled { opacity: 0.45; cursor: default; }
+.cog-creation-action:focus-visible {
+  outline: 2px solid var(--cog-gold, #B8953A);
+  outline-offset: 2px;
+}
+.cog-creation-action-primary {
+  background: var(--cog-gold, #B8953A);
+  color: #FFFFFF;
+  padding: 0 15px;
+  box-shadow: 0 4px 14px rgba(184, 149, 58, 0.34);
+}
+.cog-creation-action-primary:hover {
+  background: var(--cog-gold-light, #D4AE5C);
+}
+.cog-creation-action-primary:disabled { background: var(--cog-gold, #B8953A); }
+.cog-creation-action-icon { display: inline-flex; align-items: center; }
+.cog-creation-action-label { line-height: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .cog-creation-action { transition: none; }
+  .cog-creation-action:active { transform: none; }
+}

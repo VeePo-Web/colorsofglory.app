@@ -21,6 +21,24 @@ export interface UseGestureOptions {
 
 const CURSOR_BROADCAST_INTERVAL = 100; // ms
 
+/** Imperative reduced-motion check for the animation paths (panTo/fitTo jump). */
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * True when a pointerdown lands on something that should handle its own press
+ * rather than pan the canvas: any card, or any button/link/tab/slider in the
+ * overlay. Mark bespoke non-pan surfaces with `data-canvas-nopan`.
+ */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : null;
+  if (!el) return false;
+  return !!el.closest(
+    'button, a, input, select, textarea, [role="button"], [role="tab"], [role="slider"], [data-canvas-card], [data-canvas-nopan]',
+  );
+}
+
 /**
  * useGesture — isolated touch gesture logic for the canvas viewport.
  *
@@ -115,6 +133,12 @@ export function useGesture(
   const onPointerDown = useCallback((e: PointerEvent) => {
     // Only respond to touch or left-button drag
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    // Never start a pan when the press lands on an interactive control (a card,
+    // a quick-nav pill, a dock button). The gesture container captures the
+    // pointer on down; without this bail it would swallow the control's click
+    // (the overlay controls read as dead). Those controls run their own
+    // handlers — the canvas just steps aside. Empty canvas background still pans.
+    if (isInteractiveTarget(e.target)) return;
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     // A direct touch always wins over an in-flight panTo animation — cancel it so
     // the finger and the easing curve don't fight over pan.current.
@@ -293,6 +317,13 @@ export function useGesture(
     const startPanY = pan.current.y;
     const targetPanX = viewportCenterX - targetCanvasX * zoom.current;
     const targetPanY = viewportCenterY - targetCanvasY * zoom.current;
+    // Reduced motion: jump to the destination, no easing.
+    if (prefersReducedMotion()) {
+      pan.current.x = targetPanX; pan.current.y = targetPanY;
+      onTransform(pan.current.x, pan.current.y, zoom.current);
+      onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      return;
+    }
     const start = performance.now();
 
     function frame(now: number) {
@@ -312,5 +343,93 @@ export function useGesture(
     panToRaf.current = requestAnimationFrame(frame);
   }, [onTransform, onTransformEnd]);
 
-  return { canvasToScreen, screenToCanvas, panTo, panRef: pan, zoomRef: zoom };
+  // ── Animate pan AND zoom together (semantic nav: fit-to-view, zone framing) ──
+
+  const animateTo = useCallback((
+    targetPanX: number,
+    targetPanY: number,
+    targetZoom: number,
+    durationMs = 520,
+  ) => {
+    if (panToRaf.current) cancelAnimationFrame(panToRaf.current);
+    const z = clamp(targetZoom, minZoom, maxZoom);
+    const startPanX = pan.current.x;
+    const startPanY = pan.current.y;
+    const startZoom = zoom.current;
+    // Reduced motion: jump to the destination, no easing.
+    if (prefersReducedMotion()) {
+      pan.current.x = targetPanX; pan.current.y = targetPanY; zoom.current = z;
+      onTransform(pan.current.x, pan.current.y, zoom.current);
+      onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      return;
+    }
+    const start = performance.now();
+
+    function frame(now: number) {
+      const t = Math.min((now - start) / durationMs, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // cubic ease-out
+      pan.current.x = startPanX + (targetPanX - startPanX) * ease;
+      pan.current.y = startPanY + (targetPanY - startPanY) * ease;
+      zoom.current = startZoom + (z - startZoom) * ease;
+      onTransform(pan.current.x, pan.current.y, zoom.current);
+      if (t < 1) {
+        panToRaf.current = requestAnimationFrame(frame);
+      } else {
+        panToRaf.current = 0;
+        onTransformEnd(pan.current.x, pan.current.y, zoom.current);
+      }
+    }
+    panToRaf.current = requestAnimationFrame(frame);
+  }, [onTransform, onTransformEnd, minZoom, maxZoom]);
+
+  /**
+   * Frame a canvas-space box in the viewport: choose the zoom that fits it
+   * (respecting min/max) and center it, animated. Used by fit-to-view, jump-to
+   * -zone, and tap-a-cluster-to-frame-it.
+   */
+  const fitTo = useCallback((
+    box: { minX: number; minY: number; maxX: number; maxY: number },
+    viewW: number,
+    viewH: number,
+    padding = 72,
+    durationMs = 520,
+  ) => {
+    const bw = Math.max(1, box.maxX - box.minX);
+    const bh = Math.max(1, box.maxY - box.minY);
+    const z = clamp(
+      Math.min((viewW - 2 * padding) / bw, (viewH - 2 * padding) / bh),
+      minZoom,
+      maxZoom,
+    );
+    const cx = (box.minX + box.maxX) / 2;
+    const cy = (box.minY + box.maxY) / 2;
+    animateTo(viewW / 2 - cx * z, viewH / 2 - cy * z, z, durationMs);
+  }, [animateTo, minZoom, maxZoom]);
+
+  // ── Keyboard controls (accessibility) ───────────────────────────────────────
+
+  /** Pan by a screen-space delta (arrow keys). Instant, clamped, state-synced. */
+  const nudge = useCallback((dx: number, dy: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    pan.current.x += dx;
+    pan.current.y += dy;
+    const c = clampPan(pan.current.x, pan.current.y, zoom.current, el.clientWidth, el.clientHeight);
+    pan.current = c;
+    onTransform(c.x, c.y, zoom.current);
+    onTransformEnd(c.x, c.y, zoom.current);
+  }, [containerRef, onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Zoom by a factor about the viewport center (+/- keys). */
+  const zoomBy = useCallback((factor: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    applyZoomAt(factor, el.clientWidth / 2, el.clientHeight / 2);
+    const c = clampPan(pan.current.x, pan.current.y, zoom.current, el.clientWidth, el.clientHeight);
+    pan.current = c;
+    onTransform(c.x, c.y, zoom.current);
+    onTransformEnd(c.x, c.y, zoom.current);
+  }, [containerRef, onTransform, onTransformEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, nudge, zoomBy, panRef: pan, zoomRef: zoom };
 }
