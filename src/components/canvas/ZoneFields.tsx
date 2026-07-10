@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import { GLORY } from "@/lib/canvas/glorySpectrum";
 import { CANVAS_HEIGHT, DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import { COLUMN_TOP } from "@/lib/canvas/canvasGeometry";
@@ -110,4 +111,6 @@ const ZoneFields = ({ isDropActive = false }: ZoneFieldsProps) => (
   </>
 );
 
-export default ZoneFields;
+// Static stage layer - re-renders only when its own props change, not on
+// every host/stage render (e.g. the mid-drag divider-glow flip).
+export default memo(ZoneFields);

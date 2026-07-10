@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, type ComponentType, type ReactNode } from "react";
-import { useCanvasViewport } from "@/components/canvas/CanvasViewport";
+import { useCanvasViewportFns } from "@/components/canvas/CanvasViewport";
 import CardShell, { type CardInteractionState } from "@/components/canvas/CardShell";
 import LyricCard from "@/components/canvas/LyricCard";
 import VoiceMemoCard from "@/components/canvas/VoiceMemoCard";
@@ -131,7 +131,8 @@ const CanvasCard = memo(function CanvasCard({
   onRestore,
   playing = false,
 }: CanvasCardProps) {
-  const { screenToCanvas, dragPanBy, endDragPan } = useCanvasViewport();
+  // The STABLE fn context — this card never re-renders on gesture-end syncs.
+  const { screenToCanvas, dragPanBy, endDragPan } = useCanvasViewportFns();
   const elRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     pointerId: number;
@@ -343,6 +344,19 @@ const CanvasCard = memo(function CanvasCard({
 
   const handleClick = () => {
     if (justDragged.current) { justDragged.current = false; return; }
+    // An empty writable card promises "Tap to write…" — keep the promise:
+    // the first tap opens the editor directly (selection still happens so
+    // the card shows context behind the sheet).
+    if (
+      !card.body &&
+      !card.isDimmedReference &&
+      onEdit &&
+      (card.type === "lyric" || card.type === "note" || card.type === "scripture" || card.type === "chord")
+    ) {
+      onSelect();
+      onEdit();
+      return;
+    }
     onSelect();
   };
 
@@ -392,11 +406,15 @@ const CanvasCard = memo(function CanvasCard({
       {/* The typed face */}
       <Face card={card} color={color} tone={tone} selected={selected} playing={playing} />
 
-      {/* Who wrote it — collaboration made visible (color always paired with
-          name). Unresolved identity ("" until the roster loads) shows nothing
-          rather than a fabricated name. */}
+      {/* Who wrote it — ONE identity signal: a color dot always paired with
+          a readable name (the 8px-initials avatars the faces used to carry
+          were illegible decoration). Unresolved identity shows nothing. */}
       {!card.isDimmedReference && card.contributor && (
-        <p style={{ marginTop: 8, fontSize: 10.5, fontWeight: 700, color: color.dark, fontFamily: "var(--font-body)", letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <p
+          title={card.contributor}
+          style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8, fontSize: 10.5, fontWeight: 700, color: color.dark, fontFamily: "var(--font-body)", letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: color.base, flexShrink: 0 }} />
           {card.contributor}
         </p>
       )}

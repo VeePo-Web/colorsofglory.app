@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas/canvasConstants";
 import {
   CONNECTOR_VERT_SLACK,
@@ -53,7 +54,7 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
         zIndex: 0,
       }}
     >
-      {/* ── Ideas connectors: root bottom-center → card top-center ────── */}
+      {/* â”€â”€ Ideas connectors: root bottom-center → card top-center â”€â”€â”€â”€â”€â”€ */}
       {ideasCards.map((card) => {
         const { x: ex, y: ey } = ideaArrival(card.x, card.y, card.type);
         // Cubic bezier: depart downward from root, arrive from above at card
@@ -70,7 +71,7 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
         );
       })}
 
-      {/* ── Final connectors: root right-center → card left-center ────── */}
+      {/* â”€â”€ Final connectors: root right-center → card left-center â”€â”€â”€â”€â”€â”€ */}
       {finalCards.map((card) => {
         const { x: ex, y: ey } = finalArrival(card.x, card.y);
         // S-curve cubic: depart horizontally from root, arrive horizontally at card
@@ -87,7 +88,7 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
         );
       })}
 
-      {/* ── Anchor dots on root card ─────────────────────────────────── */}
+      {/* â”€â”€ Anchor dots on root card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {hasIdeas && (
         <circle cx={ROOT_IDEAS_ANCHOR.x} cy={ROOT_IDEAS_ANCHOR.y} r={4.5} fill="rgba(181,147,90,0.42)" />
       )}
@@ -98,4 +99,6 @@ const CanvasBranchConnectors = ({ ideasCards, finalCards }: CanvasBranchConnecto
   );
 };
 
-export default CanvasBranchConnectors;
+// Static stage layer - re-renders only when its own props change, not on
+// every host/stage render (e.g. the mid-drag divider-glow flip).
+export default memo(CanvasBranchConnectors);

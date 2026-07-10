@@ -208,6 +208,17 @@ function formatDurationMs(ms: number | null): string {
   return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
 }
 
+/** "pre-chorus" → "Pre-Chorus"; human labels pass through untouched. */
+const SECTION_KIND_TITLES: Record<string, string> = {
+  intro: "Intro", verse: "Verse", "pre-chorus": "Pre-Chorus", pre_chorus: "Pre-Chorus",
+  chorus: "Chorus", bridge: "Bridge", tag: "Tag", outro: "Outro",
+  interlude: "Interlude", hook: "Hook",
+};
+function prettySectionKind(kind: string | null): string | null {
+  if (!kind) return null;
+  return SECTION_KIND_TITLES[kind.toLowerCase()] ?? kind;
+}
+
 /**
  * Pull this song's server board: voice memos AND canvas_cards rows (the rows
  * Capture mode's Say-It-Structured writes — this is where an idea captured on
@@ -234,6 +245,14 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
   let memosOk = false;
   let cardsOk = false;
 
+  // ONE slot cursor per tree, shared across BOTH sources — independent
+  // zero-based indexes used to stack every capture-committed card
+  // pixel-perfect on top of a voice memo (both started at slot 0).
+  let ideaCursor = 0;
+  let finalCursor = 0;
+  const nextSlot = (tree: CanvasBoardTree) =>
+    tree === "final" ? finalColumnSlot(finalCursor++) : ideaColumnSlot(ideaCursor++);
+
   if (memosRes.status === "fulfilled" && !memosRes.value.error && memosRes.value.data) {
     memosOk = true;
     // Reverse so slot fallbacks still lay out oldest-at-top.
@@ -246,13 +265,14 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
         title: row.title || `Voice memo ${i + 1}`,
         body: "",
         meta: formatDurationMs(row.duration_ms),
-        section: "Raw idea",
+        // "" = unlabeled; a fabricated "Raw idea" label was junk metadata.
+        section: "",
         contributor: "",
         status: "raw",
         // Deterministic from the author id (roster names refine later) — an
         // empty accent broke every `${accent}30` concatenation downstream.
         accent: getCreatorColor(row.author_user_id ?? row.id).base,
-        ...ideaColumnSlot(i),
+        ...nextSlot("ideas"),
         durationMs: row.duration_ms ?? undefined,
         isProcessing,
         createdBy: row.author_user_id ?? undefined,
@@ -267,9 +287,9 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
 
   if (cardsRes.status === "fulfilled") {
     cardsOk = true;
-    cardsRes.value.forEach((row, i) => {
+    cardsRes.value.forEach((row) => {
       // Carrier rows are proposals, not board material — route them to the
-      // review lane and never paint them as cards.
+      // review lane and never paint them as cards (or burn a column slot).
       if (row.section_kind === SUGGESTION_SECTION_KIND) {
         const payload = decodeSuggestion(row.body);
         if (payload) {
@@ -290,21 +310,24 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
       }
       const type = SERVER_KIND_TO_TYPE[row.kind] ?? "note";
       const tree: CanvasBoardTree = row.tree_kind === "final" ? "final" : "ideas";
-      const fallback = tree === "final" ? finalColumnSlot(i) : ideaColumnSlot(i);
       const serverPositioned = row.x != null && row.y != null;
+      const fallback = serverPositioned ? null : nextSlot(tree);
       out.push({
         id: `db-card-${row.id}`,
         tree,
         type,
-        title: row.label || row.section_label || TYPE_TITLES[type],
+        title: row.label || prettySectionKind(row.section_label ?? row.section_kind) || TYPE_TITLES[type],
         body: row.body,
         meta: "",
-        section: row.section_label ?? row.section_kind ?? "Raw idea",
+        // Capture writes machine slugs ("pre-chorus") into section_kind —
+        // prettify so the crown reads "Pre-Chorus" and groups with locally
+        // sectioned cards; "" when truly unlabeled (never fabricate).
+        section: row.section_label ?? prettySectionKind(row.section_kind) ?? "",
         contributor: "",
         status: tree === "final" ? "approved" : "raw",
         accent: getCreatorColor(row.created_by || row.id).base,
-        x: row.x ?? fallback.x,
-        y: row.y ?? fallback.y,
+        x: row.x ?? fallback!.x,
+        y: row.y ?? fallback!.y,
         serverPositioned,
         createdBy: row.created_by,
         createdAt: row.created_at,

@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import { CANVAS_HEIGHT, DIVIDER_X } from "@/lib/canvas/canvasConstants";
 
 interface CanvasDividerProps {
@@ -29,4 +30,6 @@ const CanvasDivider = ({ isDropActive = false }: CanvasDividerProps) => (
   />
 );
 
-export default CanvasDivider;
+// Static stage layer - re-renders only when its own props change, not on
+// every host/stage render (e.g. the mid-drag divider-glow flip).
+export default memo(CanvasDivider);

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -53,6 +54,20 @@ export interface ViewportCtx {
 }
 
 const CanvasViewportContext = createContext<ViewportCtx | null>(null);
+
+/**
+ * The STABLE function half of the viewport API — coordinate conversion +
+ * imperative pan/zoom. Its identity never changes, so the ~N canvas cards
+ * that only need `screenToCanvas`/`dragPanBy` for their drag math do NOT
+ * re-render when a gesture ends and the VALUE context (zoom/pan) updates.
+ * That gesture-end full-board re-render was the largest single churn source.
+ */
+export type ViewportFns = Pick<
+  ViewportCtx,
+  "canvasToScreen" | "screenToCanvas" | "panTo" | "animateTo" | "fitTo" | "dragPanBy" | "endDragPan"
+>;
+
+const CanvasViewportFnsContext = createContext<ViewportFns | null>(null);
 
 // ─── CanvasViewport ───────────────────────────────────────────────────────────
 
@@ -160,28 +175,24 @@ const CanvasViewport = ({
     setReactPan({ x: panRef.current.x, y: panRef.current.y });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Stable context value — coordinate helpers reference refs so they're always current
+  // ONE stable object for the function half (all members are useGesture's
+  // ref-backed stable callbacks) — cards subscribe to this and never
+  // re-render on gesture-end value syncs.
+  const fnsValue = useMemo<ViewportFns>(
+    () => ({ canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, dragPanBy, endDragPan }),
+    [canvasToScreen, screenToCanvas, panTo, animateTo, fitTo, dragPanBy, endDragPan],
+  );
+
   const ctxValue: ViewportCtx = {
-    canvasToScreen: useCallback((cx, cy) => ({
-      x: cx * zoomRef.current + panRef.current.x,
-      y: cy * zoomRef.current + panRef.current.y,
-    }), [panRef, zoomRef]),
-    screenToCanvas: useCallback((sx, sy) => ({
-      x: (sx - panRef.current.x) / zoomRef.current,
-      y: (sy - panRef.current.y) / zoomRef.current,
-    }), [panRef, zoomRef]),
-    panTo,
-    animateTo,
-    fitTo,
+    ...fnsValue,
     zoom: reactZoom,
     panX: reactPan.x,
     panY: reactPan.y,
-    dragPanBy,
-    endDragPan,
   };
 
   return (
     <CanvasViewportContext.Provider value={ctxValue}>
+    <CanvasViewportFnsContext.Provider value={fnsValue}>
       <div
         ref={containerRef}
         data-canvas-viewport="true"
@@ -246,6 +257,7 @@ const CanvasViewport = ({
         {/* Fixed overlays — not transformed (e.g., first-action prompt, zoom controls) */}
         {overlay}
       </div>
+    </CanvasViewportFnsContext.Provider>
     </CanvasViewportContext.Provider>
   );
 };
@@ -258,6 +270,16 @@ const CanvasViewport = ({
 export function useCanvasViewport(): ViewportCtx {
   const ctx = useContext(CanvasViewportContext);
   if (!ctx) throw new Error("useCanvasViewport must be used inside <CanvasViewport>");
+  return ctx;
+}
+
+/**
+ * The stable function half only — cards use THIS so a gesture-end value sync
+ * doesn't re-render the whole board.
+ */
+export function useCanvasViewportFns(): ViewportFns {
+  const ctx = useContext(CanvasViewportFnsContext);
+  if (!ctx) throw new Error("useCanvasViewportFns must be used inside <CanvasViewport>");
   return ctx;
 }
 

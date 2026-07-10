@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import { GLORY } from "@/lib/canvas/glorySpectrum";
 import { ROOT_HEIGHT, ROOT_TOP } from "@/lib/canvas/canvasGeometry";
@@ -65,4 +66,6 @@ const ZoneLabels = () => (
   </>
 );
 
-export default ZoneLabels;
+// Static stage layer - re-renders only when its own props change, not on
+// every host/stage render (e.g. the mid-drag divider-glow flip).
+export default memo(ZoneLabels);

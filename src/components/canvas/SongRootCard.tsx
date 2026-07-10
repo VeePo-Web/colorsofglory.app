@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import { Sparkles } from "lucide-react";
 import { GLORY_CROWN_GRADIENT } from "@/lib/canvas/glorySpectrum";
 import { ROOT_HEIGHT, ROOT_LEFT, ROOT_TOP, ROOT_WIDTH } from "@/lib/canvas/canvasGeometry";
@@ -106,4 +107,6 @@ const SongRootCard = ({ title }: SongRootCardProps) => (
   </section>
 );
 
-export default SongRootCard;
+// Static stage layer - re-renders only when its own props change, not on
+// every host/stage render (e.g. the mid-drag divider-glow flip).
+export default memo(SongRootCard);

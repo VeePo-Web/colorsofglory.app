@@ -1,6 +1,5 @@
 import { memo, useMemo } from "react";
 import { Mic } from "lucide-react";
-import { getCreatorInitials } from "@/lib/canvas/creatorColors";
 import {
   generateWaveform,
   HUM_BAR_COUNT,
@@ -16,53 +15,34 @@ import type { CardFaceProps } from "./cardFace";
  * HUM" label carries the creator's color and a gentle pulse dot to read as
  * fresh + unreviewed. Presentational only — see cardFace.ts.
  */
-const HumCard = memo(({ card, color, tone, playing }: CardFaceProps) => {
-  const initials = getCreatorInitials(card.contributor);
+const HumCard = memo(({ card, tone, playing }: CardFaceProps) => {
   const barHeights = useMemo(() => generateWaveform(card.id, HUM_BAR_COUNT), [card.id]);
-  const duration = card.meta || "Hum";
+  // "Fresh" means fresh: the amber dot marks a hum under 24h old (a board of
+  // forever-pulsing dots is notification noise, not warmth). Static, no pulse.
+  const isFresh = card.createdAt
+    ? Date.now() - Date.parse(card.createdAt) < 24 * 60 * 60 * 1000
+    : false;
 
   return (
     <>
-      {/* Creator dot (WHO) */}
-      {card.contributor && (
-        <div
-          style={{
-            position: "absolute", top: 11, right: 11,
-            width: 22, height: 22, borderRadius: "50%",
-            backgroundColor: color.base,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 8, fontWeight: 800, color: "#FFF",
-            border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
-          }}
-          title={card.contributor}
-          aria-hidden="true"
-        >
-          {initials}
-        </div>
-      )}
-
-      {/* Type icon + "QUICK HUM" — raw amber, warm and unfinished (WHAT) */}
+      {/* The hum's NAME leads, amber-warm and unfinished */}
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Mic size={13} strokeWidth={1.8} style={{ color: tone.base }} />
+        <div style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Mic size={12} strokeWidth={1.8} style={{ color: tone.base }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: tone.dark, fontFamily: "var(--font-body)" }}>
-            Quick Hum
-          </span>
-          <div
-            style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: tone.base, animation: "cog-card-pulse-dot 2s ease-in-out infinite" }}
-            aria-label="New hum"
-          />
-        </div>
-      </div>
-
-      {/* Title + duration */}
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", lineHeight: 1.2, flex: 1, marginRight: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", lineHeight: 1.15, flex: 1, minWidth: 0, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {card.title}
         </p>
-        <span style={{ fontSize: 10, color: "var(--cog-muted)", fontFamily: "var(--font-body)", flexShrink: 0 }}>{duration}</span>
+        {isFresh && (
+          <span
+            role="img"
+            aria-label="New hum"
+            style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: tone.base, flexShrink: 0 }}
+          />
+        )}
+        {card.meta && (
+          <span style={{ fontSize: 11, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", flexShrink: 0 }}>{card.meta}</span>
+        )}
       </div>
 
       {/* Waveform — fewer, taller, jagged bars = raw idea. Always system

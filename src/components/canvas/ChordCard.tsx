@@ -1,17 +1,28 @@
 import { memo, useMemo } from "react";
 import { Music } from "lucide-react";
-import { getCreatorInitials } from "@/lib/canvas/creatorColors";
 import type { CardFaceProps } from "./cardFace";
 
 const CHORD_RE = /^[A-G][#b]?(?:m|maj|min|sus|dim|aug|add|M)?\d{0,2}(?:\/[A-G][#b]?)?$/;
 
-/** Pull chord tokens out of a free-text body ("C - G - Am - F, 74 BPM"). */
+/** Pull chord tokens out of a free-text body ("Key: G · 74 BPM · C G Am F").
+ *  The key phrase is lifted out FIRST so its letter can't masquerade as the
+ *  opening chord, and "·"/em-dash separators never survive as garbage tags. */
 function parseChords(body: string): { chords: string[]; rest: string } {
-  const tokens = body.split(/[\s,|>-]+/).map((t) => t.trim()).filter(Boolean);
+  let working = body;
+  const restPre: string[] = [];
+  const keyMatch = /\bkey[:\s]+([A-G][#b♯♭]?\s*(?:major|minor|m)?)\b/i.exec(working);
+  if (keyMatch) {
+    restPre.push(`Key ${keyMatch[1].trim()}`);
+    working = working.replace(keyMatch[0], " ");
+  }
+  const tokens = working.split(/[\s,|>·—-]+/).map((t) => t.trim()).filter(Boolean);
   const chords: string[] = [];
   const rest: string[] = [];
   for (const t of tokens) (CHORD_RE.test(t) ? chords : rest).push(t);
-  return { chords: chords.slice(0, 8), rest: rest.join(" ") };
+  return {
+    chords: chords.slice(0, 8),
+    rest: [...restPre, rest.join(" ")].filter(Boolean).join(" · "),
+  };
 }
 
 /**
@@ -19,8 +30,7 @@ function parseChords(body: string): { chords: string[]; rest: string } {
  * gold-tinted chips (the app's chord-chip signature) in rows of four; key/BPM
  * ride below as quiet tags. Presentational only — see cardFace.ts.
  */
-const ChordCard = memo(({ card, color, tone }: CardFaceProps) => {
-  const initials = getCreatorInitials(card.contributor);
+const ChordCard = memo(({ card, tone }: CardFaceProps) => {
   const { chords, rest } = useMemo(() => parseChords(card.body || ""), [card.body]);
 
   const rows: string[][] = [];
@@ -28,30 +38,20 @@ const ChordCard = memo(({ card, color, tone }: CardFaceProps) => {
 
   return (
     <>
-      {/* Creator dot (WHO) */}
-      {card.contributor && (
-        <div
+      {/* Serif headline — which part of the song this harmonic bed serves */}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+        <div style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Music size={12} strokeWidth={1.8} style={{ color: tone.base }} />
+        </div>
+        <span
           style={{
-            position: "absolute", top: 11, right: 11,
-            width: 22, height: 22, borderRadius: "50%", backgroundColor: color.base,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 8, fontWeight: 800, color: "#FFF",
-            border: "2px solid #FFFFFF", boxShadow: `0 2px 6px ${color.glow}`,
+            flex: 1, minWidth: 0,
+            fontSize: 15, fontWeight: 700, color: "var(--cog-charcoal)",
+            fontFamily: "var(--font-display)", lineHeight: 1.15,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}
-          title={card.contributor}
-          aria-hidden="true"
         >
-          {initials}
-        </div>
-      )}
-
-      {/* Type icon + title/section — the harmonic bed's pale gold (WHAT) */}
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Music size={13} strokeWidth={1.8} style={{ color: tone.base }} />
-        </div>
-        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: tone.dark, fontFamily: "var(--font-body)", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {card.section || card.title}
+          {card.section || card.title || "Chords"}
         </span>
       </div>
 

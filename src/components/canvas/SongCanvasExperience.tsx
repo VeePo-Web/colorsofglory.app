@@ -127,7 +127,6 @@ import {
 import { useCapabilities } from "@/lib/permissions";
 import { REVIEW_TONE } from "@/lib/canvas/glorySpectrum";
 
-const SongCanvasWorkLayers = lazy(() => import("@/components/cog/SongCanvasWorkLayers"));
 const SongCanvasCollabLayers = lazy(() => import("@/components/cog/SongCanvasCollabLayers"));
 const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
 const CardEditSheet = lazy(() => import("@/components/canvas/CardEditSheet"));
@@ -186,6 +185,27 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
   }
 };
 const SHOW_LEGACY_CANVAS_FABS = false;
+
+// Warm amber pending-review dot — attention, never alarm. ONE element
+// descriptor shared by every card (elements are immutable; identity-stable
+// so React.memo passes).
+const REVIEW_DOT = (
+  <span
+    role="img"
+    aria-label="Awaiting your review"
+    style={{
+      position: "absolute",
+      top: -5,
+      right: -5,
+      width: 12,
+      height: 12,
+      borderRadius: "50%",
+      backgroundColor: REVIEW_TONE.base,
+      border: "2px solid #FAFAF6",
+      boxShadow: `0 1px 5px ${REVIEW_TONE.glow}`,
+    }}
+  />
+);
 
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute",
@@ -347,7 +367,10 @@ const SongCanvasExperience = () => {
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
   const [activeLayer, setActiveLayer] = useState<LayerId>(() => {
     const layer = searchParams.get("layer");
-    return isLayerId(layer) ? layer : "room";
+    // lyrics/chords/notes forward to their real pages (effect below) — never
+    // flash a panel for them on first paint.
+    if (!isLayerId(layer) || layer === "lyrics" || layer === "chords" || layer === "notes") return "room";
+    return layer;
   });
   const [showWorkPanel, setShowWorkPanel] = useState(activeLayer !== "room" && activeLayer !== "ideas");
   const [saveMoment, setSaveMoment] = useState<SongRoomSaveMoment | null>(null);
@@ -659,11 +682,23 @@ const SongCanvasExperience = () => {
 
   useEffect(() => {
     const layer = searchParams.get("layer");
-    if (isLayerId(layer)) {
-      setActiveLayer(layer);
-      setShowWorkPanel(layer !== "room" && layer !== "ideas");
+    if (!isLayerId(layer)) return;
+    // Every word has ONE real home. Legacy ?layer= deep links used to open a
+    // DEMO panel showing a fabricated song (hardcoded verses/memos/chords) —
+    // the fastest way to teach a songwriter not to trust the app. Forward to
+    // the real surfaces instead; only Voice (real recorder panel) and People
+    // (real roster/activity) remain as canvas layers.
+    if (layer === "lyrics" || layer === "chords") {
+      navigate(`/songs/${songId}/sheet`, { replace: true });
+      return;
     }
-  }, [searchParams]);
+    if (layer === "notes") {
+      navigate(`/songs/${songId}/notes`, { replace: true });
+      return;
+    }
+    setActiveLayer(layer);
+    setShowWorkPanel(layer !== "room" && layer !== "ideas");
+  }, [searchParams, navigate, songId]);
 
   useEffect(() => {
     writeBoard(songId, cards);
@@ -682,15 +717,28 @@ const SongCanvasExperience = () => {
     const res = await hydrateBoard(songId);
     if (!res.memosOk && !res.cardsOk) return;
     if (res.cardsOk) {
-      // Resolve proposer names through the roster where the payload lacks one.
-      setServerSuggestions(
-        res.suggestions.map((s) => ({
+      // Resolve proposer names through the roster where the payload lacks
+      // one. Bail out when nothing changed — this runs on every debounced
+      // realtime tick, and a fresh array identity would re-render the whole
+      // page for a byte-identical list.
+      setServerSuggestions((prev) => {
+        const next = res.suggestions.map((s) => ({
           ...s,
           contributor:
             s.contributor ||
             (s.createdBy ? identityRef.current.get(s.createdBy)?.name ?? "" : ""),
-        })),
-      );
+        }));
+        const same =
+          prev.length === next.length &&
+          prev.every(
+            (p, i) =>
+              p.id === next[i].id &&
+              p.proposedLine === next[i].proposedLine &&
+              p.originalLine === next[i].originalLine &&
+              p.contributor === next[i].contributor,
+          );
+        return same ? prev : next;
+      });
     }
     setCards((prev) => {
       const fresh = new Map(res.cards.map((c) => [c.id, c]));
@@ -1172,48 +1220,87 @@ const SongCanvasExperience = () => {
     setCanvasStatus("Idea brought back.");
   }, []);
 
-  // Per-card wiring for CanvasStage's render loop — the exact closures the old
-  // inline loop built, handed across the D1 boundary as a selector. CanvasStage
-  // renders the pixels; what each callback DOES stays here with the D2 hooks.
-  // Deliberately not memoized: the stage's cards aren't memoized either, so
-  // fresh closures per render match the previous behavior exactly.
-  const getCardInteractions = (card: CanvasCard): CanvasCardInteractions => ({
-    onSelect: () => setSelectedId((prev) => (prev === card.id ? null : card.id)),
-    onMoveToFinal: () => arrangement.moveToFinal(card.id),
-    onMoveToIdeas: () => arrangement.moveToIdeas(card.id),
-    onMove: handleCardMove,
-    // A card dragged across the divider into the other tree: D1 reports the
-    // zone, D2 owns the meaning (promote / return + its own placement).
-    onCardDrop: (id, zone) => {
-      if (zone === "final") arrangement.moveToFinal(id);
-      else arrangement.moveToIdeas(id);
-    },
-    layerCount: layerCountByBase[card.id] ?? 0,
-    onOpenStack:
-      card.type === "voice" || card.type === "hum"
-        ? () => setStackBaseId(card.id)
-        : undefined,
-    onSuggestLine:
-      card.type === "lyric" && !isViewer
-        ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
-        : undefined,
-    onAddToListenPath: () => listenPath.toggleCard(card.id),
-    listenIndex: listenPath.queue.includes(card.id) ? listenPath.queue.indexOf(card.id) : undefined,
-    onMergeSelect:
-      !isViewer && card.tree === "ideas" && !card.isDimmedReference
-        ? () => merge.toggleSelect(card.id)
-        : undefined,
-    mergeSelected: merge.selection.includes(card.id),
-    onEdit: !isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined,
-    onMore: () => setMoreCardId(card.id),
-    finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
-    onRestore: !isViewer && card.isDimmedReference ? () => handleRestoreCard(card.id) : undefined,
-    // "Now sounding" ring: the active listen-path step while playing, or the
-    // take auditioning in compare mode.
-    playing:
-      (listenPath.playing && listenPath.queue[listenPath.step] === card.id) ||
-      compare.playingId === card.id,
-  });
+  // Per-card wiring for CanvasStage's render loop — MEMOIZED so a CanvasCard's
+  // props keep identity across unrelated host renders (presence syncs, status
+  // pill changes, sheet toggles) and React.memo actually skips it. The hook
+  // APIs ride behind a ref, so the closures always call the CURRENT verbs
+  // without their per-render object identity invalidating the memo.
+  const apisRef = useRef({ arrangement, merge, listenPath });
+  apisRef.current = { arrangement, merge, listenPath };
+  const { queue: listenQueue, step: listenStep, playing: listenPlaying } = listenPath;
+  const comparePlayingId = compare.playingId;
+  const mergeSelection = merge.selection;
+
+  const interactionsById = useMemo(() => {
+    const map = new Map<string, CanvasCardInteractions>();
+    for (const card of boardCards) {
+      map.set(card.id, {
+        onSelect: () => setSelectedId((prev) => (prev === card.id ? null : card.id)),
+        onMoveToFinal: () => apisRef.current.arrangement.moveToFinal(card.id),
+        onMoveToIdeas: () => apisRef.current.arrangement.moveToIdeas(card.id),
+        onMove: handleCardMove,
+        // A card dragged across the divider into the other tree: D1 reports the
+        // zone, D2 owns the meaning (promote / return + its own placement).
+        onCardDrop: (id, zone) => {
+          if (zone === "final") apisRef.current.arrangement.moveToFinal(id);
+          else apisRef.current.arrangement.moveToIdeas(id);
+        },
+        layerCount: layerCountByBase[card.id] ?? 0,
+        onOpenStack:
+          card.type === "voice" || card.type === "hum"
+            ? () => setStackBaseId(card.id)
+            : undefined,
+        onSuggestLine:
+          card.type === "lyric" && !isViewer
+            ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
+            : undefined,
+        onAddToListenPath: () => apisRef.current.listenPath.toggleCard(card.id),
+        listenIndex: listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined,
+        onMergeSelect:
+          !isViewer && card.tree === "ideas" && !card.isDimmedReference
+            ? () => apisRef.current.merge.toggleSelect(card.id)
+            : undefined,
+        mergeSelected: mergeSelection.includes(card.id),
+        onEdit: !isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined,
+        onMore: () => setMoreCardId(card.id),
+        finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
+        onRestore: !isViewer && card.isDimmedReference ? () => handleRestoreCard(card.id) : undefined,
+        // "Now sounding" ring: the active listen-path step while playing, or
+        // the take auditioning in compare mode.
+        playing:
+          (listenPlaying && listenQueue[listenStep] === card.id) ||
+          comparePlayingId === card.id,
+      });
+    }
+    return map;
+  }, [
+    boardCards,
+    isViewer,
+    layerCountByBase,
+    listenQueue,
+    listenStep,
+    listenPlaying,
+    comparePlayingId,
+    mergeSelection,
+    finalOrder,
+    handleCardMove,
+    handleRestoreCard,
+  ]);
+
+  const EMPTY_INTERACTIONS: CanvasCardInteractions = useMemo(
+    () => ({
+      onSelect: () => {},
+      onMoveToFinal: () => {},
+      onMoveToIdeas: () => {},
+      onMove: () => {},
+    }),
+    [],
+  );
+  const getCardInteractions = useCallback(
+    (card: CanvasCard): CanvasCardInteractions =>
+      interactionsById.get(card.id) ?? EMPTY_INTERACTIONS,
+    [interactionsById, EMPTY_INTERACTIONS],
+  );
 
   // Everyone whose hand is on this song — derived from who contributed cards.
   // Stable color/initials per person so the room reads as collaborative at a glance.
@@ -1392,9 +1479,9 @@ const SongCanvasExperience = () => {
   // The primary "show me everything" gesture on a phone that can't see it all.
   const fitAll = useCallback(() => {
     const { vw, vh } = viewportDims();
-    viewportApiRef.current?.fitTo(boundsOfCards([...ideasCards, ...finalCards], true), vw, vh, 72, 560);
+    viewportApiRef.current?.fitTo(boundsOfCards(boardCards, true), vw, vh, 72, 560);
     setSelectedId(null);
-  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
+  }, [boardCards, boundsOfCards, viewportDims]);
 
   // Tap a cluster → fan its members back onto the board and frame them; tap
   // again (or fit) to re-collapse. Framing reuses the semantic-nav fitTo.
@@ -1728,24 +1815,9 @@ const SongCanvasExperience = () => {
   );
   const renderCardAdornment = useCallback(
     (card: CanvasCard) =>
-      canReview && !isViewer && pendingReviewIds.has(card.id) ? (
-        <span
-          role="img"
-          aria-label="Awaiting your review"
-          style={{
-            position: "absolute",
-            top: -5,
-            right: -5,
-            width: 12,
-            height: 12,
-            borderRadius: "50%",
-            // Warm amber — attention, never alarm (glory spectrum REVIEW_TONE).
-            backgroundColor: REVIEW_TONE.base,
-            border: "2px solid #FAFAF6",
-            boxShadow: `0 1px 5px ${REVIEW_TONE.glow}`,
-          }}
-        />
-      ) : null,
+      // ONE hoisted element (module scope) — a fresh <span> per call defeated
+      // the memo of every card wearing a dot, on every stage render.
+      canReview && !isViewer && pendingReviewIds.has(card.id) ? REVIEW_DOT : null,
     [canReview, isViewer, pendingReviewIds],
   );
 
@@ -2148,21 +2220,19 @@ const SongCanvasExperience = () => {
                     onRecord={() => { closeWorkPanel(); void handleStartRecording(); }}
                   />
                 ) : (
-                  <>
-                    <Suspense fallback={<div style={{ height: 200, backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 16 }} />}>
-                      <SongCanvasWorkLayers activeLayer={activeLayer} />
-                    </Suspense>
-                    <Suspense fallback={null}>
-                      <SongCanvasCollabLayers
-                        activeLayer={activeLayer}
-                        collaborators={peopleLayerCollaborators}
-                        activity={layerActivity}
-                        onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
-                        onOpenRecap={() => setShowRecap(true)}
-                        onOpenCredits={() => navigate(`/songs/${songId}/credits`)}
-                      />
-                    </Suspense>
-                  </>
+                  // People — the REAL roster + real activity (lyrics/chords/
+                  // notes layers forward to their real pages; the fabricated
+                  // demo work-layers are gone from this path).
+                  <Suspense fallback={null}>
+                    <SongCanvasCollabLayers
+                      activeLayer={activeLayer}
+                      collaborators={peopleLayerCollaborators}
+                      activity={layerActivity}
+                      onInvite={isViewer ? undefined : () => setShowShareSheet(true)}
+                      onOpenRecap={() => setShowRecap(true)}
+                      onOpenCredits={() => navigate(`/songs/${songId}/credits`)}
+                    />
+                  </Suspense>
                 )}
               </div>
             </div>
@@ -2176,7 +2246,7 @@ const SongCanvasExperience = () => {
       {!arrangement.arranging && (
         <MergeActionBar
           selection={merge.selection}
-          cards={[...ideasCards, ...finalCards]}
+          cards={boardCards}
           onRemove={merge.removeFromSelection}
           onMerge={merge.executeMerge}
           onClear={merge.clearSelection}
@@ -2186,7 +2256,7 @@ const SongCanvasExperience = () => {
       {!arrangement.arranging && merge.selection.length === 0 && (
         <ListenPathBar
           queue={listenPath.queue}
-          cards={[...ideasCards, ...finalCards]}
+          cards={boardCards}
           step={listenPath.step}
           playing={listenPath.playing}
           collapsed={!pathExpanded}
