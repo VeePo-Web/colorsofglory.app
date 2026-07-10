@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PenLine, Music, Bookmark, BookOpen, Lightbulb, type LucideIcon } from "lucide-react";
+import { GLORY, GLORY_PALE_GOLD, type GloryTone } from "@/lib/canvas/glorySpectrum";
 
 export type RailAction = "lyrics" | "chords" | "section" | "scripture" | "note";
 
@@ -8,22 +9,29 @@ interface SideRailProps {
   onAction: (action: RailAction) => void;
 }
 
-const CHIPS: Array<{ id: RailAction; label: string; icon: LucideIcon }> = [
-  { id: "lyrics", label: "Lyrics", icon: PenLine },
-  { id: "chords", label: "Chords", icon: Music },
-  { id: "section", label: "Section", icon: Bookmark },
-  { id: "scripture", label: "Scripture", icon: BookOpen },
-  { id: "note", label: "Idea", icon: Lightbulb },
+// The auth-code's ROYGBV power-up, standing as a column: each chip wears the
+// SAME glory tone its card will wear on the song canvas — the color language
+// travels with the idea from the moment it's captured. Top to bottom the rail
+// reads as a warm spectrum: rose → pale gold → gold → sage → violet.
+const CHIPS: Array<{ id: RailAction; label: string; icon: LucideIcon; tone: GloryTone }> = [
+  { id: "lyrics", label: "Lyrics", icon: PenLine, tone: GLORY.crimson },
+  { id: "chords", label: "Chords", icon: Music, tone: GLORY_PALE_GOLD },
+  { id: "section", label: "Section", icon: Bookmark, tone: GLORY.gold },
+  { id: "scripture", label: "Scripture", icon: BookOpen, tone: GLORY.sage },
+  { id: "note", label: "Idea", icon: Lightbulb, tone: GLORY.violet },
 ];
 
 /**
  * Adobe-style edge rail: a vertical column of labeled chips pinned to the
  * right edge of the viewport, vertically centered against the mic.
  *
- * - Idle tap → opens the matching capture sheet.
- * - Tap during a recording → drops a timestamped pin (handled by parent) and
- *   flashes the chip gold for ~300ms so the user sees confirmation without
- *   any modal interruption.
+ * - Idle: quiet cream chips, each tinted by its glory tone.
+ * - Recording: the rail POWERS UP — every chip glows in its own jewel tone
+ *   (the 6-digit auth code's cell glow, standing in a column) so the live
+ *   take is visibly surrounded by everything it can become.
+ * - Tap during a recording → drops a timestamped pin and the chip lands with
+ *   the auth code's success pop (tint deepens, glow blooms, 1.09 scale beat).
+ *   Reduced-motion drops the pop — the colors stay (color isn't motion).
  */
 const SideRail = ({ recording, onAction }: SideRailProps) => {
   const [flashed, setFlashed] = useState<RailAction | null>(null);
@@ -37,7 +45,7 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
       setFlashed(id);
       window.setTimeout(() => {
         setFlashed((curr) => (curr === id ? null : curr));
-      }, 320);
+      }, 420);
     }
   };
 
@@ -58,7 +66,27 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
     >
       {CHIPS.map((chip, idx) => {
         const Icon = chip.icon;
+        const { tone } = chip;
         const isFlashed = flashed === chip.id;
+        // Three registers, straight from the OTP cell recipe:
+        //   idle      → white chip, whisper of the tone in icon + border
+        //   powered   → tone tint bg + tone border + soft tone glow (recording)
+        //   landed    → deeper tint + full-power glow + pop (pin confirmed)
+        const background = isFlashed
+          ? `${tone.base}1F`
+          : recording
+            ? tone.bg
+            : "var(--cog-cream-light, #faf7f2)";
+        const border = isFlashed
+          ? `1.5px solid ${tone.base}`
+          : recording
+            ? `1.5px solid ${tone.base}59`
+            : `1px solid ${tone.base}2E`;
+        const boxShadow = isFlashed
+          ? `0 0 0 3px ${tone.base}33, 0 6px 18px ${tone.base}4D`
+          : recording
+            ? `0 0 0 3px ${tone.base}26, 0 4px 14px ${tone.base}33`
+            : "0 2px 8px rgba(28,26,23,0.08)";
         return (
           <button
             key={chip.id}
@@ -70,25 +98,21 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
               minHeight: 60,
               padding: "8px 4px",
               borderRadius: 16,
-              background: isFlashed
-                ? "var(--cog-gold)"
-                : "var(--cog-cream-light, #faf7f2)",
-              border: isFlashed
-                ? "1px solid var(--cog-gold)"
-                : recording
-                  ? "1px solid rgba(184,149,58,0.40)"
-                  : "1px solid rgba(28,26,23,0.08)",
+              background,
+              border,
               cursor: "pointer",
-              color: isFlashed ? "var(--cog-cream-light, #faf7f2)" : "var(--cog-charcoal)",
-              boxShadow: recording
-                ? "0 4px 14px rgba(184,149,58,0.18), 0 0 0 1px rgba(184,149,58,0.10)"
-                : "0 2px 8px rgba(28,26,23,0.08)",
-              transition: "background 200ms ease, color 200ms ease, border-color 200ms ease, transform 120ms ease",
-              // Staggered slide-in — suppressed for reduced-motion (chips just
-              // appear, no travel), per the design bible's motion mandate.
+              color: tone.dark,
+              boxShadow,
+              transition:
+                "background 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 240ms ease, transform 120ms ease",
+              // One inline animation slot: the landing POP while flashed, the
+              // staggered slide-in on mount, nothing under reduced-motion
+              // (the colors stay — color isn't motion).
               animation: reduceMotion
                 ? "none"
-                : `cog-rail-enter 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)) ${idx * 40}ms both`,
+                : isFlashed
+                  ? "cogRailPop 240ms cubic-bezier(0.34, 1.56, 0.64, 1)"
+                  : `cog-rail-enter 320ms var(--cog-ease-reveal, cubic-bezier(0.22,1,0.36,1)) ${idx * 40}ms both`,
             }}
             aria-label={
               recording
@@ -96,7 +120,7 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
                 : `Open ${chip.label.toLowerCase()}`
             }
           >
-            <Icon size={20} strokeWidth={1.7} />
+            <Icon size={20} strokeWidth={1.7} style={{ color: tone.base }} />
             <span
               style={{
                 fontFamily: "var(--font-body)",
@@ -115,6 +139,12 @@ const SideRail = ({ recording, onAction }: SideRailProps) => {
         @keyframes cog-rail-enter {
           from { opacity: 0; transform: translateX(8px); }
           to   { opacity: 1; transform: translateX(0);   }
+        }
+        /* The auth code's power-up pop — a pinned moment LANDS. */
+        @keyframes cogRailPop {
+          0%   { transform: scale(1); }
+          45%  { transform: scale(1.09); }
+          100% { transform: scale(1); }
         }
       `}</style>
     </div>
