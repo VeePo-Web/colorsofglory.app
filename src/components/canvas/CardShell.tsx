@@ -22,6 +22,11 @@ interface CardShellProps {
   mergeSelected?: boolean;
   /** This card is sounding right now — soft-blue playback halo. */
   playing?: boolean;
+  /** Weave mode: this card isn't part of the weave — recede, stay tappable. */
+  faded?: boolean;
+  /** The face is a panel of real buttons (weave rows): the shell must NOT be
+   *  a button itself — nested interactive controls break SR semantics. */
+  plainContainer?: boolean;
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerMove?: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerUp?: (e: PointerEvent<HTMLDivElement>) => void;
@@ -53,6 +58,8 @@ const CardShell = memo(
       top,
       mergeSelected = false,
       playing = false,
+      faded = false,
+      plainContainer = false,
       onPointerDown,
       onPointerMove,
       onPointerUp,
@@ -104,7 +111,8 @@ const CardShell = memo(
           backgroundColor: isDimmed ? "rgba(255,252,247,0.72)" : "#FFFCF7",
           border,
           boxShadow,
-          opacity: isDimmed ? 0.55 : 1,
+          // A selected faded card un-fades — "tap to peek" must mean readable.
+          opacity: faded && !isSelected ? 0.3 : isDimmed ? 0.55 : 1,
           // Dimmed cards stay tappable — "nothing is deleted" means nothing is
           // unreachable. They select (to read + restore) but never drag.
           cursor: isDimmed ? "pointer" : isSelected ? "default" : "grab",
@@ -139,10 +147,10 @@ const CardShell = memo(
           }
           onKeyDown?.(e);
         }}
-        role="button"
-        aria-pressed={isSelected}
+        role={plainContainer ? "group" : "button"}
+        aria-pressed={plainContainer ? undefined : isSelected}
         aria-label={ariaLabel}
-        tabIndex={0}
+        tabIndex={plainContainer ? undefined : 0}
         data-canvas-card="true"
       >
         {/* Material identity stripe — the card TYPE's glory tone down the

@@ -111,6 +111,9 @@ import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
+import WeaveBar from "@/components/canvas/WeaveBar";
+import { useWeave } from "@/components/canvas/useWeave";
+import { corpusFromBodies } from "@/lib/lyrics/rhymeSuggest";
 import CompareModeSheet from "@/components/canvas/CompareModeSheet";
 import FinalArrangementBar from "@/components/canvas/FinalArrangementBar";
 import CanvasMetronomeToggle from "@/components/canvas/CanvasMetronomeToggle";
@@ -132,6 +135,7 @@ const ShareSongSheet = lazy(() => import("@/components/invite/ShareSongSheet"));
 const CardEditSheet = lazy(() => import("@/components/canvas/CardEditSheet"));
 const CardActionsSheet = lazy(() => import("@/components/canvas/CardActionsSheet"));
 const AddPartSheet = lazy(() => import("@/components/canvas/AddPartSheet"));
+const LineLabSheet = lazy(() => import("@/components/canvas/LineLabSheet"));
 const OwnerReviewQueueSheet = lazy(() => import("@/components/canvas/OwnerReviewQueueSheet"));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -313,7 +317,19 @@ const SongCanvasExperience = () => {
   // the room hydrates it. A rejected insert (RLS, offline, local song id) is
   // non-fatal — the card simply stays device-local, exactly as before.
   const replaceQueueIdRef = useRef<(oldId: string, newId: string) => void>(() => {});
+  // Local→server id history: write closures queued under a card's OLD id
+  // (weave body writes racing the insert ack) resolve the live id here.
+  const idAliasRef = useRef(new Map<string, string>());
+  // Weave keeps its target/bookkeeping attached through the swap (set after
+  // the hook exists — the spine is declared earlier than the feature).
+  const weaveRenameRef = useRef<(oldId: string, newId: string) => void>(() => {});
   const swapCardId = useCallback((oldId: string, newId: string) => {
+    idAliasRef.current.set(oldId, newId);
+    // A chained alias (local → db-card A → …) stays resolvable in one hop.
+    for (const [k, v] of idAliasRef.current) {
+      if (v === oldId) idAliasRef.current.set(k, newId);
+    }
+    weaveRenameRef.current(oldId, newId);
     setCards((prev) =>
       prev
         // The realtime hydrate may have mirrored the row already — never two.
@@ -1109,7 +1125,56 @@ const SongCanvasExperience = () => {
 
   // Collapsed clusters → SectionClusterData for the render layer; their member
   // ids are hidden from the card render so a stack replaces the loose cards.
+  // ── Weave: line-level composition into a final section (WEAVE-CONTRACT) ──
+  // The hook's ONE write path: body-only update, local-first + server sync —
+  // the same spine handleSaveCardEdit rides, minus title/section. The server
+  // id resolves INSIDE the queued closure: a section whose insert is still in
+  // flight (weave-right-after-add) gets its woven body written once the ack
+  // lands (the per-key chain runs this after the insert), never dropped.
+  const handleWeaveBody = useCallback(
+    (cardId: string, body: string) => {
+      const now = new Date().toISOString();
+      setCards((prev) =>
+        prev.map((c) =>
+          c.id === cardId
+            ? { ...c, body, updatedAt: now, lastActivityAt: now, updatedBy: profile?.user_id ?? c.updatedBy }
+            : c,
+        ),
+      );
+      syncServer(async () => {
+        const resolved = idAliasRef.current.get(cardId) ?? cardId;
+        const sid = serverCardId(resolved);
+        if (!sid) return; // genuinely device-local — nothing to sync
+        if (resolved !== cardId) markDirty(resolved); // dirty rides the LIVE id
+        await updateCanvasCard(sid, { body });
+      }, cardId);
+    },
+    [profile?.user_id, syncServer, markDirty],
+  );
+
+  const weave = useWeave({
+    songId,
+    cards,
+    isViewer,
+    updateBody: handleWeaveBody,
+    announce: setCanvasStatus,
+  });
+  weaveRenameRef.current = weave.renameCard;
+  const weaveSectionName = weave.target?.section || weave.target?.title || "the section";
+  // Line Lab's offline fallback corpus — the writer's OWN idea-tree words.
+  // Only mined while the lab is open; empty (and dep-cheap) otherwise.
+  const weaveCorpus = useMemo(
+    () =>
+      weave.labIndex == null
+        ? []
+        : corpusFromBodies(cards.filter((c) => c.tree === "ideas" && c.body).map((c) => c.body)),
+    [cards, weave.labIndex],
+  );
+
   const { clusterData, hiddenCardIds } = useMemo(() => {
+    // While weaving, stacks yield: a collapsed cluster would HIDE glowing
+    // candidate lines the mode just promised ("tap a glowing line").
+    if (weave.active) return { clusterData: [] as SectionClusterData[], hiddenCardIds: new Set<string>() };
     const byId = new Map(boardCards.map((c) => [c.id, c]));
     const hidden = new Set<string>();
     const data: SectionClusterData[] = [];
@@ -1135,7 +1200,7 @@ const SongCanvasExperience = () => {
       });
     }
     return { clusterData: data, hiddenCardIds: hidden };
-  }, [clusterFlagList, expandedClusters, boardCards]);
+  }, [clusterFlagList, expandedClusters, boardCards, weave.active]);
 
   // What the render surface draws: every card minus the ones tucked in a
   // collapsed stack (D2/D3 still operate on the full ideasCards/finalCards).
@@ -1225,8 +1290,8 @@ const SongCanvasExperience = () => {
   // pill changes, sheet toggles) and React.memo actually skips it. The hook
   // APIs ride behind a ref, so the closures always call the CURRENT verbs
   // without their per-render object identity invalidating the memo.
-  const apisRef = useRef({ arrangement, merge, listenPath });
-  apisRef.current = { arrangement, merge, listenPath };
+  const apisRef = useRef({ arrangement, merge, listenPath, weave });
+  apisRef.current = { arrangement, merge, listenPath, weave };
   const { queue: listenQueue, step: listenStep, playing: listenPlaying } = listenPath;
   const comparePlayingId = compare.playingId;
   const mergeSelection = merge.selection;
@@ -1270,6 +1335,25 @@ const SongCanvasExperience = () => {
         playing:
           (listenPlaying && listenQueue[listenStep] === card.id) ||
           comparePlayingId === card.id,
+        // Weave mode: this card is the forming section (ribbon + meter), a
+        // candidate (glowing lines), or a bystander (recedes, stays tappable).
+        // D2 computed everything here; the card only paints. Handlers ride
+        // apisRef so the map doesn't rebuild per callback identity.
+        ...(weave.active
+          ? weave.targetId === card.id
+            ? {
+                weaveTarget: weave.targetView ?? undefined,
+                onWeaveTargetLineTap: (i: number) => apisRef.current.weave.openLab(i),
+                weaveSectionName,
+              }
+            : weave.glow.has(card.id)
+              ? {
+                  weaveLines: weave.glow.get(card.id),
+                  onWeaveLineTap: (i: number) => apisRef.current.weave.toggleLine(card.id, i),
+                  weaveSectionName,
+                }
+              : { weaveFaded: true }
+          : null),
       });
     }
     return map;
@@ -1285,6 +1369,11 @@ const SongCanvasExperience = () => {
     finalOrder,
     handleCardMove,
     handleRestoreCard,
+    weave.active,
+    weave.targetId,
+    weave.targetView,
+    weave.glow,
+    weaveSectionName,
   ]);
 
   const EMPTY_INTERACTIONS: CanvasCardInteractions = useMemo(
@@ -2240,10 +2329,34 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
-      {/* One bottom surface at a time: an active arrange session owns the
-          bottom; a merge selection hides the (collapsed) listen pill's
-          expanded state; pills coexist quietly. */}
-      {!arrangement.arranging && (
+      {/* One bottom surface at a time: an active weave owns the bottom; an
+          arrange session next; a merge selection hides the (collapsed) listen
+          pill's expanded state; pills coexist quietly. */}
+      {weave.active && weave.target && (
+        <WeaveBar
+          sectionName={weaveSectionName}
+          lineCount={weave.targetView?.lines.length ?? 0}
+          placedCount={weave.placedCount}
+          candidateCount={weave.glow.size}
+          onJumpToSection={() => {
+            setViewZone("final"); // keep the zone chips honest after the fly
+            jumpToCardId(weave.target!.id);
+          }}
+          onDone={weave.exit}
+        />
+      )}
+      {weave.active && weave.labIndex != null && weave.targetView?.lines[weave.labIndex] != null && (
+        <Suspense fallback={null}>
+          <LineLabSheet
+            line={weave.targetView.lines[weave.labIndex]}
+            sectionName={weaveSectionName}
+            corpus={weaveCorpus}
+            onCommit={(newLine) => weave.swapTargetLine(weave.labIndex!, newLine)}
+            onDismiss={weave.closeLab}
+          />
+        </Suspense>
+      )}
+      {!arrangement.arranging && !weave.active && (
         <MergeActionBar
           selection={merge.selection}
           cards={boardCards}
@@ -2253,7 +2366,7 @@ const SongCanvasExperience = () => {
           onSwap={merge.swapSelection}
         />
       )}
-      {!arrangement.arranging && merge.selection.length === 0 && (
+      {!arrangement.arranging && !weave.active && merge.selection.length === 0 && (
         <ListenPathBar
           queue={listenPath.queue}
           cards={boardCards}
@@ -2271,6 +2384,7 @@ const SongCanvasExperience = () => {
           onSave={listenPath.save}
         />
       )}
+      {!weave.active && (
       <FinalArrangementBar
         arranging={arrangement.arranging}
         canArrange={arrangement.canArrange}
@@ -2285,6 +2399,7 @@ const SongCanvasExperience = () => {
           listenPath.playAll(arrangement.orderedFinalCards.map((c) => c.id));
         }}
       />
+      )}
       {compare.pair && (
         <CompareModeSheet
           cards={compare.pair}
@@ -2436,6 +2551,18 @@ const SongCanvasExperience = () => {
             actions.push({ id: "down", label: "Move down in the arrangement", tone: "muted", onClick: () => arrangement.moveBy(c.id, 1) });
           }
         }
+        // WEAVE — compose this final section line-by-line from the Ideas tree
+        // (the star action for a forming section; docs/WEAVE-CONTRACT.md).
+        if ((c.type === "lyric" || c.type === "section") && c.tree === "final" && !isViewer && !c.isDimmedReference) {
+          actions.push({
+            id: "weave",
+            label: "Weave lines into this section",
+            onClick: () => {
+              weave.enter(c.id);
+              goToZone("ideas");
+            },
+          });
+        }
         if (c.type === "lyric" && !isViewer) {
           actions.push({
             id: "suggest",
@@ -2552,7 +2679,8 @@ const SongCanvasExperience = () => {
         />
       )}
 
-      {featuresTour.visible && (
+      {/* Coach marks yield to an active weave — one focused mode at a time. */}
+      {featuresTour.visible && !weave.active && (
         <CoachMark
           targetRef={featuresTourRef}
           lead="Every part of your song."
@@ -2563,7 +2691,7 @@ const SongCanvasExperience = () => {
         />
       )}
 
-      {ideasTour.visible && (
+      {ideasTour.visible && !weave.active && (
         <CoachMark
           targetRef={ideasTourRef}
           lead="Two spaces, one song."
@@ -2574,7 +2702,7 @@ const SongCanvasExperience = () => {
         />
       )}
 
-      {inviteTour.visible && (
+      {inviteTour.visible && !weave.active && (
         <CoachMark
           targetRef={inviteTourRef}
           lead="Songs are better together."

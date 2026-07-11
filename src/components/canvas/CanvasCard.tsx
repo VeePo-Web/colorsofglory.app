@@ -12,6 +12,10 @@ import { cardWidth, clampToBoard, DRAG_THRESHOLD_PX } from "@/lib/canvas/canvasG
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
 import type { CardFaceProps } from "@/components/canvas/cardFace";
+import WeaveCardFace from "@/components/canvas/WeaveCardFace";
+import WeaveTargetFace from "@/components/canvas/WeaveTargetFace";
+import type { WeaveGlowLine } from "@/components/canvas/useWeave";
+import type { WeaveTargetView } from "@/lib/canvas/weave";
 
 export type CanvasZone = "ideas" | "final";
 
@@ -50,6 +54,18 @@ export interface CanvasCardInteractions {
   onRestore?: () => void;
   /** This card is sounding right now (listen path / compare audition). */
   playing?: boolean;
+
+  // ── Weave mode (D2 computes, this layer renders — docs/WEAVE-CONTRACT.md) ──
+  /** This idea card's lines, scored against the forming section. */
+  weaveLines?: WeaveGlowLine[];
+  onWeaveLineTap?: (index: number) => void;
+  /** This card IS the forming section — ribbon + meter view. */
+  weaveTarget?: WeaveTargetView;
+  onWeaveTargetLineTap?: (index: number) => void;
+  /** Weave is on and this card isn't part of it — recede, stay tappable. */
+  weaveFaded?: boolean;
+  /** The section being woven (for line aria-labels). */
+  weaveSectionName?: string;
 }
 
 interface CanvasCardProps extends CanvasCardInteractions {
@@ -130,6 +146,12 @@ const CanvasCard = memo(function CanvasCard({
   finalOrder,
   onRestore,
   playing = false,
+  weaveLines,
+  onWeaveLineTap,
+  weaveTarget,
+  onWeaveTargetLineTap,
+  weaveFaded = false,
+  weaveSectionName = "the section",
 }: CanvasCardProps) {
   // The STABLE fn context — this card never re-renders on gesture-end syncs.
   const { screenToCanvas, dragPanBy, endDragPan } = useCanvasViewportFns();
@@ -155,6 +177,9 @@ const CanvasCard = memo(function CanvasCard({
   const isVoice = card.type === "voice" || card.type === "hum";
   const state: CardInteractionState = card.isDimmedReference ? "dimmed" : selected ? "selected" : "default";
   const Face = FACES[card.type] ?? LyricCard;
+  // Weave mode: taps mean PLACE, not rearrange — the card never drags while
+  // it's wearing weave props (tap-to-place is the invariant, not drag).
+  const weaving = Boolean(weaveLines || weaveTarget);
 
   const hasMore =
     Boolean(onMore) &&
@@ -262,6 +287,7 @@ const CanvasCard = memo(function CanvasCard({
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     if (card.isDimmedReference) return; // dimmed cards select, never drag
+    if (weaving || weaveFaded) return; // weave mode is tap-to-place, never drag
     // A press on one of the card's own buttons (→ Final, Edit, Layers, ⋯) must
     // stay a BUTTON press. Capturing the pointer here retargets pointerup —
     // and therefore the click — to the card, so every real tap on the action
@@ -344,6 +370,9 @@ const CanvasCard = memo(function CanvasCard({
 
   const handleClick = () => {
     if (justDragged.current) { justDragged.current = false; return; }
+    // While weaving, line rows own the meaning of a tap; a tap on the card
+    // frame just selects (to peek at a faded card) — never opens an editor.
+    if (weaving || weaveFaded) { onSelect(); return; }
     // An empty writable card promises "Tap to write…" — keep the promise:
     // the first tap opens the editor directly (selection still happens so
     // the card shows context behind the sheet).
@@ -365,7 +394,8 @@ const CanvasCard = memo(function CanvasCard({
     ` by ${card.contributor}` +
     (finalOrder != null ? `, arrangement position ${finalOrder}` : "") +
     (listenIndex != null ? `, listen path stop ${listenIndex + 1}` : "") +
-    (playing ? ", playing now" : "");
+    (playing ? ", playing now" : "") +
+    (weaveTarget ? ` — the section being woven` : weaveLines ? ` — has lines that could fit ${weaveSectionName}` : "");
 
   return (
     <CardShell
@@ -375,6 +405,8 @@ const CanvasCard = memo(function CanvasCard({
       state={state}
       mergeSelected={mergeSelected}
       playing={playing}
+      faded={weaveFaded}
+      plainContainer={weaving}
       width={cardWidth(card.type)}
       left={card.x}
       top={card.y}
@@ -403,8 +435,16 @@ const CanvasCard = memo(function CanvasCard({
         </div>
       )}
 
-      {/* The typed face */}
-      <Face card={card} color={color} tone={tone} selected={selected} playing={playing} />
+      {/* The typed face — or, while weaving, the weave view of this card:
+          the forming section (ribbon + meter) or its glowing candidate lines.
+          D2 computed everything in these props; this is pure paint. */}
+      {weaveTarget && onWeaveTargetLineTap ? (
+        <WeaveTargetFace card={card} view={weaveTarget} onLineTap={onWeaveTargetLineTap} />
+      ) : weaveLines && onWeaveLineTap ? (
+        <WeaveCardFace card={card} tone={tone} lines={weaveLines} sectionName={weaveSectionName} onLineTap={onWeaveLineTap} />
+      ) : (
+        <Face card={card} color={color} tone={tone} selected={selected} playing={playing} />
+      )}
 
       {/* Who wrote it — ONE identity signal: a color dot always paired with
           a readable name (the 8px-initials avatars the faces used to carry
@@ -443,8 +483,9 @@ const CanvasCard = memo(function CanvasCard({
         </div>
       )}
 
-      {/* Selected action row — one primary + promote + More (calm, not a wall) */}
-      {selected && !card.isDimmedReference && (
+      {/* Selected action row — one primary + promote + More (calm, not a wall).
+          Hidden while weaving: the mode's verbs live on the line rows + WeaveBar. */}
+      {selected && !card.isDimmedReference && !weaving && !weaveFaded && (
         <div
           style={{ display: "flex", gap: 6, marginTop: 10, borderTop: "1px solid rgba(0,0,0,0.07)", paddingTop: 8 }}
           onClick={(e) => e.stopPropagation()}
