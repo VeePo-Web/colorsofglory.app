@@ -2,8 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { Play, Pause, MoreHorizontal } from "lucide-react";
 import type { VoiceMemoRecord } from "@/lib/voice/voiceApi";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
-import { generateWaveform } from "@/lib/canvas/waveformSeed";
-import { resamplePeaks } from "@/lib/audio/waveformPeaks";
+import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { audioCache } from "@/lib/voice/audioCache";
@@ -21,10 +20,14 @@ const MINI_BAR_MAX_H = 12;
 const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoListItemProps) => {
   const color = getCreatorColor(creatorName);
   const initials = getCreatorInitials(creatorName);
-  // Real persisted peaks when present; ID-seeded shape only for legacy rows.
-  const bars = memo.waveform_peaks?.length
-    ? resamplePeaks(memo.waveform_peaks, MINI_BAR_COUNT)
-    : generateWaveform(memo.id, MINI_BAR_COUNT);
+  // Melody Lens precedence: contour (bars ride the tune) → real peaks → seed.
+  const wave = resolveWaveformBars({
+    seedId: memo.id,
+    peaks: memo.waveform_peaks,
+    contour: memo.pitch_contour,
+    barCount: MINI_BAR_COUNT,
+    maxHeight: MINI_BAR_MAX_H,
+  });
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,11 +84,11 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
         position: "relative",
       }}
     >
-      {/* Mini waveform (static) */}
+      {/* Mini waveform (static) — melody bars ride the tune via marginTop */}
       <div
         style={{
           display: "flex",
-          alignItems: "flex-end",
+          alignItems: "flex-start",
           gap: 2,
           height: MINI_BAR_MAX_H,
           flexShrink: 0,
@@ -93,16 +96,18 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
         }}
         aria-hidden="true"
       >
-        {bars.map((h, i) => {
+        {wave.bars.map((bar, i) => {
           const played = isPlaying && progress > i / MINI_BAR_COUNT;
           return (
             <div
               key={i}
               style={{
                 flex: 1,
-                height: Math.max(2, Math.round(h * MINI_BAR_MAX_H)),
+                height: Math.max(2, bar.height),
+                marginTop: bar.top,
                 borderRadius: 2,
                 backgroundColor: played ? color.base : color.dim,
+                opacity: bar.voiced ? 1 : 0.4,
               }}
             />
           );

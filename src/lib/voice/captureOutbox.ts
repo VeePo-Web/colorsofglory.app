@@ -1,4 +1,5 @@
 import { audioCache } from "./audioCache";
+import { renameContour } from "@/lib/audio/contourStore";
 import { uploadVoiceMemo } from "./voiceApi";
 
 /**
@@ -336,8 +337,10 @@ async function processJob(id: string): Promise<void> {
     const memoId = await upload(job, blob);
 
     // Success: hand the cached blob to its real id for instant first playback,
-    // then release the outbox copy + job.
+    // then release the outbox copy + job. The Melody Lens contour follows the
+    // same rename so the melody waveform never flickers back to amplitude.
     await audioCache.set(memoId, blob);
+    renameContour(id, memoId);
     await audioCache.delete(id);
     removeJob(id);
     emit({ type: "success", outboxId: id, memoId, songId: job.songId });

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { listCanvasCards, type CanvasCard as ServerCanvasCard } from "@/integrations/cog/canvas";
+import { resolveContour } from "@/lib/audio/contourStore";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import {
   decodeSuggestion,
@@ -230,7 +231,7 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
   const [memosRes, cardsRes] = await Promise.allSettled([
     supabase
       .from("voice_memos")
-      .select("id, title, duration_ms, status, created_at, author_user_id")
+      .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks")
       .eq("song_id", songId)
       .not("status", "in", '("failed","deleted")')
       // Newest first — an ascending window pinned the 60 OLDEST memos and a
@@ -274,6 +275,11 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
         accent: getCreatorColor(row.author_user_id ?? row.id).base,
         ...nextSlot("ideas"),
         durationMs: row.duration_ms ?? undefined,
+        // Melody Lens: real peaks travel with the row; the pitch contour
+        // resolves server-first (once Lovable's column lands) then the
+        // device store — so the card shows the tune, not an id-seeded fake.
+        waveformPeaks: (row as { waveform_peaks?: number[] | null }).waveform_peaks ?? null,
+        pitchContour: resolveContour(row.id)?.pitchContour ?? null,
         isProcessing,
         createdBy: row.author_user_id ?? undefined,
         createdAt: row.created_at,

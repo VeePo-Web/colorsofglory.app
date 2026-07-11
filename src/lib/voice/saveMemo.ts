@@ -1,5 +1,7 @@
 import { enqueueCaptureUpload } from "./captureOutbox";
 import { computeWaveformPeaks } from "@/lib/audio/waveformPeaks";
+import { computePitchContour } from "@/lib/audio/pitchContour";
+import { writeContour } from "@/lib/audio/contourStore";
 import type { VoiceMemoRecord } from "./voiceApi";
 
 /**
@@ -38,8 +40,9 @@ export interface SaveMemoResult {
 }
 
 export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoResult> {
-  // Compute-once real peaks. A decode failure yields null (legacy-style card),
-  // never a blocked save — the audio itself is what must survive.
+  // Real peaks are cheap (one O(n) pass) and feed the optimistic card, so they
+  // stay on the path; a decode failure yields null (legacy-style card), never
+  // a blocked save.
   const peaks = await computeWaveformPeaks(params.blob);
 
   const { outboxId } = await enqueueCaptureUpload({
@@ -57,6 +60,16 @@ export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoR
       waveformPeaks: peaks ?? undefined,
     },
   });
+
+  // Melody Lens is deliberately OFF the critical path: the blob is already
+  // durable (enqueued above) and the optimistic card is about to return, so a
+  // capture never freezes on the pitch analysis. The contour computes off the
+  // main thread (worker) and lands in the device store keyed to the outbox id;
+  // the outbox renames it to the real memo id on sync, and backfill-on-play
+  // heals any miss (e.g. the analysis outracing the upload). Best-effort.
+  void computePitchContour(params.blob)
+    .then((contour) => { if (contour) writeContour(outboxId, contour); })
+    .catch(() => { /* pitch never affects the save */ });
 
   const optimistic: VoiceMemoRecord = {
     id: outboxId,

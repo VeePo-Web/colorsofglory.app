@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Mic } from "lucide-react";
 import {
-  generateWaveform,
+  resolveWaveformBars,
   HUM_BAR_COUNT,
   HUM_MAX_BAR_HEIGHT,
   BAR_WIDTH,
@@ -10,13 +10,24 @@ import {
 import type { CardFaceProps } from "./cardFace";
 
 /**
- * HumCard — the face for a raw, quick-captured hum. Fewer, taller, jagged bars
- * say "unfinished idea, caught in the moment" (not composed audio). The "QUICK
- * HUM" label carries the creator's color and a gentle pulse dot to read as
- * fresh + unreviewed. Presentational only — see cardFace.ts.
+ * HumCard — the face for a raw, quick-captured hum. Fewer, taller bars say
+ * "unfinished idea, caught in the moment"; with a Melody Lens contour the
+ * eight bars ride the hummed tune (real, at a glance), real peaks come next,
+ * and the id-seeded fake survives only for legacy rows. The "QUICK HUM" label
+ * carries the creator's color and a fresh dot. Presentational only.
  */
 const HumCard = memo(({ card, tone, playing }: CardFaceProps) => {
-  const barHeights = useMemo(() => generateWaveform(card.id, HUM_BAR_COUNT), [card.id]);
+  const wave = useMemo(
+    () =>
+      resolveWaveformBars({
+        seedId: card.id,
+        peaks: card.waveformPeaks,
+        contour: card.pitchContour,
+        barCount: HUM_BAR_COUNT,
+        maxHeight: HUM_MAX_BAR_HEIGHT,
+      }),
+    [card.id, card.waveformPeaks, card.pitchContour],
+  );
   // "Fresh" means fresh: the amber dot marks a hum under 24h old (a board of
   // forever-pulsing dots is notification noise, not warmth). Static, no pulse.
   const isFresh = card.createdAt
@@ -45,19 +56,23 @@ const HumCard = memo(({ card, tone, playing }: CardFaceProps) => {
         )}
       </div>
 
-      {/* Waveform — fewer, taller, jagged bars = raw idea. Always system
-          gold; breathes while sounding. */}
+      {/* Waveform — fewer, taller bars = raw idea; a hum's contour makes them
+          ride the tune. Always system gold; breathes while sounding. */}
       <div
-        style={{ display: "flex", alignItems: "flex-end", gap: BAR_GAP + 2, height: HUM_MAX_BAR_HEIGHT, overflow: "hidden" }}
+        style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP + 2, height: HUM_MAX_BAR_HEIGHT, overflow: "hidden" }}
         aria-hidden="true"
       >
-        {barHeights.map((h, i) => (
+        {wave.bars.map((bar, i) => (
           <div
             key={i}
             style={{
-              width: BAR_WIDTH + 1, height: Math.round(h * HUM_MAX_BAR_HEIGHT), borderRadius: 3,
+              width: BAR_WIDTH + 1, height: bar.height, marginTop: bar.top, borderRadius: 3,
               backgroundColor: "var(--cog-gold, #B8953A)",
-              opacity: playing ? h * 0.45 + 0.5 : h * 0.65 + 0.25,
+              opacity: !bar.voiced
+                ? 0.16
+                : playing
+                  ? bar.amp * 0.45 + 0.5
+                  : bar.amp * 0.65 + 0.25,
               flexShrink: 0,
               transformOrigin: "bottom",
               animation: playing ? `cog-wave-play 1.1s ease-in-out ${(i % 5) * 110}ms infinite` : "none",

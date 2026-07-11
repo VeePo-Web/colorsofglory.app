@@ -7,6 +7,7 @@ import {
   type VoiceMemo,
   type VoiceMemoWithSection,
 } from "@/integrations/cog/memos";
+import { resolveContour } from "@/lib/audio/contourStore";
 
 // ─── In-song voice pipeline (shim) ──────────────────────────────────────────
 // Every backend call routes through the cog/memos seam — this module no longer
@@ -25,6 +26,9 @@ export interface VoiceMemoRecord {
   section_label: string | null;
   /** Persisted real-audio peaks (0–1). Null only on legacy rows → seed fallback. */
   waveform_peaks: number[] | null;
+  /** Melody Lens relative pitch contour (server column once live, else the
+   *  device store, else null → amplitude/seed fallback). */
+  pitch_contour: number[] | null;
   storage_path: string;
   created_at: string;
   created_by: string;
@@ -57,6 +61,11 @@ function toVoiceMemoRecord(row: VoiceMemoWithSection): VoiceMemoRecord {
     waveform_peaks: Array.isArray(row.waveform_peaks)
       ? (row.waveform_peaks as number[])
       : null,
+    // Melody Lens: server column wins the moment Lovable lands it; until then
+    // the device store (capture + lazy backfill) carries the contour.
+    pitch_contour: resolveContour(row.id, {
+      pitchContour: (row as { pitch_contour?: number[] | null }).pitch_contour ?? null,
+    })?.pitchContour ?? null,
     storage_path: row.storage_path,
     created_at: row.created_at,
     created_by: "Contributor",

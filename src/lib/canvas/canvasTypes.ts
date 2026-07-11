@@ -124,6 +124,10 @@ export interface CanvasBoardCard {
   parentMemoId?: string;
   /** Recording length for stack playback/labels; voice cards only. */
   durationMs?: number;
+  /** Real per-take amplitude peaks (voice_memos.waveform_peaks); voice cards. */
+  waveformPeaks?: number[] | null;
+  /** Melody Lens relative pitch contour (server column or device store). */
+  pitchContour?: number[] | null;
   /** Owner has reviewed this contributor idea (kept it in Ideas). Clears it from the review queue. */
   reviewed?: boolean;
   isDimmedReference?: boolean;

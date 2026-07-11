@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Mic } from "lucide-react";
 import {
-  generateWaveform,
+  resolveWaveformBars,
   MAX_BAR_HEIGHT,
   BAR_WIDTH,
   BAR_GAP,
@@ -10,14 +10,25 @@ import {
 import type { CardFaceProps } from "./cardFace";
 
 /**
- * VoiceMemoCard — the face for a recorded voice memo. A composed 20-bar
- * waveform (deterministic from the card id, so it never reflows) reads as
- * audio at a glance; height-based opacity gives it depth in the creator's
- * color. Duration + section as quiet metadata. Playback lives in the stack
- * sheet / Listen Path (D2), so the canvas face stays calm. Presentational only.
+ * VoiceMemoCard — the face for a recorded voice memo. The 20-bar waveform is
+ * REAL (Melody Lens): with a pitch contour the bars ride the tune up and down
+ * (you see loudness AND shape — "the one that soars at the end"); with peaks
+ * only it's the true amplitude; the id-seeded fake survives ONLY for legacy
+ * rows so a card is never blank. Duration + section as quiet metadata.
+ * Playback lives in the stack sheet / Listen Path (D2). Presentational only.
  */
 const VoiceMemoCard = memo(({ card, tone, playing }: CardFaceProps) => {
-  const barHeights = useMemo(() => generateWaveform(card.id, VOICE_BAR_COUNT), [card.id]);
+  const wave = useMemo(
+    () =>
+      resolveWaveformBars({
+        seedId: card.id,
+        peaks: card.waveformPeaks,
+        contour: card.pitchContour,
+        barCount: VOICE_BAR_COUNT,
+        maxHeight: MAX_BAR_HEIGHT,
+      }),
+    [card.id, card.waveformPeaks, card.pitchContour],
+  );
   const totalBarsPx = VOICE_BAR_COUNT * BAR_WIDTH + (VOICE_BAR_COUNT - 1) * BAR_GAP;
 
   return (
@@ -38,19 +49,24 @@ const VoiceMemoCard = memo(({ card, tone, playing }: CardFaceProps) => {
         )}
       </div>
 
-      {/* Waveform — always system gold; while sounding, the bars breathe
-          (GPU scaleY, staggered per bar; keyframe lives in CanvasStage). */}
+      {/* Waveform — always system gold; melody bars ride the tune via
+          marginTop; while sounding, the bars breathe (GPU scaleY, staggered
+          per bar; keyframe lives in CanvasStage). */}
       <div
-        style={{ display: "flex", alignItems: "flex-end", gap: BAR_GAP, height: MAX_BAR_HEIGHT, width: totalBarsPx, marginBottom: 6, overflow: "hidden" }}
+        style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP, height: MAX_BAR_HEIGHT, width: totalBarsPx, marginBottom: 6, overflow: "hidden" }}
         aria-hidden="true"
       >
-        {barHeights.map((h, i) => (
+        {wave.bars.map((bar, i) => (
           <div
             key={i}
             style={{
-              width: BAR_WIDTH, height: Math.round(h * MAX_BAR_HEIGHT), borderRadius: 3,
+              width: BAR_WIDTH, height: bar.height, marginTop: bar.top, borderRadius: 3,
               backgroundColor: "var(--cog-gold, #B8953A)",
-              opacity: playing ? h * 0.4 + 0.45 : h * 0.5 + 0.18,
+              opacity: !bar.voiced
+                ? 0.14
+                : playing
+                  ? bar.amp * 0.4 + 0.45
+                  : bar.amp * 0.5 + 0.18,
               flexShrink: 0,
               transformOrigin: "bottom",
               animation: playing ? `cog-wave-play 1.1s ease-in-out ${(i % 5) * 110}ms infinite` : "none",

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Mic, Pause, Play, RefreshCw, Upload } from "lucide-react";
+import { ArrowLeft, Mic, Pause, Play, RefreshCw, Search, Upload } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
@@ -29,9 +29,11 @@ import {
   discardOutboxJob,
 } from "@/lib/voice/captureOutbox";
 import { defaultCaptureName } from "@/lib/voice/captureNaming";
-import { generateWaveform } from "@/lib/canvas/waveformSeed";
-import { resamplePeaks } from "@/lib/audio/waveformPeaks";
+import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
+import { backfillOnOpen } from "@/lib/audio/melodyBackfill";
 import TakeMiniPlayer from "@/components/voice/TakeMiniPlayer";
+
+const HumToFindSheet = lazy(() => import("@/components/voice/HumToFindSheet"));
 import { getSessionUser } from "@/integrations/cog/auth";
 
 // ─── Playable memo card ───────────────────────────────────────────────────────
@@ -79,11 +81,19 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed, onOpenTakes }: Mem
 
   const [hasLocal, setHasLocal] = useState(false);
 
-  // Real persisted peaks whenever they exist; the ID-seeded shape is a fallback
-  // for legacy rows with null peaks ONLY (Law 3: real audio, never fake).
-  const bars = memo.waveform_peaks?.length
-    ? resamplePeaks(memo.waveform_peaks, WAVEFORM_BARS)
-    : generateWaveform(memo.id, WAVEFORM_BARS);
+  // Melody Lens precedence: contour (bars ride the tune) → real peaks → seed.
+  // Memoized so playback's per-frame progress ticks don't rebuild the 28 bars.
+  const wave = useMemo(
+    () =>
+      resolveWaveformBars({
+        seedId: memo.id,
+        peaks: memo.waveform_peaks,
+        contour: memo.pitch_contour,
+        barCount: WAVEFORM_BARS,
+        maxHeight: WAVEFORM_MAX_H,
+      }),
+    [memo.id, memo.waveform_peaks, memo.pitch_contour],
+  );
   const statusMeta = STATUS_LABELS[memo.status ?? "ready"] ?? STATUS_LABELS.ready;
   const isReady = memo.status === "ready" || memo.status === "finalized" || memo.status === "transcribed";
   const isProcessing = memo.status === "uploading" || memo.status === "uploaded";
@@ -108,6 +118,10 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed, onOpenTakes }: Mem
     }
 
     setIsLoading(true);
+    // Melody Lens lazy backfill: opening a memo fetches its audio anyway, so
+    // index its melody now (best-effort, off the play path) — Hum-to-Find
+    // coverage grows as the library gets browsed. No-op if already indexed.
+    backfillOnOpen(memo.id);
     try {
       const cached = await audioCache.get(memo.id);
       let url: string;
@@ -339,23 +353,24 @@ const MemoCard = ({ memo, onDelete, onRetry, onDiscardFailed, onOpenTakes }: Mem
       {/* Waveform */}
       <div
         style={{
-          display: "flex", alignItems: "flex-end", gap: 3, height: WAVEFORM_MAX_H,
+          display: "flex", alignItems: "flex-start", gap: 3, height: WAVEFORM_MAX_H,
           cursor: canPlay ? "pointer" : "default",
         }}
         onClick={canPlay ? togglePlay : undefined}
         aria-hidden="true"
       >
-        {bars.map((h, i) => {
+        {wave.bars.map((bar, i) => {
           const played = isPlaying && progress > i / WAVEFORM_BARS;
           return (
             <div
               key={i}
               style={{
                 flex: 1,
-                height: Math.max(3, Math.round(h * WAVEFORM_MAX_H)),
+                height: Math.max(3, bar.height),
+                marginTop: bar.top,
                 borderRadius: 3,
                 backgroundColor: played ? "#B8953A" : "#D4AE5C",
-                opacity: h * 0.6 + 0.25,
+                opacity: bar.voiced ? bar.amp * 0.6 + 0.25 : 0.14,
                 transition: "background-color 150ms ease",
               }}
             />
@@ -435,6 +450,7 @@ const VoiceMemosPage = () => {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showHumFind, setShowHumFind] = useState(false);
 
   // Recording flow
   type Flow = "idle" | "recording" | "reviewing";
@@ -732,9 +748,30 @@ const VoiceMemosPage = () => {
         >
           Voice memos
         </h1>
-        <p className="text-sm mb-6" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+        <p className="text-sm mb-4" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
           {songTitle}
         </p>
+
+        {/* Hum to find — opt-in melody search over your own memos (Melody Lens
+            Feature 2). Quiet until the library is worth searching. */}
+        {memos.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowHumFind(true)}
+            className="flex items-center gap-2 rounded-xl px-3.5 mb-6 transition-all duration-150 active:scale-[0.98]"
+            style={{
+              minHeight: 44, alignSelf: "flex-start",
+              backgroundColor: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.22)",
+              color: "var(--cog-gold)", fontFamily: "var(--font-body)",
+              fontSize: 13, fontWeight: 600,
+            }}
+            aria-label="Hum to find a melody in your memos"
+          >
+            <Search size={15} strokeWidth={2} />
+            Hum to find a melody
+          </button>
+        )}
 
         {/* Upload zone */}
         {showUpload && (
@@ -894,6 +931,20 @@ const VoiceMemosPage = () => {
           onSave={handleSaveMemo}
           onDiscard={handleCancelRecording}
         />
+      )}
+
+      {/* Hum to find — melody search over your own memos (Melody Lens F2) */}
+      {showHumFind && (
+        <Suspense fallback={null}>
+          <HumToFindSheet
+            memos={memos}
+            onClose={() => setShowHumFind(false)}
+            onOpenMemo={(memoId) => {
+              const m = memos.find((x) => x.id === memoId);
+              if (m) setTakesMemo(m);
+            }}
+          />
+        </Suspense>
       )}
 
       <style>{`
