@@ -3,8 +3,7 @@ import { Play, Pause, Mic, Volume2, VolumeX } from "lucide-react";
 import { useStackPlayer } from "@/hooks/useStackPlayer";
 import { stackPlayOrder, type MemoStackGroup } from "@/lib/voice/stackModel";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
-import { generateWaveform } from "@/lib/canvas/waveformSeed";
-import { resamplePeaks } from "@/lib/audio/waveformPeaks";
+import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { formatDuration } from "@/lib/voice/audioFormat";
 
 /**
@@ -24,6 +23,8 @@ export interface StackMemoView {
   createdAt?: string;
   /** Real persisted peaks (0–1); null on legacy rows → seed fallback. */
   waveformPeaks?: number[] | null;
+  /** Melody Lens contour — the base row rides the primary take's tune. */
+  pitchContour?: number[] | null;
 }
 
 interface MemoStackProps {
@@ -37,6 +38,7 @@ interface MemoStackProps {
 }
 
 const STACK_BARS = 28;
+const STACK_WAVE_H = 34;
 
 const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: MemoStackProps) => {
   const group: MemoStackGroup<StackMemoView> = { base, layers };
@@ -47,10 +49,14 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
   useEffect(() => { void prepare(); }, [prepare]);
 
   const baseColor = getCreatorColor(base.contributor);
-  // Real persisted peaks when present; ID-seeded shape only for legacy rows.
-  const bars = base.waveformPeaks?.length
-    ? resamplePeaks(base.waveformPeaks, STACK_BARS)
-    : generateWaveform(base.id, STACK_BARS);
+  // Melody Lens precedence: contour (rides the tune) → real peaks → seed.
+  const wave = resolveWaveformBars({
+    seedId: base.id,
+    peaks: base.waveformPeaks,
+    contour: base.pitchContour,
+    barCount: STACK_BARS,
+    maxHeight: STACK_WAVE_H,
+  });
   const layerCount = layers.length;
 
   return (
@@ -105,15 +111,16 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
         </div>
       </div>
 
-      {/* Calm waveform + progress (preview only, never editable) */}
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 34, marginBottom: 4 }} aria-hidden="true">
-        {bars.map((h, i) => {
+      {/* Calm waveform + progress (preview only, never editable). Melody bars
+          ride the tune via marginTop; unvoiced stretches sit dim. */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 2, height: STACK_WAVE_H, marginBottom: 4 }} aria-hidden="true">
+        {wave.bars.map((bar, i) => {
           const played = state.isPlaying && state.progress > i / STACK_BARS;
           return (
             <div key={i} style={{
-              flex: 1, height: Math.max(3, Math.round(h * 34)), borderRadius: 2,
+              flex: 1, height: Math.max(3, bar.height), marginTop: bar.top, borderRadius: 2,
               backgroundColor: baseColor.base,
-              opacity: played ? h * 0.7 + 0.3 : h * 0.45 + 0.15,
+              opacity: !bar.voiced ? 0.14 : played ? bar.amp * 0.7 + 0.3 : bar.amp * 0.45 + 0.15,
               transition: "opacity 80ms ease",
             }} />
           );

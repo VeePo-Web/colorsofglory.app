@@ -149,7 +149,9 @@ type LayerId = "room" | "lyrics" | "voice" | "chords" | "notes" | "ideas" | "peo
  */
 export type CanvasCard = CanvasBoardCard;
 
-/** Canvas card → the shape the stack engine + sheet consume. */
+/** Canvas card → the shape the stack engine + sheet consume. Carries the real
+ *  peaks + Melody Lens contour so the stack shows the true waveform (the base
+ *  used to render a fabricated id-seeded shape here). */
 const toStackView = (c: CanvasCard): StackMemoView => ({
   id: c.id,
   parentMemoId: c.parentMemoId,
@@ -157,6 +159,8 @@ const toStackView = (c: CanvasCard): StackMemoView => ({
   contributor: c.contributor,
   durationMs: c.durationMs ?? 0,
   section: c.section,
+  waveformPeaks: c.waveformPeaks,
+  pitchContour: c.pitchContour,
 });
 
 type RecordingFlow = "idle" | "recording" | "reviewing";

@@ -22,8 +22,8 @@ import {
 } from "@/integrations/cog/takes";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { audioCache } from "@/lib/voice/audioCache";
-import { generateWaveform } from "@/lib/canvas/waveformSeed";
-import { resamplePeaks } from "@/lib/audio/waveformPeaks";
+import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
+import { resolveContour } from "@/lib/audio/contourStore";
 import { formatDuration } from "@/lib/voice/audioFormat";
 
 /**
@@ -339,12 +339,20 @@ const TakeMiniPlayer = ({ memoId, memoTitle, fallbackPeaks, onClose }: TakeMiniP
     await loadTakes();
   }, [current, loadTakes]);
 
-  const bars = useMemo(() => {
+  const wave = useMemo(() => {
     const peaks = current?.peaks?.length ? current.peaks : fallbackPeaks;
-    return peaks?.length
-      ? resamplePeaks(peaks, BARS)
-      : generateWaveform(current?.id ?? memoId, BARS);
-  }, [current?.id, current?.peaks, fallbackPeaks, memoId]);
+    // Melody Lens: the PRIMARY take rides the memo's tune (its contour lives in
+    // the device store, keyed by memo id); layer takes are separate recordings,
+    // so they show their own true amplitude. Precedence: contour → peaks → seed.
+    const contour = current?.isPrimary ? resolveContour(memoId)?.pitchContour ?? null : null;
+    return resolveWaveformBars({
+      seedId: current?.id ?? memoId,
+      peaks,
+      contour,
+      barCount: BARS,
+      maxHeight: WAVE_H,
+    });
+  }, [current?.id, current?.peaks, current?.isPrimary, fallbackPeaks, memoId]);
 
   if (loading || !current) return null;
 
@@ -470,7 +478,7 @@ const TakeMiniPlayer = ({ memoId, memoTitle, fallbackPeaks, onClose }: TakeMiniP
         style={{
           position: "relative",
           display: "flex",
-          alignItems: "flex-end",
+          alignItems: "flex-start",
           gap: 2,
           height: WAVE_H,
           cursor: "pointer",
@@ -495,17 +503,18 @@ const TakeMiniPlayer = ({ memoId, memoTitle, fallbackPeaks, onClose }: TakeMiniP
             }}
           />
         )}
-        {bars.map((h, i) => {
+        {wave.bars.map((bar, i) => {
           const played = progress > i / BARS;
           return (
             <div
               key={i}
               style={{
                 flex: 1,
-                height: Math.max(3, Math.round(h * WAVE_H)),
+                height: Math.max(3, bar.height),
+                marginTop: bar.top,
                 borderRadius: 2,
                 backgroundColor: played ? "var(--cog-gold)" : "var(--cog-gold-pale)",
-                opacity: h * 0.55 + 0.35,
+                opacity: !bar.voiced ? 0.16 : bar.amp * 0.55 + 0.35,
               }}
             />
           );

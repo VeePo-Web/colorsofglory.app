@@ -83,9 +83,16 @@ barCount, maxHeight})` → `{ mode, bars: [{height, top, voiced, amp}] }`:
 3. **neither → `generateWaveform(seed)`** — the id-seeded fake survives ONLY as the
    legacy-null fallback so a card is never blank.
 
-**Adopted by:** D1's `VoiceMemoCard` + `HumCard` (canvas), C4's `VoiceMemoListItem`
-+ `VoiceMemosPage` MemoCard + the Hum-to-Find thumbnails. Static; unvoiced bars render
-dimmed. `aria-hidden` — the shape is decorative; the card keeps its normal label.
+**Adopted by EVERY memo-waveform surface** (launch-audit sweep — no surface shows the
+fake while another shows the melody): D1's `VoiceMemoCard` + `HumCard` (canvas), C4's
+`VoiceMemoListItem`, `VoiceMemosPage` MemoCard, the Hum-to-Find thumbnails, `MemoStack`
+(the stack's base row — the primary take's contour; this also fixed a pre-existing bug
+where `toStackView` dropped `waveform_peaks` entirely and the base rendered a fabricated
+id-seeded shape), and `TakeMiniPlayer` (the primary take rides the memo's tune; layer
+takes show their own true amplitude). Static; unvoiced bars render dimmed. `aria-hidden`
+— the shape is decorative; the card keeps its normal label. The only motion is the
+canvas playback shimmer (`cog-wave-play`), disabled under `prefers-reduced-motion` by
+CanvasStage's global rule.
 
 ## 4. Hum-to-Find — `src/lib/audio/melodySearch.ts`
 

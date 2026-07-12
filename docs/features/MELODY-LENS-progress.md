@@ -39,3 +39,21 @@ screenshot (soaring vs flat memo).
 
 **Handoffs open:** A3/Lovable — the two nullable columns + finalize persistence +
 (optional) a server backfill edge fn. Everything works device-local until then.
+
+## Launch "zero-fail" audit (post-review) — every spec edge case re-verified in code
+Verified against the shipped code, not memory. All Feature-1 §2.3 + Feature-2 §3.2 edge
+cases confirmed handled. Cleared as NOT-real after reading the code: the Hum-to-Find
+double-analyze race (the recorder's `onstop` resolves the awaited `stopRecording()` OR
+calls `onAutoFinalize` via the `resolveStopRef` guard — never both, so a tap-stop
+analyzes exactly once); reduced-motion on the melody bars (the only animation is the
+canvas `cog-wave-play`, already disabled by CanvasStage's global reduced-motion rule;
+list surfaces have no bar animation); the <1s / short-PCM path (< one window → 0 frames
+→ null → amplitude fallback, no crash).
+
+**Fixed (the one real gap — the §2.3 "layered takes/stacks" edge case):** `MemoStack`
+and `TakeMiniPlayer` still rendered flat amplitude/seed while the list + canvas rode the
+tune. Both now use `resolveWaveformBars` with the primary take's contour. This also
+closed a **pre-existing bug**: `toStackView` dropped `waveform_peaks` entirely, so the
+canvas-opened stack's base card rendered a *fabricated* id-seeded waveform — it now
+carries the real peaks + contour. tsc + eslint clean; 686/694 (same 8 pre-existing);
+build green.
