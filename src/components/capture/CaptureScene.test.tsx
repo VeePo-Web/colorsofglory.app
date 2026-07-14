@@ -55,6 +55,10 @@ vi.mock("@/integrations/cog/intake", () => ({
 
 vi.mock("@/integrations/cog/songs", () => ({
   createSong: vi.fn(),
+  // The shared-tempo hook reads these on mount; capture must stay fully
+  // functional when no tempo/song data comes back.
+  getSong: vi.fn(async () => null),
+  updateSongTempo: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/integrations/cog/transcript", () => ({

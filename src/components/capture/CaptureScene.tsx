@@ -34,7 +34,9 @@ const ReviewSheet = lazy(() => import("./ReviewSheet"));
 const CommitRibbon = lazy(() => import("./CommitRibbon"));
 import ImportMemoButton from "./ImportMemoButton";
 import MetronomeBar from "./MetronomeBar";
+import MetronomeStrip from "@/components/voice/MetronomeStrip";
 import { useMetronome } from "@/hooks/useMetronome";
+import { useSongTempo } from "@/hooks/useSongTempo";
 import LatestPeekStrip from "./LatestPeekStrip";
 import HeardCuesStrip from "./HeardCuesStrip";
 import {
@@ -97,6 +99,19 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // it only matters to people who reach for it, and never adds friction otherwise.
   const [metroBpm, setMetroBpm] = useState<number | null>(null);
   const [clickOn, setClickOn] = useState(false);
+  // In a song's room, seed the tempo from the ONE shared song BPM so a capture
+  // take is tempo-compatible with everyone else's takes and layers. A tap-tempo
+  // here stays a local override for this take — setting the canonical song
+  // tempo is an explicit act in the song room, never a side effect of humming.
+  const { bpm: sharedSongBpm } = useSongTempo(songId);
+  const bpmManuallySetRef = useRef(false);
+  useEffect(() => {
+    if (!bpmManuallySetRef.current && sharedSongBpm != null) setMetroBpm(sharedSongBpm);
+  }, [sharedSongBpm]);
+  const handleMetroBpmChange = useCallback((bpm: number) => {
+    bpmManuallySetRef.current = true;
+    setMetroBpm(bpm);
+  }, []);
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
   const [status, setStatus] = useState<
@@ -541,6 +556,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     }
     const started = await recorder.startRecording();
     if (!started) {
+      // The mic never opened — the count-in click must not keep ticking into
+      // the room; the take flow is over, so is the beat.
+      stopMetro();
       setStatus("idle");
       return;
     }
@@ -556,7 +574,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         /* recognition is optional; the take keeps recording regardless */
       }
     }
-  }, [phase, recorder, saving, live, handleAudioFile, metro, clickOn, metroBpm, detection, appendSpokenCueBlocks]);
+  }, [phase, recorder, saving, live, handleAudioFile, metro, stopMetro, clickOn, metroBpm, detection, appendSpokenCueBlocks]);
 
   const handleRailAction = useCallback(
     (action: RailAction) => {
@@ -895,9 +913,16 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           <MetronomeBar
             bpm={metroBpm}
             clickOn={clickOn}
-            onBpmChange={setMetroBpm}
+            onBpmChange={handleMetroBpmChange}
             onClickToggle={setClickOn}
           />
+        )}
+
+        {/* While the take runs with the click on, the beat must stay visible:
+            on a speaker the session silences the sound (never-bleed), so this
+            gold pulse + earbuds toggle IS the metronome the singer follows. */}
+        {phase === "recording" && clickOn && metroBpm != null && (
+          <MetronomeStrip bpm={metroBpm} />
         )}
 
         {/* Recovery path — a denied or errored mic must never be a dead end. */}

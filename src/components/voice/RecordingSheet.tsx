@@ -22,6 +22,12 @@ interface RecordingSheetProps {
   onOpenSettings: () => void;
   /** Optional in-take tempo companion (MetronomeStrip) — the visual beat lives here. */
   metronomeSlot?: ReactNode;
+  /**
+   * True while the count-in bar plays, BEFORE the mic opens. The sheet must
+   * say so honestly — "Recording…" over a bar of silence reads as broken, and
+   * the Stop button doubles as "cancel the count-in".
+   */
+  countingIn?: boolean;
 }
 
 /**
@@ -43,6 +49,7 @@ const RecordingSheet = ({
   onCancel,
   onOpenSettings,
   metronomeSlot,
+  countingIn = false,
 }: RecordingSheetProps) => {
   const noteRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +59,9 @@ const RecordingSheet = ({
     ? "Microphone access needed"
     : isStopping
       ? "Saving your recording"
-      : "Recording in progress";
+      : countingIn
+        ? "Count-in — recording starts on the downbeat"
+        : "Recording in progress";
 
   return (
     <CaptureSheetShell
@@ -160,7 +169,7 @@ const RecordingSheet = ({
               marginBottom: 24,
             }}
           >
-            {isStopping ? "Saving…" : "Recording…"}
+            {isStopping ? "Saving…" : countingIn ? "Count-in — start on the downbeat" : "Recording…"}
           </p>
 
           {/* Stop button */}

@@ -80,9 +80,14 @@ export interface UseVoiceRecorderOptions {
   highFidelity?: boolean;
 }
 
+export interface StartRecordingOptions {
+  /** Per-take override of the hook-level highFidelity option (see above). */
+  highFidelity?: boolean;
+}
+
 export interface UseVoiceRecorderReturn {
   state: VoiceRecorderState;
-  startRecording: () => Promise<boolean>;
+  startRecording: (opts?: StartRecordingOptions) => Promise<boolean>;
   stopRecording: () => Promise<RecordingResult | null>;
   cancelRecording: () => void;
 }
@@ -280,13 +285,14 @@ export function useVoiceRecorder(
     return () => window.removeEventListener("beforeunload", handler);
   }, [state.phase]);
 
-  const startRecording = useCallback(async (): Promise<boolean> => {
+  const startRecording = useCallback(async (opts?: StartRecordingOptions): Promise<boolean> => {
     // Concurrency guard: ignore double-taps and starts while one is in flight
     // or a recording is already live. Without this, an impatient tap spawns a
     // second getUserMedia + AudioContext and leaks the mic.
     if (startingRef.current) return false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") return true;
     startingRef.current = true;
+    const takeHighFidelity = opts?.highFidelity ?? highFidelity;
 
     try {
       if (typeof MediaRecorder === "undefined") {
@@ -341,9 +347,9 @@ export function useVoiceRecorder(
       try {
         stream = await mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: !highFidelity,
-            noiseSuppression: !highFidelity,
-            autoGainControl: !highFidelity,
+            echoCancellation: !takeHighFidelity,
+            noiseSuppression: !takeHighFidelity,
+            autoGainControl: !takeHighFidelity,
           },
         });
       } catch (err) {

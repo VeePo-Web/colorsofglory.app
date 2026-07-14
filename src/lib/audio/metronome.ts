@@ -56,6 +56,13 @@ export interface MetronomeOptions {
   countIn?: boolean;
   /** Fires on each audible beat: 0‑indexed beat within the bar. */
   onBeat?: (beatInBar: number) => void;
+  /**
+   * Fires on each COUNT-IN beat (0-indexed within the count-in bar), so the
+   * transport can pulse during the count-in — a songwriter staring at a still
+   * screen for a whole bar reads it as broken. Separate from onBeat, which
+   * stays silent until the first real beat.
+   */
+  onCountInBeat?: (beatInBar: number) => void;
   /** Fires once the count‑in bar finishes (if countIn was set). */
   onCountInDone?: () => void;
 }
@@ -89,6 +96,7 @@ export class Metronome {
   private beatsPerBar: number;
   private readonly onBeat?: (beatInBar: number) => void;
   private readonly countIn: boolean;
+  private readonly onCountInBeat?: (beatInBar: number) => void;
   private readonly onCountInDone?: () => void;
 
   private nextNoteTime = 0; // Web Audio time of the next click
@@ -97,9 +105,15 @@ export class Metronome {
   private running = false;
 
   // Visual queue the rAF loop fires as the clock passes each entry.
-  // beat === -1 marks a count-in click (no onBeat); countInDone fires the
-  // completion callback exactly when the first real beat sounds.
-  private visualQueue: Array<{ beat: number; time: number; countInDone?: boolean }> = [];
+  // beat === -1 marks a count-in click (routed to onCountInBeat, not onBeat);
+  // countInDone fires the completion callback exactly when the first real
+  // beat sounds.
+  private visualQueue: Array<{
+    beat: number;
+    time: number;
+    countInBeat?: number;
+    countInDone?: boolean;
+  }> = [];
 
   // Clicks already synthesised into the lookahead window, so a session flip
   // (mic arming / earbuds unplugged) can silence them mid-flight — nothing
@@ -112,6 +126,7 @@ export class Metronome {
     this.beatsPerBar = Math.max(1, Math.min(12, Math.round(opts.beatsPerBar)));
     this.onBeat = opts.onBeat;
     this.countIn = opts.countIn ?? false;
+    this.onCountInBeat = opts.onCountInBeat;
     this.onCountInDone = opts.onCountInDone;
     this.unsubscribeSession = subscribeAudioSession(() => {
       if (getClickMode() === "silent") this.muteScheduledClicks();
@@ -182,13 +197,37 @@ export class Metronome {
   private scheduler(): void {
     if (!this.ctx) return;
     const secondsPerBeat = 60 / this.bpm;
+    const now = this.ctx.currentTime;
+    // Backgrounded-tab guard: timers throttle while hidden, so on return
+    // nextNoteTime can sit far in the past. Without this, the while-loop
+    // schedules every missed click AT ONCE — a machine-gun burst on
+    // foreground. Fast-forward to the current grid position instead,
+    // preserving the bar phase so the visual pulse stays musically honest.
+    if (this.nextNoteTime < now - secondsPerBeat) {
+      const { skippedBeats, nextNoteTime } = computeCatchUp(this.nextNoteTime, now, secondsPerBeat);
+      this.nextNoteTime = nextNoteTime;
+      if (this.countInRemaining > 0) {
+        // A count-in interrupted by backgrounding is stale — end it now; the
+        // consumer's wall-clock fallback has already released any awaiter.
+        this.countInRemaining = 0;
+        this.visualQueue.push({ beat: -1, time: now, countInDone: true });
+      } else {
+        this.beatInBar = (this.beatInBar + skippedBeats) % this.beatsPerBar;
+      }
+    }
     while (this.nextNoteTime < this.ctx.currentTime + SCHEDULE_AHEAD_S) {
       if (this.countInRemaining > 0) {
-        // Count-in bar: clicks sound (accent on its first beat) but the visual
-        // callback stays quiet; the last count-in beat arms onCountInDone so it
-        // fires on the audio clock, right as the first real beat lands.
+        // Count-in bar: clicks sound (accent on its first beat) and pulse via
+        // onCountInBeat; onBeat stays quiet. The last count-in beat arms
+        // onCountInDone so it fires on the audio clock, right as the first
+        // real beat lands.
         const isFirst = this.countInRemaining === this.beatsPerBar;
         this.scheduleClick(isFirst, this.nextNoteTime);
+        this.visualQueue.push({
+          beat: -1,
+          time: this.nextNoteTime,
+          countInBeat: this.beatsPerBar - this.countInRemaining,
+        });
         this.countInRemaining--;
         if (this.countInRemaining === 0) {
           this.visualQueue.push({
@@ -255,9 +294,14 @@ export class Metronome {
     if (!this.running || !this.ctx) return;
     const now = this.ctx.currentTime;
     while (this.visualQueue.length && this.visualQueue[0].time <= now) {
-      const { beat, countInDone } = this.visualQueue.shift()!;
+      const { beat, time, countInBeat, countInDone } = this.visualQueue.shift()!;
+      // countInDone must NEVER be dropped (an awaiter may hang on it), but a
+      // backlog of stale beat pulses (rAF paused in a hidden tab) would strobe
+      // the UI on return — skip pulses older than a blink.
       if (countInDone) this.onCountInDone?.();
-      if (beat >= 0) this.onBeat?.(beat);
+      if (now - time > 0.3) continue;
+      if (countInBeat != null) this.onCountInBeat?.(countInBeat);
+      else if (beat >= 0) this.onBeat?.(beat);
     }
     this.raf = requestAnimationFrame(this.drainVisuals);
   };
@@ -266,4 +310,22 @@ export class Metronome {
 export function clampBpm(bpm: number): number {
   if (!Number.isFinite(bpm)) return 100;
   return Math.min(300, Math.max(30, Math.round(bpm)));
+}
+
+/**
+ * Pure catch-up math for a scheduler that fell behind (backgrounded tab):
+ * how many whole beats were skipped, and the next on-grid schedule time at or
+ * after `now`. Exported for tests — the burst-on-foreground bug this prevents
+ * is exactly the kind that only shows up on a real phone.
+ */
+export function computeCatchUp(
+  nextNoteTime: number,
+  now: number,
+  secondsPerBeat: number,
+): { skippedBeats: number; nextNoteTime: number } {
+  if (secondsPerBeat <= 0 || nextNoteTime >= now) {
+    return { skippedBeats: 0, nextNoteTime };
+  }
+  const skippedBeats = Math.ceil((now - nextNoteTime) / secondsPerBeat);
+  return { skippedBeats, nextNoteTime: nextNoteTime + skippedBeats * secondsPerBeat };
 }

@@ -63,4 +63,15 @@ describe("audioSession — the never-bleed invariant", () => {
     setRecordingArmed(false);
     expect(calls).toBe(1);
   });
+
+  it("scopes the earbud confirmation to the SESSION — never a stale cross-session grant", () => {
+    // "I'm on earbuds" is a statement about now. Persisting it across browser
+    // sessions would let last week's confirmation re-enable an audible click
+    // on today's speaker take — the exact bleed the invariant exists to stop.
+    setMonitorPreference(true);
+    expect(sessionStorage.getItem("cog-monitor-headphones")).toBe("1");
+    expect(localStorage.getItem("cog-monitor-headphones")).toBeNull();
+    setMonitorPreference(false);
+    expect(sessionStorage.getItem("cog-monitor-headphones")).toBeNull();
+  });
 });

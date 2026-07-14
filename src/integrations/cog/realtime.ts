@@ -167,7 +167,12 @@ export function subscribeSongTempo(
   song_id: string,
   onChange: (next: { tempo_bpm: number | null; time_signature: string | null }) => void,
 ): () => void {
-  const channel = supabase.channel(`song-tempo:${song_id}`);
+  // Unique topic suffix: two surfaces subscribing to the same song (canvas +
+  // capture) must not collide on one channel topic — same-topic double
+  // subscriptions on one socket are a known supabase-js footgun.
+  const channel = supabase.channel(
+    `song-tempo:${song_id}:${Math.random().toString(36).slice(2, 9)}`,
+  );
   channel.on(
     "postgres_changes" as any,
     { event: "UPDATE", schema: "public", table: "songs", filter: `id=eq.${song_id}` },

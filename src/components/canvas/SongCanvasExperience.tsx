@@ -111,6 +111,7 @@ import MetronomeStrip from "@/components/voice/MetronomeStrip";
 import TempoRow from "@/components/voice/TempoRow";
 import { playReferenceGuide, type GuideHandle } from "@/lib/audio/referenceGuide";
 import { setAlignmentOffset, rekeyAlignmentOffset } from "@/lib/audio/alignmentStore";
+import { getAudioSession } from "@/lib/audio/audioSession";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
@@ -555,12 +556,28 @@ const SongCanvasExperience = () => {
   // Live record-over guide + the measured alignment offset for the take in flight.
   const guideRef = useRef<GuideHandle | null>(null);
   const takeAlignOffsetRef = useRef(0);
+  // Take-start sequencing: each attempt gets a sequence number; Stop/cancel
+  // bump it so a start still awaiting its count-in or mic knows it was
+  // abandoned and bails instead of opening a mic nobody wants. The in-flight
+  // guard also swallows double-taps (a second tap during a 2.7s count-in must
+  // not spawn a second count-in).
+  const takeSeqRef = useRef(0);
+  const takeStartInFlightRef = useRef(false);
+  // True while the count-in bar plays, BEFORE the mic opens — the sheet shows
+  // an honest "count-in" state instead of pretending to record.
+  const [countingIn, setCountingIn] = useState(false);
 
   // However a take ends — Stop, cancel, or an interruption auto-finalize the
   // UI never asked for — the guide and the click must not outlive it.
+  // EDGE-triggered on live→ended, deliberately: a level-triggered version
+  // fires the moment the count-in starts the click (phase still "idle") and
+  // kills the take before it begins.
+  const prevPhaseLiveRef = useRef(false);
   useEffect(() => {
     const live = recorderState.phase === "recording" || recorderState.phase === "stopping";
-    if (live) return;
+    const wasLive = prevPhaseLiveRef.current;
+    prevPhaseLiveRef.current = live;
+    if (live || !wasLive) return;
     guideRef.current?.stop();
     guideRef.current = null;
     if (clickRunning) stopClick();
@@ -1018,45 +1035,84 @@ const SongCanvasExperience = () => {
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
-    if (isViewer) return;
-    // Never-bleed invariant: the speaker click must not bake into the take.
-    // The beat can be restarted after the take; losing a click is recoverable,
-    // a ruined recording is not.
-    if (metronome.running) metronome.stop();
-    recordingParentIdRef.current = parentId ?? null;
-    setRecordingSection(parentId ? "Layer" : "Raw idea");
-    setRecordingNote("");
-    takeAlignOffsetRef.current = 0;
-    // One audible bar of count-in, resolving only after the final click has
-    // fully decayed — THEN the mic opens, so the count-in can never be in the
-    // take. Requires the shared song BPM (no tempo → no count-in, per spec).
-    if (countInOn && songBpm) {
-      primeClick(); // resume the AudioContext inside this gesture
-      await clickCountIn(songBpm, beatsPerBar);
-    }
-    const started = await startRecording();
-    const recorderStartMs = performance.now();
-    setRecordingFlow(started ? "recording" : "idle");
-    if (!started) return;
-    // The click may continue through the take — the session authority decides:
-    // audible into confirmed earbuds, otherwise the sheet's gold visual pulse.
-    if (countInOn && songBpm) startClick(songBpm, beatsPerBar);
-    // Record-over guide (F16): the base take plays aloud ONLY into confirmed
-    // headphones — on a speaker it would bleed into the layer, so the fallback
-    // is the visual beat plus the earbuds hint. The start-skew + device
-    // round-trip estimate becomes the layer's alignment offset so base + layer
-    // share one grid on playback instead of drifting by the latency.
-    if (parentId) {
-      const guide = await playReferenceGuide(parentId);
-      if (guide) {
-        guideRef.current = guide;
-        takeAlignOffsetRef.current =
-          Math.max(0, Math.round(guide.startedAtMs - recorderStartMs)) + guide.latencyEstimateMs;
+    // The in-flight guard swallows double-taps: a second tap during the
+    // count-in or the permission prompt must not spawn a second sequence.
+    if (isViewer || takeStartInFlightRef.current) return;
+    takeStartInFlightRef.current = true;
+    const seq = ++takeSeqRef.current;
+    try {
+      // Never-bleed invariant: the speaker click must not bake into the take.
+      // The beat can be restarted after the take; losing a click is recoverable,
+      // a ruined recording is not.
+      if (metronome.running) metronome.stop();
+      recordingParentIdRef.current = parentId ?? null;
+      setRecordingSection(parentId ? "Layer" : "Raw idea");
+      setRecordingNote("");
+      takeAlignOffsetRef.current = 0;
+      // One audible bar of count-in, resolving on the downbeat — THEN the mic
+      // opens, so the count-in can never be in the take. Requires the shared
+      // song BPM (no tempo → no count-in, per spec). The sheet opens NOW in an
+      // honest count-in state: a bar of dead screen reads as broken.
+      if (countInOn && songBpm) {
+        primeClick(); // resume the AudioContext inside this gesture
+        setCountingIn(true);
+        setRecordingFlow("recording");
+        await clickCountIn(songBpm, beatsPerBar);
+        setCountingIn(false);
+        if (takeSeqRef.current !== seq) {
+          // Stop/cancel landed during the count-in — the take was abandoned.
+          stopClick();
+          return;
+        }
       }
+      // Headphone monitoring means there is no speaker for AEC to cancel —
+      // there, echo cancellation only smears a musical take. Speaker takes
+      // keep the speech-friendly processing.
+      const started = await startRecording({
+        highFidelity: getAudioSession().outputRoute === "confirmed-headphones",
+      });
+      const recorderStartMs = performance.now();
+      if (takeSeqRef.current !== seq) {
+        // Abandoned while the permission prompt / mic arm was in flight.
+        stopClick();
+        if (started) cancelRecording();
+        return;
+      }
+      setRecordingFlow(started ? "recording" : "idle");
+      if (!started) {
+        // The mic never opened — the count-in click must not keep ticking
+        // into the room forever.
+        stopClick();
+        return;
+      }
+      // The click may continue through the take — the session authority decides:
+      // audible into confirmed earbuds, otherwise the sheet's gold visual pulse.
+      if (countInOn && songBpm) startClick(songBpm, beatsPerBar);
+      // Record-over guide (F16): the base take plays aloud ONLY into confirmed
+      // headphones — on a speaker it would bleed into the layer, so the fallback
+      // is the visual beat plus the earbuds hint. The start-skew + device
+      // round-trip estimate becomes the layer's alignment offset so base + layer
+      // share one grid on playback instead of drifting by the latency.
+      if (parentId) {
+        const guide = await playReferenceGuide(parentId);
+        if (takeSeqRef.current !== seq) {
+          guide?.stop();
+          return;
+        }
+        if (guide) {
+          guideRef.current = guide;
+          takeAlignOffsetRef.current =
+            Math.max(0, Math.round(guide.startedAtMs - recorderStartMs)) + guide.latencyEstimateMs;
+        }
+      }
+    } finally {
+      takeStartInFlightRef.current = false;
+      setCountingIn(false);
     }
-  }, [isViewer, startRecording, metronome, countInOn, songBpm, beatsPerBar, primeClick, clickCountIn, startClick]);
+  }, [isViewer, startRecording, cancelRecording, metronome, countInOn, songBpm, beatsPerBar, primeClick, clickCountIn, startClick, stopClick]);
 
   const handleStopRecording = useCallback(async () => {
+    takeSeqRef.current += 1; // abandon any start still awaiting count-in / mic
     guideRef.current?.stop();
     guideRef.current = null;
     stopClick();
@@ -1066,6 +1122,7 @@ const SongCanvasExperience = () => {
   }, [stopRecording, stopClick]);
 
   const handleCancelRecording = useCallback(() => {
+    takeSeqRef.current += 1; // abandon any start still awaiting count-in / mic
     guideRef.current?.stop();
     guideRef.current = null;
     stopClick();
@@ -2518,6 +2575,7 @@ const SongCanvasExperience = () => {
           onCancel={handleCancelRecording}
           onOpenSettings={openMicSettings}
           metronomeSlot={<MetronomeStrip bpm={songBpm} beatsPerBar={beatsPerBar} />}
+          countingIn={countingIn}
         />
       )}
 

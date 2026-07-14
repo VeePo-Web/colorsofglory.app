@@ -1,6 +1,8 @@
 # The Click That Never Bleeds + One Shared Tempo — build handoff
 
 **Date:** 2026-07-13 · **Lane:** C4 (audio engine) · **Shipped to:** `main`
+**Hardening pass:** 2026-07-14 (see "No-failure hardening" at the bottom — the
+count-in flow, output-route trust, and transport unification all changed)
 
 ## What landed
 
@@ -94,3 +96,75 @@ derivation, count-in guard gap across the BPM range, alignment store), canvas
 suite green. Pre-existing failures on main (`song-catalog-hero`,
 `codex-mobile-render`, `cog-phone-otp-send`) were confirmed pre-existing via a
 clean-tree run and are untouched by this work.
+
+---
+
+## No-failure hardening (2026-07-14 audit pass)
+
+A full-system audit of the shipped feature found and fixed the following.
+Severity-ordered; each was verified by unit test where jsdom allows.
+
+**Criticals (all fixed):**
+1. **Count-in hang / dead take.** The canvas guide/click safety effect was
+   level-triggered: the count-in started the click while the recorder phase
+   was still "idle", the effect fired, stopped the click, and the wrapper
+   nulled the count-in resolver WITHOUT calling it — `await countIn()` hung
+   forever and the take never started. Fixed three ways (defense in depth):
+   the safety effect is now EDGE-triggered (live→ended only); the transport is
+   hang-proof (every drop path — stop, rebuild, unmount, engine failure —
+   releases the awaiter, plus a wall-clock fallback for a suspended audio
+   clock); and the take-start flow carries a sequence guard so an abandoned
+   start bails instead of opening a mic nobody wants.
+2. **Two engines, two clicks.** `useMetronome` owned an engine per hook
+   instance, so the sheet's MetronomeStrip could neither see the record flow's
+   count-in nor be trusted not to start a SECOND simultaneous click. The click
+   is now `lib/audio/clickTransport.ts` — one app-wide external store every
+   `useMetronome()` views (refcounted: last surface unmounting stops and
+   releases the click). This is the "one engine, never forked" law made
+   structural.
+3. **Failed mic start left the click ticking.** Canvas and CaptureScene both
+   returned early on `!started` without stopping the count-in continuation —
+   an audible click forever on a speaker. Both paths now stop the click.
+
+**Highs (all fixed):**
+4. **Stale earbud confirmation = bleed.** "I'm on earbuds" persisted in
+   localStorage — a week-old confirmation would re-enable the audible click on
+   today's speaker take. Now session-scoped (sessionStorage), the old key is
+   purged on load, and the route is re-verified at every arm (devicechange
+   watcher is also wired from the arm path, since capture never mounts the
+   React session hook).
+5. **Background-throttle click burst.** A backgrounded tab's throttled
+   scheduler replayed every missed click at once on foreground. The scheduler
+   now fast-forwards to the current grid position (`computeCatchUp`, unit
+   tested), preserving bar phase; stale visual pulses are dropped, and a
+   count-in interrupted by backgrounding ends cleanly.
+6. **Count-in was invisible and uncancellable.** Up to ~3s of dead screen
+   after tapping record. The sheet now opens immediately in an honest
+   "Count-in — start on the downbeat" state, the engine emits count-in beats
+   (`onCountInBeat`) so the gold pulse runs through the count, Stop doubles as
+   cancel (sequence-guarded, mic never opens), and double-taps are swallowed.
+
+**Also wired in this pass:**
+- **highFidelity is real now:** takes recorded on confirmed headphones disable
+  AEC/NS/AGC automatically (there is no speaker to cancel; AEC only smears a
+  musical take). Speaker takes keep the speech-friendly processing.
+  (`startRecording({ highFidelity })` per-take override.)
+- **Guide autoplay retry:** the record-over guide's `play()` can outlive iOS
+  transient activation after count-in + getUserMedia; one short retry, then a
+  calm visual-beat fallback.
+- **Capture reads the shared tempo:** in a song's room, CaptureScene seeds its
+  BPM from `songs.tempo_bpm` (tap-tempo stays a local per-take override — the
+  canonical tempo is only ever set explicitly in the song room), and shows the
+  MetronomeStrip (gold pulse + earbuds toggle) while recording with the click
+  on — previously the silent click had zero visual on capture.
+- **useSongTempo is unbreakable:** synchronous seam failures (partial mocks,
+  broken imports, missing realtime) degrade to "no shared tempo" instead of
+  crashing the recording surface.
+- **A11y:** the beat dots are `aria-hidden` (announcing 1–5 beats/second is
+  screen-reader spam); the strip's `aria-live` status line is the accessible
+  state. **Realtime:** tempo channels get a unique topic suffix so two
+  surfaces on one song can't collide on one socket topic.
+
+**Verification:** `tsc --noEmit` clean · `vite build` green · 47 audio unit
+tests green (incl. 4 new hang-proof transport tests + 5 catch-up tests +
+session-scoping test) · canvas (3) + capture (4) + stack (9) suites green.

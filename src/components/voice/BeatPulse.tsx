@@ -38,9 +38,11 @@ const BeatPulse = ({ beatInBar, beatsPerBar, emphasis }: BeatPulseProps) => {
   const downbeatDot = primary ? 18 : 11;
 
   return (
+    // Purely decorative for assistive tech: announcing every beat would spam a
+    // screen reader 1–5×/second. The transport's aria-live status line is the
+    // accessible description of the click's state.
     <div
-      role="img"
-      aria-label={active >= 0 ? `Beat ${active + 1} of ${beatsPerBar}` : "Metronome ready"}
+      aria-hidden="true"
       style={{ display: "flex", alignItems: "center", gap: primary ? 14 : 10 }}
     >
       {Array.from({ length: Math.max(1, beatsPerBar) }, (_, i) => {

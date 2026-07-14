@@ -39,9 +39,16 @@ const MONITOR_PREF_KEY = "cog-monitor-headphones";
 
 type Listener = () => void;
 
+/**
+ * "I'm on earbuds" is a statement about NOW, so it persists for the SESSION
+ * only (sessionStorage). A localStorage version shipped briefly — a week-old
+ * confirmation re-enabling the audible click on today's speaker take is a
+ * bleed waiting to happen — so any stale copy is purged on load.
+ */
 function readMonitorPref(): boolean {
   try {
-    return typeof localStorage !== "undefined" && localStorage.getItem(MONITOR_PREF_KEY) === "1";
+    if (typeof localStorage !== "undefined") localStorage.removeItem(MONITOR_PREF_KEY);
+    return typeof sessionStorage !== "undefined" && sessionStorage.getItem(MONITOR_PREF_KEY) === "1";
   } catch {
     return false;
   }
@@ -135,14 +142,23 @@ export function ensureOutputWatch(): void {
 /** The recorder calls this just before getUserMedia and clears it on every stop path. */
 export function setRecordingArmed(armed: boolean): void {
   emit({ recordingArmed: armed });
+  if (armed) {
+    // The arm moment is when the route matters most: wire the devicechange
+    // watcher (some record paths never mount the React hook that usually
+    // does) and re-verify the route. Detection can only make things SAFER
+    // mid-arm — a downgrade silences the click instantly; an upgrade merely
+    // allows what confirmed headphones already allow.
+    ensureOutputWatch();
+    void reevaluateOutputRoute();
+  }
 }
 
-/** The calm "I'm on headphones / earbuds" control. Persisted across sessions. */
+/** The calm "I'm on headphones / earbuds" control. Session-scoped (see above). */
 export function setMonitorPreference(on: boolean): void {
   try {
-    if (typeof localStorage !== "undefined") {
-      if (on) localStorage.setItem(MONITOR_PREF_KEY, "1");
-      else localStorage.removeItem(MONITOR_PREF_KEY);
+    if (typeof sessionStorage !== "undefined") {
+      if (on) sessionStorage.setItem(MONITOR_PREF_KEY, "1");
+      else sessionStorage.removeItem(MONITOR_PREF_KEY);
     }
   } catch {
     /* persistence is a nicety; the session state still updates */
@@ -193,6 +209,7 @@ export function __resetAudioSessionForTests(): void {
   listeners.clear();
   deviceListenerWired = false;
   try {
+    if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(MONITOR_PREF_KEY);
     if (typeof localStorage !== "undefined") localStorage.removeItem(MONITOR_PREF_KEY);
   } catch {
     /* noop */

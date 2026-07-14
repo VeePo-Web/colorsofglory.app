@@ -51,25 +51,37 @@ export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
     }
     let cancelled = false;
     setLoading(true);
-    getSong(songId)
-      .then((detail) => {
-        if (cancelled || !detail) return;
-        setBpm(detail.tempo_bpm);
-        setBeatsPerBar(parseBeatsPerBar(detail.time_signature));
-        setCanEdit(detail.my_role !== "viewer");
-      })
-      .catch(() => {
-        /* tempo is an aid — a failed read must never break recording */
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    // Belt AND braces: the promise path catches async failures, the try/catch
+    // catches a seam that throws synchronously (partial mock, broken import).
+    // Tempo is an aid — nothing here may ever break the recording surface.
+    try {
+      getSong(songId)
+        .then((detail) => {
+          if (cancelled || !detail) return;
+          setBpm(detail.tempo_bpm);
+          setBeatsPerBar(parseBeatsPerBar(detail.time_signature));
+          setCanEdit(detail.my_role !== "viewer");
+        })
+        .catch(() => {
+          /* failed read → no shared tempo, surface stays fully usable */
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    } catch {
+      setLoading(false);
+    }
 
-    const unsubscribe = subscribeSongTempo(songId, (next) => {
-      if (cancelled) return;
-      setBpm(next.tempo_bpm);
-      setBeatsPerBar(parseBeatsPerBar(next.time_signature));
-    });
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = subscribeSongTempo(songId, (next) => {
+        if (cancelled) return;
+        setBpm(next.tempo_bpm);
+        setBeatsPerBar(parseBeatsPerBar(next.time_signature));
+      });
+    } catch {
+      /* no realtime → the tempo still reads fresh on next open */
+    }
 
     return () => {
       cancelled = true;

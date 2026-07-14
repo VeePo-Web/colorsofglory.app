@@ -1,31 +1,39 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Metronome } from "@/lib/audio/metronome";
+import { useCallback, useSyncExternalStore } from "react";
+import {
+  clickCountIn,
+  clickSetBpm,
+  clickStart,
+  clickStop,
+  clickSupported,
+  getClickState,
+  subscribeClick,
+  type ClickBeat,
+} from "@/lib/audio/clickTransport";
 
 /**
- * useMetronome — the React transport over C4's ONE click engine
- * (src/lib/audio/metronome.ts). Capture's scene, the canvas record flow, and
- * any future surface drive this same class; nobody re-implements a click,
- * because the engine is where the never-bleed invariant lives: while a
- * recording is armed, the click is audible only into a CONFIRMED
- * headphone/earbud output — on a speaker it runs silent while `beat` keeps
- * firing for the visual pulse (and haptics).
+ * useMetronome — a React VIEW over the ONE app-wide click transport
+ * (lib/audio/clickTransport). Capture's scene, the canvas record flow, and
+ * the recording sheet's beat strip all read the SAME running click and the
+ * same beat — no hook instance ever owns a private engine, so two surfaces
+ * can never tick two clicks against each other, and a strip mounted mid-take
+ * sees the count-in/beat the record flow started.
+ *
+ * The engine underneath enforces the never-bleed invariant per scheduled
+ * click: while a recording is armed, the click is audible only into a
+ * CONFIRMED headphone/earbud output — on a speaker it runs silent while
+ * `beat` keeps firing for the visual pulse (and haptics).
  *
  * API kept intentionally compatible with the original capture hook:
- *   • `prime()` — warm the engine inside the user gesture.
- *   • `countIn(bpm, beats)` — one audible bar; resolves on the audio clock as
- *     the first REAL beat lands, and the click CONTINUES seamlessly on the
- *     same grid (session-gated once the mic arms). Open the mic on resolve.
+ *   • `prime()` — gesture-first idiom shim (the transport resumes in start).
+ *   • `countIn(bpm, beats)` — one audible bar; resolves as the first REAL
+ *     beat lands and the click CONTINUES seamlessly. HANG-PROOF: the promise
+ *     always resolves (downbeat, stop/cancel, engine failure, or wall-clock
+ *     fallback). Open the mic on resolve.
  *   • `start(bpm, beatsPerBar)` — steady click; live-retunes if running.
  *   • `stop()` — silence + clear.
- * Plus `beat` / `running` state for transports that render the pulse.
  */
 
-export interface MetronomeBeat {
-  /** 0-indexed beat within the bar. */
-  beatInBar: number;
-  /** Monotonic counter so effects can fire once per landed beat. */
-  seq: number;
-}
+export type MetronomeBeat = ClickBeat;
 
 export interface UseMetronomeReturn {
   /** Resume-ready: call inside a user gesture before awaiting. */
@@ -45,111 +53,29 @@ export interface UseMetronomeReturn {
 }
 
 export function useMetronome(): UseMetronomeReturn {
-  const engineRef = useRef<Metronome | null>(null);
-  // Whether the current instance was built with a count-in bar — a stopped
-  // count-in engine must not count in again when restarted as a steady click.
-  const engineHasCountInRef = useRef(false);
-  const countInResolveRef = useRef<(() => void) | null>(null);
-  const seqRef = useRef(0);
-  const [beat, setBeat] = useState<MetronomeBeat | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const supported =
-    typeof window !== "undefined" &&
-    (window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) != null;
-
-  const disposeEngine = useCallback(() => {
-    engineRef.current?.dispose();
-    engineRef.current = null;
-    engineHasCountInRef.current = false;
-  }, []);
-
-  const buildEngine = useCallback(
-    (bpm: number, beatsPerBar: number, withCountIn: boolean) => {
-      disposeEngine();
-      engineRef.current = new Metronome({
-        bpm,
-        beatsPerBar,
-        countIn: withCountIn,
-        onBeat: (beatInBar) => {
-          seqRef.current += 1;
-          setBeat({ beatInBar, seq: seqRef.current });
-        },
-        onCountInDone: () => {
-          const resolve = countInResolveRef.current;
-          countInResolveRef.current = null;
-          resolve?.();
-        },
-      });
-      engineHasCountInRef.current = withCountIn;
-      return engineRef.current;
-    },
-    [disposeEngine],
-  );
+  // Refcounted teardown lives in the transport: when the LAST mounted view
+  // unsubscribes (route change, full unmount), the click stops and the audio
+  // graph is released — a beat never ticks on with nobody left to silence it.
+  const snapshot = useSyncExternalStore(subscribeClick, getClickState, getClickState);
 
   const prime = useCallback(() => {
-    // The engine resumes its context inside start(); prime exists so callers
-    // can keep the gesture-first idiom and stays cheap when nothing runs yet.
+    // The transport resumes its context inside start(); prime exists so
+    // callers can keep the gesture-first idiom.
   }, []);
 
-  const countIn = useCallback(
-    (bpm: number, beats = 4): Promise<void> => {
-      if (!supported) return Promise.resolve();
-      const engine = buildEngine(bpm, beats, true);
-      return new Promise<void>((resolve) => {
-        countInResolveRef.current = resolve;
-        setRunning(true);
-        void engine.start().catch(() => {
-          // No context / resume refused — never strand the take behind a click.
-          countInResolveRef.current = null;
-          setRunning(false);
-          resolve();
-        });
-      });
-    },
-    [supported, buildEngine],
-  );
+  const countIn = useCallback((bpm: number, beats = 4) => clickCountIn(bpm, beats), []);
+  const start = useCallback((bpm: number, beatsPerBar = 4) => clickStart(bpm, beatsPerBar), []);
+  const stop = useCallback(() => clickStop(), []);
+  const setBpm = useCallback((bpm: number) => clickSetBpm(bpm), []);
 
-  const start = useCallback(
-    (bpm: number, beatsPerBar = 4) => {
-      if (!supported) return;
-      const existing = engineRef.current;
-      if (existing?.isRunning) {
-        // Live retune — the seamless count-in → take continuation path.
-        existing.setBpm(bpm);
-        existing.setBeatsPerBar(beatsPerBar);
-        setRunning(true);
-        return;
-      }
-      const engine =
-        existing && !engineHasCountInRef.current ? existing : buildEngine(bpm, beatsPerBar, false);
-      engine.setBpm(bpm);
-      engine.setBeatsPerBar(beatsPerBar);
-      setRunning(true);
-      void engine.start().catch(() => setRunning(false));
-    },
-    [supported, buildEngine],
-  );
-
-  const stop = useCallback(() => {
-    engineRef.current?.stop();
-    countInResolveRef.current = null;
-    setRunning(false);
-    setBeat(null);
-  }, []);
-
-  const setBpm = useCallback((bpm: number) => {
-    engineRef.current?.setBpm(bpm);
-  }, []);
-
-  // A surface that mounted a click never leaves it playing after unmount.
-  useEffect(() => {
-    return () => {
-      countInResolveRef.current = null;
-      disposeEngine();
-    };
-  }, [disposeEngine]);
-
-  return { prime, countIn, start, stop, supported, running, beat, setBpm };
+  return {
+    prime,
+    countIn,
+    start,
+    stop,
+    supported: clickSupported(),
+    running: snapshot.running,
+    beat: snapshot.beat,
+    setBpm,
+  };
 }

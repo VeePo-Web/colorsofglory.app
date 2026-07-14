@@ -85,8 +85,18 @@ export async function playReferenceGuide(memoId: string): Promise<GuideHandle | 
   try {
     await el.play();
   } catch {
-    stop();
-    return null;
+    // The record flow reaches here after a count-in + getUserMedia — a long
+    // await chain that can outlive iOS's transient user activation and get
+    // play() rejected. One short retry usually lands (the element is loaded
+    // by now); if the platform still refuses, degrade to the visual beat —
+    // never block or lose the take over its guide.
+    await new Promise((r) => setTimeout(r, 120));
+    try {
+      await el.play();
+    } catch {
+      stop();
+      return null;
+    }
   }
   const startedAtMs = performance.now();
 
