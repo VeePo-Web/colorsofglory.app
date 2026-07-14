@@ -21,6 +21,8 @@ export type SongRoomHandlers = {
   onCardChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
   onTakeChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
   onCaptureChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
+  /** The song row itself (shared tempo, key, title). Fires on UPDATE. */
+  onSongChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
 };
 
 /**
@@ -137,9 +139,47 @@ export function subscribeSongRoom(song_id: string, handlers: SongRoomHandlers): 
       handlers.onCaptureChange as any,
     );
   }
+  if (handlers.onSongChange) {
+    // The song row keys on `id`, not `song_id` — its own filter. This is how a
+    // tempo set on one phone reaches every open metronome in the room live.
+    channel.on(
+      "postgres_changes" as any,
+      { event: "UPDATE", schema: "public", table: "songs", filter: `id=eq.${song_id}` },
+      handlers.onSongChange as any,
+    );
+  }
 
   channel.subscribe();
 
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Focused live subscription to a song's shared musical settings (tempo, time
+ * signature). Its own channel topic — the room channel (`song:{id}`) is
+ * already owned by the canvas, and two subscriptions on one topic from one
+ * socket is a footgun. Used by useSongTempo so every open metronome in the
+ * room re-reads the ONE shared BPM the moment anyone sets it.
+ */
+export function subscribeSongTempo(
+  song_id: string,
+  onChange: (next: { tempo_bpm: number | null; time_signature: string | null }) => void,
+): () => void {
+  const channel = supabase.channel(`song-tempo:${song_id}`);
+  channel.on(
+    "postgres_changes" as any,
+    { event: "UPDATE", schema: "public", table: "songs", filter: `id=eq.${song_id}` },
+    ((payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const next = payload.new as { tempo_bpm?: number | null; time_signature?: string | null };
+      onChange({
+        tempo_bpm: next?.tempo_bpm ?? null,
+        time_signature: next?.time_signature ?? null,
+      });
+    }) as any,
+  );
+  channel.subscribe();
   return () => {
     supabase.removeChannel(channel);
   };

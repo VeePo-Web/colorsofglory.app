@@ -105,6 +105,12 @@ import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors"
 import { useSongPresence } from "@/lib/canvas/useSongPresence";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { subscribeSongRoom } from "@/integrations/cog/realtime";
+import { useSongTempo } from "@/hooks/useSongTempo";
+import { useMetronome } from "@/hooks/useMetronome";
+import MetronomeStrip from "@/components/voice/MetronomeStrip";
+import TempoRow from "@/components/voice/TempoRow";
+import { playReferenceGuide, type GuideHandle } from "@/lib/audio/referenceGuide";
+import { setAlignmentOffset, rekeyAlignmentOffset } from "@/lib/audio/alignmentStore";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
@@ -164,6 +170,10 @@ const toStackView = (c: CanvasCard): StackMemoView => ({
 });
 
 type RecordingFlow = "idle" | "recording" | "reviewing";
+
+/** Per-device "count in a bar before recording" preference. */
+const COUNT_IN_PREF_KEY = "cog-count-in";
+
 
 const LAYERS: Array<{ id: LayerId; label: string; icon: ElementType }> = [
   { id: "room",   label: "Canvas",  icon: GitBranch },
@@ -525,6 +535,36 @@ const SongCanvasExperience = () => {
   useEffect(() => {
     localStorage.setItem(FEATURES_KEY(songId), JSON.stringify(featureMeta));
   }, [featureMeta, songId]);
+
+  // ── Shared tempo + the one session-gated metronome (never bleeds) ────────────
+  // One BPM per song, read by every collaborator's metronome and propagated
+  // live; the click itself is audible only into confirmed earbuds while the
+  // mic is armed — on a speaker it runs as the sheet's gold visual pulse.
+  const { bpm: songBpm, beatsPerBar, canEdit: canEditTempo, saveTempo } = useSongTempo(songId);
+  const { running: clickRunning, prime: primeClick, countIn: clickCountIn, start: startClick, stop: stopClick } = useMetronome();
+  const [countInOn, setCountInOn] = useState(() => {
+    try { return localStorage.getItem(COUNT_IN_PREF_KEY) === "1"; } catch { return false; }
+  });
+  const toggleCountIn = useCallback((on: boolean) => {
+    setCountInOn(on);
+    try {
+      if (on) localStorage.setItem(COUNT_IN_PREF_KEY, "1");
+      else localStorage.removeItem(COUNT_IN_PREF_KEY);
+    } catch { /* preference only */ }
+  }, []);
+  // Live record-over guide + the measured alignment offset for the take in flight.
+  const guideRef = useRef<GuideHandle | null>(null);
+  const takeAlignOffsetRef = useRef(0);
+
+  // However a take ends — Stop, cancel, or an interruption auto-finalize the
+  // UI never asked for — the guide and the click must not outlive it.
+  useEffect(() => {
+    const live = recorderState.phase === "recording" || recorderState.phase === "stopping";
+    if (live) return;
+    guideRef.current?.stop();
+    guideRef.current = null;
+    if (clickRunning) stopClick();
+  }, [recorderState.phase, clickRunning, stopClick]);
 
   const featureMutations = useMemo<CanvasFeatureMutations>(
     () => ({
@@ -986,22 +1026,54 @@ const SongCanvasExperience = () => {
     recordingParentIdRef.current = parentId ?? null;
     setRecordingSection(parentId ? "Layer" : "Raw idea");
     setRecordingNote("");
+    takeAlignOffsetRef.current = 0;
+    // One audible bar of count-in, resolving only after the final click has
+    // fully decayed — THEN the mic opens, so the count-in can never be in the
+    // take. Requires the shared song BPM (no tempo → no count-in, per spec).
+    if (countInOn && songBpm) {
+      primeClick(); // resume the AudioContext inside this gesture
+      await clickCountIn(songBpm, beatsPerBar);
+    }
     const started = await startRecording();
+    const recorderStartMs = performance.now();
     setRecordingFlow(started ? "recording" : "idle");
-  }, [isViewer, startRecording, metronome]);
+    if (!started) return;
+    // The click may continue through the take — the session authority decides:
+    // audible into confirmed earbuds, otherwise the sheet's gold visual pulse.
+    if (countInOn && songBpm) startClick(songBpm, beatsPerBar);
+    // Record-over guide (F16): the base take plays aloud ONLY into confirmed
+    // headphones — on a speaker it would bleed into the layer, so the fallback
+    // is the visual beat plus the earbuds hint. The start-skew + device
+    // round-trip estimate becomes the layer's alignment offset so base + layer
+    // share one grid on playback instead of drifting by the latency.
+    if (parentId) {
+      const guide = await playReferenceGuide(parentId);
+      if (guide) {
+        guideRef.current = guide;
+        takeAlignOffsetRef.current =
+          Math.max(0, Math.round(guide.startedAtMs - recorderStartMs)) + guide.latencyEstimateMs;
+      }
+    }
+  }, [isViewer, startRecording, metronome, countInOn, songBpm, beatsPerBar, primeClick, clickCountIn, startClick]);
 
   const handleStopRecording = useCallback(async () => {
+    guideRef.current?.stop();
+    guideRef.current = null;
+    stopClick();
     const result = await stopRecording();
     if (result) { setPendingRecording(result); setRecordingFlow("reviewing"); }
     else setRecordingFlow("idle");
-  }, [stopRecording]);
+  }, [stopRecording, stopClick]);
 
   const handleCancelRecording = useCallback(() => {
+    guideRef.current?.stop();
+    guideRef.current = null;
+    stopClick();
     cancelRecording();
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
-  }, [cancelRecording]);
+  }, [cancelRecording, stopClick]);
 
   // Flush a queued canvas take (base OR layer) and reconcile its card. On success
   // the temp card id becomes the real memo id; on failure the card stays put with
@@ -1010,6 +1082,9 @@ const SongCanvasExperience = () => {
   const flushCanvasUpload = useCallback(async (pendingId: string) => {
     try {
       const memoId = await flushPendingUpload(pendingId);
+      // The layer's measured alignment offset must follow the take from its
+      // queued temp id to the real memo id, or stack playback loses the grid.
+      if (memoId) rekeyAlignmentOffset(pendingId, memoId);
       setCards((prev) => prev
         // The realtime event can hydrate the server mirror (db-voice-<memoId>)
         // BEFORE this swap lands — drop it here so one take never shows twice.
@@ -1062,6 +1137,13 @@ const SongCanvasExperience = () => {
       transcribe,
       parentMemoId,
     });
+
+    // A layer cut against the headphone guide carries its measured latency
+    // offset so stack playback seats it on the base's grid (see alignmentStore).
+    if (parentMemoId && takeAlignOffsetRef.current > 0) {
+      setAlignmentOffset(pending.id, takeAlignOffsetRef.current);
+      takeAlignOffsetRef.current = 0;
+    }
 
     setCards((prev) => {
       const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
@@ -2435,6 +2517,7 @@ const SongCanvasExperience = () => {
           onStop={handleStopRecording}
           onCancel={handleCancelRecording}
           onOpenSettings={openMicSettings}
+          metronomeSlot={<MetronomeStrip bpm={songBpm} beatsPerBar={beatsPerBar} />}
         />
       )}
 
@@ -2458,9 +2541,19 @@ const SongCanvasExperience = () => {
           <StackSheet
             base={toStackView(base)}
             layers={stackLayers.map(toStackView)}
+            bpm={songBpm}
             canRecordOver={!isViewer}
             onRecordOver={handleRecordOver}
             onClose={() => setStackBaseId(null)}
+            tempoSlot={
+              <TempoRow
+                bpm={songBpm}
+                canEdit={canEditTempo}
+                onSaveTempo={saveTempo}
+                countInOn={countInOn}
+                onCountInToggle={toggleCountIn}
+              />
+            }
           />
         );
       })()}

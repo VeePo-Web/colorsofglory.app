@@ -79,6 +79,9 @@ export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoR
     section_id: params.sectionId ?? null,
     section_label: params.sectionLabel,
     waveform_peaks: peaks,
+    // The contour lands async in the device store (above); resolveContour
+    // heals this null the moment the card renders or plays.
+    pitch_contour: null,
     storage_path: "",
     created_at: new Date().toISOString(),
     created_by: params.createdBy ?? "You",

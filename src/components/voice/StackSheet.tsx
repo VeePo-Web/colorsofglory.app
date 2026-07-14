@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import MemoStack, { type StackMemoView } from "./MemoStack";
 
@@ -16,9 +16,11 @@ interface StackSheetProps {
   canRecordOver: boolean;
   onRecordOver: (baseMemoId: string) => void;
   onClose: () => void;
+  /** Optional pre-record tempo transport (TempoRow) — shown under the stack. */
+  tempoSlot?: ReactNode;
 }
 
-const StackSheet = ({ base, layers, bpm, canRecordOver, onRecordOver, onClose }: StackSheetProps) => {
+const StackSheet = ({ base, layers, bpm, canRecordOver, onRecordOver, onClose, tempoSlot }: StackSheetProps) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -82,6 +84,7 @@ const StackSheet = ({ base, layers, bpm, canRecordOver, onRecordOver, onClose }:
             canRecordOver={canRecordOver}
             onRecordOver={onRecordOver}
           />
+          {tempoSlot}
         </div>
       </div>
     </>

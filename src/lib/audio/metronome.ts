@@ -1,16 +1,28 @@
 /**
- * Metronome — a sample‑accurate Web Audio click (F14, One‑Tap Metronome).
+ * Metronome — a sample‑accurate Web Audio click (F14, One‑Tap Metronome),
+ * hard-wired to the NEVER-BLEED INVARIANT.
  *
  * A songwriter humming into Capture needs a steady pulse so the take is usable
  * later. Naïve `setInterval` beeps drift badly under load; this uses the
- * canonical **lookahead scheduler** (a coarse `setTimeout` that schedules
- * precise clicks slightly ahead on the Web Audio clock), so timing stays
- * rock‑solid even when the main thread is busy recording.
+ * canonical **lookahead scheduler** (a coarse timer that schedules precise
+ * clicks slightly ahead on the Web Audio clock), so timing stays rock‑solid
+ * even when the main thread is busy recording.
+ *
+ * THE INVARIANT (see lib/audio/audioSession): while the microphone is armed,
+ * nothing plays through the speaker. Every scheduled click consults the
+ * audio-session authority — when a recording is armed on anything but a
+ * CONFIRMED headphone output, the click is not synthesised at all, and clicks
+ * already queued in the lookahead window are muted the instant the session
+ * flips (mic arming, earbuds unplugged). The scheduler and the visual `onBeat`
+ * queue keep running regardless, so the gold beat pulse stays perfectly on
+ * grid while the sound is silent. Bleed is acoustic (speaker → air → mic):
+ * no routing trick and no echoCancellation can remove a click from a take —
+ * only headphones or not making the sound. This class encodes the latter.
  *
  * Clicks are synthesised (short oscillator + fast gain envelope) — no audio
  * assets to bundle. Beat 1 of each bar is accented (higher pitch, louder). A
- * visual `onBeat` callback is driven off the same clock via rAF so the dots and
- * the sound agree.
+ * visual `onBeat` callback is driven off the same clock via rAF so the dots
+ * and the sound agree.
  *
  * No React, no DOM. Construct, `start()`, `stop()`, `dispose()`.
  *
@@ -28,8 +40,14 @@
  *
  * Count-in: with `countIn: true`, start() plays ONE bar of clicks first;
  * `onBeat` stays silent during it and `onCountInDone` fires (on the audio
- * clock) as the first real beat sounds.
+ * clock) as the first real beat sounds — the click continues seamlessly on
+ * the same grid. Consumers open the mic at `onCountInDone`: arming the
+ * session mutes any speaker click within the same tick, and the mic stream
+ * itself only opens after getUserMedia resolves (~100–300ms later), so the
+ * count-in and the continuation clicks can never land in a speaker take.
  */
+
+import { getClickMode, subscribeAudioSession } from "./audioSession";
 
 export interface MetronomeOptions {
   bpm: number;
@@ -50,6 +68,17 @@ const BEAT_FREQ = 900; // other beats
 const ACCENT_GAIN = 0.5;
 const BEAT_GAIN = 0.32;
 const CLICK_S = 0.04; // click envelope length
+
+/**
+ * The most recently created engine context — the app's best latency oracle
+ * (baseLatency/outputLatency) for record-over alignment math. Never used for
+ * playback routing; routing tricks cannot prevent acoustic bleed.
+ */
+let lastEngineCtx: AudioContext | null = null;
+
+export function getEngineAudioContext(): AudioContext | null {
+  return lastEngineCtx;
+}
 
 export class Metronome {
   private ctx: AudioContext | null = null;
@@ -72,12 +101,21 @@ export class Metronome {
   // completion callback exactly when the first real beat sounds.
   private visualQueue: Array<{ beat: number; time: number; countInDone?: boolean }> = [];
 
+  // Clicks already synthesised into the lookahead window, so a session flip
+  // (mic arming / earbuds unplugged) can silence them mid-flight — nothing
+  // rides the buffer out into an open mic.
+  private scheduledGains: Array<{ gain: GainNode; endsAt: number }> = [];
+  private unsubscribeSession: (() => void) | null;
+
   constructor(opts: MetronomeOptions) {
     this.bpm = clampBpm(opts.bpm);
     this.beatsPerBar = Math.max(1, Math.min(12, Math.round(opts.beatsPerBar)));
     this.onBeat = opts.onBeat;
     this.countIn = opts.countIn ?? false;
     this.onCountInDone = opts.onCountInDone;
+    this.unsubscribeSession = subscribeAudioSession(() => {
+      if (getClickMode() === "silent") this.muteScheduledClicks();
+    });
   }
 
   get isRunning(): boolean {
@@ -97,7 +135,10 @@ export class Metronome {
     if (this.running) return;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return; // no Web Audio → silent no‑op, never throw
-    if (!this.ctx) this.ctx = new Ctor();
+    if (!this.ctx) {
+      this.ctx = new Ctor();
+      lastEngineCtx = this.ctx;
+    }
     // Autoplay policy: a user gesture is required; resume() here is that gesture.
     if (this.ctx.state === "suspended") await this.ctx.resume();
 
@@ -120,12 +161,17 @@ export class Metronome {
       this.raf = 0;
     }
     this.visualQueue = [];
+    // Clicks already queued ahead must not ring on after a stop.
+    this.muteScheduledClicks();
   }
 
   /** Stop and release the audio context. Call on unmount. */
   dispose(): void {
     this.stop();
+    this.unsubscribeSession?.();
+    this.unsubscribeSession = null;
     if (this.ctx) {
+      if (lastEngineCtx === this.ctx) lastEngineCtx = null;
       void this.ctx.close().catch(() => {});
       this.ctx = null;
     }
@@ -164,6 +210,11 @@ export class Metronome {
 
   private scheduleClick(accent: boolean, time: number): void {
     if (!this.ctx) return;
+    // THE GATE. While a recording is armed without confirmed headphones the
+    // click is not synthesised at all — the beat exists only as the visual
+    // queue entry (and the consumer's haptic). This, not echoCancellation,
+    // is what keeps the click out of the take.
+    if (getClickMode() === "silent") return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.frequency.value = accent ? ACCENT_FREQ : BEAT_FREQ;
@@ -174,6 +225,30 @@ export class Metronome {
     osc.connect(gain).connect(this.ctx.destination);
     osc.start(time);
     osc.stop(time + CLICK_S);
+    this.scheduledGains.push({ gain, endsAt: time + CLICK_S });
+    if (this.scheduledGains.length > 12) this.pruneScheduled();
+  }
+
+  /** Silence every not-yet-finished click without touching the oscillators. */
+  private muteScheduledClicks(): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    for (const s of this.scheduledGains) {
+      if (s.endsAt <= now) continue;
+      try {
+        s.gain.gain.cancelScheduledValues(now);
+        s.gain.gain.setValueAtTime(0.0001, now);
+      } catch {
+        /* node already released */
+      }
+    }
+    this.scheduledGains = this.scheduledGains.filter((s) => s.endsAt > now);
+  }
+
+  private pruneScheduled(): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.scheduledGains = this.scheduledGains.filter((s) => s.endsAt > now);
   }
 
   private drainVisuals = (): void => {
@@ -188,7 +263,7 @@ export class Metronome {
   };
 }
 
-function clampBpm(bpm: number): number {
+export function clampBpm(bpm: number): number {
   if (!Number.isFinite(bpm)) return 100;
   return Math.min(300, Math.max(30, Math.round(bpm)));
 }

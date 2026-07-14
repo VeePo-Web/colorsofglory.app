@@ -264,3 +264,24 @@ export const renameSong = async (song_id: string, title: string): Promise<void> 
     .eq("id", song_id);
   if (error) throw toCogError(error);
 };
+
+/**
+ * Set the song's canonical shared tempo. This is ASYNC tempo ALIGNMENT, not
+ * real-time click sync: every collaborator's metronome reads this one BPM and
+ * records locally against it (plus a bar-1 count-in), which is what makes
+ * independent takes and layers tempo-compatible. Nobody's click is
+ * network-phase-locked to anyone else's — that is infeasible over the
+ * internet and unnecessary for COG's asynchronous collaboration. Do not
+ * "upgrade" this to live cross-device click synchronization.
+ *
+ * Tapped or auto-detected BPMs are PROPOSALS — this function is called only
+ * from an explicit confirm. The server (RLS) remains the permission gate;
+ * the UI additionally hides the control from viewers.
+ */
+export const updateSongTempo = async (song_id: string, tempo_bpm: number): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ tempo_bpm })
+    .eq("id", song_id);
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+};

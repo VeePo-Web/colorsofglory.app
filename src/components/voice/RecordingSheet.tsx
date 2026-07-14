@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { GLORY_RECORDING_AURA } from "@/lib/canvas/glorySpectrum";
 import RecordingWaveform from "./RecordingWaveform";
 import RecordingTimer from "./RecordingTimer";
@@ -20,6 +20,8 @@ interface RecordingSheetProps {
   onStop: () => void;
   onCancel: () => void;
   onOpenSettings: () => void;
+  /** Optional in-take tempo companion (MetronomeStrip) — the visual beat lives here. */
+  metronomeSlot?: ReactNode;
 }
 
 /**
@@ -40,6 +42,7 @@ const RecordingSheet = ({
   onStop,
   onCancel,
   onOpenSettings,
+  metronomeSlot,
 }: RecordingSheetProps) => {
   const noteRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +147,9 @@ const RecordingSheet = ({
 
           {/* Timer */}
           <RecordingTimer durationMs={durationMs} />
+
+          {/* In-take metronome (visual pulse / click / earbuds) when a tempo exists */}
+          {metronomeSlot}
 
           <p
             style={{

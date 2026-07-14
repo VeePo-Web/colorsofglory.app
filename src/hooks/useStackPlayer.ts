@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { audioCache } from "@/lib/voice/audioCache";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { resolveAudible } from "@/lib/voice/stackModel";
+import { getAlignmentOffsetMs } from "@/lib/audio/alignmentStore";
 
 /**
  * useStackPlayer — synchronized playback of a layered voice-memo stack.
@@ -34,6 +35,11 @@ export function useStackPlayer(playIds: string[]) {
   const elementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const objectUrlsRef = useRef<string[]>([]);
   const preparedRef = useRef(false);
+  // True until the first play after prepare/stop — the moment latency
+  // alignment offsets are applied (a layer recorded against the audible guide
+  // starts that many ms in, so base + layers share one grid). Resuming from
+  // pause never re-applies them.
+  const freshStartRef = useRef(true);
   const idsKey = playIds.join("|");
 
   const [state, setState] = useState<StackPlayerState>({
@@ -60,6 +66,7 @@ export function useStackPlayer(playIds: string[]) {
   // Reset whenever the stack's membership changes; release on unmount.
   useEffect(() => {
     releaseAll();
+    freshStartRef.current = true;
     setState({ isPlaying: false, progress: 0, loading: false, muted: EMPTY_MUTED, soloId: null });
     return releaseAll;
   }, [idsKey, releaseAll]);
@@ -77,6 +84,7 @@ export function useStackPlayer(playIds: string[]) {
       el.pause();
       el.currentTime = 0;
     });
+    freshStartRef.current = true;
     setState((s) => ({ ...s, isPlaying: false, progress: 0 }));
   }, []);
 
@@ -127,6 +135,16 @@ export function useStackPlayer(playIds: string[]) {
       setState((s) => ({ ...s, isPlaying: false }));
       return;
     }
+    // Fresh start: seat each layer at its measured alignment offset so a take
+    // recorded against the headphone guide lands on the base's grid instead of
+    // dragging behind by the round-trip latency. Bases (offset 0) are untouched.
+    if (freshStartRef.current) {
+      elementsRef.current.forEach((el, id) => {
+        const offsetMs = getAlignmentOffsetMs(id);
+        if (offsetMs > 0) el.currentTime = offsetMs / 1000;
+      });
+      freshStartRef.current = false;
+    }
     // Start every element in the same tick so the gesture activation covers all.
     elementsRef.current.forEach((el) => {
       void el.play().catch(() => {});
@@ -157,9 +175,11 @@ export function useStackPlayer(playIds: string[]) {
   const seek = useCallback((pct: number) => {
     const base = elementsRef.current.get(playIds[0]);
     const target = (base?.duration || 0) * pct;
-    elementsRef.current.forEach((el) => {
-      if (Number.isFinite(target)) el.currentTime = target;
+    elementsRef.current.forEach((el, id) => {
+      // Seeking is in BASE time; each aligned layer sits its offset later.
+      if (Number.isFinite(target)) el.currentTime = target + getAlignmentOffsetMs(id) / 1000;
     });
+    freshStartRef.current = false;
     setState((s) => ({ ...s, progress: pct }));
   }, [playIds]);
 

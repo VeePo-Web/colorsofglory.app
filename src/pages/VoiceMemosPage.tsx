@@ -543,6 +543,9 @@ const VoiceMemosPage = () => {
           section_id: (o.extra?.sectionId as string | undefined) ?? null,
           section_label: o.sectionLabel,
           waveform_peaks: (o.extra?.waveformPeaks as number[] | undefined) ?? null,
+          // The melody contour computes async off the save path and lands in
+          // the device store; resolveContour heals this null on read/play.
+          pitch_contour: null,
           storage_path: "",
           created_at: o.createdAt,
           created_by: "You",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBestMimeType } from "@/lib/voice/audioFormat";
+import { setRecordingArmed } from "@/lib/audio/audioSession";
 
 /**
  * useVoiceRecorder — THE shared recorder engine (C4). Every recording surface
@@ -69,6 +70,14 @@ export interface UseVoiceRecorderOptions {
    * take was empty. This is how an idea survives events the UI never asked for.
    */
   onAutoFinalize?: (result: RecordingResult | null) => void;
+  /**
+   * Music-capture mode: disables echoCancellation / noiseSuppression /
+   * autoGainControl for a cleaner musical take (AEC is tuned for speech and
+   * smears transients / eats reverb tails). Safe to offer ONLY because bleed
+   * is prevented structurally by the audio-session invariant — never lean on
+   * AEC to remove a click. Opt-in; default stays the speech-friendly trio.
+   */
+  highFidelity?: boolean;
 }
 
 export interface UseVoiceRecorderReturn {
@@ -147,6 +156,7 @@ export function useVoiceRecorder(
   options?: UseVoiceRecorderOptions,
 ): UseVoiceRecorderReturn {
   const maxDurationMs = options?.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+  const highFidelity = options?.highFidelity ?? false;
 
   const [state, setState] = useState<VoiceRecorderState>({
     phase: "idle",
@@ -191,6 +201,10 @@ export function useVoiceRecorder(
     analyserRef.current = null;
     mediaRecorderRef.current = null;
     chunksRef.current = [];
+    // Every stop path (manual stop, cancel, error, auto-finalize) flows through
+    // here — the single choke point that releases the never-bleed invariant so
+    // the metronome may sound again.
+    setRecordingArmed(false);
   }, []);
 
 
@@ -286,6 +300,12 @@ export function useVoiceRecorder(
 
       setState((s) => ({ ...s, phase: "requesting-permission", error: null }));
 
+      // ARM THE SESSION before the mic opens: from this instant the metronome
+      // (and any reference guide) is silent on a speaker — an audible click is
+      // possible only into confirmed headphones. Cleared by cleanup() on every
+      // stop path, and explicitly on each failed-start return below.
+      setRecordingArmed(true);
+
       // Create + kick the AudioContext as early as possible. iOS Safari starts
       // every AudioContext in "suspended" state and only lets it resume from a
       // user gesture — so we fire resume() now, while the tap's activation is
@@ -305,6 +325,7 @@ export function useVoiceRecorder(
       const mediaDevices = navigator.mediaDevices;
       if (!mediaDevices?.getUserMedia) {
         safeCloseContext(audioCtx);
+        setRecordingArmed(false);
         setState((s) => ({
           ...s,
           phase: "error",
@@ -320,13 +341,14 @@ export function useVoiceRecorder(
       try {
         stream = await mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+            echoCancellation: !highFidelity,
+            noiseSuppression: !highFidelity,
+            autoGainControl: !highFidelity,
           },
         });
       } catch (err) {
         safeCloseContext(audioCtx);
+        setRecordingArmed(false);
         const domErr = err as DOMException;
         if (
           domErr.name === "NotAllowedError" ||
@@ -535,7 +557,7 @@ export function useVoiceRecorder(
     } finally {
       startingRef.current = false;
     }
-  }, [cleanup, autoStop, maxDurationMs]);
+  }, [cleanup, autoStop, maxDurationMs, highFidelity]);
 
   const stopRecording = useCallback((): Promise<RecordingResult | null> => {
     return new Promise((resolve) => {

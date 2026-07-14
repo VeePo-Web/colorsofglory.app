@@ -1,156 +1,155 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Metronome } from "@/lib/audio/metronome";
 
 /**
- * useMetronome — a Web-Audio click track for the Capture scene.
+ * useMetronome — the React transport over C4's ONE click engine
+ * (src/lib/audio/metronome.ts). Capture's scene, the canvas record flow, and
+ * any future surface drive this same class; nobody re-implements a click,
+ * because the engine is where the never-bleed invariant lives: while a
+ * recording is armed, the click is audible only into a CONFIRMED
+ * headphone/earbud output — on a speaker it runs silent while `beat` keeps
+ * firing for the visual pulse (and haptics).
  *
- * Two jobs, both in service of "hum the idea *in time*":
- *   • `countIn(bpm, beats)` plays N clicks and resolves when the downbeat lands,
- *     so a take starts on the beat instead of whenever the finger lifts.
- *   • `start(bpm)` / `stop()` keep a steady click going while recording.
- *
- * iOS-first doctrine: the AudioContext starts *suspended*; we lazily create it
- * and resume it inside the user gesture that calls `prime()` / `countIn()`,
- * before any `await`. Clicks are scheduled with a short look-ahead so timing
- * stays rock-solid even when the main thread is busy (the classic
- * "A Tale of Two Clocks" scheduler). No DOM, no React state — pure refs, so it
- * never triggers a re-render mid-recording.
+ * API kept intentionally compatible with the original capture hook:
+ *   • `prime()` — warm the engine inside the user gesture.
+ *   • `countIn(bpm, beats)` — one audible bar; resolves on the audio clock as
+ *     the first REAL beat lands, and the click CONTINUES seamlessly on the
+ *     same grid (session-gated once the mic arms). Open the mic on resolve.
+ *   • `start(bpm, beatsPerBar)` — steady click; live-retunes if running.
+ *   • `stop()` — silence + clear.
+ * Plus `beat` / `running` state for transports that render the pulse.
  */
 
-const LOOKAHEAD_MS = 25; // how often the scheduler wakes up
-const SCHEDULE_AHEAD_S = 0.12; // how far ahead we queue clicks
-const ACCENT_HZ = 1600; // downbeat (beat 1)
-const TICK_HZ = 1100; // other beats
-const CLICK_LEN_S = 0.045;
-
-type AudioCtor = typeof AudioContext;
-
-function getAudioContextCtor(): AudioCtor | null {
-  if (typeof window === "undefined") return null;
-  return (
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext ??
-    null
-  );
+export interface MetronomeBeat {
+  /** 0-indexed beat within the bar. */
+  beatInBar: number;
+  /** Monotonic counter so effects can fire once per landed beat. */
+  seq: number;
 }
 
 export interface UseMetronomeReturn {
-  /** Resume the audio context inside a user gesture. Call before awaiting. */
+  /** Resume-ready: call inside a user gesture before awaiting. */
   prime: () => void;
-  /** Play `beats` clicks at `bpm`; resolves on the final downbeat. */
+  /** One count-in bar of `beats`; resolves as the first real beat sounds. */
   countIn: (bpm: number, beats?: number) => Promise<void>;
-  /** Start a steady click at `bpm` (accent every `beatsPerBar`). */
+  /** Start (or live-retune) a steady click at `bpm`. */
   start: (bpm: number, beatsPerBar?: number) => void;
-  /** Stop the steady click. */
+  /** Stop the click. */
   stop: () => void;
   /** True once an AudioContext can be created (not SSR / unsupported). */
   supported: boolean;
+  running: boolean;
+  /** The beat that just landed (null when idle) — drives the visual pulse. */
+  beat: MetronomeBeat | null;
+  setBpm: (bpm: number) => void;
 }
 
 export function useMetronome(): UseMetronomeReturn {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const nextNoteTimeRef = useRef(0);
-  const beatRef = useRef(0);
-  const bpmRef = useRef(120);
-  const beatsPerBarRef = useRef(4);
-  const supported = getAudioContextCtor() != null;
+  const engineRef = useRef<Metronome | null>(null);
+  // Whether the current instance was built with a count-in bar — a stopped
+  // count-in engine must not count in again when restarted as a steady click.
+  const engineHasCountInRef = useRef(false);
+  const countInResolveRef = useRef<(() => void) | null>(null);
+  const seqRef = useRef(0);
+  const [beat, setBeat] = useState<MetronomeBeat | null>(null);
+  const [running, setRunning] = useState(false);
 
-  const ensureCtx = useCallback((): AudioContext | null => {
-    if (ctxRef.current) return ctxRef.current;
-    const Ctor = getAudioContextCtor();
-    if (!Ctor) return null;
-    try {
-      ctxRef.current = new Ctor();
-    } catch {
-      return null;
-    }
-    return ctxRef.current;
+  const supported =
+    typeof window !== "undefined" &&
+    (window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) != null;
+
+  const disposeEngine = useCallback(() => {
+    engineRef.current?.dispose();
+    engineRef.current = null;
+    engineHasCountInRef.current = false;
   }, []);
 
-  const prime = useCallback(() => {
-    const ctx = ensureCtx();
-    // resume() must run inside the gesture; ignore the promise rejection on
-    // browsers that auto-resume.
-    void ctx?.resume().catch(() => {});
-  }, [ensureCtx]);
-
-  const click = useCallback((ctx: AudioContext, time: number, accent: boolean) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = accent ? ACCENT_HZ : TICK_HZ;
-    const peak = accent ? 0.6 : 0.4;
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(peak, time + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + CLICK_LEN_S);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(time);
-    osc.stop(time + CLICK_LEN_S + 0.01);
-  }, []);
-
-  const clearTimer = useCallback(() => {
-    if (timerRef.current != null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const scheduler = useCallback(() => {
-    const ctx = ctxRef.current;
-    if (!ctx) return;
-    const secondsPerBeat = 60 / bpmRef.current;
-    while (nextNoteTimeRef.current < ctx.currentTime + SCHEDULE_AHEAD_S) {
-      const accent = beatRef.current % beatsPerBarRef.current === 0;
-      click(ctx, nextNoteTimeRef.current, accent);
-      nextNoteTimeRef.current += secondsPerBeat;
-      beatRef.current += 1;
-    }
-  }, [click]);
-
-  const start = useCallback(
-    (bpm: number, beatsPerBar = 4) => {
-      const ctx = ensureCtx();
-      if (!ctx) return;
-      void ctx.resume().catch(() => {});
-      clearTimer();
-      bpmRef.current = bpm;
-      beatsPerBarRef.current = beatsPerBar;
-      beatRef.current = 0;
-      nextNoteTimeRef.current = ctx.currentTime + 0.06;
-      scheduler();
-      timerRef.current = setInterval(scheduler, LOOKAHEAD_MS);
+  const buildEngine = useCallback(
+    (bpm: number, beatsPerBar: number, withCountIn: boolean) => {
+      disposeEngine();
+      engineRef.current = new Metronome({
+        bpm,
+        beatsPerBar,
+        countIn: withCountIn,
+        onBeat: (beatInBar) => {
+          seqRef.current += 1;
+          setBeat({ beatInBar, seq: seqRef.current });
+        },
+        onCountInDone: () => {
+          const resolve = countInResolveRef.current;
+          countInResolveRef.current = null;
+          resolve?.();
+        },
+      });
+      engineHasCountInRef.current = withCountIn;
+      return engineRef.current;
     },
-    [ensureCtx, clearTimer, scheduler],
+    [disposeEngine],
   );
 
-  const stop = useCallback(() => {
-    clearTimer();
-  }, [clearTimer]);
+  const prime = useCallback(() => {
+    // The engine resumes its context inside start(); prime exists so callers
+    // can keep the gesture-first idiom and stays cheap when nothing runs yet.
+  }, []);
 
   const countIn = useCallback(
     (bpm: number, beats = 4): Promise<void> => {
-      const ctx = ensureCtx();
-      if (!ctx) return Promise.resolve();
-      void ctx.resume().catch(() => {});
-      const secondsPerBeat = 60 / bpm;
-      const start0 = ctx.currentTime + 0.08;
-      for (let b = 0; b < beats; b += 1) {
-        click(ctx, start0 + b * secondsPerBeat, b === 0);
-      }
-      // Resolve right as the downbeat after the count-in would land.
-      const totalMs = (start0 - ctx.currentTime + beats * secondsPerBeat) * 1000;
-      return new Promise((resolve) => setTimeout(resolve, Math.max(0, totalMs)));
+      if (!supported) return Promise.resolve();
+      const engine = buildEngine(bpm, beats, true);
+      return new Promise<void>((resolve) => {
+        countInResolveRef.current = resolve;
+        setRunning(true);
+        void engine.start().catch(() => {
+          // No context / resume refused — never strand the take behind a click.
+          countInResolveRef.current = null;
+          setRunning(false);
+          resolve();
+        });
+      });
     },
-    [ensureCtx, click],
+    [supported, buildEngine],
   );
 
-  // Release the timer (and context) on unmount so a click never outlives the scene.
+  const start = useCallback(
+    (bpm: number, beatsPerBar = 4) => {
+      if (!supported) return;
+      const existing = engineRef.current;
+      if (existing?.isRunning) {
+        // Live retune — the seamless count-in → take continuation path.
+        existing.setBpm(bpm);
+        existing.setBeatsPerBar(beatsPerBar);
+        setRunning(true);
+        return;
+      }
+      const engine =
+        existing && !engineHasCountInRef.current ? existing : buildEngine(bpm, beatsPerBar, false);
+      engine.setBpm(bpm);
+      engine.setBeatsPerBar(beatsPerBar);
+      setRunning(true);
+      void engine.start().catch(() => setRunning(false));
+    },
+    [supported, buildEngine],
+  );
+
+  const stop = useCallback(() => {
+    engineRef.current?.stop();
+    countInResolveRef.current = null;
+    setRunning(false);
+    setBeat(null);
+  }, []);
+
+  const setBpm = useCallback((bpm: number) => {
+    engineRef.current?.setBpm(bpm);
+  }, []);
+
+  // A surface that mounted a click never leaves it playing after unmount.
   useEffect(() => {
     return () => {
-      clearTimer();
-      void ctxRef.current?.close().catch(() => {});
-      ctxRef.current = null;
+      countInResolveRef.current = null;
+      disposeEngine();
     };
-  }, [clearTimer]);
+  }, [disposeEngine]);
 
-  return { prime, countIn, start, stop, supported };
+  return { prime, countIn, start, stop, supported, running, beat, setBpm };
 }
