@@ -285,3 +285,51 @@ export const updateSongTempo = async (song_id: string, tempo_bpm: number): Promi
     .eq("id", song_id);
   if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
 };
+
+/**
+ * Set the song's canonical key signature (app format: "G" majors, "Em"
+ * minors). Same explicit-user-action contract as updateSongTempo — the sheet
+ * (C3 transpose) and every "Key of …" surface read this one value.
+ */
+export const updateSongKeySignature = async (song_id: string, key_signature: string): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ key_signature })
+    .eq("id", song_id);
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+};
+
+/**
+ * F13 (auto tempo/key detection): fill tempo_bpm / key_signature ONLY where
+ * the field is still NULL — enforced ATOMICALLY by the `.is(col, null)`
+ * filter on each update, so a user-set value can never be overwritten even
+ * if it lands between our read and write. Returns which fields were actually
+ * filled. Best-effort by contract: callers treat any failure as "not filled"
+ * (the suggestion still surfaces in the picker; the save never depended on
+ * this).
+ */
+export const fillSongMusicIfEmpty = async (
+  song_id: string,
+  patch: { tempo_bpm?: number; key_signature?: string },
+): Promise<{ filledBpm: boolean; filledKey: boolean }> => {
+  const result = { filledBpm: false, filledKey: false };
+  if (patch.tempo_bpm != null) {
+    const { data, error } = await supabase
+      .from("songs")
+      .update({ tempo_bpm: patch.tempo_bpm })
+      .eq("id", song_id)
+      .is("tempo_bpm", null)
+      .select("id");
+    if (!error && (data?.length ?? 0) > 0) result.filledBpm = true;
+  }
+  if (patch.key_signature != null) {
+    const { data, error } = await supabase
+      .from("songs")
+      .update({ key_signature: patch.key_signature })
+      .eq("id", song_id)
+      .is("key_signature", null)
+      .select("id");
+    if (!error && (data?.length ?? 0) > 0) result.filledKey = true;
+  }
+  return result;
+};

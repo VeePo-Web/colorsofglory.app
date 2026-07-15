@@ -2,6 +2,7 @@ import { enqueueCaptureUpload } from "./captureOutbox";
 import { computeWaveformPeaks } from "@/lib/audio/waveformPeaks";
 import { computePitchContour } from "@/lib/audio/pitchContour";
 import { writeContour } from "@/lib/audio/contourStore";
+import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
 import type { VoiceMemoRecord } from "./voiceApi";
 
 /**
@@ -70,6 +71,11 @@ export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoR
   void computePitchContour(params.blob)
     .then((contour) => { if (contour) writeContour(outboxId, contour); })
     .catch(() => { /* pitch never affects the save */ });
+
+  // F13 rides the same off-path moment: read the tempo + key the songwriter
+  // just played and pre-fill the song's EMPTY tempo_bpm/key_signature (a
+  // confirmable suggestion, never an overwrite; silent when unsure).
+  maybeDetectSongTempoKey(params.blob, params.songId);
 
   const optimistic: VoiceMemoRecord = {
     id: outboxId,

@@ -16,6 +16,21 @@ import TapTempo from "./TapTempo";
 
 type DisplayMode = "letters" | "numbers";
 
+/**
+ * F13: what the demo sounded like — a confidence-gated, one-tap-confirmable
+ * suggestion. `filled*` marks values detection already wrote into the song's
+ * EMPTY fields (that's how the metronome/sheet inherit them); unresolved
+ * suggestions carry the calm gold "detected from your recording" honesty.
+ */
+export interface DetectedMusicSuggestion {
+  keySignature?: string;
+  tonic?: string;
+  mode?: Mode;
+  bpm?: number;
+  filledKey: boolean;
+  filledBpm: boolean;
+}
+
 interface ChordPickerProps {
   /** Pre-set key for the song, if any. If absent, we ask once. */
   initialKey?: string;
@@ -25,9 +40,18 @@ interface ChordPickerProps {
   /** Persist key/bpm at the song level when the user changes them here. */
   onKeyChange?: (key: string, mode: Mode) => void;
   onBpmChange?: (bpm: number) => void;
+  /** F13 detection suggestion (null/undefined = feature invisible). */
+  detected?: DetectedMusicSuggestion | null;
+  /** The suggestion was confirmed (accepted) or dismissed/changed. */
+  onDetectedResolved?: (accepted: boolean) => void;
   /** Save the progression as a capture block. */
   onSave: (label: string, text: string, progression: Progression) => void;
 }
+
+/** External song-level wiring (everything except onSave) for call sites. */
+export type ChordPickerSongWiring = Omit<ChordPickerProps, "onSave" | "initialDisplay">;
+
+const keyLabel = (tonic: string, mode: Mode) => `${tonic} ${mode === "minor" ? "minor" : "major"}`;
 
 const ChordPicker = ({
   initialKey,
@@ -36,16 +60,31 @@ const ChordPicker = ({
   initialDisplay = "letters",
   onKeyChange,
   onBpmChange,
+  detected,
+  onDetectedResolved,
   onSave,
 }: ChordPickerProps) => {
-  const [keyChosen, setKeyChosen] = useState<boolean>(!!initialKey);
-  const [tonic, setTonic] = useState<string>(initialKey?.replace(/m$/, "") ?? "G");
-  const [mode, setMode] = useState<Mode>(initialMode);
-  const [bpm, setBpm] = useState<number | "">(initialBpm ?? "");
+  // An initialKey that detection wrote into the empty field (or that has no
+  // stored value yet) is UNCONFIRMED — the first-run ask still shows, but as
+  // a pre-filled "confirm or change" instead of a blank question.
+  const detectedKeyUnconfirmed = Boolean(
+    detected?.keySignature && (!initialKey || (initialKey === detected.keySignature && detected.filledKey)),
+  );
+  const [keyChosen, setKeyChosen] = useState<boolean>(!!initialKey && !detectedKeyUnconfirmed);
+  const [tonic, setTonic] = useState<string>(
+    (detectedKeyUnconfirmed ? detected?.tonic : undefined) ?? initialKey?.replace(/m$/, "") ?? "G",
+  );
+  const [mode, setMode] = useState<Mode>(
+    (detectedKeyUnconfirmed ? detected?.mode : undefined) ?? initialMode,
+  );
+  const [bpm, setBpm] = useState<number | "">(initialBpm ?? detected?.bpm ?? "");
   const [display, setDisplay] = useState<DisplayMode>(initialDisplay);
   const [chords, setChords] = useState<NumberChord[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // The "your take sounds different" hint beside an existing value — shown
+  // until used or dismissed, never a replacement of the user's choice.
+  const [hintDismissed, setHintDismissed] = useState(false);
 
   const palette = useMemo(() => diatonic(mode), [mode]);
   const borrowed = useMemo(() => borrowedChords(mode), [mode]);
@@ -62,33 +101,73 @@ const ChordPicker = ({
   // ------ First-run key prompt ----------------------------------------------
   if (!keyChosen) {
     const keys = mode === "major" ? MAJOR_KEYS : MINOR_KEYS;
+    const suggestedTonic = detectedKeyUnconfirmed ? detected?.tonic : undefined;
+    const confirmLabel = suggestedTonic
+      ? `${keyLabel(suggestedTonic, mode)}${typeof bpm === "number" ? ` · ${bpm} BPM` : ""}`
+      : null;
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm" style={{ color: "var(--cog-warm-gray)" }}>
-          What key is this song in? We'll remember it.
-        </p>
-        <ModeToggle mode={mode} onChange={setMode} />
-        <div className="flex flex-wrap gap-2">
-          {keys.map((k) => (
+        {confirmLabel ? (
+          <>
+            {/* F13 confirm: the ask is already answered by their own take. */}
+            <p className="text-sm" style={{ color: "var(--cog-charcoal)" }}>
+              Sounds like <strong>{confirmLabel}</strong> — tap to confirm, or change it.
+            </p>
             <button
-              key={k}
               type="button"
               onClick={() => {
-                setTonic(k.replace(/m$/, ""));
-                setKeyChosen(true);
+                if (suggestedTonic) setTonic(suggestedTonic);
+                setKeyChosen(true); // the key effect persists via onKeyChange
+                if (typeof bpm === "number") onBpmChange?.(bpm);
+                onDetectedResolved?.(true);
               }}
-              className="px-4 rounded-xl text-sm font-medium transition-transform active:scale-95"
+              className="rounded-xl text-sm font-semibold transition-transform active:scale-95"
               style={{
-                minHeight: 44,
-                minWidth: 44,
-                background: "white",
-                border: "1px solid var(--cog-border)",
-                color: "var(--cog-charcoal)",
+                minHeight: 48,
+                background: "var(--cog-gold)",
+                color: "var(--cog-cream-light, #faf7f2)",
+                border: "1px solid var(--cog-gold)",
               }}
             >
-              {k}
+              Use {confirmLabel}
             </button>
-          ))}
+            <p className="text-xs" style={{ color: "var(--cog-gold)" }}>
+              Detected from your recording — every part of it is editable.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm" style={{ color: "var(--cog-warm-gray)" }}>
+            What key is this song in? We'll remember it.
+          </p>
+        )}
+        <ModeToggle mode={mode} onChange={setMode} />
+        <div className="flex flex-wrap gap-2">
+          {keys.map((k) => {
+            const bare = k.replace(/m$/, "");
+            const isSuggested = suggestedTonic === bare;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => {
+                  setTonic(bare);
+                  setKeyChosen(true);
+                  // Choosing any key resolves the suggestion — theirs wins.
+                  if (detectedKeyUnconfirmed) onDetectedResolved?.(bare === suggestedTonic);
+                }}
+                className="px-4 rounded-xl text-sm font-medium transition-transform active:scale-95"
+                style={{
+                  minHeight: 44,
+                  minWidth: 44,
+                  background: isSuggested ? "var(--cog-gold-pale)" : "white",
+                  border: isSuggested ? "1px solid var(--cog-gold)" : "1px solid var(--cog-border)",
+                  color: "var(--cog-charcoal)",
+                }}
+              >
+                {k}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -97,8 +176,91 @@ const ChordPicker = ({
   // ------ Main picker --------------------------------------------------------
   const editing = editingIndex !== null ? chords[editingIndex] : null;
 
+  // F13 differs-hint: the songwriter already set a key/tempo, but the take
+  // they just recorded sounds different. A dismissible suggestion BESIDE
+  // their value — never a replacement; their explicit choice always wins.
+  const detectedKeyDiffers = Boolean(
+    detected?.keySignature && initialKey && initialKey !== detected.keySignature,
+  );
+  const detectedBpmDiffers = Boolean(
+    detected?.bpm && initialBpm != null && initialBpm !== detected.bpm && !detected.filledBpm,
+  );
+  const showDiffersHint = !hintDismissed && (detectedKeyDiffers || detectedBpmDiffers);
+  const differsLabel = detected
+    ? [
+        detectedKeyDiffers && detected.tonic && detected.mode
+          ? keyLabel(detected.tonic, detected.mode)
+          : null,
+        detectedBpmDiffers ? `${detected.bpm} BPM` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  // The freshly-detected value sitting in the BPM field, awaiting its confirm.
+  const bpmIsDetected = Boolean(
+    detected?.bpm && detected.filledBpm && typeof bpm === "number" && bpm === detected.bpm,
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      {showDiffersHint && (
+        <div
+          className="flex items-center gap-2 p-2.5 rounded-xl"
+          style={{
+            background: "var(--cog-gold-pale)",
+            border: "1px solid var(--cog-border-gold, rgba(184,149,58,0.40))",
+          }}
+        >
+          <p className="text-xs flex-1 m-0" style={{ color: "var(--cog-charcoal)" }}>
+            Your take sounds like <strong>{differsLabel}</strong>.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (detectedKeyDiffers && detected?.tonic && detected?.mode) {
+                setTonic(detected.tonic);
+                setMode(detected.mode); // the key effect persists the change
+              }
+              if (detected?.bpm && (detectedBpmDiffers || detected.filledBpm)) {
+                setBpm(detected.bpm);
+                onBpmChange?.(detected.bpm);
+              }
+              setHintDismissed(true);
+              onDetectedResolved?.(true);
+            }}
+            className="text-xs font-semibold rounded-lg transition-transform active:scale-95"
+            style={{
+              minHeight: 44,
+              padding: "0 12px",
+              background: "var(--cog-gold)",
+              color: "var(--cog-cream-light, #faf7f2)",
+              border: "none",
+            }}
+          >
+            Use it
+          </button>
+          <button
+            type="button"
+            aria-label="Dismiss the detected key and tempo suggestion"
+            onClick={() => {
+              setHintDismissed(true);
+              onDetectedResolved?.(false);
+            }}
+            className="flex items-center justify-center transition-transform active:scale-90"
+            style={{
+              minWidth: 44,
+              minHeight: 44,
+              background: "transparent",
+              border: "none",
+              color: "var(--cog-warm-gray)",
+              cursor: "pointer",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Key + tempo header */}
       <div className="flex flex-col gap-3 p-3 rounded-2xl" style={{
         background: "white",
@@ -123,9 +285,20 @@ const ChordPicker = ({
                 className="w-16 text-center rounded-lg py-1.5"
                 // 16px so iOS Safari doesn't zoom the canvas when the BPM field
                 // is focused.
-                style={{ background: "var(--cog-cream)", border: "1px solid var(--cog-border)", fontSize: 16 }}
+                style={{
+                  background: "var(--cog-cream)",
+                  border: bpmIsDetected
+                    ? "1px solid var(--cog-border-gold, rgba(184,149,58,0.40))"
+                    : "1px solid var(--cog-border)",
+                  fontSize: 16,
+                }}
               />
               <span className="text-xs" style={{ color: "var(--cog-warm-gray)" }}>bpm</span>
+              {bpmIsDetected && (
+                <span className="text-[10px]" style={{ color: "var(--cog-gold)" }} title="Detected from your recording">
+                  detected
+                </span>
+              )}
             </div>
             {/* Tap tempo — set BPM by tapping in time, no typing. */}
             <TapTempo

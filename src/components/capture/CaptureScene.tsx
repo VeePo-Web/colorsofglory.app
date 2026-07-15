@@ -37,6 +37,11 @@ import MetronomeBar from "./MetronomeBar";
 import MetronomeStrip from "@/components/voice/MetronomeStrip";
 import { useMetronome } from "@/hooks/useMetronome";
 import { useSongTempo } from "@/hooks/useSongTempo";
+import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
+import { clearDetection, readDetection, type DetectedTempoKeyRecord } from "@/lib/audio/detectedTempoKeyStore";
+import { formatKeySignature } from "@/lib/audio/tempoKey";
+import type { ChordPickerSongWiring } from "./ChordPicker";
+import type { Mode } from "@/lib/chords/keys";
 import LatestPeekStrip from "./LatestPeekStrip";
 import HeardCuesStrip from "./HeardCuesStrip";
 import {
@@ -103,7 +108,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // take is tempo-compatible with everyone else's takes and layers. A tap-tempo
   // here stays a local override for this take — setting the canonical song
   // tempo is an explicit act in the song room, never a side effect of humming.
-  const { bpm: sharedSongBpm } = useSongTempo(songId);
+  const { bpm: sharedSongBpm, keySignature: sharedSongKey, saveTempo, saveKey } = useSongTempo(songId);
   const bpmManuallySetRef = useRef(false);
   useEffect(() => {
     if (!bpmManuallySetRef.current && sharedSongBpm != null) setMetroBpm(sharedSongBpm);
@@ -112,6 +117,21 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     bpmManuallySetRef.current = true;
     setMetroBpm(bpm);
   }, []);
+
+  // ── F13: detected tempo/key → the ChordPicker's confirm-or-change UX ───────
+  // The suggestion record is re-read every time the chords sheet opens, so a
+  // detection that lands seconds after the take is picked up without a remount.
+  const [detectedMusic, setDetectedMusic] = useState<DetectedTempoKeyRecord | null>(null);
+  // Dedupe persistence: the picker re-fires onKeyChange on mount with the
+  // unchanged value — writing it back would churn updated_at + realtime.
+  const lastPersistedKeyRef = useRef<string | null>(null);
+  const lastPersistedBpmRef = useRef<number | null>(null);
+  useEffect(() => {
+    lastPersistedKeyRef.current = sharedSongKey;
+  }, [sharedSongKey]);
+  useEffect(() => {
+    lastPersistedBpmRef.current = sharedSongBpm;
+  }, [sharedSongBpm]);
 
   const [manualMarkers, setManualMarkers] = useState<SectionMarker[]>([]);
   const [status, setStatus] = useState<
@@ -141,6 +161,50 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   // Side-rail sheet (idle taps)
   const [sheetAction, setSheetAction] = useState<RailAction | null>(null);
+
+  // Re-read the F13 suggestion whenever the chords sheet opens — detection
+  // lands a beat after the take saves, so the record must be fresh per open.
+  useEffect(() => {
+    if (sheetAction === "chords") setDetectedMusic(songId ? readDetection(songId) : null);
+  }, [sheetAction, songId]);
+
+  // Song-level wiring for the chord picker: initial key/BPM from the shared
+  // song values, the detected suggestion, and dedup-guarded persistence. On
+  // the global capture page (no song) this is undefined and the picker
+  // behaves exactly as before.
+  const chordWiring = useMemo<ChordPickerSongWiring | undefined>(() => {
+    if (!songId) return undefined;
+    return {
+      initialKey: sharedSongKey ?? undefined,
+      initialMode: (sharedSongKey?.endsWith("m") ? "minor" : "major") as Mode,
+      initialBpm: sharedSongBpm ?? undefined,
+      detected: detectedMusic
+        ? {
+            keySignature: detectedMusic.keySignature,
+            tonic: detectedMusic.tonic,
+            mode: detectedMusic.mode,
+            bpm: detectedMusic.bpm,
+            filledKey: detectedMusic.filledKey,
+            filledBpm: detectedMusic.filledBpm,
+          }
+        : null,
+      onKeyChange: (key, mode) => {
+        const sig = formatKeySignature(key, mode);
+        if (sig === lastPersistedKeyRef.current) return;
+        lastPersistedKeyRef.current = sig;
+        void saveKey(sig);
+      },
+      onBpmChange: (b) => {
+        if (b === lastPersistedBpmRef.current) return;
+        lastPersistedBpmRef.current = b;
+        void saveTempo(b);
+      },
+      onDetectedResolved: () => {
+        clearDetection(songId);
+        setDetectedMusic(null);
+      },
+    };
+  }, [songId, sharedSongKey, sharedSongBpm, detectedMusic, saveKey, saveTempo]);
   // Typed fragments (sheet saves + mid-record pins) are sessionStorage-backed
   // so a reload can't eat a lyric the writer already typed — they only clear
   // when they flow into a review (commit/close). Keyed per song context.
@@ -429,6 +493,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           fileName: file.name,
           uploaderKey: "intake",
         });
+
+        // F13: the take is durably queued (the sacred promise is already
+        // kept) — now, off the save path, read the tempo + key they just
+        // played and pre-fill the song's EMPTY tempo_bpm/key_signature as a
+        // confirmable suggestion. Silent when unsure; never an overwrite.
+        maybeDetectSongTempoKey(file, targetSongId);
 
         const settled = await waitForOutboxResult(outboxId);
         if (!settled.ok) {
@@ -1012,6 +1082,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           action={sheetAction}
           onClose={() => setSheetAction(null)}
           onSave={handleSheetSave}
+          chords={chordWiring}
         />
       </Suspense>
 

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { getSong, updateSongTempo } from "@/integrations/cog/songs";
+import { getSong, updateSongKeySignature, updateSongTempo } from "@/integrations/cog/songs";
 import { subscribeSongTempo } from "@/integrations/cog/realtime";
 import { clampBpm } from "@/lib/audio/metronome";
 
 export interface UseSongTempoReturn {
   /** The ONE shared song tempo every collaborator's metronome reads. */
   bpm: number | null;
+  /** The song's key signature (app format: "G" / "Em"), live like the tempo. */
+  keySignature: string | null;
   /** Parsed from the song's time signature ("3/4" → 3). Defaults to 4. */
   beatsPerBar: number;
   /** Owner + collaborator may set the canonical tempo; viewers read it. */
@@ -18,6 +20,8 @@ export interface UseSongTempoReturn {
    * back) when the server declines; the server stays the permission gate.
    */
   saveTempo: (bpm: number) => Promise<boolean>;
+  /** Same explicit-confirmation contract, for the key signature. */
+  saveKey: (keySignature: string) => Promise<boolean>;
 }
 
 function parseBeatsPerBar(timeSignature: string | null | undefined): number {
@@ -37,6 +41,7 @@ function parseBeatsPerBar(timeSignature: string | null | undefined): number {
  */
 export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
   const [bpm, setBpm] = useState<number | null>(null);
+  const [keySignature, setKeySignature] = useState<string | null>(null);
   const [beatsPerBar, setBeatsPerBar] = useState(4);
   const [canEdit, setCanEdit] = useState(false);
   const [loading, setLoading] = useState(Boolean(songId));
@@ -44,6 +49,7 @@ export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
   useEffect(() => {
     if (!songId) {
       setBpm(null);
+      setKeySignature(null);
       setBeatsPerBar(4);
       setCanEdit(false);
       setLoading(false);
@@ -59,6 +65,7 @@ export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
         .then((detail) => {
           if (cancelled || !detail) return;
           setBpm(detail.tempo_bpm);
+          setKeySignature(detail.key_signature);
           setBeatsPerBar(parseBeatsPerBar(detail.time_signature));
           setCanEdit(detail.my_role !== "viewer");
         })
@@ -77,6 +84,7 @@ export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
       unsubscribe = subscribeSongTempo(songId, (next) => {
         if (cancelled) return;
         setBpm(next.tempo_bpm);
+        setKeySignature(next.key_signature);
         setBeatsPerBar(parseBeatsPerBar(next.time_signature));
       });
     } catch {
@@ -106,5 +114,21 @@ export function useSongTempo(songId: string | undefined): UseSongTempoReturn {
     [songId, bpm],
   );
 
-  return { bpm, beatsPerBar, canEdit, loading, saveTempo };
+  const saveKey = useCallback(
+    async (nextKey: string): Promise<boolean> => {
+      if (!songId) return false;
+      const previous = keySignature;
+      setKeySignature(nextKey); // optimistic — the picker reflects it instantly
+      try {
+        await updateSongKeySignature(songId, nextKey);
+        return true;
+      } catch {
+        setKeySignature(previous); // the server declined; roll back honestly
+        return false;
+      }
+    },
+    [songId, keySignature],
+  );
+
+  return { bpm, keySignature, beatsPerBar, canEdit, loading, saveTempo, saveKey };
 }

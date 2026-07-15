@@ -112,6 +112,7 @@ import TempoRow from "@/components/voice/TempoRow";
 import { playReferenceGuide, type GuideHandle } from "@/lib/audio/referenceGuide";
 import { setAlignmentOffset, rekeyAlignmentOffset } from "@/lib/audio/alignmentStore";
 import { getAudioSession } from "@/lib/audio/audioSession";
+import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
@@ -1201,6 +1202,10 @@ const SongCanvasExperience = () => {
       setAlignmentOffset(pending.id, takeAlignOffsetRef.current);
       takeAlignOffsetRef.current = 0;
     }
+
+    // F13: read the tempo + key off the take and pre-fill the song's EMPTY
+    // tempo_bpm/key_signature — a confirmable suggestion, off the save path.
+    maybeDetectSongTempoKey(rec.blob, songId);
 
     setCards((prev) => {
       const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;

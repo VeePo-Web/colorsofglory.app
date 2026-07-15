@@ -165,7 +165,11 @@ export function subscribeSongRoom(song_id: string, handlers: SongRoomHandlers): 
  */
 export function subscribeSongTempo(
   song_id: string,
-  onChange: (next: { tempo_bpm: number | null; time_signature: string | null }) => void,
+  onChange: (next: {
+    tempo_bpm: number | null;
+    time_signature: string | null;
+    key_signature: string | null;
+  }) => void,
 ): () => void {
   // Unique topic suffix: two surfaces subscribing to the same song (canvas +
   // capture) must not collide on one channel topic — same-topic double
@@ -177,10 +181,15 @@ export function subscribeSongTempo(
     "postgres_changes" as any,
     { event: "UPDATE", schema: "public", table: "songs", filter: `id=eq.${song_id}` },
     ((payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      const next = payload.new as { tempo_bpm?: number | null; time_signature?: string | null };
+      const next = payload.new as {
+        tempo_bpm?: number | null;
+        time_signature?: string | null;
+        key_signature?: string | null;
+      };
       onChange({
         tempo_bpm: next?.tempo_bpm ?? null,
         time_signature: next?.time_signature ?? null,
+        key_signature: next?.key_signature ?? null,
       });
     }) as any,
   );

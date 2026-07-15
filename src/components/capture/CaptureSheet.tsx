@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { RailAction } from "./SideRail";
 import ScripturePicker from "./ScripturePicker";
-import ChordPicker from "./ChordPicker";
+import ChordPicker, { type ChordPickerSongWiring } from "./ChordPicker";
 
 export type PendingBlockKind = "lyrics" | "chords" | "scripture" | "idea" | "section";
 
@@ -25,6 +25,12 @@ interface CaptureSheetProps {
   action: RailAction | null;
   onClose: () => void;
   onSave: (block: PendingBlock) => void;
+  /**
+   * Song-level key/BPM wiring for the chord picker (initial values, F13
+   * detected suggestion, persistence callbacks). Absent on the global
+   * capture page — the picker then behaves exactly as before.
+   */
+  chords?: ChordPickerSongWiring;
 }
 
 const SECTION_KINDS: { value: string; label: string }[] = [
@@ -48,7 +54,7 @@ const COPY: Record<RailAction, { title: string; description: string; placeholder
  * Generic bottom sheet used by every side-rail chip. Stores the entry as a
  * "pending block" that flows into the Review Sheet when the user stops recording.
  */
-const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
+const CaptureSheet = ({ open, action, onClose, onSave, chords }: CaptureSheetProps) => {
   const [text, setText] = useState("");
   const [sectionKind, setSectionKind] = useState<string>("verse");
   const [sectionNum, setSectionNum] = useState<string>("");
@@ -186,6 +192,7 @@ const CaptureSheet = ({ open, action, onClose, onSave }: CaptureSheetProps) => {
           {useChordPicker && (
             <>
               <ChordPicker
+                {...(chords ?? {})}
                 onSave={(label, lettersText) => {
                   onSave({
                     id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
