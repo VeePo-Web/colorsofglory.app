@@ -1,5 +1,21 @@
 # F13 — Auto Tempo + Key Detection · Progress
 
+## 2026-07-14 (later) — Launch-audit pass
+
+Fresh-eyes audit of the shipped feature; three findings, all fixed + tested:
+1. **Confirm-line honesty bug** — the "Sounds like…" claim followed the LIVE
+   mode toggle instead of what the detector heard; now pinned to the detected
+   tonic/mode/bpm (mode-aware grid highlight, Use restores detected mode,
+   manual-pick verdict compares both). Covered by a dedicated test.
+2. **Main-thread manners** — chroma FFT pass now segmented (~10 s slices,
+   additive chroma) with macrotask yields, mirroring the Melody Lens's
+   off-main-thread discipline without a worker port; tempo runs first + yield.
+3. **BPM "detected" tag** now shows for fill-declined suggestions too.
+Plus 6 new ChordPicker component tests (silent fallback byte-for-byte,
+confirm persists + resolves accepted, honesty-under-toggle, different-key
+resolves not-accepted, differs-hint use/dismiss). 71 audio+picker tests green;
+tsc + build green; capture/canvas suites green.
+
 ## 2026-07-14 — Shipped (safe half: tempo + key, chords excluded)
 
 **What changed**

@@ -375,7 +375,16 @@ function spellTonic(pc: number, mode: Mode): string {
 }
 
 export function detectKey(data: Float32Array, rate: number): KeyDetection | null {
-  const chroma = chromaProfile(data, rate);
+  return keyFromChroma(chromaProfile(data, rate));
+}
+
+/**
+ * Score an accumulated 12-bin chroma against the 24 Krumhansl–Kessler keys.
+ * Split out from detectKey because chroma is ADDITIVE across time segments —
+ * the browser wrapper accumulates it in slices (yielding between them) and
+ * scores once at the end.
+ */
+export function keyFromChroma(chroma: Float32Array): KeyDetection | null {
   let total = 0;
   for (let i = 0; i < 12; i++) total += chroma[i];
   if (total <= 0) return null; // no tonal content at all
@@ -436,10 +445,18 @@ export function detectTempoKey(samples: Float32Array, sampleRate: number): Tempo
 
 // ─── Browser wrapper (decode via OfflineAudioContext) ────────────────────────
 
+const yieldToMain = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 /**
  * Decode a captured blob and run detection. BEST-EFFORT: null on ANY failure
  * (no Web Audio, decode error, empty take). Runs after the save — the outbox
  * "sacred promise" never depends on this.
+ *
+ * Main-thread manners: decode is already off-thread; the tempo pass is cheap;
+ * the FFT-heavy chroma pass is accumulated in ~10 s segments with a macrotask
+ * yield between each (chroma is additive over time), so this never holds the
+ * main thread through a UI beat — the review sheet is usually animating in at
+ * exactly this moment.
  */
 export async function detectTempoKeyFromBlob(blob: Blob): Promise<TempoKeyResult | null> {
   try {
@@ -448,7 +465,37 @@ export async function detectTempoKeyFromBlob(blob: Blob): Promise<TempoKeyResult
     const ctx = new OfflineAudioContext(1, 1, 44100);
     const decoded = await ctx.decodeAudioData(arrayBuffer);
     if (!decoded || decoded.length === 0) return null;
-    return detectTempoKey(decoded.getChannelData(0), decoded.sampleRate);
+    const samples = decoded.getChannelData(0);
+    const capped =
+      samples.length > decoded.sampleRate * MAX_ANALYZE_SECONDS
+        ? samples.subarray(0, decoded.sampleRate * MAX_ANALYZE_SECONDS)
+        : samples;
+    const { data, rate } = decimate(capped, decoded.sampleRate);
+
+    let tempo: TempoDetection | null = null;
+    try {
+      tempo = detectTempo(data, rate);
+    } catch {
+      tempo = null;
+    }
+    await yieldToMain();
+
+    let key: KeyDetection | null = null;
+    try {
+      const chroma = new Float32Array(12);
+      const segment = Math.max(KEY_FFT_SIZE * 2, Math.floor(rate * 10));
+      for (let start = 0; start < data.length; start += segment) {
+        const slice = data.subarray(start, Math.min(data.length, start + segment));
+        if (slice.length < KEY_FFT_SIZE) break;
+        const part = chromaProfile(slice, rate);
+        for (let i = 0; i < 12; i++) chroma[i] += part[i];
+        await yieldToMain();
+      }
+      key = keyFromChroma(chroma);
+    } catch {
+      key = null;
+    }
+    return { tempo, key };
   } catch {
     return null;
   }

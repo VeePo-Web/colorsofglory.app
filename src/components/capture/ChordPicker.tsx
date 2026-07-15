@@ -101,10 +101,16 @@ const ChordPicker = ({
   // ------ First-run key prompt ----------------------------------------------
   if (!keyChosen) {
     const keys = mode === "major" ? MAJOR_KEYS : MINOR_KEYS;
+    // The confirm line is pinned to WHAT THE DETECTOR HEARD — never to the
+    // live mode/bpm state. Toggling the mode below is part of "or change it";
+    // it must not quietly rewrite what the take "sounds like."
     const suggestedTonic = detectedKeyUnconfirmed ? detected?.tonic : undefined;
-    const confirmLabel = suggestedTonic
-      ? `${keyLabel(suggestedTonic, mode)}${typeof bpm === "number" ? ` · ${bpm} BPM` : ""}`
-      : null;
+    const suggestedMode = detectedKeyUnconfirmed ? detected?.mode : undefined;
+    const suggestedBpm = detectedKeyUnconfirmed ? detected?.bpm : undefined;
+    const confirmLabel =
+      suggestedTonic && suggestedMode
+        ? `${keyLabel(suggestedTonic, suggestedMode)}${suggestedBpm ? ` · ${suggestedBpm} BPM` : ""}`
+        : null;
     return (
       <div className="flex flex-col gap-3">
         {confirmLabel ? (
@@ -117,8 +123,12 @@ const ChordPicker = ({
               type="button"
               onClick={() => {
                 if (suggestedTonic) setTonic(suggestedTonic);
+                if (suggestedMode) setMode(suggestedMode);
                 setKeyChosen(true); // the key effect persists via onKeyChange
-                if (typeof bpm === "number") onBpmChange?.(bpm);
+                if (typeof suggestedBpm === "number") {
+                  setBpm(suggestedBpm);
+                  onBpmChange?.(suggestedBpm);
+                }
                 onDetectedResolved?.(true);
               }}
               className="rounded-xl text-sm font-semibold transition-transform active:scale-95"
@@ -144,7 +154,9 @@ const ChordPicker = ({
         <div className="flex flex-wrap gap-2">
           {keys.map((k) => {
             const bare = k.replace(/m$/, "");
-            const isSuggested = suggestedTonic === bare;
+            // Highlight only the EXACT detected key — after flipping the mode
+            // toggle, nothing in the grid is "the suggestion" anymore.
+            const isSuggested = suggestedTonic === bare && suggestedMode === mode;
             return (
               <button
                 key={k}
@@ -153,7 +165,9 @@ const ChordPicker = ({
                   setTonic(bare);
                   setKeyChosen(true);
                   // Choosing any key resolves the suggestion — theirs wins.
-                  if (detectedKeyUnconfirmed) onDetectedResolved?.(bare === suggestedTonic);
+                  if (detectedKeyUnconfirmed) {
+                    onDetectedResolved?.(bare === suggestedTonic && mode === suggestedMode);
+                  }
                 }}
                 className="px-4 rounded-xl text-sm font-medium transition-transform active:scale-95"
                 style={{
@@ -196,9 +210,11 @@ const ChordPicker = ({
         .filter(Boolean)
         .join(" · ")
     : "";
-  // The freshly-detected value sitting in the BPM field, awaiting its confirm.
+  // The freshly-detected value sitting in the BPM field, awaiting its confirm
+  // — whether the DB fill succeeded or was declined (offline/RLS), the number
+  // in the field came from the recording and must say so.
   const bpmIsDetected = Boolean(
-    detected?.bpm && detected.filledBpm && typeof bpm === "number" && bpm === detected.bpm,
+    detected?.bpm && typeof bpm === "number" && bpm === detected.bpm,
   );
 
   return (

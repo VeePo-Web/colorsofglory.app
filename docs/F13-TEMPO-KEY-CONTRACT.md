@@ -126,7 +126,7 @@ steps**. Capture's MetronomeBar seeds from the shared tempo already.
 5. **Single values, not a stream** — tempo + key only; **no chord
    detection.**
 
-## Verification (2026-07-14)
+## Verification (2026-07-14, incl. launch-audit pass)
 
 - `tempoKey.test.ts` (14): 120/92 BPM click tracks within ±3 confidently;
   240 BPM folds into range; noise/held-tone/short-clip silent; C major,
@@ -135,7 +135,30 @@ steps**. Capture's MetronomeBar seeds from the shared tempo already.
   confident values routed to the fill seam; declined fill still yields the
   suggestion (honestly `filled=false`); no-song/detector-crash → nothing,
   never a throw.
+- `ChordPicker.test.tsx` (6): silent fallback renders exactly the manual ask;
+  the confirm tap persists key+BPM and resolves accepted; the confirm line
+  stays pinned to the DETECTED key when the mode toggle changes (honesty);
+  picking a different key resolves not-accepted; the differs-hint appears
+  beside a user-set key, "Use it" applies + persists, dismiss leaves the
+  user's values untouched.
 - `tsc --noEmit` clean · `vite build` green · capture + canvas suites green.
 - **Needs an on-device pass (real audio in the running app):** a sung/played
   demo pre-filling the picker, a spoken take staying silent, and the
   metronome/sheet inheriting after confirm.
+
+### Launch-audit fixes (same day)
+
+1. **Confirm-line honesty:** the "Sounds like …" line and `Use …` button were
+   derived from the LIVE mode/bpm state — toggling the mode on the confirm
+   screen silently rewrote the claim to a key the detector never reported.
+   Now pinned to the detected tonic/mode/bpm; the grid highlight is
+   mode-aware; `Use` restores the detected mode; the manual-pick verdict
+   compares both tonic and mode.
+2. **Main-thread manners:** the Melody Lens precedent runs its analysis in a
+   Worker; F13's FFT chroma pass now accumulates in ~10 s segments with a
+   macrotask yield between each (chroma is additive over time), so detection
+   never holds the main thread through the review sheet's entrance. Tempo
+   (cheap) runs first, then a yield, then the segmented key pass.
+3. **BPM "detected" tag** now also shows when the DB fill was declined
+   (offline/RLS) — the number in the field came from the recording either
+   way, and must say so.
