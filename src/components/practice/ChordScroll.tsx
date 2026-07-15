@@ -153,9 +153,11 @@ export function ChordScroll({
 /**
  * One lyric line with chords over the right words. The text is split at the
  * chord anchors; each segment is an inline-block with its chord absolutely
- * positioned above its first character.
+ * positioned above its first character. Exported so Flow (the hands-free
+ * autoscroll perform mode) renders the same chips — one chord renderer, never
+ * two.
  */
-function ChordLine({
+export function ChordLine({
   line,
   lyricSize,
   chordSize,

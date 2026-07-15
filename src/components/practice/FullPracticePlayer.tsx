@@ -14,6 +14,7 @@ import {
   ListOrdered,
   Type,
   Mic,
+  Waves,
 } from "lucide-react";
 import { getSectionColor } from "@/lib/audio/sectionColors";
 import { SectionStrip } from "./SectionStrip";
@@ -28,9 +29,11 @@ import { effectiveClickBpm, type PracticePlayerHook } from "@/hooks/usePracticeP
 interface FullPracticePlayerProps {
   hook: PracticePlayerHook;
   onClose: () => void;
+  /** Enter Flow — the hands-free autoscroll perform mode. */
+  onEnterFlow?: () => void;
 }
 
-export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
+export function FullPracticePlayer({ hook, onClose, onEnterFlow }: FullPracticePlayerProps) {
   const {
     state,
     play, pause, goToSection, goToPrevSection, goToNextSection, goToPrevSong, goToNextSong, restartCurrentSection,
@@ -146,6 +149,22 @@ export function FullPracticePlayer({ hook, onClose }: FullPracticePlayerProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Flow — hands-free autoscroll perform mode */}
+            {onEnterFlow && (
+              <button
+                onClick={onEnterFlow}
+                aria-label="Enter Flow — the whole song scrolls by while you play"
+                className="flex items-center justify-center rounded-full"
+                style={{
+                  width: 40, height: 40,
+                  backgroundColor: "rgba(28,26,23,0.07)",
+                  color: "var(--cog-warm-gray)",
+                }}
+              >
+                <Waves size={18} />
+              </button>
+            )}
+
             {/* Drive mode toggle */}
             <button
               onClick={toggleDriveMode}

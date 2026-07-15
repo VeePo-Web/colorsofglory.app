@@ -1,9 +1,10 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader2, Mic } from "lucide-react";
 import { goBackOr } from "@/lib/nav/safeBack";
 import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
+import { FlowPlayer } from "@/components/practice/FlowPlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
 import { loadSession, loadLoopMode } from "@/lib/audio/practiceStorage";
 import { loadPracticeBundle } from "@/lib/practice/practiceApi";
@@ -61,11 +62,15 @@ export default function PracticePlayerPage() {
   const location   = useLocation();
   const hook       = usePracticeContext();
   const { state, initSession, applyEnrichment } = hook;
+  // Flow — the hands-free autoscroll perform mode (self-paced, no playback).
+  const [flowMode, setFlowMode] = useState(false);
 
-  // Screen stays awake for the whole live session (full player + drive mode).
+  // Screen stays awake for the whole live session (full player, drive mode,
+  // and Flow — a music stand that sleeps mid-verse fails its one job).
   usePracticeWakeLock(
-    state.songId === songId &&
-    (state.status === "ready" || state.status === "playing" || state.status === "paused"),
+    flowMode ||
+    (state.songId === songId &&
+      (state.status === "ready" || state.status === "playing" || state.status === "paused")),
   );
 
   // Practice launches from the canvas; closing pops back there, but on a cold
@@ -190,11 +195,16 @@ export default function PracticePlayerPage() {
     );
   }
 
+  // ─── Flow — hands-free autoscroll perform mode ──────────────────────────
+  if (flowMode) {
+    return <FlowPlayer hook={hook} onExit={() => setFlowMode(false)} />;
+  }
+
   // ─── Drive Mode — separate render tree ─────────────────────────────────
   if (state.driveMode) {
     return <DriveModePlayer hook={hook} />;
   }
 
   // ─── Normal full-screen player ──────────────────────────────────────────
-  return <FullPracticePlayer hook={hook} onClose={handleClose} />;
+  return <FullPracticePlayer hook={hook} onClose={handleClose} onEnterFlow={() => setFlowMode(true)} />;
 }
