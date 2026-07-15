@@ -5,6 +5,7 @@ import CogBrand from "@/components/cog/CogBrand";
 import SongTabBar from "@/components/cog/SongTabBar";
 import { useSongTitle } from "@/lib/songContext";
 import { useSongCollaborators } from "@/lib/invite/useSongCollaborators";
+import { useDedication } from "@/lib/songs/dedication";
 import { deriveCredits, creditsToText } from "@/lib/canvas/credits";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { copyTextToClipboard } from "@/lib/invite/clipboard";
@@ -31,6 +32,8 @@ const CreditsPage = () => {
   const songId = id ?? "1";
   const songTitle = useSongTitle(songId);
   const members = useSongCollaborators(songId);
+  // The song's "for …" — a top-line on the sheet and in the export.
+  const { text: dedication } = useDedication(songId);
   const [copied, setCopied] = useState(false);
 
   const credits = useMemo<DisplayCredit[]>(() => {
@@ -79,7 +82,7 @@ const CreditsPage = () => {
   }, [songId, members]);
 
   const handleExport = async () => {
-    const ok = await copyTextToClipboard(creditsToText(songTitle, credits));
+    const ok = await copyTextToClipboard(creditsToText(songTitle, credits, dedication));
     if (!ok) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2200);
@@ -115,6 +118,14 @@ const CreditsPage = () => {
         <p className="text-sm mb-1" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
           {songTitle}
         </p>
+        {/* The dedication is how the song is OFFERED, not a contribution —
+            a quiet top-line above the ledger, never a row in it. Omitted
+            entirely when unset. */}
+        {dedication && (
+          <p className="text-sm italic mb-1" style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+            for {dedication}
+          </p>
+        )}
         <p className="text-sm mb-8" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
           Every contribution remembered.
         </p>

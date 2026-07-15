@@ -50,6 +50,8 @@ interface SeedIdeaCardProps {
   songs: SeedIdeaCardSong[];
   onClaimed?: () => void;
   onDiscarded?: () => void;
+  /** Fired when "Make it a song" births a NEW song from this idea. */
+  onSongBorn?: (song: { id: string; title: string }) => void;
 }
 
 /**
@@ -58,7 +60,7 @@ interface SeedIdeaCardProps {
  * which uploads it through the existing voice memo pipeline and the card
  * disappears from the shelf — the idea now lives in that song's room.
  */
-const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps) => {
+const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded, onSongBorn }: SeedIdeaCardProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -159,6 +161,9 @@ const SeedIdeaCard = ({ idea, songs, onClaimed, onDiscarded }: SeedIdeaCardProps
       await claimSeedIdea({ seedId: idea.id, songId: song.id });
       setPickerOpen(false);
       onClaimed?.();
+      // The song was just BORN from its first capture — the one moment the
+      // dedication offer may appear (after the idea is safe, never before).
+      onSongBorn?.({ id: song.id, title: songTitle });
       toast.success(`Started “${songTitle}” from your idea`);
     } catch {
       setClaiming(false);

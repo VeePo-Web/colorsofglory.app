@@ -68,8 +68,16 @@ export function deriveCredits(songId: string): CreditEntry[] {
 }
 
 /** Plain-text credits block for the clipboard / share (client-side export). */
-export function creditsToText(songTitle: string, entries: CreditEntry[]): string {
-  const lines = [`Credits — ${songTitle}`, ""];
+export function creditsToText(
+  songTitle: string,
+  entries: CreditEntry[],
+  /** The song's "for …" — a dedicatory TOP-LINE under the title (like a record
+   *  sleeve), never a contributor row. Omitted entirely when unset. */
+  dedication?: string | null,
+): string {
+  const lines = [`Credits — ${songTitle}`];
+  if (dedication) lines.push(`for ${dedication}`);
+  lines.push("");
   for (const e of entries) {
     lines.push(`${e.name}: ${e.contributions.join(", ")}`);
   }

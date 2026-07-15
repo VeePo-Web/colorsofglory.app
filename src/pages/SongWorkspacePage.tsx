@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FileText, Mic, Music, PenLine, StickyNote, UserPlus } from "lucide-react";
 import CogBrand from "@/components/cog/CogBrand";
+import DedicationLine from "@/components/cog/DedicationLine";
 import { type SongDetail } from "@/integrations/cog/songs";
 import { useSongDetail } from "@/hooks/useAppQueries";
 import { useSwipeNav } from "@/lib/nav/useSwipeNav";
@@ -211,6 +212,16 @@ const SongWorkspacePage = () => {
             <p className="text-[0.9375rem] text-center mb-1 text-[var(--cog-warm-gray)]">
               Private song space
             </p>
+            {/* The song's quiet "for …" — present only when set (the same
+                IF-available grammar as Key · BPM below); tap to set/change.
+                This header is the dedication's permanent home + edit path. */}
+            <DedicationLine
+              songId={songId}
+              serverValue={song.dedication}
+              canEdit={song.my_role !== "viewer"}
+              showAddWhenEmpty
+              className="mb-1"
+            />
             {songMeta.length > 0 && (
               <p className="text-[0.8125rem] text-center mb-2 text-[var(--cog-muted)]">
                 {songMeta.join(" · ")}

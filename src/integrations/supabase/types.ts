@@ -1685,6 +1685,7 @@ export type Database = {
         Row: {
           cover_color: string | null
           created_at: string
+          dedication: string | null
           id: string
           is_locked: boolean
           key_signature: string | null
@@ -1701,6 +1702,7 @@ export type Database = {
         Insert: {
           cover_color?: string | null
           created_at?: string
+          dedication?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null
@@ -1717,6 +1719,7 @@ export type Database = {
         Update: {
           cover_color?: string | null
           created_at?: string
+          dedication?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null

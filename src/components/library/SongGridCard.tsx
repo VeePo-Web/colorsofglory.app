@@ -2,6 +2,7 @@ import { Mic, Pin, Check } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import { relativeDate, coverColor } from "@/lib/library/format";
 import { songStatusChip } from "@/lib/library/songStatus";
+import { useDedication } from "@/lib/songs/dedication";
 import { useLongPress } from "./useLongPress";
 import StatusChip from "./StatusChip";
 
@@ -32,7 +33,12 @@ const SongGridCard = ({
   pinned = false,
   selecting = false,
   selected = false,
-}: SongGridCardProps) => (
+}: SongGridCardProps) => {
+  // The song's quiet "for …" — display-only here (the card is a button; the
+  // workspace header is the edit surface). Invisible when unset, and omitted
+  // in the pinched-in compact density.
+  const { text: dedication } = useDedication(song.id, song.dedication ?? undefined);
+  return (
   <button
     onClick={onClick}
     {...(selecting ? {} : useLongPress(onLongPress))}
@@ -104,6 +110,15 @@ const SongGridCard = ({
         {song.title}
       </p>
 
+      {!compact && dedication && (
+        <p
+          className="italic text-[0.75rem] leading-snug line-clamp-1 -mt-1 mb-2"
+          style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+        >
+          for {dedication}
+        </p>
+      )}
+
       <div className="flex items-center gap-1.5">
         <Mic size={compact ? 10 : 11} style={{ color: "var(--cog-gold)" }} />
         <span
@@ -126,6 +141,7 @@ const SongGridCard = ({
       </div>
     )}
   </button>
-);
+  );
+};
 
 export default SongGridCard;

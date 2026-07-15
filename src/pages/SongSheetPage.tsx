@@ -5,6 +5,8 @@ import {
   MoreHorizontal, Music, Pencil, Play, Plus, Printer, Ruler, Share2, Trash2, Type, Wand2, X,
 } from "lucide-react";
 import { useSongTitle } from "@/lib/songContext";
+import DedicationLine from "@/components/cog/DedicationLine";
+import { useDedication } from "@/lib/songs/dedication";
 import { useSongSheet } from "@/lib/sheet/useSongSheet";
 import { emitSheetEvent } from "@/integrations/cog/sheet";
 import {
@@ -92,6 +94,8 @@ const SongSheetPage = () => {
   const songId = id ?? "";
   const navigate = useNavigate();
   const songTitle = useSongTitle(songId);
+  // The song's "for …" — carried into the header line and the print/PDF export.
+  const { text: dedicationText } = useDedication(songId);
   const { doc, setDoc, loadState, saveState } = useSongSheet(songId);
 
   // View-only state — transposition/capo/display change how the doc RENDERS,
@@ -284,6 +288,10 @@ const SongSheetPage = () => {
         >
           {songTitle || "Untitled song"}
         </h1>
+
+        {/* The song's quiet "for …" — present only when set; the workspace
+            header is the edit surface, the sheet simply carries it. */}
+        <DedicationLine songId={songId} align="left" className="px-5 mt-0.5" />
 
         {/* Save indicator — quiet, honest, never red */}
         <p className="px-5 mt-0.5 text-xs" style={{ color: "var(--cog-muted)", minHeight: 16, fontFamily: "var(--font-body)" }} aria-live="polite">
@@ -530,7 +538,7 @@ const SongSheetPage = () => {
 
       {/* Print / PDF — hidden on screen, the only thing visible when printing */}
       {!isEmpty && (
-        <PrintSheet songTitle={songTitle} sections={sections} playKey={playKey} display={display} capo={capo} />
+        <PrintSheet songTitle={songTitle} dedication={dedicationText} sections={sections} playKey={playKey} display={display} capo={capo} />
       )}
       <style>{`
         .cog-print { display: none; }
@@ -1338,12 +1346,15 @@ function ImportSheet({
 
 function PrintSheet({
   songTitle,
+  dedication,
   sections,
   playKey,
   display,
   capo,
 }: {
   songTitle: string;
+  /** The song's "for …" — a top-line under the title, omitted when unset. */
+  dedication?: string | null;
   sections: SheetSection[];
   playKey: string;
   display: "letters" | "numbers";
@@ -1352,6 +1363,11 @@ function PrintSheet({
   return (
     <div className="cog-print" aria-hidden="true">
       <h1>{songTitle}</h1>
+      {dedication && (
+        <p className="cog-print-sub" style={{ fontStyle: "italic" }}>
+          for {dedication}
+        </p>
+      )}
       <p className="cog-print-sub">
         {display === "numbers" ? "Nashville numbers" : `Key of ${playKey}`}
         {capo > 0 && display !== "numbers" ? ` · Capo ${capo}` : ""}

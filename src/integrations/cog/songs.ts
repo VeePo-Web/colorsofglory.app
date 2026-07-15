@@ -24,6 +24,8 @@ export type SongCard = {
   my_role: SongMemberRole;
   voice_memo_count: number;
   collaborator_count: number;
+  /** Optional "for …" line; absent until list_my_songs returns the column. */
+  dedication?: string | null;
 };
 
 /** Full song + per-room counts for the Workspace hub. */
@@ -35,6 +37,8 @@ export type SongDetail = {
   key_signature: string | null;
   tempo_bpm: number | null;
   time_signature: string | null;
+  /** Optional one-line "for …" the song quietly remembers. */
+  dedication: string | null;
   tags: string[] | null;
   cover_color: string | null;
   is_locked: boolean;
@@ -60,6 +64,8 @@ export const createSong = (input: {
   time_signature?: string;
   cover_color?: string;
   tags?: string[];
+  /** Optional "for …" dedication, when the song is born already knowing it. */
+  dedication?: string;
 }) => call<{ song: Song }>("create-song", input);
 
 /**
@@ -222,6 +228,7 @@ export const getSong = async (song_id: string): Promise<SongDetail | null> => {
     key_signature: (row.key_signature as string | null) ?? null,
     tempo_bpm: (row.tempo_bpm as number | null) ?? null,
     time_signature: (row.time_signature as string | null) ?? null,
+    dedication: (row.dedication as string | null) ?? null,
     tags: (row.tags as string[] | null) ?? null,
     cover_color: (row.cover_color as string | null) ?? null,
     is_locked: Boolean(row.is_locked),
@@ -295,6 +302,21 @@ export const updateSongKeySignature = async (song_id: string, key_signature: str
   const { error } = await supabase
     .from("songs")
     .update({ key_signature })
+    .eq("id", song_id);
+  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+};
+
+/**
+ * Set (or clear, with null) the song's optional one-line dedication — the
+ * quiet "for …" the header, credits, and export carry. Plain text, no
+ * validation beyond the client's soft cap; null returns the song to
+ * invisible. Callers go through lib/songs/dedication (offline-first,
+ * unfailing) rather than calling this directly from components.
+ */
+export const setSongDedication = async (song_id: string, dedication: string | null): Promise<void> => {
+  const { error } = await supabase
+    .from("songs")
+    .update({ dedication })
     .eq("id", song_id);
   if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
 };
