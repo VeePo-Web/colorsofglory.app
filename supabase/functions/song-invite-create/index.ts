@@ -1,4 +1,7 @@
 import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/auth.ts";
+import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
+import { inviteEmail } from "../_shared/email.ts";
+import { enqueueEmail } from "../_shared/emailGovernance.ts";
 
 function genToken(len = 24): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz";
@@ -57,6 +60,57 @@ Deno.serve(async (req) => {
       entity_id: invite.id,
       after: { song_id, role, max_uses },
     });
+
+    // C1 · collab.invite — the most important growth email in the system
+    // (docs/email/COG-EMAIL-SYSTEM.md §4/§5). Transactional-warm, instant,
+    // sent only when the inviter addressed a real email. STRICTLY NON-FATAL:
+    // the invite row is already created and returned; a mail hiccup must
+    // never break inviting. Also enqueues the one C2 reminder (+3 days),
+    // deduped per invite — the drain re-checks the invite is still pending.
+    if (invited_email) {
+      try {
+        const [{ data: song }, { data: inviterProfile }] = await Promise.all([
+          admin.from("songs").select("title").eq("id", song_id).maybeSingle(),
+          admin.from("profiles").select("display_name, first_name").eq("user_id", user.id).maybeSingle(),
+        ]);
+        const inviterName =
+          inviterProfile?.display_name?.trim() ||
+          inviterProfile?.first_name?.trim() ||
+          "A songwriter";
+        const songTitle = song?.title ?? "a song";
+
+        const template = inviteEmail({
+          inviterName,
+          songTitle,
+          role,
+          personalNote: message,
+          token,
+        });
+        await sendViaResend({
+          from: COG_SENDERS.primary,
+          to: invited_email,
+          subject: template.subject,
+          html: template.html,
+          text: template.text,
+          tags: [
+            { name: "app", value: "cog" },
+            { name: "category", value: "collab" },
+            { name: "kind", value: "collab_invite" },
+          ],
+        }).catch((e) => console.error("[song-invite-create] invite_email_failed", String(e)));
+
+        await enqueueEmail(admin, {
+          user_id: user.id, // queue owner; the drain sends to payload/invite email
+          kind: "collab.invite_reminder",
+          category: "collab",
+          payload: { invite_id: invite.id, inviter_name: inviterName, song_title: songTitle },
+          scheduled_for: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString(),
+          dedupe_key: `collab.invite_reminder:${invite.id}`,
+        });
+      } catch (e) {
+        console.error("[song-invite-create] email_wiring_failed", String(e));
+      }
+    }
 
     return jsonResponse({ invite });
   } catch (e) {

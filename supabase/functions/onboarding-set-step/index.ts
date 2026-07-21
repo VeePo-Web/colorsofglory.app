@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3.23.8';
+import { enqueueEmail } from '../_shared/emailGovernance.ts';
 
 const STEPS = [
   'not_started','intent_selected','founder_code_seen','first_song_created',
@@ -99,6 +100,39 @@ Deno.serve(async (req) => {
   }
 
   const nextRoute = NEXT_ROUTE[prof.onboarding_step]?.(prof.first_song_id ?? null) ?? '/';
+
+  // A1/A2 (docs/email/COG-EMAIL-SYSTEM.md §5): the first successful step a
+  // user ever sets is the "account is real" moment. Enqueue the welcome
+  // (instant) + the first-song nudge (+24h; the drain re-checks "still no
+  // song" and evaporates if one exists). dedupe_key = once ever, enforced
+  // by the DB, so re-running onboarding can never double-send. Non-fatal.
+  if (result === 'OK') {
+    try {
+      const { data: emailProf } = await admin
+        .from('profiles')
+        .select('email, first_name')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (emailProf?.email) {
+        await enqueueEmail(admin, {
+          user_id: userId,
+          kind: 'onboarding.welcome',
+          category: 'onboarding',
+          payload: { first_name: emailProf.first_name ?? null },
+          dedupe_key: `onboarding.welcome:${userId}`,
+        });
+        await enqueueEmail(admin, {
+          user_id: userId,
+          kind: 'onboarding.first_song_nudge',
+          category: 'onboarding',
+          scheduled_for: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          dedupe_key: `onboarding.first_song_nudge:${userId}`,
+        });
+      }
+    } catch (e) {
+      console.error('[onboarding-set-step] email_enqueue_failed', String(e));
+    }
+  }
 
   if (result === 'OK') {
     return json({

@@ -1,5 +1,51 @@
 import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/auth.ts";
 import { logActivity } from "../_shared/activity.ts";
+import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
+import { inviteAcceptedEmail } from "../_shared/email.ts";
+
+// C3 · collab.invite_accepted — tell the inviter someone stepped into the
+// room (docs/email/COG-EMAIL-SYSTEM.md §5). Transactional, instant, and
+// STRICTLY NON-FATAL: acceptance already succeeded; mail must never break it.
+// deno-lint-ignore no-explicit-any
+async function notifyInviter(admin: any, token: string, songId: string, inviteeUserId: string) {
+  try {
+    const { data: invite } = await admin
+      .from("song_invites")
+      .select("created_by_user_id, role")
+      .eq("token", token)
+      .maybeSingle();
+    const inviterId = invite?.created_by_user_id;
+    if (!inviterId || inviterId === inviteeUserId) return;
+
+    const [{ data: inviter }, { data: invitee }, { data: song }] = await Promise.all([
+      admin.from("profiles").select("email").eq("user_id", inviterId).maybeSingle(),
+      admin.from("profiles").select("display_name, first_name").eq("user_id", inviteeUserId).maybeSingle(),
+      admin.from("songs").select("title").eq("id", songId).maybeSingle(),
+    ]);
+    if (!inviter?.email) return; // no email on profile → skip, never block
+
+    const template = inviteAcceptedEmail({
+      inviteeName: invitee?.display_name?.trim() || invitee?.first_name?.trim() || "Your collaborator",
+      songTitle: song?.title ?? "your song",
+      songId,
+      role: invite?.role ?? "collaborator",
+    });
+    await sendViaResend({
+      from: COG_SENDERS.primary,
+      to: inviter.email,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+      tags: [
+        { name: "app", value: "cog" },
+        { name: "category", value: "collab" },
+        { name: "kind", value: "collab_invite_accepted" },
+      ],
+    });
+  } catch (e) {
+    console.error("[song-invite-accept] accepted_email_failed", String(e));
+  }
+}
 
 // Maps SQL helper codes -> HTTP status
 const STATUS: Record<string, number> = {
@@ -40,6 +86,7 @@ Deno.serve(async (req) => {
           entity_id: user.id,
           payload: { role: row.role },
         });
+        await notifyInviter(admin, token, row.song_id, user.id);
       }
       return jsonResponse(
         {
