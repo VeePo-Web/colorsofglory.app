@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getActivitySince, getSongLastSeen, markSongSeen } from "@/integrations/cog/activity";
+import {
+  getActivitySince,
+  getSongLastSeen,
+  markSongSeen,
+  type ActivityEvent,
+} from "@/integrations/cog/activity";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { buildRecapDigest, type RecapEntry } from "./recapDigest";
 
@@ -19,7 +24,7 @@ import { buildRecapDigest, type RecapEntry } from "./recapDigest";
 
 const LAST_VISIT_KEY = (songId: string) => `cog:canvas-last-visit-${songId}`;
 
-export function useCanvasRecap(songId: string) {
+export function useCanvasRecap(songId: string, extraEvents?: ActivityEvent[]) {
   const { user } = useCurrentAccount();
   const [dismissed, setDismissed] = useState(false);
 
@@ -76,10 +81,20 @@ export function useCanvasRecap(songId: string) {
     retry: false,
   });
 
-  const items: RecapEntry[] = useMemo(
-    () => buildRecapDigest(query.data ?? [], { excludeUserId: user?.id, cap: 5 }),
-    [query.data, user?.id],
-  );
+  const items: RecapEntry[] = useMemo(() => {
+    // Client-synthesized rows (amens) fold into the SAME anchor window and
+    // digest, so "Sarah left 3 amens" groups beside her other changes — one
+    // calm recap, never a second surface. Same gates as the server query:
+    // a real anchor and a known identity (excludeUserId must be meaningful).
+    const extras =
+      typeof anchor === "string" && user?.id && extraEvents?.length
+        ? extraEvents.filter((r) => r.created_at > anchor)
+        : [];
+    return buildRecapDigest([...(query.data ?? []), ...extras], {
+      excludeUserId: user?.id,
+      cap: 5,
+    });
+  }, [query.data, user?.id, anchor, extraEvents]);
 
   return {
     shouldShow: !dismissed && items.length > 0,

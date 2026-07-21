@@ -38,6 +38,7 @@ const PHRASES: Record<string, Phrase> = {
   card_section_set:    { one: "tagged an idea with a section", many: (n) => `tagged ${n} ideas with sections`, category: "Canvas" },
   card_promoted_final: { one: "moved an idea into Final",     many: (n) => `moved ${n} ideas into Final`,    category: "Canvas" },
   card_deleted:        { one: "removed an idea",              many: (n) => `removed ${n} ideas`,             category: "Canvas" },
+  idea_amened:         { one: "left an amen on an idea",      many: (n) => `left ${n} amens`,                category: "Ideas" },
 };
 
 const FALLBACK_PHRASE: Phrase = {

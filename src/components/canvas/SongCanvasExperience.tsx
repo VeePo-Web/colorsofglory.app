@@ -117,6 +117,8 @@ import Pad from "@/components/capture/Pad";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
+import AmenChip from "@/components/canvas/AmenChip";
+import { useAmens } from "@/lib/canvas/collab/useAmens";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
@@ -447,6 +449,22 @@ const SongCanvasExperience = () => {
   }, [songMembers, profile?.user_id, currentUserName]);
   const identityRef = useRef(identityByUserId);
   identityRef.current = identityByUserId;
+
+  // ── Amens — the encouragement layer (D3). Depends on the live identity map
+  // so cluster names upgrade from "Someone" the moment the roster lands.
+  const resolveAmenName = useCallback(
+    (id: string) => identityByUserId.get(id)?.name,
+    [identityByUserId],
+  );
+  const {
+    summaries: amenSummaryByCard,
+    toggleAmen,
+    amenEvents,
+  } = useAmens(songId, {
+    userId: profile?.user_id,
+    isDemo: isDemoRoom,
+    resolveName: resolveAmenName,
+  });
 
   /** Is this card mine? IDs when both sides are known; names as the fallback;
    *  calm default (true) while identity is still resolving — an unresolved
@@ -2052,11 +2070,27 @@ const SongCanvasExperience = () => {
     [pendingReview],
   );
   const renderCardAdornment = useCallback(
-    (card: CanvasCard) =>
+    (card: CanvasCard) => {
       // ONE hoisted element (module scope) — a fresh <span> per call defeated
       // the memo of every card wearing a dot, on every stage render.
-      canReview && !isViewer && pendingReviewIds.has(card.id) ? REVIEW_DOT : null,
-    [canReview, isViewer, pendingReviewIds],
+      const dot = canReview && !isViewer && pendingReviewIds.has(card.id) ? REVIEW_DOT : null;
+      const amenSummary = amenSummaryByCard.get(card.id) ?? null;
+      const isSelectedCard = selectedId === card.id;
+      // Null for untouched, unselected cards — their memo stays intact.
+      if (!dot && !amenSummary && !isSelectedCard) return null;
+      return (
+        <>
+          {dot}
+          <AmenChip
+            summary={amenSummary}
+            selected={isSelectedCard}
+            cardTitle={card.title || "this idea"}
+            onToggle={(kind) => toggleAmen(card.id, kind)}
+          />
+        </>
+      );
+    },
+    [canReview, isViewer, pendingReviewIds, amenSummaryByCard, selectedId, toggleAmen],
   );
 
   // A decided suggestion leaves EVERY device's queue: server-lane rows are
@@ -2644,7 +2678,7 @@ const SongCanvasExperience = () => {
 
       {/* Return-visit recap — auto-shows once for a returning collaborator
           with real activity-feed changes since their last visit (Product 12) */}
-      {!showRecap && <CanvasRecapGate songId={songId} />}
+      {!showRecap && <CanvasRecapGate songId={songId} extraEvents={amenEvents} />}
 
       {/* Fresh-from-invite welcome: "You joined as [role]" — once, on arrival. */}
       {isInviteArrival && <RoleToast role={invitedRole} />}

@@ -1,4 +1,5 @@
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
+import type { ActivityEvent } from "@/integrations/cog/activity";
 import { useCanvasRecap } from "@/lib/canvas/collab/useCanvasRecap";
 
 /**
@@ -12,8 +13,15 @@ import { useCanvasRecap } from "@/lib/canvas/collab/useCanvasRecap";
  * first visits silent, at most 5 grouped lines. Renders nothing the rest of
  * the time, so the canvas stays calm.
  */
-const CanvasRecapGate = ({ songId }: { songId: string }) => {
-  const { shouldShow, items, dismiss } = useCanvasRecap(songId);
+const CanvasRecapGate = ({
+  songId,
+  extraEvents,
+}: {
+  songId: string;
+  /** Client-synthesized rows (e.g. amens) folded into the same calm digest. */
+  extraEvents?: ActivityEvent[];
+}) => {
+  const { shouldShow, items, dismiss } = useCanvasRecap(songId, extraEvents);
   if (!shouldShow) return null;
   return <WhatChangedRecapSheet songId={songId} items={items} onDismiss={dismiss} />;
 };
