@@ -3,6 +3,7 @@ import { audioCache } from "@/lib/voice/audioCache";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { resolveAudible } from "@/lib/voice/stackModel";
 import { getAlignmentOffsetMs } from "@/lib/audio/alignmentStore";
+import { polishAttach } from "@/lib/audio/enhance";
 
 /**
  * useStackPlayer — synchronized playback of a layered voice-memo stack.
@@ -33,6 +34,7 @@ const EMPTY_MUTED: Set<string> = new Set();
 
 export function useStackPlayer(playIds: string[]) {
   const elementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const blobsRef = useRef<Map<string, Blob>>(new Map());
   const objectUrlsRef = useRef<string[]>([]);
   const preparedRef = useRef(false);
   // True until the first play after prepare/stop — the moment latency
@@ -58,6 +60,7 @@ export function useStackPlayer(playIds: string[]) {
       el.onended = null;
     });
     elementsRef.current.clear();
+    blobsRef.current.clear();
     objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     objectUrlsRef.current = [];
     preparedRef.current = false;
@@ -102,6 +105,7 @@ export function useStackPlayer(playIds: string[]) {
           if (cached) {
             url = URL.createObjectURL(cached);
             objectUrlsRef.current.push(url);
+            blobsRef.current.set(id, cached); // for the polish loudness profile
           } else {
             url = await getSignedUrl(id);
             audioCache.prefetch(id, url); // warm cache for next time
@@ -145,6 +149,11 @@ export function useStackPlayer(playIds: string[]) {
       });
       freshStartRef.current = false;
     }
+    // Polish (strictly additive, inside the gesture): cached blob-URL layers
+    // route through the music-safe bus; remote layers stay exactly as today.
+    elementsRef.current.forEach((el, id) => {
+      void polishAttach(el, { memoId: id, blob: blobsRef.current.get(id) });
+    });
     // Start every element in the same tick so the gesture activation covers all.
     elementsRef.current.forEach((el) => {
       void el.play().catch(() => {});

@@ -6,6 +6,7 @@ import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { audioCache } from "@/lib/voice/audioCache";
+import { isPolishAttached, polishAttach, renderPolishedWav } from "@/lib/audio/enhance";
 
 interface VoiceMemoListItemProps {
   memo: VoiceMemoRecord;
@@ -32,8 +33,47 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  // Render a produced-demo WAV through the polish chain (offline, the
+  // original untouched) and hand it to the share sheet / a download. Any
+  // failure ends quietly — the memo itself is never at risk.
+  const sharePolished = useCallback(async () => {
+    setShowMenu(false);
+    setIsExporting(true);
+    try {
+      let blob = await audioCache.get(memo.id);
+      if (!blob) {
+        const url = await getSignedUrl(memo.id);
+        blob = await (await fetch(url)).blob();
+        await audioCache.set(memo.id, blob).catch(() => {});
+      }
+      const wav = await renderPolishedWav(memo.id, blob);
+      if (!wav) return;
+      const file = new File([wav], `${memo.title || "demo"} (polished).wav`, {
+        type: "audio/wav",
+      });
+      const nav = navigator as Navigator & {
+        canShare?: (d: { files: File[] }) => boolean;
+      };
+      if (nav.share && nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file], title: file.name }).catch(() => {});
+      } else {
+        const dl = URL.createObjectURL(wav);
+        const a = document.createElement("a");
+        a.href = dl;
+        a.download = file.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(dl), 10_000);
+      }
+    } catch {
+      // Quiet — the original is safe; the user can simply try again.
+    } finally {
+      setIsExporting(false);
+    }
+  }, [memo.id, memo.title]);
 
   const togglePlay = useCallback(async () => {
     if (isPlaying) {
@@ -44,8 +84,16 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
 
     setIsLoading(true);
     try {
-      const cached = await audioCache.get(memo.id);
+      let cached = await audioCache.get(memo.id);
       let url: string;
+
+      if (!cached && audioRef.current && isPolishAttached(audioRef.current)) {
+        // This element is wired into the polish bus (a prior cached play) —
+        // a remote src on it would play SILENCE, so fetch to a blob first.
+        const signedUrl = await getSignedUrl(memo.id);
+        cached = await (await fetch(signedUrl)).blob();
+        await audioCache.set(memo.id, cached).catch(() => {});
+      }
 
       if (cached) {
         url = URL.createObjectURL(cached);
@@ -64,6 +112,9 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
       audio.src = url;
       audio.ontimeupdate = () => setProgress(audio.currentTime / (audio.duration || 1));
       audio.onended = () => { setIsPlaying(false); setProgress(0); };
+      // Polish (strictly additive): cached blob-URL playback routes through
+      // the music-safe bus; signed-URL playback stays exactly as today.
+      void polishAttach(audio, { memoId: memo.id, blob: cached ?? undefined });
       await audio.play();
       setIsPlaying(true);
     } catch {
@@ -206,43 +257,60 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
       </button>
 
       {/* More menu */}
-      {onDelete && (
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => setShowMenu((v) => !v)}
-            style={{
-              width: 28, height: 28, borderRadius: "50%",
-              backgroundColor: "transparent",
-              border: "none", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#BBB",
-            }}
-            aria-label="More options"
-          >
-            <MoreHorizontal size={14} />
-          </button>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          type="button"
+          onClick={() => setShowMenu((v) => !v)}
+          style={{
+            width: 28, height: 28, borderRadius: "50%",
+            backgroundColor: "transparent",
+            border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#BBB",
+          }}
+          aria-label="More options"
+        >
+          <MoreHorizontal size={14} />
+        </button>
 
-          {showMenu && (
-            <>
-              <div
-                style={{ position: "fixed", inset: 0, zIndex: 90 }}
-                onClick={() => setShowMenu(false)}
-                aria-hidden="true"
-              />
-              <div
+        {showMenu && (
+          <>
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 90 }}
+              onClick={() => setShowMenu(false)}
+              aria-hidden="true"
+            />
+            <div
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 4px)",
+                zIndex: 91,
+                backgroundColor: "#FFFFFF",
+                borderRadius: 12,
+                boxShadow: "0 8px 30px rgba(0,0,0,0.14)",
+                padding: "4px 0",
+                minWidth: 150,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => void sharePolished()}
+                disabled={isExporting}
                 style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "calc(100% + 4px)",
-                  zIndex: 91,
-                  backgroundColor: "#FFFFFF",
-                  borderRadius: 12,
-                  boxShadow: "0 8px 30px rgba(0,0,0,0.14)",
-                  padding: "4px 0",
-                  minWidth: 120,
+                  display: "block", width: "100%",
+                  padding: "9px 14px",
+                  textAlign: "left",
+                  fontFamily: "var(--font-body)",
+                  fontSize: 13, color: "var(--cog-gold, #B8953A)",
+                  backgroundColor: "transparent", border: "none",
+                  cursor: isExporting ? "wait" : "pointer",
+                  opacity: isExporting ? 0.6 : 1,
                 }}
               >
+                {isExporting ? "Polishing…" : "Share polished demo"}
+              </button>
+              {onDelete && (
                 <button
                   type="button"
                   onClick={() => { onDelete(memo.id); setShowMenu(false); }}
@@ -257,11 +325,11 @@ const VoiceMemoListItem = ({ memo, creatorName, ageLabel, onDelete }: VoiceMemoL
                 >
                   Delete
                 </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

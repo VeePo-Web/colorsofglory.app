@@ -25,6 +25,7 @@ import { audioCache } from "@/lib/voice/audioCache";
 import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { resolveContour } from "@/lib/audio/contourStore";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { isPolishAttached, polishAttach } from "@/lib/audio/enhance";
 
 /**
  * TakeMiniPlayer — the C4 take player (F15: swipe between takes + loop a part).
@@ -133,33 +134,51 @@ const TakeMiniPlayer = ({ memoId, memoTitle, fallbackPeaks, onClose }: TakeMiniP
   }, [loadTakes]);
 
   // ── Resolve + prepare audio for the current take (cache-first, instant) ──
-  const resolveUrl = useCallback(async (t: PlayableTake): Promise<string> => {
-    const cached = await audioCache.get(t.id);
-    if (cached) {
-      const url = URL.createObjectURL(cached);
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = url;
-      return url;
-    }
-    const url = t.take
-      ? await getTakeSignedUrl(t.take.storage_path)
-      : await getSignedUrl(t.id);
-    void audioCache.prefetch(t.id, url);
-    return url;
-  }, []);
+  const resolveUrl = useCallback(
+    async (t: PlayableTake): Promise<{ url: string; blob?: Blob }> => {
+      const cached = await audioCache.get(t.id);
+      if (cached) {
+        const url = URL.createObjectURL(cached);
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = url;
+        return { url, blob: cached };
+      }
+      const url = t.take
+        ? await getTakeSignedUrl(t.take.storage_path)
+        : await getSignedUrl(t.id);
+      // Once this shared element is wired into the polish bus, a remote src
+      // on it would play SILENCE (media-element sources are permanent and
+      // cross-origin output is muted) — so fetch to a blob first. This also
+      // warms the cache the prefetch was about to warm anyway.
+      if (audioRef.current && isPolishAttached(audioRef.current)) {
+        const fetched = await (await fetch(url)).blob();
+        await audioCache.set(t.id, fetched).catch(() => {});
+        const blobUrl = URL.createObjectURL(fetched);
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = blobUrl;
+        return { url: blobUrl, blob: fetched };
+      }
+      void audioCache.prefetch(t.id, url);
+      return { url };
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!current) return;
     let cancelled = false;
     (async () => {
       try {
-        const url = await resolveUrl(current);
+        const { url, blob } = await resolveUrl(current);
         if (cancelled) return;
         if (!audioRef.current) audioRef.current = new Audio();
         const audio = audioRef.current;
         const wasPlaying = isPlaying;
         audio.src = url;
         audio.load();
+        // Polish (strictly additive): cached blob-URL takes route through
+        // the music-safe bus; signed URLs stay exactly as today.
+        void polishAttach(audio, { memoId: current.id, blob });
         if (wasPlaying) void audio.play().catch(() => setIsPlaying(false));
         // Warm the neighbors so a swipe plays instantly.
         const prev = takes[index - 1];
@@ -242,9 +261,12 @@ const TakeMiniPlayer = ({ memoId, memoTitle, fallbackPeaks, onClose }: TakeMiniP
       audio.pause();
       setIsPlaying(false);
     } else {
+      // Gesture retry: if the earlier attach skipped (suspended context),
+      // this one runs inside the tap. Idempotent when already attached.
+      void polishAttach(audio, { memoId: current?.id });
       void audio.play().then(() => setIsPlaying(true)).catch(() => {});
     }
-  }, [isPlaying]);
+  }, [isPlaying, current?.id]);
 
   // ── Waveform interactions: tap = scrub; drag = set the A–B loop region ──
   const pctFromEvent = useCallback((clientX: number): number => {

@@ -32,6 +32,7 @@ import { defaultCaptureName } from "@/lib/voice/captureNaming";
 import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { backfillOnOpen } from "@/lib/audio/melodyBackfill";
 import TakeMiniPlayer from "@/components/voice/TakeMiniPlayer";
+import PolishToggle from "@/components/voice/PolishToggle";
 
 const HumToFindSheet = lazy(() => import("@/components/voice/HumToFindSheet"));
 import { getSessionUser } from "@/integrations/cog/auth";
@@ -756,24 +757,28 @@ const VoiceMemosPage = () => {
         </p>
 
         {/* Hum to find — opt-in melody search over your own memos (Melody Lens
-            Feature 2). Quiet until the library is worth searching. */}
+            Feature 2). Quiet until the library is worth searching. Polish A/B
+            sits beside it — one tap between "Polished ✨" and the raw take. */}
         {memos.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowHumFind(true)}
-            className="flex items-center gap-2 rounded-xl px-3.5 mb-6 transition-all duration-150 active:scale-[0.98]"
-            style={{
-              minHeight: 44, alignSelf: "flex-start",
-              backgroundColor: "rgba(184,149,58,0.10)",
-              border: "1px solid rgba(184,149,58,0.22)",
-              color: "var(--cog-gold)", fontFamily: "var(--font-body)",
-              fontSize: 13, fontWeight: 600,
-            }}
-            aria-label="Hum to find a melody in your memos"
-          >
-            <Search size={15} strokeWidth={2} />
-            Hum to find a melody
-          </button>
+          <div className="flex items-center gap-2 mb-6" style={{ alignSelf: "flex-start" }}>
+            <button
+              type="button"
+              onClick={() => setShowHumFind(true)}
+              className="flex items-center gap-2 rounded-xl px-3.5 transition-all duration-150 active:scale-[0.98]"
+              style={{
+                minHeight: 44,
+                backgroundColor: "rgba(184,149,58,0.10)",
+                border: "1px solid rgba(184,149,58,0.22)",
+                color: "var(--cog-gold)", fontFamily: "var(--font-body)",
+                fontSize: 13, fontWeight: 600,
+              }}
+              aria-label="Hum to find a melody in your memos"
+            >
+              <Search size={15} strokeWidth={2} />
+              Hum to find a melody
+            </button>
+            <PolishToggle />
+          </div>
         )}
 
         {/* Upload zone */}

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { audioCache } from "@/lib/voice/audioCache";
+import { polishAttach } from "@/lib/audio/enhance";
 
 export interface AudioPlayerState {
   isPlaying: boolean;
@@ -23,7 +24,7 @@ export function useAudioPlayer() {
     }
   };
 
-  const loadAndPlay = useCallback((url: string, memoId: string) => {
+  const loadAndPlay = useCallback((url: string, memoId: string, blob?: Blob) => {
     releaseObjectUrl();
     if (audioRef.current) {
       audioRef.current.pause();
@@ -32,6 +33,9 @@ export function useAudioPlayer() {
 
     const audio = new Audio();
     audio.src = url;
+    // Polish (strictly additive): blob-URL playback routes through the
+    // music-safe bus; remote URLs stay exactly as today.
+    void polishAttach(audio, { memoId, blob });
     audio.ontimeupdate = () => {
       const pct = audio.currentTime / (audio.duration || 1);
       setState((s) => ({ ...s, progress: pct }));
@@ -58,7 +62,7 @@ export function useAudioPlayer() {
     if (cached) {
       const url = URL.createObjectURL(cached);
       objectUrlRef.current = url;
-      loadAndPlay(url, memoId);
+      loadAndPlay(url, memoId, cached);
     } else {
       // Stream immediately while caching in background
       loadAndPlay(signedUrl, memoId);
@@ -71,7 +75,7 @@ export function useAudioPlayer() {
     releaseObjectUrl();
     const url = URL.createObjectURL(blob);
     objectUrlRef.current = url;
-    loadAndPlay(url, memoId);
+    loadAndPlay(url, memoId, blob);
   }, [loadAndPlay]);
 
   const pause = useCallback(() => {
