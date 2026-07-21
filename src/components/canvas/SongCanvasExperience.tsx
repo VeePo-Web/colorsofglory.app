@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -24,6 +25,8 @@ import {
   UserPlus,
   Inbox,
   Maximize2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CrownMark from "@/components/cog/CrownMark";
@@ -1778,6 +1781,45 @@ const SongCanvasExperience = () => {
     viewportApiRef.current?.fitTo(box, vw, vh, 72, 480);
   }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
 
+  // The next space peeks in from the physical edge. Tapping is the accessible
+  // baseline; a short edge swipe is the tactile shortcut. Keeping the gesture
+  // on this narrow rail prevents competition with card drag and canvas pan.
+  const edgeSwipeStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const edgeSwipeHandledRef = useRef(false);
+  const handleEdgeSwipeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return;
+    edgeSwipeHandledRef.current = false;
+    edgeSwipeStartRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+  const handleEdgeSwipeEnd = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const start = edgeSwipeStartRef.current;
+    edgeSwipeStartRef.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 28 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+    if (viewZone === "ideas" && deltaX < 0) {
+      edgeSwipeHandledRef.current = true;
+      goToZone("final");
+    }
+    if (viewZone === "final" && deltaX > 0) {
+      edgeSwipeHandledRef.current = true;
+      goToZone("ideas");
+    }
+  }, [goToZone, viewZone]);
+  const handleEdgeClick = useCallback(() => {
+    if (edgeSwipeHandledRef.current) {
+      edgeSwipeHandledRef.current = false;
+      return;
+    }
+    goToZone(viewZone === "ideas" ? "final" : "ideas");
+  }, [goToZone, viewZone]);
+  const handleEdgeSwipeCancel = useCallback(() => {
+    edgeSwipeStartRef.current = null;
+    edgeSwipeHandledRef.current = false;
+  }, []);
+
   const closeWorkPanel = useCallback(() => {
     setShowWorkPanel(false);
     setActiveLayer("room");
@@ -2318,16 +2360,15 @@ const SongCanvasExperience = () => {
           viewportApiRef={viewportApiRef}
           overlay={
             <>
-              {/* Semantic nav — the PRIMARY way to move on a phone that can't
-                  show both zones at once. One tap frames Ideas or Final; Fit
-                  frames the whole song. Pinch/pan stay as a secondary path. */}
+              {/* The mobile two-space model. Ideas remains the expansive room;
+                  Final Song is the ordered destination to its right. */}
               <div
                 className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5"
                 style={{ top: 12 }}
               >
                 <div
-                  role="tablist"
-                  aria-label="Jump between Ideas and Final"
+                  role="group"
+                  aria-label="Choose Ideas canvas or Final song"
                   ref={ideasTourRef}
                   className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
@@ -2338,17 +2379,24 @@ const SongCanvasExperience = () => {
                       <button
                         key={zone}
                         type="button"
-                        role="tab"
-                        aria-selected={active}
+                        aria-pressed={active}
+                        aria-label={`${zone === "ideas" ? "Show Ideas canvas" : "Show Final song"}, ${zone === "ideas" ? ideasCards.length : finalCards.length} ${zone === "ideas" ? "ideas" : "final sections"}`}
                         onClick={() => goToZone(zone)}
-                        className="flex min-h-9 items-center rounded-full px-4 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                        className="flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-[12px] font-bold transition-all duration-150 active:scale-[0.97]"
                         style={{
                           backgroundColor: active ? (zone === "ideas" ? "var(--cog-gold)" : GLORY.sage.base) : "transparent",
                           color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
                           fontFamily: "var(--font-body)",
                         }}
                       >
-                        {zone === "ideas" ? "Ideas" : "Final"}
+                        <span>{zone === "ideas" ? "Ideas canvas" : "Final song"}</span>
+                        <span
+                          aria-hidden="true"
+                          className="flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
+                          style={{ backgroundColor: active ? "rgba(255,255,255,0.20)" : "rgba(28,26,23,0.07)" }}
+                        >
+                          {zone === "ideas" ? ideasCards.length : finalCards.length}
+                        </span>
                       </button>
                     );
                   })}
@@ -2356,14 +2404,46 @@ const SongCanvasExperience = () => {
                 <button
                   type="button"
                   onClick={fitAll}
-                  className="pointer-events-auto flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                  className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full transition-all duration-150 active:scale-[0.97]"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
                   aria-label="Fit the whole song to view"
                 >
-                  <Maximize2 size={13} strokeWidth={2.2} />
-                  Fit
+                  <Maximize2 size={16} strokeWidth={2.1} aria-hidden="true" />
                 </button>
               </div>
+
+              {/* A quiet physical edge turns the relationship into muscle
+                  memory. This rail alone owns the page-like swipe shortcut. */}
+              <button
+                type="button"
+                onClick={handleEdgeClick}
+                onPointerDown={handleEdgeSwipeStart}
+                onPointerUp={handleEdgeSwipeEnd}
+                onPointerCancel={handleEdgeSwipeCancel}
+                className={`pointer-events-auto absolute top-1/2 z-40 flex min-h-32 w-11 -translate-y-1/2 flex-col items-center justify-center gap-2 transition-all duration-250 active:scale-[0.97] lg:hidden ${viewZone === "ideas" ? "right-0 rounded-l-2xl" : "left-0 rounded-r-2xl"}`}
+                style={{
+                  touchAction: "none",
+                  background: viewZone === "ideas"
+                    ? "linear-gradient(90deg, rgba(250,247,242,0.70), rgba(184,149,58,0.18))"
+                    : "linear-gradient(270deg, rgba(250,247,242,0.70), rgba(184,149,58,0.14))",
+                  border: "1px solid rgba(184,149,58,0.22)",
+                  borderRight: viewZone === "ideas" ? "none" : undefined,
+                  borderLeft: viewZone === "final" ? "none" : undefined,
+                  color: "var(--cog-gold)",
+                  boxShadow: "0 8px 24px rgba(28,26,23,0.07)",
+                  animation: "cog-final-peek 3.6s ease-in-out infinite",
+                }}
+                aria-label={viewZone === "ideas" ? "Swipe or tap to open the Final song" : "Swipe or tap to return to the Ideas canvas"}
+              >
+                {viewZone === "ideas" ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
+                <span
+                  className="text-[10px] font-bold uppercase tracking-[0.12em]"
+                  style={{ writingMode: "vertical-rl", fontFamily: "var(--font-body)" }}
+                  aria-hidden="true"
+                >
+                  {viewZone === "ideas" ? "Final song" : "Ideas"}
+                </span>
+              </button>
               {showFirstRun && (
                 <FirstActionPrompt
                   // "Tap to record" OPENS THE RECORDER — the chip used to
@@ -2893,7 +2973,7 @@ const SongCanvasExperience = () => {
         <CoachMark
           targetRef={ideasTourRef}
           lead="Two spaces, one song."
-          body="Explore ideas on the left. Tap a keeper, then → Final — or drag it across."
+          body="Ideas is your full creative room. Keep what belongs, then swipe toward Final song to hear the arrangement take shape."
           onGotIt={ideasTour.gotIt}
           onSkip={ideasTour.skip}
           isFinal={ideasTour.isFinal}
@@ -2920,10 +3000,15 @@ const SongCanvasExperience = () => {
           0%   { transform: scale(1);   opacity: 0.6; }
           75%, 100% { transform: scale(2.2); opacity: 0; }
         }
+        @keyframes cog-final-peek {
+          0%, 100% { opacity: 0.72; }
+          50% { opacity: 1; }
+        }
         @keyframes cog-fade-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes cog-sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
           [style*="cog-live-ping"] { animation: none !important; }
+          [style*="cog-final-peek"] { animation: none !important; }
           [style*="cog-sheet-rise"], [style*="cog-fade-in"] { animation: none !important; }
         }
       `}</style>
