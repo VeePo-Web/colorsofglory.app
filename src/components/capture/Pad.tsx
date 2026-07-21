@@ -3,6 +3,7 @@ import { Headphones, Waves, X } from "lucide-react";
 import {
   AmbientPad,
   clampPadVolume,
+  isPadSupported,
   PAD_DEFAULT_VOLUME,
   PAD_MAX_VOLUME,
   PAD_MIN_VOLUME,
@@ -72,6 +73,18 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
     [],
   );
 
+  // Self-heal after an interruption (phone call, screen lock): iOS suspends
+  // the context; when the writer returns with the pad toggled on, nudge it
+  // back to life instead of showing an ON toggle that plays silence.
+  useEffect(() => {
+    if (!running) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void engineRef.current?.resumeIfNeeded();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [running]);
+
   const toggle = () => {
     if (running) {
       engineRef.current?.stop();
@@ -124,6 +137,9 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
   };
 
   const keyLabel = `${tonic}${flavor === "minor" ? "m" : ""}`;
+
+  // No Web Audio → no pad. Genuinely absent, never a dead control.
+  if (!isPadSupported()) return null;
 
   return (
     <div className={`flex flex-col items-center gap-2 ${className ?? ""}`}>

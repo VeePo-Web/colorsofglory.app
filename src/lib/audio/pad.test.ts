@@ -80,4 +80,16 @@ describe("pad — pure music math (all 12 keys procedural)", () => {
     expect(clampPadVolume(Number.NaN)).toBe(PAD_DEFAULT_VOLUME);
     expect(clampPadVolume(0.2)).toBe(0.2);
   });
+
+  it("HEADROOM: the summed bed can never clip — normalized against the full flavored sum", () => {
+    for (const flavor of ["neutral", "major", "minor"] as const) {
+      const sum = padVoicing("C", flavor).reduce((s, v) => s + v.gain, 0);
+      expect(sum).toBeLessThanOrEqual(1.01);
+    }
+    // The normalization anchor is the FULL sum (third at max), so switching
+    // flavor never changes the non-third voices' level — no loudness jump.
+    const neutralRoot = padVoicing("G", "neutral")[0].gain;
+    const majorRoot = padVoicing("G", "major")[0].gain;
+    expect(neutralRoot).toBeCloseTo(majorRoot, 10);
+  });
 });

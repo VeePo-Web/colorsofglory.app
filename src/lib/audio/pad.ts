@@ -11,7 +11,9 @@
  *   VOICING   tonic + perfect fifth stacked across three octaves, NO third by
  *             default — a fifths drone consonant under BOTH major and minor
  *             melodies (it commits to the KEY, not the mode). An optional
- *             major/minor third voice crossfades in only when asked.
+ *             major/minor third voice crossfades in only when asked. Voice
+ *             gains are HEADROOM-NORMALIZED (the summed bed peaks ≈ 1.0) so
+ *             the mix can never clip into harshness.
  *   UNISON    every voice is 3 oscillators detuned ±7 cents (saw · triangle ·
  *             saw) summed — the #1 lushness factor: shimmer and width instead
  *             of a flat tone.
@@ -23,14 +25,25 @@
  *   WASH      a ConvolverNode fed a PROCEDURAL impulse response (decaying
  *             filtered noise, ~3.5 s, stereo, built in memory — no bundled
  *             file) at a high wet mix: the worship-pad hall.
+ *   GLUE      a gentle DynamicsCompressor rides the summed wash — the reverb
+ *             build-up breathes against it instead of stacking into peaks.
  *   AIR       a whisper of high-passed looped noise.
  *   SMOOTH    master gain ramps in ~1.5 s and out ~2.5 s (never a click);
  *             key changes GLIDE (~0.3 s portamento); volume moves smoothly.
  *
+ * LIFECYCLE (the no-failure part): every start() builds a FRESH graph; stop()
+ * and dispose() RETIRE the current graph — it fades on its own timer and
+ * tears itself down when the fade completes. Retiring graphs are tracked, so
+ * tapping the pad back ON mid-fade simply swells a new bed over the old one's
+ * tail — never an abrupt cut, never a pop, never a timer tearing down the
+ * wrong graph. start() never throws (a failed node build tears down silently
+ * — worst case is silence, recoverable with a tap). resumeIfNeeded() heals
+ * the iOS suspended-after-interruption state (phone call, screen lock).
+ *
  * Mirrors the Metronome class shape: no React, no DOM — construct, start()
  * (creates + resumes the AudioContext INSIDE the user gesture, autoplay
- * policy), stop(), dispose(). Never a runaway drone: dispose fades fast and
- * closes the context.
+ * policy), stop(), dispose(). Never a runaway drone: dispose fades every
+ * live graph fast and closes the context.
  *
  * NOTE vs the click's never-bleed rule: the pad DELIBERATELY keeps sounding
  * while recording — humming over it is the point (and its harmonics are in
@@ -46,9 +59,9 @@ export type PadFlavor = "neutral" | Mode;
 
 // ── Tuning (documented in docs/PAD-CONTRACT.md) ──────────────────────────────
 
-export const PAD_DEFAULT_VOLUME = 0.2;
+export const PAD_DEFAULT_VOLUME = 0.25;
 export const PAD_MIN_VOLUME = 0.05;
-export const PAD_MAX_VOLUME = 0.45;
+export const PAD_MAX_VOLUME = 0.5;
 
 const ATTACK_S = 1.5;
 const RELEASE_S = 2.5;
@@ -63,6 +76,12 @@ const REVERB_SECONDS = 3.5;
 const REVERB_WET = 0.85;
 const REVERB_DRY = 0.5;
 const AIR_GAIN = 0.012;
+
+/**
+ * The summed voice bed is normalized to peak ≈ this, so even with the reverb
+ * wash and max volume the output cannot clip into digital harshness.
+ */
+const VOICING_HEADROOM = 1.0;
 
 /** Per-voice breathing rates — mutually detuned so phases drift apart. */
 const BREATH_RATES_HZ = [0.09, 0.11, 0.13, 0.15, 0.17, 0.19];
@@ -98,23 +117,30 @@ export interface PadVoiceSpec {
 
 /**
  * The voicing: root+fifth over octaves 2–4 (65–330 Hz fundamentals), lower
- * voices carrying more weight. The third (when flavored) sits mid-stack at a
- * modest level — color, not a chord lead.
+ * voices carrying more weight, the whole bed normalized to VOICING_HEADROOM
+ * (including the flavored third's maximum, so choosing a flavor can never
+ * push the mix into clipping). The third sits mid-stack at a modest level —
+ * color, not a chord lead.
  */
 export function padVoicing(tonic: string, flavor: PadFlavor): PadVoiceSpec[] {
   const pc = Math.max(0, pitchClass(tonic));
   const base = 36 + pc; // tonic at octave 2
+  const thirdMax = 0.42;
   const spec: Array<[semis: number, gain: number, pan: number, isThird: boolean]> = [
     [0, 1.0, 0, false], // root  · oct 2 · center anchor
     [7, 0.75, -0.55, false], // fifth · oct 2 · left
     [12, 0.7, 0.55, false], // root  · oct 3 · right
     [19, 0.5, -0.3, false], // fifth · oct 3
     [24, 0.34, 0.3, false], // root  · oct 4 · shimmer
-    [flavor === "minor" ? 15 : 16, flavor === "neutral" ? 0 : 0.42, 0.12, true],
+    [flavor === "minor" ? 15 : 16, flavor === "neutral" ? 0 : thirdMax, 0.12, true],
   ];
+  // Normalize against the FULL possible sum (third at max) so the level is
+  // stable whether or not a flavor is chosen.
+  const fullSum = spec.reduce((s, [, g, , isThird]) => s + (isThird ? thirdMax : g), 0);
+  const scale = VOICING_HEADROOM / fullSum;
   return spec.map(([semis, gain, pan, isThird], i) => ({
     freq: midiToFrequency(base + semis),
-    gain,
+    gain: gain * scale,
     pan,
     breathRateHz: BREATH_RATES_HZ[i % BREATH_RATES_HZ.length],
     isThird,
@@ -125,7 +151,8 @@ export function padVoicing(tonic: string, flavor: PadFlavor): PadVoiceSpec[] {
  * Procedural reverb impulse: exponentially-decaying noise, softened by a
  * one-pole lowpass in the generation loop, independently per channel for
  * stereo width. Built directly as an AudioBuffer — no file, no network, no
- * offline render needed.
+ * offline render needed. (ConvolverNode.normalize is true by default, which
+ * keeps the wash level-stable regardless of this buffer's raw energy.)
  */
 export function buildImpulseResponse(ctx: BaseAudioContext, seconds = REVERB_SECONDS): AudioBuffer {
   const rate = ctx.sampleRate;
@@ -155,20 +182,36 @@ interface VoiceNodes {
   isThird: boolean;
 }
 
+/** One complete signal graph — retired and torn down as a unit. */
+interface PadGraph {
+  master: GainNode;
+  voices: VoiceNodes[];
+  nodes: AudioNode[];
+  sources: Array<OscillatorNode | AudioBufferSourceNode>;
+  teardownTimer: ReturnType<typeof setTimeout> | null;
+}
+
 export interface AmbientPadOptions {
   tonic?: string;
   flavor?: PadFlavor;
   volume?: number;
 }
 
+/** True when this browser can synthesize the pad at all. */
+export function isPadSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) !=
+      null
+  );
+}
+
 export class AmbientPad {
   private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private filter: BiquadFilterNode | null = null;
-  private voices: VoiceNodes[] = [];
-  private extraNodes: AudioNode[] = [];
-  private extraSources: Array<OscillatorNode | AudioBufferSourceNode> = [];
-  private stopTimer: ReturnType<typeof setTimeout> | null = null;
+  private graph: PadGraph | null = null;
+  private retiring: PadGraph[] = [];
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   private tonic: string;
   private flavor: PadFlavor;
@@ -189,34 +232,174 @@ export class AmbientPad {
     return { tonic: this.tonic, flavor: this.flavor };
   }
 
-  /** Call from the user's tap — resumes the context inside the gesture. */
+  /**
+   * Call from the user's tap — resumes the context inside the gesture.
+   * NEVER throws: a failed node build tears itself down and resolves silent
+   * (worst case: no sound; a tap-off/on retries). Restart during a fade-out
+   * simply swells a fresh bed while the old one finishes its tail.
+   */
   async start(): Promise<void> {
     if (this.running) return;
-    const Ctor =
-      typeof window !== "undefined"
-        ? (window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
-        : undefined;
-    if (!Ctor) return; // no Web Audio → silent no-op, never throw
-    if (this.stopTimer) {
-      clearTimeout(this.stopTimer);
-      this.stopTimer = null;
+    if (!isPadSupported()) return;
+    if (this.closeTimer) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
     }
-    this.teardownGraph(); // a restart rebuilds cleanly
-    if (!this.ctx) this.ctx = new Ctor();
-    if (this.ctx.state === "suspended") await this.ctx.resume().catch(() => {});
+    try {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!;
+      if (!this.ctx) this.ctx = new Ctor();
+      if (this.ctx.state !== "running") await this.ctx.resume().catch(() => {});
+      this.graph = this.buildGraph(this.ctx);
+      this.running = true;
+    } catch {
+      // A partially-built graph must not linger half-connected.
+      if (this.graph) {
+        this.teardownGraphNodes(this.graph);
+        this.graph = null;
+      }
+      this.running = false;
+    }
+  }
 
+  /** Fade out over the long release; the graph retires and frees itself. */
+  stop(): void {
+    if (!this.running) return;
+    this.running = false;
+    this.retireGraph(RELEASE_S);
+  }
+
+  /** Glide every oscillator to the new key — a swell, never a jump. */
+  setKey(tonic: string, flavor?: PadFlavor): void {
+    this.tonic = tonic;
+    if (flavor !== undefined) this.flavor = flavor;
     const ctx = this.ctx;
+    const graph = this.graph;
+    if (!ctx || !graph) return;
     const now = ctx.currentTime;
+    const specs = padVoicing(this.tonic, this.flavor);
+    graph.voices.forEach((voice, i) => {
+      const spec = specs[i];
+      if (!spec) return;
+      for (const osc of voice.oscillators) {
+        osc.frequency.cancelScheduledValues(now);
+        osc.frequency.setTargetAtTime(spec.freq, now, GLIDE_S / 3);
+      }
+      // The flavor third breathes in/out with the choice — no pops.
+      if (voice.isThird) {
+        voice.gain.gain.cancelScheduledValues(now);
+        voice.gain.gain.setTargetAtTime(spec.gain, now, 0.2);
+        voice.breathGain.gain.setTargetAtTime(spec.gain * BREATH_DEPTH, now, 0.2);
+      }
+    });
+  }
+
+  setVolume(volume: number): void {
+    this.volume = clampPadVolume(volume);
+    const ctx = this.ctx;
+    if (ctx && this.graph && this.running) {
+      this.graph.master.gain.cancelScheduledValues(ctx.currentTime);
+      this.graph.master.gain.setTargetAtTime(Math.max(0.001, this.volume), ctx.currentTime, 0.15);
+    }
+  }
+
+  /**
+   * Heal the suspended-after-interruption state (phone call, screen lock,
+   * iOS backgrounding): if the pad should be sounding, nudge the context
+   * back to life. Best-effort, never throws.
+   */
+  async resumeIfNeeded(): Promise<void> {
+    if (!this.running || !this.ctx) return;
+    if (this.ctx.state !== "running") {
+      await this.ctx.resume().catch(() => {});
+    }
+  }
+
+  /** Fast fade of EVERY live graph + close the context. Never a runaway. */
+  dispose(): void {
+    this.running = false;
+    // Fast-fade the current graph and any still-fading retirees together.
+    if (this.graph) this.retireGraph(DISPOSE_FADE_S);
+    const ctx = this.ctx;
+    if (ctx) {
+      const now = ctx.currentTime;
+      for (const g of this.retiring) {
+        try {
+          g.master.gain.cancelScheduledValues(now);
+          g.master.gain.setValueAtTime(Math.max(0.0001, g.master.gain.value), now);
+          g.master.gain.exponentialRampToValueAtTime(0.0001, now + DISPOSE_FADE_S);
+        } catch {
+          /* node already released */
+        }
+      }
+    }
+    if (this.closeTimer) clearTimeout(this.closeTimer);
+    this.closeTimer = setTimeout(() => {
+      for (const g of this.retiring) this.teardownGraphNodes(g);
+      this.retiring = [];
+      const toClose = this.ctx;
+      this.ctx = null;
+      if (toClose) {
+        try {
+          const r = toClose.close() as unknown;
+          if (r && typeof (r as Promise<void>).catch === "function") {
+            (r as Promise<void>).catch(() => {});
+          }
+        } catch {
+          /* already closed */
+        }
+      }
+    }, DISPOSE_FADE_S * 1000 + 80);
+  }
+
+  // ── internals ─────────────────────────────────────────────────────────────
+
+  /** Move the current graph to the retiring list with its own fade + free. */
+  private retireGraph(fadeS: number): void {
+    const ctx = this.ctx;
+    const graph = this.graph;
+    this.graph = null;
+    if (!graph) return;
+    if (ctx) {
+      const now = ctx.currentTime;
+      try {
+        graph.master.gain.cancelScheduledValues(now);
+        graph.master.gain.setValueAtTime(Math.max(0.0001, graph.master.gain.value), now);
+        graph.master.gain.exponentialRampToValueAtTime(0.0001, now + fadeS);
+      } catch {
+        /* context already gone — just free below */
+      }
+    }
+    this.retiring.push(graph);
+    // The graph frees ITSELF when its fade completes — a later start() can
+    // never collide with this timer, because it owns a different graph.
+    graph.teardownTimer = setTimeout(() => {
+      this.teardownGraphNodes(graph);
+      this.retiring = this.retiring.filter((g) => g !== graph);
+    }, fadeS * 1000 + 100);
+  }
+
+  private buildGraph(ctx: AudioContext): PadGraph {
+    const now = ctx.currentTime;
+    const graph: PadGraph = { master: ctx.createGain(), voices: [], nodes: [], sources: [], teardownTimer: null };
 
     // Master — the soft swell in.
-    const master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(Math.max(0.001, this.volume), now + ATTACK_S);
-    master.connect(ctx.destination);
-    this.master = master;
+    graph.master.gain.setValueAtTime(0.0001, now);
+    graph.master.gain.exponentialRampToValueAtTime(Math.max(0.001, this.volume), now + ATTACK_S);
+    graph.master.connect(ctx.destination);
 
-    // Reverb wash: bus → (dry + convolver-wet) → master.
+    // Glue: a gentle compressor so the reverb build-up breathes, never stacks.
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 20;
+    compressor.ratio.value = 2.5;
+    compressor.attack.value = 0.15;
+    compressor.release.value = 0.4;
+    compressor.connect(graph.master);
+    graph.nodes.push(compressor);
+
+    // Reverb wash: bus → (dry + convolver-wet) → compressor.
     const bus = ctx.createGain();
     const convolver = ctx.createConvolver();
     convolver.buffer = buildImpulseResponse(ctx);
@@ -224,10 +407,10 @@ export class AmbientPad {
     wet.gain.value = REVERB_WET;
     const dry = ctx.createGain();
     dry.gain.value = REVERB_DRY;
-    bus.connect(dry).connect(master);
+    bus.connect(dry).connect(compressor);
     bus.connect(convolver);
-    convolver.connect(wet).connect(master);
-    this.extraNodes.push(bus, convolver, wet, dry);
+    convolver.connect(wet).connect(compressor);
+    graph.nodes.push(bus, convolver, wet, dry);
 
     // Evolving lowpass in front of the bus.
     const filter = ctx.createBiquadFilter();
@@ -235,7 +418,7 @@ export class AmbientPad {
     filter.frequency.value = FILTER_BASE_HZ;
     filter.Q.value = 0.5;
     filter.connect(bus);
-    this.filter = filter;
+    graph.nodes.push(filter);
 
     const filterLfo = ctx.createOscillator();
     filterLfo.frequency.value = FILTER_LFO_HZ;
@@ -243,8 +426,8 @@ export class AmbientPad {
     filterLfoGain.gain.value = FILTER_LFO_DEPTH_HZ;
     filterLfo.connect(filterLfoGain).connect(filter.frequency);
     filterLfo.start(now);
-    this.extraSources.push(filterLfo);
-    this.extraNodes.push(filterLfoGain);
+    graph.sources.push(filterLfo);
+    graph.nodes.push(filterLfoGain);
 
     // The voices.
     for (const spec of padVoicing(this.tonic, this.flavor)) {
@@ -271,12 +454,12 @@ export class AmbientPad {
         const trim = ctx.createGain();
         trim.gain.value = 1 / 3;
         osc.connect(trim).connect(voiceGain);
-        this.extraNodes.push(trim);
+        graph.nodes.push(trim);
         osc.start(now);
         return osc;
       });
 
-      this.voices.push({ oscillators, gain: voiceGain, breathOsc, breathGain, panner, isThird: spec.isThird });
+      graph.voices.push({ oscillators, gain: voiceGain, breathOsc, breathGain, panner, isThird: spec.isThird });
     }
 
     // Air: a whisper of high-passed looped noise under the wash.
@@ -293,96 +476,18 @@ export class AmbientPad {
     airGain.gain.value = AIR_GAIN;
     air.connect(airHp).connect(airGain).connect(bus);
     air.start(now);
-    this.extraSources.push(air);
-    this.extraNodes.push(airHp, airGain);
+    graph.sources.push(air);
+    graph.nodes.push(airHp, airGain);
 
-    this.running = true;
+    return graph;
   }
 
-  /** Fade out over the long release, then release the graph. Never clicks. */
-  stop(): void {
-    if (!this.running) return;
-    this.running = false;
-    const ctx = this.ctx;
-    const master = this.master;
-    if (!ctx || !master) {
-      this.teardownGraph();
-      return;
+  private teardownGraphNodes(graph: PadGraph): void {
+    if (graph.teardownTimer) {
+      clearTimeout(graph.teardownTimer);
+      graph.teardownTimer = null;
     }
-    const now = ctx.currentTime;
-    master.gain.cancelScheduledValues(now);
-    master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + RELEASE_S);
-    if (this.stopTimer) clearTimeout(this.stopTimer);
-    this.stopTimer = setTimeout(() => this.teardownGraph(), RELEASE_S * 1000 + 100);
-  }
-
-  /** Glide every oscillator to the new key — a swell, never a jump. */
-  setKey(tonic: string, flavor?: PadFlavor): void {
-    this.tonic = tonic;
-    if (flavor !== undefined) this.flavor = flavor;
-    const ctx = this.ctx;
-    if (!ctx || this.voices.length === 0) return;
-    const now = ctx.currentTime;
-    const specs = padVoicing(this.tonic, this.flavor);
-    this.voices.forEach((voice, i) => {
-      const spec = specs[i];
-      if (!spec) return;
-      for (const osc of voice.oscillators) {
-        osc.frequency.cancelScheduledValues(now);
-        osc.frequency.setTargetAtTime(spec.freq, now, GLIDE_S / 3);
-      }
-      // The flavor third breathes in/out with the choice — no pops.
-      if (voice.isThird) {
-        voice.gain.gain.cancelScheduledValues(now);
-        voice.gain.gain.setTargetAtTime(spec.gain, now, 0.2);
-        voice.breathGain.gain.setTargetAtTime(spec.gain * BREATH_DEPTH, now, 0.2);
-      }
-    });
-  }
-
-  setVolume(volume: number): void {
-    this.volume = clampPadVolume(volume);
-    const ctx = this.ctx;
-    if (ctx && this.master && this.running) {
-      this.master.gain.cancelScheduledValues(ctx.currentTime);
-      this.master.gain.setTargetAtTime(Math.max(0.001, this.volume), ctx.currentTime, 0.15);
-    }
-  }
-
-  /** Fast fade + full release. Call on unmount — never a runaway drone. */
-  dispose(): void {
-    const ctx = this.ctx;
-    if (ctx && this.master && this.running) {
-      const now = ctx.currentTime;
-      this.master.gain.cancelScheduledValues(now);
-      this.master.gain.setValueAtTime(Math.max(0.0001, this.master.gain.value), now);
-      this.master.gain.exponentialRampToValueAtTime(0.0001, now + DISPOSE_FADE_S);
-    }
-    this.running = false;
-    if (this.stopTimer) clearTimeout(this.stopTimer);
-    // Give the fast fade a beat, then tear everything down and close.
-    this.stopTimer = setTimeout(() => {
-      this.teardownGraph();
-      const toClose = this.ctx;
-      this.ctx = null;
-      if (toClose) {
-        try {
-          const r = toClose.close() as unknown;
-          if (r && typeof (r as Promise<void>).catch === "function") {
-            (r as Promise<void>).catch(() => {});
-          }
-        } catch {
-          /* already closed */
-        }
-      }
-    }, DISPOSE_FADE_S * 1000 + 60);
-  }
-
-  // ── internals ─────────────────────────────────────────────────────────────
-
-  private teardownGraph(): void {
-    for (const voice of this.voices) {
+    for (const voice of graph.voices) {
       for (const osc of voice.oscillators) {
         try {
           osc.stop();
@@ -401,8 +506,8 @@ export class AmbientPad {
       voice.gain.disconnect();
       voice.panner.disconnect();
     }
-    this.voices = [];
-    for (const src of this.extraSources) {
+    graph.voices = [];
+    for (const src of graph.sources) {
       try {
         src.stop();
       } catch {
@@ -410,13 +515,10 @@ export class AmbientPad {
       }
       src.disconnect();
     }
-    this.extraSources = [];
-    for (const node of this.extraNodes) node.disconnect();
-    this.extraNodes = [];
-    this.filter?.disconnect();
-    this.filter = null;
-    this.master?.disconnect();
-    this.master = null;
+    graph.sources = [];
+    for (const node of graph.nodes) node.disconnect();
+    graph.nodes = [];
+    graph.master.disconnect();
   }
 }
 

@@ -24,9 +24,11 @@ in key.** It creates NOTHING about the song.
 | Filter | lowpass 1800 Hz, Q 0.5; cutoff LFO 0.07 Hz × ±450 Hz |
 | Reverb | ConvolverNode, **procedural IR**: 3.5 s stereo decaying noise, one-pole-smoothed (warm tail), decay `(1−t)^2.2` — built directly as an AudioBuffer, zero assets, zero network. Wet 0.85 / dry 0.5 |
 | Air | looped noise → highpass 4 kHz → gain 0.012 |
-| Master | attack 1.5 s / release 2.5 s exponential ramps (never a click); default volume 0.2, clamped 0.05–0.45, remembered (`cog-pad-volume`) |
+| Headroom | voice gains normalized so the summed bed peaks ≈ 1.0 — against the FULL flavored sum, so choosing a flavor never jumps the level and the mix can never clip into harshness |
+| Glue | DynamicsCompressor before master: threshold −20 dB, knee 20, ratio 2.5, attack 0.15 s, release 0.4 s — the reverb build-up breathes instead of stacking into peaks |
+| Master | attack 1.5 s / release 2.5 s exponential ramps (never a click); default volume 0.25, clamped 0.05–0.5, remembered (`cog-pad-volume`) |
 | Glide | key change: `setTargetAtTime` τ = 0.1 s (~0.3 s settle) per oscillator; flavor third crossfades over ~0.2 s |
-| CPU | 18 tone osc + 6 breath LFOs + 1 filter LFO + 1 shared convolver — fine for mobile |
+| CPU | 18 tone osc + 6 breath LFOs + 1 filter LFO + 1 shared convolver + 1 compressor — fine for mobile |
 
 ## The API (mirrors the Metronome class)
 
@@ -65,6 +67,25 @@ hint appears on first activation (`cog-pad-headphones-hint`).
    never-bleed rule): the pad keeps sounding while recording because humming
    over it is the point; its harmonics are in-key (reinforcing F13), and the
    headphones hint is the honest guidance. Turn it off first for a dry take.
+
+## Launch-audit fixes (2026-07-15, same day)
+
+1. **Restart-during-fade pop (critical, "never clicks"):** re-tapping the pad
+   ON while the old bed was still fading tore its graph down instantly — an
+   audible cut. The lifecycle is now GRAPH-SCOPED: stop()/dispose() retire
+   the current graph, which fades and frees itself on its own timer; every
+   start() builds a fresh graph. A new bed simply swells over the old one's
+   tail; no shared teardown timer can ever kill the wrong graph.
+2. **Clipping at volume (high, "lush not fizzy"):** the raw voice sum (~3.5×)
+   could push the wash past 0 dBFS at higher volumes. Voicing is now
+   headroom-normalized (unit-tested) and a gentle compressor glues the mix.
+3. **start() can no longer throw** — a failed node build (ancient browser)
+   tears down silently; worst case is silence, one tap retries. The toggle
+   also hides itself entirely when Web Audio doesn't exist (never a dead
+   control).
+4. **Interruption self-heal:** after a phone call / screen lock, iOS leaves
+   the context suspended while the toggle shows ON. `resumeIfNeeded()` +
+   a visibilitychange listener nudge it back to life on return.
 
 ## Verification (2026-07-15)
 

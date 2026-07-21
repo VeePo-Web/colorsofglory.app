@@ -1,5 +1,23 @@
 # Pad — One-Tap Ambient Tonal Bed · Progress
 
+## 2026-07-15 (later) — Launch-audit pass
+
+Fresh-eyes audit against the no-failure standard; four findings, all fixed +
+covered (see the contract's "Launch-audit fixes"):
+1. **Restart-during-fade popped** (critical) — graph-scoped retirement now:
+   each stop/dispose retires its graph to fade + free itself; start() builds
+   fresh; re-tapping mid-fade swells a new bed over the old tail.
+2. **Clipping at higher volumes** (high) — voicing headroom-normalized to a
+   ~1.0 summed peak (anchored to the full flavored sum so flavor changes
+   never jump the level; unit-tested) + a gentle DynamicsCompressor glue.
+3. **start() could throw mid-build** on ancient browsers — now never throws
+   (silent teardown; a tap retries), and the toggle hides itself when Web
+   Audio doesn't exist.
+4. **Silent-but-ON after a phone call / screen lock** — `resumeIfNeeded()` +
+   a visibilitychange listener self-heal the suspended context.
+8 pad tests green (headroom guarantee added); tsc clean; build green;
+capture + canvas suites green.
+
 ## 2026-07-15 — Shipped
 
 **What changed**
