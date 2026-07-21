@@ -97,6 +97,33 @@ Silence through `createMediaElementSource` is impossible by construction:
 6. iOS interruption self-heal: `visibilitychange` resumes a suspended bus
    (the Pad lesson).
 
+## Pass 2 (2026-07-21, same day) — coverage + forced-failure proof
+
+- **The first listen is now polished.** `ReviewAudioPlayer` (capture review,
+  via an optional `blob` prop from `ReviewSheet`) and `VoiceReviewSheet`
+  (voice review) route the just-recorded take through the bus inside the
+  play tap — the "recorded through COG sounds amazing" moment. The saved
+  file stays the raw original; the object URL doubles as the profile key.
+- **Loudness profiles now resolve everywhere:** `polishAttach` with only a
+  memoId pulls the blob from the device audio cache (dynamic import — no
+  layering cycle), so the take player's gesture-retry and the stack's
+  fallback path level correctly instead of staying at unity.
+- **The ladder is proven in CI, not claimed** (`enhance.attach.test.ts`,
+  7 green): no-Web-Audio no-op ×2; remote src never attaches; chain-build
+  failure lands on the loudness-only rung with the source still connected;
+  source-creation failure stays dry and RETRIES on the next tap; a
+  suspended context that won't run skips and succeeds when it later runs;
+  idempotence (one source per element, ever); and a downstream connect
+  failure hard-wires the source to the destination.
+- **Canvas voice cards stay deliberately dry** (`canvasAudio.ts`): two
+  module-level REUSED elements, remote-URL-only sources, and a gapless
+  listen-path seam — attaching would risk the exact silence the reuse
+  guard exists for, and a fetch-to-blob await would break gaplessness.
+  The spec lists canvas cards under no-regression (satisfied), not
+  routing. A future slice can make canvasAudio cache-first, then attach.
+  BrainstormMemosPanel / SeedIdeaCard / onboarding players likewise stay
+  on today's path (additive; small surfaces).
+
 ## The A/B model
 
 `isPolishEnabled` / `setPolishEnabled` / `subscribePolish` — a persisted

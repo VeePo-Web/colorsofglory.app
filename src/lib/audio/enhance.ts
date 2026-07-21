@@ -122,6 +122,26 @@ export function clearPolishProfileCache(): void {
   profileCache.clear();
 }
 
+/**
+ * Resolve a take's loudness gain: use the provided blob, else the cached
+ * profile, else quietly pull the blob from the device audio cache (covers
+ * attach sites that only know the memo id — e.g. the take player's gesture
+ * retry). null = no profile available; leave the gain at unity.
+ */
+async function loudnessFor(memoId: string, blob?: Blob): Promise<number | null> {
+  if (blob) return computeLoudnessProfile(memoId, blob);
+  const cached = profileCache.get(memoId);
+  if (cached !== undefined) return cached;
+  try {
+    const { audioCache } = await import("@/lib/voice/audioCache");
+    const stored = await audioCache.get(memoId);
+    if (!stored) return null;
+    return computeLoudnessProfile(memoId, stored);
+  } catch {
+    return null;
+  }
+}
+
 // ── The global preference (default ON, persisted, live) ──────────────────
 const PREF_KEY = "cog-polish-enabled";
 let prefValue: boolean | null = null;
@@ -362,8 +382,9 @@ export async function polishAttach(
       const entry: BusEntry = { el, makeup, loudnessGain: 1 };
       entries.add(entry);
       routeEntry(entry);
-      if (opts.memoId && opts.blob) {
-        void computeLoudnessProfile(opts.memoId, opts.blob).then((gain) => {
+      if (opts.memoId) {
+        void loudnessFor(opts.memoId, opts.blob).then((gain) => {
+          if (gain === null) return;
           entry.loudnessGain = gain;
           if (isPolishEnabled() && busCtx) {
             // Glide, don't jump, if the profile lands mid-play.

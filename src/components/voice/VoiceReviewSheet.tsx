@@ -3,6 +3,7 @@ import { Play, Pause, Trash2, Sparkles } from "lucide-react";
 import SectionChip from "./SectionChip";
 import CaptureSheetShell from "./CaptureSheetShell";
 import { formatDuration } from "@/lib/voice/audioFormat";
+import { polishAttach } from "@/lib/audio/enhance";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 
 // Re-use waveform seed from audioFormat domain (simple inline version)
@@ -84,6 +85,9 @@ const VoiceReviewSheet = ({
       audio.pause();
       setIsPlaying(false);
     } else {
+      // Polish (strictly additive): the first listen of a fresh take plays
+      // through the music-safe bus; the saved file stays the raw original.
+      void polishAttach(audio, { memoId: audio.src, blob: recording.blob });
       audio.play().catch(() => {});
       setIsPlaying(true);
     }

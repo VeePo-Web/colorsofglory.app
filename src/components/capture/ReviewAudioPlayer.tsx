@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Play, Pause } from "lucide-react";
+import { polishAttach } from "@/lib/audio/enhance";
 
 interface ReviewAudioPlayerProps {
   src: string;
@@ -7,6 +8,12 @@ interface ReviewAudioPlayerProps {
   durationMs?: number;
   /** Fired when a section clip finishes or is interrupted (full-take play, seek). */
   onClipStop?: () => void;
+  /**
+   * The take's blob — lets the first listen play POLISHED (the music-safe
+   * bus, loudness-leveled). Optional and strictly additive: without it (or
+   * without Web Audio) playback is exactly as before.
+   */
+  blob?: Blob;
 }
 
 export interface ReviewAudioPlayerHandle {
@@ -33,7 +40,7 @@ function fmt(sec: number): string {
  * a raw browser widget.
  */
 const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerProps>(
-  ({ src, durationMs, onClipStop }, ref) => {
+  ({ src, durationMs, onClipStop, blob }, ref) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // End boundary (sec) of the section clip in flight, if any.
   const clipEndRef = useRef<number | null>(null);
@@ -94,6 +101,7 @@ const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerP
     playClip: (startSec: number, endSec: number) => {
       const audio = audioRef.current;
       if (!audio || endSec <= startSec) return;
+      void polishAttach(audio, { memoId: src, blob });
       audio.currentTime = Math.max(0, startSec);
       clipEndRef.current = endSec;
       void audio.play().then(() => setPlaying(true)).catch(() => {
@@ -109,7 +117,7 @@ const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerP
       setPlaying(false);
       onClipStopRef.current?.();
     },
-  }), []);
+  }), [src, blob]);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -120,6 +128,10 @@ const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerP
       audio.pause();
       setPlaying(false);
     } else {
+      // Polish (strictly additive): the first listen plays through the
+      // music-safe bus — the "recorded through COG sounds amazing" moment.
+      // The object URL is unique per take, so it doubles as the profile key.
+      void polishAttach(audio, { memoId: src, blob });
       void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     }
   };

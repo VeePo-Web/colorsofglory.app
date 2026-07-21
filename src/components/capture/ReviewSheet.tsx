@@ -152,6 +152,9 @@ const ReviewSheet = ({
   const [blocks, setBlocks] = useState<EditableBlock[]>([]);
   const [candidates, setCandidates] = useState<SectionMarker[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  // The local take blob (when we have it) — lets the review player polish
+  // the first listen with a correct loudness profile.
+  const [audioBlob, setAudioBlob] = useState<Blob | undefined>(undefined);
   const [committing, setCommitting] = useState(false);
   const [playingClipId, setPlayingClipId] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -206,6 +209,7 @@ const ReviewSheet = ({
         const localUrl = URL.createObjectURL(localBlob);
         if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = localUrl;
+        setAudioBlob(localBlob);
         setAudioUrl(localUrl);
       } else if (storagePath) {
         try {
@@ -516,6 +520,7 @@ const ReviewSheet = ({
               src={audioUrl}
               durationMs={durationMs}
               onClipStop={() => setPlayingClipId(null)}
+              blob={audioBlob}
             />
           )}
 

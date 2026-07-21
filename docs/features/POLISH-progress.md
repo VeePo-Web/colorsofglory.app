@@ -1,5 +1,26 @@
 # Polish — Subtle Music-Safe Audio Enhancement · Progress
 
+## 2026-07-21 (later) — Pass 2: first-listen coverage + forced-failure proof
+
+- Routed the REVIEW players — the first listen after recording now plays
+  polished (`ReviewAudioPlayer` + `blob` prop from `ReviewSheet`;
+  `VoiceReviewSheet`'s own element). The saved file stays raw.
+- `polishAttach` now auto-loads the loudness blob from the device audio
+  cache when a caller only has the memo id (take-player gesture retry,
+  stack fallback) — leveling applies everywhere, not just blob-in-hand
+  sites.
+- NEW `enhance.attach.test.ts` (7 green) — the forced-failure ladder is
+  now PROVEN in CI: no Web Audio → clean no-op; remote src → never
+  attaches; chain-build failure → loudness-only rung, source still
+  connected; source failure → dry + retry next tap; suspended context →
+  skip, succeed when running; idempotent (one source per element ever);
+  downstream connect failure → source hard-wired to destination.
+- Canvas voice cards (`canvasAudio.ts`) documented as deliberately dry:
+  reused elements + remote-only URLs + the gapless listen-path seam make
+  attaching unsafe; no-regression holds by not touching it. Future slice:
+  cache-first canvasAudio, then attach.
+- Full audio suite 100/100 green · tsc clean · build green.
+
 ## 2026-07-21 — Shipped
 
 **What changed**
