@@ -113,6 +113,7 @@ import { playReferenceGuide, type GuideHandle } from "@/lib/audio/referenceGuide
 import { setAlignmentOffset, rekeyAlignmentOffset } from "@/lib/audio/alignmentStore";
 import { getAudioSession } from "@/lib/audio/audioSession";
 import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
+import Pad from "@/components/capture/Pad";
 import { toast } from "sonner";
 import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
@@ -542,7 +543,7 @@ const SongCanvasExperience = () => {
   // One BPM per song, read by every collaborator's metronome and propagated
   // live; the click itself is audible only into confirmed earbuds while the
   // mic is armed — on a speaker it runs as the sheet's gold visual pulse.
-  const { bpm: songBpm, beatsPerBar, canEdit: canEditTempo, saveTempo } = useSongTempo(songId);
+  const { bpm: songBpm, beatsPerBar, canEdit: canEditTempo, saveTempo, keySignature: songKeySignature } = useSongTempo(songId);
   const { running: clickRunning, prime: primeClick, countIn: clickCountIn, start: startClick, stop: stopClick } = useMetronome();
   const [countInOn, setCountInOn] = useState(() => {
     try { return localStorage.getItem(COUNT_IN_PREF_KEY) === "1"; } catch { return false; }
@@ -2179,6 +2180,9 @@ const SongCanvasExperience = () => {
           </p>
           {/* F14 one-tap metronome — consumes C4's engine via useCanvasMetronome */}
           <CanvasMetronomeToggle metronome={metronome} />
+          {/* Pad — the metronome's sibling: a soft tonal bed in the song's key
+              to hum over. Click keeps you in time; Pad keeps you in key. */}
+          <Pad inheritedKey={songKeySignature} />
           <button
             type="button"
             onClick={() => setShowRecap(true)}

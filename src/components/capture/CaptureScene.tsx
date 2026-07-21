@@ -35,6 +35,7 @@ const CommitRibbon = lazy(() => import("./CommitRibbon"));
 import ImportMemoButton from "./ImportMemoButton";
 import MetronomeBar from "./MetronomeBar";
 import MetronomeStrip from "@/components/voice/MetronomeStrip";
+import Pad from "./Pad";
 import { useMetronome } from "@/hooks/useMetronome";
 import { useSongTempo } from "@/hooks/useSongTempo";
 import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
@@ -122,6 +123,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   // The suggestion record is re-read every time the chords sheet opens, so a
   // detection that lands seconds after the take is picked up without a remount.
   const [detectedMusic, setDetectedMusic] = useState<DetectedTempoKeyRecord | null>(null);
+
+  // The Pad's key: the song's own key first, else F13's detected suggestion —
+  // one tap and the tonal bed is already in the right key.
+  const padInheritedKey = useMemo(
+    () =>
+      sharedSongKey ??
+      (songId ? (readDetection(songId)?.keySignature ?? null) : null),
+    // detectedMusic keeps this fresh after a new detection lands
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sharedSongKey, songId, detectedMusic],
+  );
   // Dedupe persistence: the picker re-fires onKeyChange on mount with the
   // unchanged value — writing it back would churn updated_at + realtime.
   const lastPersistedKeyRef = useRef<string | null>(null);
@@ -994,6 +1006,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         {phase === "recording" && clickOn && metroBpm != null && (
           <MetronomeStrip bpm={metroBpm} />
         )}
+
+        {/* Pad — the metronome's sibling: Click keeps a hum in time, Pad keeps
+            it in key. Deliberately NOT phase-gated: it keeps sounding through a
+            take (humming over the bed is the point; the headphones hint guides
+            the bleed) and disposes only when the surface unmounts. */}
+        <Pad inheritedKey={padInheritedKey} />
 
         {/* Recovery path — a denied or errored mic must never be a dead end. */}
         {phase === "permission-denied" && (
