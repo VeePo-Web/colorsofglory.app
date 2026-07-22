@@ -136,9 +136,11 @@ Deno.serve(async (req) => {
   });
 
   // Fire-and-forget feature usage marker (never blocks the promote).
-  admin.rpc("mark_feature_used", { _user_id: user.id, _feature: "canvas_promote" })
+  admin
+    .from("feature_usage")
+    .upsert({ user_id: user.id, feature: "canvas_promote" }, { onConflict: "user_id,feature" })
     .then(({ error }: { error: { message: string } | null }) => {
-      if (error) console.warn("mark_feature_used failed", error.message);
+      if (error) console.warn("feature_usage insert failed", error.message);
     });
 
   // 9. Fire-and-forget transcription if needed

@@ -103,8 +103,10 @@ Deno.serve(async (req) => {
     if (takeErr) return json({ error: takeErr.message }, 500);
 
     // Fire-and-forget feature usage marker (never blocks the intake).
-    admin.rpc("mark_feature_used", { _user_id: userId, _feature: "voice_memo" })
-      .then(({ error }) => { if (error) console.warn("mark_feature_used failed", error.message); });
+    admin
+      .from("feature_usage")
+      .upsert({ user_id: userId, feature: "voice_memo" }, { onConflict: "user_id,feature" })
+      .then(({ error }) => { if (error) console.warn("feature_usage insert failed", error.message); });
 
     return json({ voice_memo_id: memo.id, song_id: songId }, 200);
   } catch (err) {
