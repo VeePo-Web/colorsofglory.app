@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, Copy, Crown, Guitar, Hash, Minus,
+  ArrowLeft, BookOpen, Check, ChevronDown, ChevronUp, Copy, Crown, Guitar, Hash, Minus,
   MoreHorizontal, Music, Pencil, Play, Plus, Printer, Ruler, Share2, Trash2, Type, Wand2, X,
 } from "lucide-react";
 import { useSongTitle } from "@/lib/songContext";
@@ -41,6 +41,8 @@ import ChordDiagramSheet from "@/components/songsheet/ChordDiagramSheet";
 import { useDialogDismiss } from "@/components/songsheet/useDialogDismiss";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { rhymeScheme } from "@/lib/lyrics/rhyme";
+import { corpusFromBodies } from "@/lib/lyrics/rhymeSuggest";
+import RhymeSchemer from "@/components/songsheet/RhymeSchemer";
 import { looksLikeChordsOverLyrics, chordsOverLyricsToChordPro } from "@/lib/chords/importChart";
 import { suggestCapos } from "@/lib/chords/capoSuggest";
 
@@ -115,6 +117,24 @@ const SongSheetPage = () => {
   const [diagram, setDiagram] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<SheetSectionDoc | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // ── Live Rhyme Schemer (strictly additive) ─────────────────────────────
+  // When CLOSED, none of this exists: LyricLine gets undefined callbacks, so
+  // typing stays entirely local to the line — the editor is byte-identical to
+  // life before the schemer. When OPEN, the editing line's draft feeds the
+  // palette seed and the active input registers an insert-at-cursor function;
+  // both flow through stable callbacks so the memoized sections never re-render
+  // on keystrokes. The schemer can slow down, fail, or vanish — the editor
+  // never notices.
+  const [rhymeOpen, setRhymeOpen] = useState(false);
+  const [rhymeDraft, setRhymeDraft] = useState<{ sectionId: string; lineId: string; text: string } | null>(null);
+  const rhymeInsertRef = useRef<((text: string) => void) | null>(null);
+  const handleRhymeDraft = useRef((sectionId: string, lineId: string, text: string | null) => {
+    setRhymeDraft(text === null ? null : { sectionId, lineId, text });
+  }).current;
+  const handleRegisterInsert = useRef((fn: ((text: string) => void) | null) => {
+    rhymeInsertRef.current = fn;
+  }).current;
 
   const initializedKeyFor = useRef<string | null>(null);
   useEffect(() => {
@@ -393,6 +413,25 @@ const SongSheetPage = () => {
                 </div>
               )}
 
+              {rhymeOpen && tab === "lyrics" && !craft && (
+                <RhymeSchemer
+                  songId={songId}
+                  activeLines={(() => {
+                    const active =
+                      doc!.sections.find((s) => s.id === rhymeDraft?.sectionId) ??
+                      doc!.sections[doc!.sections.length - 1];
+                    if (!active) return [];
+                    return active.lines.map((l) =>
+                      rhymeDraft && l.id === rhymeDraft.lineId ? rhymeDraft.text : l.text,
+                    );
+                  })()}
+                  editingDraft={rhymeDraft?.text ?? null}
+                  onInsert={rhymeDraft ? (text) => rhymeInsertRef.current?.(text) : null}
+                  corpus={corpusFromBodies(doc!.sections.flatMap((s) => s.lines.map((l) => l.text)))}
+                  onClose={() => setRhymeOpen(false)}
+                />
+              )}
+
               {craft ? (
                 <CraftView sections={sections} />
               ) : (
@@ -414,6 +453,8 @@ const SongSheetPage = () => {
                       onLineCommit={handleLineCommit}
                       onAddLine={handleAddLine}
                       onTapWord={(lineId, at, word, current) => setPlacing({ sectionId: section.id, lineId, at, word, current })}
+                      onLineDraft={rhymeOpen ? handleRhymeDraft : undefined}
+                      registerInsert={rhymeOpen ? handleRegisterInsert : undefined}
                     />
                   ))}
                 </div>
@@ -465,6 +506,7 @@ const SongSheetPage = () => {
           capoHints={capoHints}
           showSyllables={showSyllables}
           craft={craft}
+          rhyme={rhymeOpen}
           copied={copied}
           disabled={isEmpty}
           onStepKey={stepKey}
@@ -473,6 +515,12 @@ const SongSheetPage = () => {
           onSyllables={() => setShowSyllables((s) => !s)}
           onCraft={() => {
             setCraft((c) => !c);
+            setToolsOpen(false);
+          }}
+          onRhyme={() => {
+            setRhymeOpen((r) => !r);
+            setTab("lyrics");
+            setCraft(false);
             setToolsOpen(false);
           }}
           onPerform={() => {
@@ -585,6 +633,8 @@ const SectionView = memo(function SectionView({
   onLineCommit,
   onAddLine,
   onTapWord,
+  onLineDraft,
+  registerInsert,
 }: {
   section: SheetSectionDoc;
   index: number;
@@ -600,6 +650,10 @@ const SectionView = memo(function SectionView({
   onLineCommit: (sectionId: string, lineId: string, before: string, after: string) => void;
   onAddLine: (sectionId: string) => void;
   onTapWord: (lineId: string, at: number, word: string, current?: NumberChord) => void;
+  /** Rhyme Schemer seam (optional — undefined when the schemer is closed, so
+   *  editing stays entirely local to the line and this memo never re-fires). */
+  onLineDraft?: (sectionId: string, lineId: string, text: string | null) => void;
+  registerInsert?: (fn: ((text: string) => void) | null) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [draftLabel, setDraftLabel] = useState(section.label);
@@ -674,6 +728,8 @@ const SectionView = memo(function SectionView({
                 display={display}
                 showSyllables={showSyllables}
                 onCommit={(after) => onLineCommit(section.id, line.id, line.text, after)}
+                onDraft={onLineDraft ? (text) => onLineDraft(section.id, line.id, text) : undefined}
+                registerInsert={registerInsert}
               />
             )}
           </div>
@@ -733,24 +789,65 @@ function LyricLine({
   display,
   showSyllables,
   onCommit,
+  onDraft,
+  registerInsert,
 }: {
   line: SheetLineDoc;
   displayKey: string;
   display: "letters" | "numbers";
   showSyllables: boolean;
   onCommit: (after: string) => void;
+  /** Rhyme Schemer seam — undefined when the schemer is closed. When present,
+   *  the draft is mirrored out (debounced by the schemer, never awaited here)
+   *  and an insert-at-cursor function is registered while editing. The editor
+   *  behaves identically whether these are wired or not. */
+  onDraft?: (text: string | null) => void;
+  registerInsert?: (fn: ((text: string) => void) | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(line.text);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   if (editing) {
     return (
       <input
         autoFocus
+        ref={(el) => {
+          inputRef.current = el;
+          if (el && registerInsert) {
+            registerInsert((text) => {
+              // Insert the tapped candidate at the caret with natural spacing.
+              // The palette chips prevent pointer-down default, so the input
+              // never blurred — focus and the editing session are untouched.
+              const input = inputRef.current;
+              const current = draftRef.current;
+              const at = input?.selectionStart ?? current.length;
+              const before = current.slice(0, at);
+              const after = current.slice(at);
+              const glue = before && !/\s$/.test(before) ? " " : "";
+              const tail = after && !/^\s/.test(after) ? " " : "";
+              const next = `${before}${glue}${text}${tail}${after}`;
+              setDraft(next);
+              onDraft?.(next);
+              const caret = (before + glue + text).length;
+              requestAnimationFrame(() => {
+                inputRef.current?.setSelectionRange(caret, caret);
+              });
+            });
+          }
+        }}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          onDraft?.(e.target.value);
+        }}
+        onFocus={() => onDraft?.(draftRef.current)}
         onBlur={() => {
           setEditing(false);
+          registerInsert?.(null);
+          onDraft?.(null);
           onCommit(draft);
         }}
         onKeyDown={(e) => {
@@ -758,6 +855,8 @@ function LyricLine({
           if (e.key === "Escape") {
             setDraft(line.text);
             setEditing(false);
+            registerInsert?.(null);
+            onDraft?.(null);
           }
         }}
         aria-label="Edit lyric line"
@@ -780,6 +879,7 @@ function LyricLine({
         onClick={() => {
           setDraft(line.text);
           setEditing(true);
+          onDraft?.(line.text);
         }}
         className="flex-1 text-left active:opacity-70"
         aria-label={line.text.trim() ? `Edit line: ${line.text}` : "Edit empty line"}
@@ -1081,6 +1181,7 @@ function ToolsSheet(props: {
   capoHints: Array<{ capo: number; playKey: string }>;
   showSyllables: boolean;
   craft: boolean;
+  rhyme: boolean;
   copied: boolean;
   disabled: boolean;
   onStepKey: (s: number) => void;
@@ -1088,6 +1189,7 @@ function ToolsSheet(props: {
   onCapo: (n: number) => void;
   onSyllables: () => void;
   onCraft: () => void;
+  onRhyme: () => void;
   onPerform: () => void;
   onImport: () => void;
   onCopy: () => void;
@@ -1185,6 +1287,11 @@ function ToolsSheet(props: {
           </ToolButton>
           <ToolButton onClick={p.onCraft} active={p.craft}>
             <Guitar size={14} strokeWidth={2} /> Rhyme
+          </ToolButton>
+        </div>
+        <div className="flex gap-2.5">
+          <ToolButton onClick={p.onRhyme} active={p.rhyme}>
+            <BookOpen size={14} strokeWidth={2} /> Rhyme book
           </ToolButton>
         </div>
         <div className="flex gap-2.5">
