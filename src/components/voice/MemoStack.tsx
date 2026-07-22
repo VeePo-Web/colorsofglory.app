@@ -283,10 +283,10 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             boxShadow: "0 4px 16px rgba(184,149,58,0.35)",
           }}
-          aria-label={`Record a new layer over ${base.title}`}
+          aria-label={`Record a layer — a new voice that plays together with ${base.title}`}
         >
           <Mic size={16} strokeWidth={2} />
-          Record over this
+          Record a layer
         </button>
       )}
     </section>

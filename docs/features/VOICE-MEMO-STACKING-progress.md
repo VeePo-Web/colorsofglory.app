@@ -1,5 +1,46 @@
 # Voice Memo Stacking · Progress
 
+## 2026-07-22 (later) — Step 4 + Step 5 core: the unified Memo Sheet
+
+**Audit correction:** the "TakesDrawer was never built" claim is stale —
+`TakeMiniPlayer` IS the tries UI (keeper/rename/archive/swipe-compare,
+already polished, already mounted on the voice page). The unified sheet
+REUSES it instead of rebuilding a drawer.
+
+**What changed**
+- NEW `MemoSheet.tsx` — ONE sheet, two labeled sections, two verbs:
+  · Section A "This sound · other tries": the keeper (gold dot +
+    friendly name) + "N earlier tries tucked away" + open → TakeMiniPlayer
+    (the full tries flow); a "Try again — another take of this" verb that
+    renders only when the consumer wires a recorder (no dead buttons).
+  · Section B "Layers": MemoStack + the mixer + "Record a layer" (the
+    stack button's copy now obeys the two-verbs law — it said "Record
+    over this").
+  · The empty-layers state TEACHES the distinction ("a layer plays
+    together; a try is another take of the same idea").
+- SERVER TRUTH ON OPEN: the sheet re-reads the song's memo rows and
+  overlays persisted parentage + the shared mix onto the passed view — a
+  collaborator's fresh layer appears even when the canvas's in-memory
+  card view lags, and the canvas stack finally plays the PERSISTED mix.
+- Canvas: `StackSheet` RETIRED (deleted); the canvas renders MemoSheet +
+  hosts TakeMiniPlayer for the tries flow (sheet closes first — z-order
+  stays sane). Verified: canvas voice-card ids ARE memo ids (temp ids
+  swap to real ids on upload), so the sheet's takes/server reads are
+  correct.
+
+**What was verified**
+- tsc clean · build green · voice + canvas suites 62/62 (including the
+  full feature04-canvas run).
+
+**Still open (next passes)**
+- The "Try again" RECORD flow (upload a new take: storage PUT +
+  `createTake` — no upload path for takes exists yet; `createTake` has
+  zero consumers today) + the post-3-tries keeper nudge (Step 5 rest).
+- Step 6 never-bleed layer monitor + measured latency → layer_offset_ms.
+- Step 7 transcribe/commit scoping + credits events.
+- VoiceMemosPage stack grouping ("N layers" affordance on the list).
+- Step 2 remainder: global player store + MediaSession.
+
 ## 2026-07-22 — The spine shipped (Step 1 + engine + mix core)
 
 **The audit that started it (multi-collaborator vision check):** the seam

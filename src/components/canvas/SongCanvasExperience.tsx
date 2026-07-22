@@ -94,7 +94,8 @@ import {
   SUGGESTION_SECTION_KIND,
   type PendingLineSuggestion,
 } from "@/lib/canvas/lineSuggestions";
-import StackSheet from "@/components/voice/StackSheet";
+import MemoSheet from "@/components/voice/MemoSheet";
+import TakeMiniPlayer from "@/components/voice/TakeMiniPlayer";
 import type { StackMemoView } from "@/components/voice/MemoStack";
 import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack";
 import RoleToast from "@/components/invite/RoleToast";
@@ -546,6 +547,8 @@ const SongCanvasExperience = () => {
   const recordingParentIdRef = useRef<string | null>(null);
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
+  // The tries player (F15) opened from the Memo Sheet's Section A.
+  const [takesFor, setTakesFor] = useState<{ id: string; title: string; peaks: number[] | null } | null>(null);
 
   // ── Canvas feature store (interim A4 seam) ─────────────────────────────────
   // The D2 hooks (src/lib/canvas/features/) own the interaction state machines
@@ -2637,18 +2640,29 @@ const SongCanvasExperience = () => {
         />
       )}
 
-      {/* Voice memo stack — base + the layers recorded over it */}
+      {/* The Memo Sheet — ONE sheet for both relationships: tries (takes,
+          one keeper — Section A) and layers (the stack that plays together —
+          Section B). Replaces StackSheet (retired). Card ids ARE memo ids
+          (temp ids swap to real memo ids on upload), so the sheet's takes +
+          server-truth reads are correct. */}
       {stackBaseId && (() => {
         const base = cards.find((c) => c.id === stackBaseId);
         if (!base) return null;
         const stackLayers = cards.filter((c) => c.parentMemoId === stackBaseId);
         return (
-          <StackSheet
+          <MemoSheet
             base={toStackView(base)}
             layers={stackLayers.map(toStackView)}
+            songId={isDemoRoom ? undefined : songId}
             bpm={songBpm}
             canRecordOver={!isViewer}
             onRecordOver={handleRecordOver}
+            onOpenTries={(memoId) => {
+              // The tries flow lives in the polished TakeMiniPlayer —
+              // close the sheet first so z-order stays sane.
+              setStackBaseId(null);
+              setTakesFor({ id: memoId, title: base.title, peaks: base.waveformPeaks ?? null });
+            }}
             onClose={() => setStackBaseId(null)}
             tempoSlot={
               <TempoRow
@@ -2662,6 +2676,16 @@ const SongCanvasExperience = () => {
           />
         );
       })()}
+
+      {/* The tries player (F15) — keeper / rename / archive / swipe-compare. */}
+      {takesFor && (
+        <TakeMiniPlayer
+          memoId={takesFor.id}
+          memoTitle={takesFor.title}
+          fallbackPeaks={takesFor.peaks}
+          onClose={() => setTakesFor(null)}
+        />
+      )}
 
       {/* What Changed recap sheet */}
       {showRecap && (
