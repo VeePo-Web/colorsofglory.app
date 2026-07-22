@@ -1,11 +1,10 @@
-// L11 email data seam. UI-agnostic wrappers around email_preferences
-// (owner-RLS) and the mark_feature_used SECURITY DEFINER RPC.
+// Email preferences + feature-usage seam. Claude's UI reads/writes here.
+// The `markFeatureUsed` call is fire-and-forget: it prevents future L11
+// education/nudge emails from re-suggesting a feature the user already used.
 
 import { supabase } from "@/integrations/supabase/client";
-import { CogError } from "./errors";
 
 export interface EmailPreferences {
-  user_id: string;
   unsubscribed_all: boolean;
   song_activity: boolean;
   weekly_recaps: boolean;
@@ -13,53 +12,40 @@ export interface EmailPreferences {
   invite_suggestions: boolean;
   encouragement: boolean;
   product_news: boolean;
-  updated_at: string;
 }
 
-export type EmailPreferencePatch = Partial<
-  Omit<EmailPreferences, "user_id" | "updated_at">
->;
+const DEFAULTS: EmailPreferences = {
+  unsubscribed_all: false,
+  song_activity: true,
+  weekly_recaps: true,
+  tips_guides: true,
+  invite_suggestions: true,
+  encouragement: true,
+  product_news: true,
+};
 
-/** Read the signed-in user's email preferences (row is auto-provisioned on signup). */
-export async function getEmailPreferences(): Promise<EmailPreferences | null> {
+export async function getEmailPreferences(): Promise<EmailPreferences> {
   const { data, error } = await supabase
     .from("email_preferences")
-    .select("*")
+    .select("unsubscribed_all, song_activity, weekly_recaps, tips_guides, invite_suggestions, encouragement, product_news")
     .maybeSingle();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
-  return (data as EmailPreferences | null) ?? null;
+  if (error) throw error;
+  return { ...DEFAULTS, ...(data ?? {}) };
 }
 
-/** Patch the signed-in user's email preferences. Returns the updated row. */
-export async function setEmailPreferences(
-  patch: EmailPreferencePatch,
-): Promise<EmailPreferences> {
-  const { data: auth } = await supabase.auth.getUser();
-  const uid = auth.user?.id;
-  if (!uid) throw new CogError("UNAUTHENTICATED", "sign in required");
-  const { data, error } = await supabase
+export async function updateEmailPreferences(patch: Partial<EmailPreferences>): Promise<void> {
+  const { data: userRes } = await supabase.auth.getUser();
+  const uid = userRes.user?.id;
+  if (!uid) throw new Error("auth_required");
+  const { error } = await supabase
     .from("email_preferences")
-    .update(patch)
-    .eq("user_id", uid)
-    .select("*")
-    .single();
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
-  return data as EmailPreferences;
+    .upsert({ user_id: uid, ...patch }, { onConflict: "user_id" });
+  if (error) throw error;
 }
 
-/** Master pause switch. `true` mutes every lifecycle email. */
-export function pauseAllEmail(paused: boolean): Promise<EmailPreferences> {
-  return setEmailPreferences({ unsubscribed_all: paused });
-}
-
-/**
- * Record that this user has used a feature (idempotent). Powers the email
- * brain's "don't nudge someone about a feature they already use" gate.
- * Canonical feature strings: "voice_memo_created", "lyrics_edited",
- * "chord_set", "canvas_open", "listen_path", "metronome", "compare_mode",
- * "version_history_open", "credits_open", "invite_sent".
- */
-export async function markFeatureUsed(feature: string): Promise<void> {
-  const { error } = await supabase.rpc("mark_feature_used", { _feature: feature });
-  if (error) throw new CogError(error.code ?? "INTERNAL", error.message);
+/** Fire-and-forget. Silently no-ops if signed out. */
+export function markFeatureUsed(feature: string): void {
+  void supabase.rpc("mark_feature_used", { _feature: feature }).then(({ error }) => {
+    if (error) console.warn("markFeatureUsed", feature, error.message);
+  });
 }
