@@ -2,10 +2,15 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
 import {
+  firstCollaboratorEmail,
   firstSongNudgeEmail,
+  humCaptureEmail,
   inviteReminderEmail,
+  lyricsChordsEmail,
+  referralExplainerEmail,
   rewardEmail,
   welcomeEmail,
+  whatChangedEmail,
   type RenderedTemplate,
 } from "../_shared/email.ts";
 import { canSend } from "../_shared/emailGovernance.ts";
@@ -45,6 +50,7 @@ type QueueRow = {
   category: string | null;
   payload: Record<string, unknown>;
   attempts: number;
+  created_at: string;
 };
 
 // deno-lint-ignore no-explicit-any
@@ -74,6 +80,73 @@ async function renderRow(admin: any, row: QueueRow): Promise<
         .eq("created_by", row.user_id);
       if ((count ?? 0) > 0) return { skip: "already_has_song" };
       return { template: firstSongNudgeEmail(), from: COG_SENDERS.primary };
+    }
+    case "digest.what_changed": {
+      const lines = Array.isArray(p.lines) ? (p.lines as string[]) : [];
+      if (lines.length === 0) return { skip: "empty_digest" };
+      // If they've visited the room since this was queued, they've already
+      // seen the recap in-app — the email evaporates (sanctuary rule).
+      const { data: pref } = await admin
+        .from("song_notification_prefs")
+        .select("last_seen_at")
+        .eq("song_id", p.song_id as string)
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+      if (pref?.last_seen_at && pref.last_seen_at > row.created_at) {
+        return { skip: "visited_since_queued" };
+      }
+      return {
+        template: whatChangedEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+          lines,
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "edu.hum_capture": {
+      // Evaporates if they've since recorded — a coach, not a newsletter.
+      const { count } = await admin
+        .from("voice_memos")
+        .select("id", { count: "exact", head: true })
+        .eq("author_user_id", row.user_id);
+      if ((count ?? 0) > 0) return { skip: "already_recorded" };
+      return {
+        template: humCaptureEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "edu.lyrics_chords": {
+      const songId = p.song_id as string | undefined;
+      if (!songId) return { skip: "missing_song_id" };
+      const { count } = await admin
+        .from("song_lyrics")
+        .select("id", { count: "exact", head: true })
+        .eq("song_id", songId);
+      if ((count ?? 0) > 0) return { skip: "already_has_lyrics" };
+      return {
+        template: lyricsChordsEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId,
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "collab.first_collaborator_owner": {
+      return {
+        template: firstCollaboratorEmail({
+          inviteeName: (p.invitee_name as string) ?? "Your collaborator",
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "growth.referral_explainer": {
+      return { template: referralExplainerEmail(), from: COG_SENDERS.referrals };
     }
     case "collab.invite_reminder": {
       // Exactly once, and only while the invite is still pending.
@@ -112,7 +185,7 @@ Deno.serve(async (req) => {
   const nowIso = new Date().toISOString();
   const { data: rows, error } = await supabase
     .from("notification_queue")
-    .select("id, user_id, kind, category, payload, attempts")
+    .select("id, user_id, kind, category, payload, attempts, created_at")
     .is("sent_at", null)
     .lt("attempts", 5)
     .lte("scheduled_for", nowIso)

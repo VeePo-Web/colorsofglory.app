@@ -2,6 +2,7 @@ import { adminClient, corsHeaders, jsonResponse, resolveUser } from "../_shared/
 import { logActivity } from "../_shared/activity.ts";
 import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
 import { inviteAcceptedEmail } from "../_shared/email.ts";
+import { enqueueEmail } from "../_shared/emailGovernance.ts";
 
 // C3 · collab.invite_accepted — tell the inviter someone stepped into the
 // room (docs/email/COG-EMAIL-SYSTEM.md §5). Transactional, instant, and
@@ -24,9 +25,12 @@ async function notifyInviter(admin: any, token: string, songId: string, inviteeU
     ]);
     if (!inviter?.email) return; // no email on profile → skip, never block
 
+    const inviteeName =
+      invitee?.display_name?.trim() || invitee?.first_name?.trim() || "Your collaborator";
+    const songTitle = song?.title ?? "your song";
     const template = inviteAcceptedEmail({
-      inviteeName: invitee?.display_name?.trim() || invitee?.first_name?.trim() || "Your collaborator",
-      songTitle: song?.title ?? "your song",
+      inviteeName,
+      songTitle,
       songId,
       role: invite?.role ?? "collaborator",
     });
@@ -41,6 +45,18 @@ async function notifyInviter(admin: any, token: string, songId: string, inviteeU
         { name: "category", value: "collab" },
         { name: "kind", value: "collab_invite_accepted" },
       ],
+    });
+
+    // C8 · the owner's FIRST accepted invite, ever — a one-time moment.
+    // The dedupe key makes "first" structural; +30 minutes so it lands
+    // after the instant C3 above, not on top of it.
+    await enqueueEmail(admin, {
+      user_id: inviterId,
+      kind: "collab.first_collaborator_owner",
+      category: "collab",
+      payload: { invitee_name: inviteeName, song_title: songTitle, song_id: songId },
+      scheduled_for: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      dedupe_key: `collab.first_collaborator_owner:${inviterId}`,
     });
   } catch (e) {
     console.error("[song-invite-accept] accepted_email_failed", String(e));

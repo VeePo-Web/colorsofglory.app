@@ -107,6 +107,16 @@ Deno.serve(async (req) => {
           scheduled_for: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString(),
           dedupe_key: `collab.invite_reminder:${invite.id}`,
         });
+
+        // E1 · the reward revealed AFTER generosity — one hour after the
+        // user's FIRST invite ever, once ever (the dedupe key is the law).
+        await enqueueEmail(admin, {
+          user_id: user.id,
+          kind: "growth.referral_explainer",
+          category: "growth",
+          scheduled_for: new Date(Date.now() + 3600 * 1000).toISOString(),
+          dedupe_key: `growth.referral_explainer:${user.id}`,
+        });
       } catch (e) {
         console.error("[song-invite-create] email_wiring_failed", String(e));
       }

@@ -264,6 +264,134 @@ export function firstSongNudgeEmail(): RenderedTemplate {
   return { subject: "The hardest part is just naming it", html, text };
 }
 
+/**
+ * Server-side humanizer for activity kinds — the same fenced vocabulary as
+ * the in-app recap (kind + actor name + count; never content).
+ */
+const KIND_PHRASES: Record<string, { one: string; many: (n: number) => string }> = {
+  take_committed: { one: "saved a take to the canvas", many: (n) => `saved ${n} takes to the canvas` },
+  capture_created: { one: "captured a new idea", many: (n) => `captured ${n} new ideas` },
+  capture_promoted: { one: "promoted an idea", many: (n) => `promoted ${n} ideas` },
+  memo_uploaded: { one: "added a voice memo", many: (n) => `added ${n} voice memos` },
+  invite_accepted: { one: "joined the song", many: () => "joined the song" },
+  member_left: { one: "left the song", many: () => "left the song" },
+  owner_transferred: { one: "became the owner", many: () => "became the owner" },
+  card_moved: { one: "rearranged an idea", many: (n) => `rearranged ${n} ideas` },
+  card_linked: { one: "connected two ideas", many: (n) => `connected ${n} ideas` },
+  card_grouped: { one: "grouped ideas together", many: () => "grouped ideas together" },
+  card_section_set: { one: "tagged an idea with a section", many: (n) => `tagged ${n} ideas with sections` },
+  card_promoted_final: { one: "moved an idea into Final", many: (n) => `moved ${n} ideas into Final` },
+  card_deleted: { one: "removed an idea", many: (n) => `removed ${n} ideas` },
+  idea_amened: { one: "left an amen on an idea", many: (n) => `left ${n} amens` },
+};
+
+export function humanizeActivityKind(kind: string, count: number): string {
+  const p = KIND_PHRASES[kind];
+  if (!p) return count > 1 ? `made ${count} changes` : "made a change";
+  return count > 1 ? p.many(count) : p.one;
+}
+
+/** D1 · digest.what_changed — Product Vision 08 as email. `lines` are
+ * pre-humanized, fence-safe strings ("Sarah added 2 voice memos"). */
+export function whatChangedEmail(args: {
+  songTitle: string;
+  songId: string;
+  lines: string[];
+}): RenderedTemplate {
+  const title = escapeHtml(args.songTitle);
+  const shown = args.lines.slice(0, 5);
+  const extra = args.lines.length - shown.length;
+  const list =
+    `<ul style="margin:0 0 16px;padding-left:20px;">` +
+    shown.map((l) => `<li style="margin:0 0 6px;">${escapeHtml(l)}</li>`).join("") +
+    (extra > 0 ? `<li style="margin:0 0 6px;color:#6B6459;">+${extra} more</li>` : "") +
+    `</ul>`;
+  const { html, text } = renderEmail({
+    preheader: "Here's the calm recap — nothing needs you urgently.",
+    headline: `Here's what happened in ${args.songTitle}.`,
+    bodyHtml:
+      p(`While you were away:`) +
+      list +
+      p(`Nothing needs you urgently. It's all here whenever you're ready.`),
+    ctaLabel: "See what changed",
+    ctaUrl: `${APP_URL}/songs/${args.songId}/activity`,
+    category: "digest",
+    categoryLabel: "weekly recaps",
+  });
+  return { subject: `What changed in ${args.songTitle} this week`, html, text };
+}
+
+/** B1 · edu.hum_capture — the flagship education email. */
+export function humCaptureEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "The fastest way to save a melody isn't writing it down. It's humming it.",
+    headline: "Sing it before you lose it.",
+    bodyHtml:
+      p(`Melodies are slippery. The one that felt perfect in the shower is often gone by the time you find a pen. So don't reach for a pen.`) +
+      p(`In <strong>${escapeHtml(args.songTitle)}</strong>, press and <strong>hold the record button</strong> and just hum, sing, or beatbox the idea — no setup, no perfect take. Let go, and it's saved as a voice memo with a waveform you can play back anytime. Record another take right over it if the next one's better.`) +
+      p(`That half-formed melody in your head right now? Thirty seconds. Go catch it.`),
+    ctaLabel: "Hum your first idea",
+    ctaUrl: `${APP_URL}/songs/${args.songId}/voice`,
+    category: "edu",
+    categoryLabel: "tips & feature guides",
+  });
+  return { subject: "The melody in your head — hum it, keep it", html, text };
+}
+
+/** B2 · edu.lyrics_chords */
+export function lyricsChordsEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "Chord chips sit right above the line they belong to — no more guessing where the G goes.",
+    headline: "Chords over the words, right where they belong.",
+    bodyHtml:
+      p(`You've been catching melodies for <strong>${escapeHtml(args.songTitle)}</strong> — now give them words to live with.`) +
+      p(`Type a line, drop chord chips (C, G, Am) right above the exact word they change on, and keep the voice memo of that section beside it so the melody and the words stay together. The way you'd actually teach it to your team on a Sunday.`),
+    ctaLabel: "Write your first verse",
+    ctaUrl: `${APP_URL}/songs/${args.songId}/lyrics`,
+    category: "edu",
+    categoryLabel: "tips & feature guides",
+  });
+  return { subject: "Turn that memo into lyrics and chords", html, text };
+}
+
+/** C8 · collab.first_collaborator_owner — a one-time moment. */
+export function firstCollaboratorEmail(args: {
+  inviteeName: string;
+  songTitle: string;
+  songId: string;
+}): RenderedTemplate {
+  const invitee = escapeHtml(args.inviteeName);
+  const { html, text } = renderEmail({
+    preheader: "A song was never meant to live alone in one person's phone.",
+    headline: "Your song just became a conversation.",
+    bodyHtml:
+      p(`${invitee} is the first person you've brought into a song here — and that's the whole heart of this thing. A song was never meant to live alone in one person's phone. It's meant to be passed back and forth until it's better than either of you could've made it apart.`) +
+      p(`Everything ${invitee} adds will show up in your activity feed, and every contribution gets remembered in the credits. Go make something together.`),
+    ctaLabel: `Open ${args.songTitle}`,
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "collab",
+    categoryLabel: "song activity emails",
+  });
+  return { subject: "This is the moment Colors of Glory was built for", html, text };
+}
+
+/** E1 · growth.referral_explainer — the reward revealed AFTER generosity. */
+export function referralExplainerEmail(): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "You invited someone because you wanted to. Here's what we do in return.",
+    headline: "You didn't do it for a reward. That's exactly why we give one.",
+    bodyHtml:
+      p(`You invited someone into a song because you wanted to write with them — not for points. We love that. So here's how Colors of Glory quietly says thank you:`) +
+      p(`When someone you invite makes this their home and starts a plan of their own, a small thank-you reward is set aside for you. It's our way of honoring the people who make this a community instead of an app.`) +
+      p(`You never have to think about it. Keep inviting the people your songs are meant for, and the rest takes care of itself.`),
+    ctaLabel: "See your referrals",
+    ctaUrl: `${APP_URL}/settings/referral`,
+    category: "growth",
+    categoryLabel: "referral emails",
+  });
+  return { subject: "A small thank-you for bringing someone in", html, text };
+}
+
 /** E3 · growth.reward_* — the LIVE reward mail, re-skinned through the shell. */
 export function rewardEmail(kind: string, amountCents: number | null): RenderedTemplate {
   const usd = amountCents != null ? `$${(amountCents / 100).toFixed(2)}` : "your reward";

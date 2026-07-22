@@ -203,4 +203,30 @@ Never: "🔥 50% OFF — 24 HOURS ONLY!!" · "we miss you 😢" · "supercharge"
 - `song-invite-create` now SENDS C1 (T, instant, hello@) when `invited_email` present + enqueues the C2 reminder (+3d, deduped per invite, auto-skips if accepted). `song-invite-accept` sends C3 to the inviter.
 - `onboarding-set-step` enqueues A1 (instant) + A2 (+24h; drain re-checks "still no song") once ever per user (dedupe keys).
 
-**Not yet built (next slices, in §9 order):** D1 digest (consume `digest-recap`), B education evaluator (nightly), D3/E1 growth pair, G billing set (on payments-webhook), F/H programs, the `/settings/notifications` preference center UI, List-Unsubscribe headers + one-click endpoint, per-kind A/B subjects.
+**Shipped 2026-07-22 (Steps 4–5 + C8/E1):**
+- `email-lifecycle-evaluator` — the scheduled brain (cron it daily; it only
+  ENQUEUES, deduped; the governed drain owns delivery). Passes: **D1**
+  per-member digests for multi-member songs with other-actor activity since
+  that member's `song_notification_prefs.last_seen_at` (weekly ISO-week
+  dedupe; work-budgeted); **B1/B2** education for 2–21-day-old accounts
+  (once ever; one education thread at a time).
+- D1 renders deterministic fenced bullet lines (same `song_activity`
+  vocabulary as `digest-recap`: kind + actor name + count — the LLM
+  paragraph is deliberately NOT used for email: the drain has no user JWT
+  and deterministic beats generative in an inbox). The digest **evaporates
+  at send time if the user visited the room after it was queued.**
+- B1/B2 re-check their gates at send time (recorded a memo → hum email
+  evaporates; wrote lyrics → lyrics email evaporates). A power user gets
+  zero education email — correct.
+- **C8** first-collaborator moment enqueued on the inviter's first-ever
+  accepted invite (+30 min, once ever) · **E1** referral explainer enqueued
+  +1h after the first invite ever (once ever, referrals@).
+
+**Not yet built (next slices, in §9 order):** D2 solo digest + D3 invite
+nudge (needs the §4 gates + dismissal tracking), remaining A (A3/A4/A5) and
+B (B3–B8) programs, E2/E4/E5, G billing set (on payments-webhook), F/H
+programs, preference-center wiring to `email_suppressions`, List-Unsubscribe
+headers + one-click endpoint, per-kind A/B subjects.
+**Ops ask (Lovable):** schedule `email-lifecycle-evaluator` daily (morning
+UTC) alongside the existing `notify-referral-event` drain cron (drain every
+5–15 min).
