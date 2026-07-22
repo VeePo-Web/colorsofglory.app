@@ -711,8 +711,10 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   const handleSheetSave = useCallback((block: PendingBlock) => {
     setPendingBlocks((prev) => [...prev, block]);
-    toast.success("Saved", {
-      description: "It'll appear in the next review sheet after you record.",
+    // "review sheet" is internal jargon a first-timer hasn't met yet. Say it
+    // plainly: the note is kept, and it rides along with the next recording.
+    toast.success("Kept", {
+      description: "It'll be here with your next take.",
     });
   }, []);
 

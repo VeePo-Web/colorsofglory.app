@@ -269,7 +269,12 @@ const CaptureSheet = ({ open, action, onClose, onSave, chords }: CaptureSheetPro
               opacity: action !== "section" && text.trim().length === 0 ? 0.5 : 1,
             }}
           >
-            Save to take
+            {/* Honest with the first-timer: this sheet only opens BEFORE a take
+                exists (rail taps during a recording drop pins directly), so the
+                old "Save to take" promised a take that isn't there yet. "Keep
+                this" is true in every case; the save toast explains it waits for
+                the next recording. */}
+            Keep this
           </Button>
             </>
           )}

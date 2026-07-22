@@ -312,7 +312,9 @@ const ScripturePicker = ({ onPicked, onFallback }: ScripturePickerProps) => {
           cursor: canSave ? "pointer" : "not-allowed",
         }}
       >
-        Save to take
+        {/* This picker is shared by idle Capture and the Rhyme book — in both,
+            no "take" exists at this moment. Name the actual object instead. */}
+        Add this passage
       </button>
 
       <button
