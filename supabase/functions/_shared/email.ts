@@ -568,3 +568,59 @@ export function rewardEmail(kind: string, amountCents: number | null): RenderedT
   });
   return { subject: c.subject, html, text };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUTH — OTP verification codes, unified into the same shell.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type OtpPurpose = "signup" | "login" | "reset";
+
+export function otpCodeEmail(args: { code: string; purpose: OtpPurpose }): RenderedTemplate {
+  const verb = args.purpose === "signup"
+    ? "Confirm your account"
+    : args.purpose === "reset"
+      ? "Reset your password"
+      : "Sign in";
+  const finishAction = args.purpose === "signup"
+    ? "finish creating your account"
+    : args.purpose === "reset"
+      ? "reset your password"
+      : "sign in";
+
+  const codeBlock = `<div style="background:#F5F0E8;border:1px solid rgba(184,149,58,.40);border-radius:14px;padding:20px;text-align:center;margin:0 0 20px;">
+    <span style="font-family:'SF Mono',Menlo,monospace;font-size:34px;letter-spacing:.4em;color:#1C1A17;font-weight:600;">${escapeHtml(args.code)}</span>
+  </div>`;
+
+  const { html, text } = renderEmail({
+    preheader: `Your Colors of Glory code is ${args.code}. It expires in 10 minutes.`,
+    headline: verb,
+    bodyHtml:
+      p(`Enter this code to ${finishAction}.`) +
+      codeBlock +
+      p(`This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.`),
+    category: "auth",
+    transactional: true,
+    transactionalNote: "This is a service message about your account.",
+  });
+  return {
+    subject: `${args.code} — ${verb} · Colors of Glory`,
+    html,
+    text,
+  };
+}
+
+export function passwordChangedEmail(args: { firstName: string | null | undefined }): RenderedTemplate {
+  const name = safeFirstName(args.firstName);
+  const { html, text } = renderEmail({
+    preheader: "Your Colors of Glory password was just changed.",
+    headline: "Your password was changed.",
+    bodyHtml:
+      p(`Hi ${escapeHtml(name)}, your Colors of Glory password was updated just now.`) +
+      p(`If this was you, you're all set. If not, reply to this email right away and we'll help you lock the account back down.`),
+    ctaLabel: "Sign in",
+    ctaUrl: `${APP_URL}/auth/login`,
+    category: "auth",
+    transactional: true,
+  });
+  return { subject: "Your password was changed", html, text };
+}

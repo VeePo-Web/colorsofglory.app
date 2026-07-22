@@ -487,6 +487,89 @@ export type Database = {
         }
         Relationships: []
       }
+      email_send_log: {
+        Row: {
+          bounced_at: string | null
+          category: string | null
+          click_count: number
+          complained_at: string | null
+          created_at: string
+          delivered_at: string | null
+          error: string | null
+          first_clicked_at: string | null
+          first_opened_at: string | null
+          id: string
+          idempotency_key: string | null
+          message_id: string | null
+          meta: Json
+          open_count: number
+          recipient_email: string
+          sent_at: string | null
+          status: string
+          subject: string | null
+          suppression_reason: string | null
+          template_name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          bounced_at?: string | null
+          category?: string | null
+          click_count?: number
+          complained_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          error?: string | null
+          first_clicked_at?: string | null
+          first_opened_at?: string | null
+          id?: string
+          idempotency_key?: string | null
+          message_id?: string | null
+          meta?: Json
+          open_count?: number
+          recipient_email: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          suppression_reason?: string | null
+          template_name: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          bounced_at?: string | null
+          category?: string | null
+          click_count?: number
+          complained_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          error?: string | null
+          first_clicked_at?: string | null
+          first_opened_at?: string | null
+          id?: string
+          idempotency_key?: string | null
+          message_id?: string | null
+          meta?: Json
+          open_count?: number
+          recipient_email?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          suppression_reason?: string | null
+          template_name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_send_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_suppressions: {
         Row: {
           category: string
@@ -2869,6 +2952,23 @@ export type Database = {
       education_candidates: { Args: { _user_id: string }; Returns: Json }
       effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
+      email_analytics_summary: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          bounced: number
+          click_rate: number
+          clicked: number
+          complained: number
+          delivered: number
+          delivery_rate: number
+          failed: number
+          open_rate: number
+          opened: number
+          sent: number
+          suppressed: number
+          template_name: string
+        }[]
+      }
       email_rolling_counts: {
         Args: { _user_id: string }
         Returns: {
