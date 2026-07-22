@@ -26,6 +26,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
+import { setNavDirection } from "@/lib/nav/navDirection";
 import CrownMark from "@/components/cog/CrownMark";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";

@@ -2,7 +2,9 @@
 // Sends the code via Resend through the Lovable Connector Gateway — never via
 // the default Supabase/Lovable branded email templates.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
-import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
+import { COG_SENDERS } from "../_shared/resend.ts";
+import { otpCodeEmail } from "../_shared/email.ts";
+import { sendAndLog } from "../_shared/sendAndLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,33 +20,6 @@ type Purpose = "signup" | "login" | "reset";
 async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function emailBody(code: string, purpose: Purpose): { subject: string; html: string; text: string } {
-  const verb = purpose === "signup" ? "Confirm your account" : purpose === "reset" ? "Reset your password" : "Sign in";
-  const subject = `${code} — ${verb} · ${APP_NAME}`;
-  const text =
-    `Your ${APP_NAME} verification code is ${code}.\n\n` +
-    `It expires in 10 minutes. If you didn't request this, you can ignore this email.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#F5F0E8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1C1A17;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F0E8;padding:40px 16px;">
-<tr><td align="center">
-  <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#FAF7F2;border:1px solid rgba(28,26,23,.10);border-radius:16px;padding:32px;">
-    <tr><td>
-      <p style="margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6B6459;">${APP_NAME}</p>
-      <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:24px;color:#1C1A17;">${verb}</h1>
-      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#1C1A17;">Enter this code to ${purpose === "signup" ? "finish creating your account" : purpose === "reset" ? "reset your password" : "sign in"}.</p>
-      <div style="background:#F5F0E8;border:1px solid rgba(184,149,58,.40);border-radius:14px;padding:20px;text-align:center;margin:0 0 24px;">
-        <span style="font-family:'SF Mono',Menlo,monospace;font-size:34px;letter-spacing:.4em;color:#1C1A17;font-weight:600;">${code}</span>
-      </div>
-      <p style="margin:0 0 4px;font-size:13px;color:#6B6459;">This code expires in 10 minutes.</p>
-      <p style="margin:0;font-size:13px;color:#6B6459;">If you didn't request it, you can safely ignore this email.</p>
-    </td></tr>
-  </table>
-  <p style="margin:16px 0 0;font-size:12px;color:#A09689;">© ${new Date().getFullYear()} ${APP_NAME}</p>
-</td></tr></table>
-</body></html>`;
-  return { subject, html, text };
 }
 
 Deno.serve(async (req) => {
@@ -96,26 +71,22 @@ Deno.serve(async (req) => {
       expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     });
 
-    const { subject, html, text } = emailBody(code, purpose);
-    let result;
-    try {
-      result = await sendViaResend({
-        from: FROM,
-        to: email,
-        subject,
-        html,
-        text,
-        tags: [
-          { name: "app", value: "cog" },
-          { name: "category", value: "auth_otp" },
-          { name: "purpose", value: purpose },
-        ],
-      });
-    } catch (err) {
-      console.error("email-otp-start provider error", err);
-      return new Response(JSON.stringify({ error: "email_provider_unconfigured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (!result.ok) {
+    const rendered = otpCodeEmail({ code, purpose });
+    const result = await sendAndLog({
+      templateName: `otp_${purpose}`,
+      category: "auth",
+      recipientEmail: email,
+      rendered,
+      from: FROM,
+      idempotencyKey: `otp:${purpose}:${emailHash}:${code}`,
+      tags: [
+        { name: "app", value: "cog" },
+        { name: "category", value: "auth_otp" },
+        { name: "purpose", value: purpose },
+      ],
+      meta: { source: "email-otp-start", purpose },
+    }, supabase);
+    if (!result.ok && result.status !== "duplicate") {
       return new Response(JSON.stringify({ error: "send_failed" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
