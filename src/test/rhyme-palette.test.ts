@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   contextTopics,
   contextWordSet,
+  frequentContentWords,
   groupPalette,
   paletteFromCorpus,
+  phraseRhymesFromLines,
   rankCandidates,
   suggestPalette,
   paletteIsEmpty,
@@ -55,6 +57,58 @@ describe("contextTopics — Datamuse topic bias", () => {
     expect(topics[1]).toBe("mercy");
     expect(topics.length).toBeGreaterThan(2);
     expect(topics.length).toBeLessThanOrEqual(5);
+  });
+
+  it("falls back to the song's own words when there is no theme (auto-theme)", () => {
+    const topics = contextTopics(EMPTY_RHYME_CONTEXT, ["anchor", "shepherd", "waters"]);
+    expect(topics).toEqual(["anchor", "shepherd", "waters"]);
+  });
+
+  it("ignores the fallback once explicit theme fills all five slots", () => {
+    const topics = contextTopics(
+      { theme: "grace mercy morning light hope", scriptures: [] },
+      ["anchor"],
+    );
+    expect(topics).toHaveLength(5);
+    expect(topics).not.toContain("anchor");
+  });
+});
+
+describe("frequentContentWords — the auto-theme source", () => {
+  it("ranks the song's own words by frequency, dropping stopwords", () => {
+    const words = frequentContentWords([
+      "Your grace is enough for me",
+      "Your grace, Your endless grace",
+      "and I will not be shaken",
+    ]);
+    expect(words[0]).toBe("grace"); // appears 3x
+    expect(words).not.toContain("your"); // stopword
+    expect(words).not.toContain("and");
+  });
+});
+
+describe("phraseRhymesFromLines — phrase rhymes from the writer's own lines", () => {
+  it("offers a line's last two words when its ending rhymes the seed", () => {
+    const phrases = phraseRhymesFromLines("place", [
+      "You are my hiding grace", // "grace" rhymes "place"
+      "one single word", // no rhyme
+    ]);
+    expect(phrases.map((p) => p.text)).toContain("hiding grace");
+    expect(phrases.every((p) => p.text.includes(" "))).toBe(true);
+  });
+
+  it("skips single-word lines and the seed's own line", () => {
+    const phrases = phraseRhymesFromLines("grace", ["grace", "by your grace"]);
+    // "grace" alone is single-word; "by your grace" ends in the seed itself.
+    expect(phrases).toHaveLength(0);
+  });
+
+  it("surfaces mined phrases through the offline palette's Phrase group", () => {
+    const groups = paletteFromCorpus("place", ["face"], EMPTY_RHYME_CONTEXT, {
+      songLines: ["found in endless grace"],
+    });
+    expect(groups.phrase.map((c) => c.text)).toContain("endless grace");
+    expect(groups.perfect.map((c) => c.text)).toContain("face");
   });
 });
 
@@ -130,6 +184,19 @@ describe("rankCandidates — the composite (tier × theme × meter × score)", (
     // "place" against "grace" is a perfect rhyme even if it arrived via near.
     const ranked = rankCandidates([raw("place", "near")], "grace", EMPTY_RHYME_CONTEXT);
     expect(ranked[0].tier).toBe("perfect");
+  });
+
+  it("boosts candidates that echo the song's own words (auto-theme)", () => {
+    // No explicit theme; "grace" is fed as a boost word (the song's vocab).
+    // The near "grace" should float above the off-theme perfect "face".
+    const ranked = rankCandidates(
+      [raw("face", "rhyme"), raw("grace", "near")],
+      "place",
+      EMPTY_RHYME_CONTEXT,
+      { boostWords: ["grace", "mercy"] },
+    );
+    expect(ranked[0].text).toBe("grace");
+    expect(ranked[0].themeHit).toBe(true);
   });
 });
 
@@ -216,5 +283,15 @@ describe("suggestPalette — fetch, cache, and the offline throw", () => {
     vi.stubGlobal("fetch", fetchMock);
     const groups = await suggestPalette("zzpartialseed", EMPTY_RHYME_CONTEXT);
     expect(paletteIsEmpty(groups)).toBe(false);
+  });
+
+  it("merges the writer's own phrase rhymes on top of the cached Datamuse result", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => dmResponse([{ word: "place", score: 90, numSyllables: 1 }])));
+    const groups = await suggestPalette("grace", { theme: "zzphrasetest", scriptures: [] }, {
+      songLines: ["you are my hiding place"],
+    });
+    expect(groups.perfect.map((c) => c.text)).toContain("place");
+    // "hiding place" ends in "place" which rhymes "grace" — mined phrase.
+    expect(groups.phrase.map((c) => c.text)).toContain("hiding place");
   });
 });

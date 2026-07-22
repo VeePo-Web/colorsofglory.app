@@ -38,7 +38,11 @@ Candidates come from three parallel Datamuse lenses — `rel_rhy` (perfect, keep
 its multi-word PHRASE results), `rel_nry` (near/slant), `ml` (related) — each with
 `md=s` (syllable metadata) and `topics=` set from the writer's theme (source-level
 bias, Datamuse's documented 5-topic cap; theme words lead, scripture content words
-fill by frequency).
+fill by frequency, the song's own words fill the rest when no theme is set). Datamuse
+rarely returns phrases, so **the Phrase group is also mined from the writer's own
+lines** (`phraseRhymesFromLines`): any line whose ending rhymes the seed contributes
+its last two words. These are merged fresh each call (not cached — the lines change as
+the writer types) on top of the session-cached Datamuse result.
 
 Then the composite re-rank, per candidate:
 
@@ -62,7 +66,7 @@ Output groups, calm and capped: **Perfect (10) / Near · Slant (10) / Phrase (8)
 Related (8)**, every chip syllable-tagged, theme hits wearing a quiet gold ring.
 Session cache per `(seed, topics)`, ~80 entries.
 
-## 4. The context (theme + scriptures)
+## 4. The context (theme + scriptures + auto-theme)
 
 The writer sets a free-text THEME and attaches exact SCRIPTURES via H1's
 `ScripturePicker` (consumed, never rebuilt — `onPicked(label, text)` provides the
@@ -70,18 +74,38 @@ passage text whose content words join the ranking set). Context persists per son
 `localStorage` (`cog.rhyme.ctx.<songId>`) — device-local, zero backend surface,
 try/catch-guarded for private mode.
 
-## 5. Live input
+**Auto-theme (zero-setup).** When the writer has set NO theme and NO scripture, the
+song's own most-frequent content words (`frequentContentWords`) stand in as the theme
+— biasing both the Datamuse `topics=` and the re-rank toward the song's own
+vocabulary. An explicit theme/scripture always wins entirely (the fallback is ignored
+the moment either is present). So the palette is on-message the instant it opens,
+before the writer types anything.
 
-- **Typing:** the line being edited mirrors its draft out through the optional
-  `onDraft` seam; the seed is the draft's `lastWord`.
-- **Singing:** Say-It-Structured's `useLiveTranscript` (C2, consumed not rebuilt —
-  on-device Web Speech, graceful `supported=false` elsewhere). The mic button renders
-  only when supported; the transcript tail feeds the seed; a quiet italic line shows
-  what was heard.
+## 5. Live input — the seed (useful the instant it opens)
+
+The seed (the word being rhymed) is chosen by priority, so the panel is never blank
+when there's anything to rhyme:
+
+1. **Singing now** → the live transcript tail (Say-It-Structured's `useLiveTranscript`,
+   C2, consumed not rebuilt — on-device Web Speech, `supported=false` elsewhere; mic
+   button renders only when supported, a quiet italic line shows what was heard).
+2. **Typing a line** with an ending word → that line's live `lastWord` (mirrored out
+   through the optional `onDraft` seam).
+3. **Otherwise** → the last written line of the active section. This means: opening
+   the Rhyme book on an existing song immediately rhymes the last line, AND starting a
+   fresh empty line rhymes the PREVIOUS line (rhyme-to-match, the songwriter's actual
+   move).
+
+- **Rhyme-on word picker:** in brainstorm mode (not typing / not singing) a small row
+  offers the last line's last few words so the writer can rhyme any of them, not only
+  the ending. While typing, the seed follows the line's ending live (no picker).
 - **Insert:** while a line is being edited, its input registers an insert-at-cursor
   function; palette chips prevent pointer-down default so tapping one **never blurs
   the input** — focus, the editing session, and the commit-on-blur flow are untouched.
   With no line being edited, chips are read-only inspiration (reading is enough).
+- **Sticky:** the panel is `position: sticky; top: 0` so it FOLLOWS the writer down to
+  the line they're editing (keyboard up) instead of scrolling out of view; it degrades
+  to static if an ancestor clips overflow — never worse.
 - **The ribbon:** the active section's A/B scheme (`rhymeScheme`) sits quietly in the
   panel header; the full-song Craft view remains the deep scheme reading.
 

@@ -41,7 +41,6 @@ import ChordDiagramSheet from "@/components/songsheet/ChordDiagramSheet";
 import { useDialogDismiss } from "@/components/songsheet/useDialogDismiss";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import { rhymeScheme } from "@/lib/lyrics/rhyme";
-import { corpusFromBodies } from "@/lib/lyrics/rhymeSuggest";
 import RhymeSchemer from "@/components/songsheet/RhymeSchemer";
 import { looksLikeChordsOverLyrics, chordsOverLyricsToChordPro } from "@/lib/chords/importChart";
 import { suggestCapos } from "@/lib/chords/capoSuggest";
@@ -135,6 +134,20 @@ const SongSheetPage = () => {
   const handleRegisterInsert = useRef((fn: ((text: string) => void) | null) => {
     rhymeInsertRef.current = fn;
   }).current;
+  // Memoized so an open schemer never rebuilds these on every keystroke (the
+  // song's lines change only on commit; the active section only when the
+  // draft or doc changes). Keeps typing latency identical to the schemer off.
+  const rhymeSongLines = useMemo(
+    () => (doc ? doc.sections.flatMap((s) => s.lines.map((l) => l.text)) : []),
+    [doc],
+  );
+  const rhymeActiveLines = useMemo(() => {
+    if (!doc) return [];
+    const active =
+      doc.sections.find((s) => s.id === rhymeDraft?.sectionId) ?? doc.sections[doc.sections.length - 1];
+    if (!active) return [];
+    return active.lines.map((l) => (rhymeDraft && l.id === rhymeDraft.lineId ? rhymeDraft.text : l.text));
+  }, [doc, rhymeDraft]);
 
   const initializedKeyFor = useRef<string | null>(null);
   useEffect(() => {
@@ -414,22 +427,19 @@ const SongSheetPage = () => {
               )}
 
               {rhymeOpen && tab === "lyrics" && !craft && (
-                <RhymeSchemer
-                  songId={songId}
-                  activeLines={(() => {
-                    const active =
-                      doc!.sections.find((s) => s.id === rhymeDraft?.sectionId) ??
-                      doc!.sections[doc!.sections.length - 1];
-                    if (!active) return [];
-                    return active.lines.map((l) =>
-                      rhymeDraft && l.id === rhymeDraft.lineId ? rhymeDraft.text : l.text,
-                    );
-                  })()}
-                  editingDraft={rhymeDraft?.text ?? null}
-                  onInsert={rhymeDraft ? (text) => rhymeInsertRef.current?.(text) : null}
-                  corpus={corpusFromBodies(doc!.sections.flatMap((s) => s.lines.map((l) => l.text)))}
-                  onClose={() => setRhymeOpen(false)}
-                />
+                // Sticky so the palette follows the writer down to the line
+                // they're editing (keyboard up) instead of scrolling away.
+                // Degrades to static if an ancestor clips overflow — never worse.
+                <div style={{ position: "sticky", top: 0, zIndex: 30, marginBottom: 20 }}>
+                  <RhymeSchemer
+                    songId={songId}
+                    activeLines={rhymeActiveLines}
+                    editingDraft={rhymeDraft?.text ?? null}
+                    onInsert={rhymeDraft ? (text) => rhymeInsertRef.current?.(text) : null}
+                    songLines={rhymeSongLines}
+                    onClose={() => setRhymeOpen(false)}
+                  />
+                </div>
               )}
 
               {craft ? (

@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Mic, MicOff, X } from "lucide-react";
 import {
   EMPTY_RHYME_CONTEXT,
+  frequentContentWords,
   paletteFromCorpus,
   paletteIsEmpty,
   suggestPalette,
   type RhymeContext,
   type RhymePaletteGroups,
 } from "@/lib/lyrics/rhymePalette";
+import { corpusFromBodies } from "@/lib/lyrics/rhymeSuggest";
 import { lastWord, rhymeScheme } from "@/lib/lyrics/rhyme";
 import { countLineSyllables } from "@/lib/lyrics/syllables";
 import RhymePaletteStrip from "@/components/songsheet/RhymePaletteStrip";
@@ -17,13 +19,13 @@ import useLiveTranscript from "@/hooks/useLiveTranscript";
 /**
  * RhymeSchemer — the Live Rhyme Schemer's opt-in brainstorm panel (C3).
  *
- * The writer opens it when they WANT rhymes; otherwise it doesn't exist. They
- * set a THEME and attach SCRIPTURES (H1's picker, consumed not rebuilt) — the
- * ranking context. Then they type (the line being edited feeds the seed) or
- * SING (Say-It-Structured's on-device live transcript feeds it) and a calm,
- * grouped, syllable-tagged palette gathers — theme-and-scripture-first,
- * slant ranked high, phrases included. A tiny A/B ribbon shows the active
- * section's rhyme scheme.
+ * The writer opens it when they WANT rhymes; otherwise it doesn't exist. It is
+ * useful the instant it opens: with no line being edited it rhymes the last
+ * written line (and lets the writer pick which of its words to explore); the
+ * moment they tap into a line it follows the line they're writing; and while
+ * they SING (Say-It-Structured's on-device transcript) it follows the sung
+ * tail. Theme + attached scriptures rank the palette — and when neither is set,
+ * the song's OWN frequent words stand in, so it is on-message with zero setup.
  *
  * STRICTLY ADDITIVE: everything here runs in effects off the input path,
  * debounced, aborted on change, and laddered (Datamuse -> the writer's own
@@ -61,6 +63,16 @@ function saveCtx(songId: string, ctx: RhymeContext) {
   }
 }
 
+/** The last ≤4 rhyme-worthy words of a line, for the "rhyme on" picker. */
+function pickableFrom(line: string): string[] {
+  return line
+    .replace(/\[[^\]]*\]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.toLowerCase().replace(/[^a-z'-]/g, "").replace(/^-+|-+$/g, ""))
+    .filter((w) => w.length >= 2)
+    .slice(-4);
+}
+
 interface RhymeSchemerProps {
   songId: string;
   /** Lines of the section being edited (ribbon + meter); empty when unknown. */
@@ -69,23 +81,62 @@ interface RhymeSchemerProps {
   editingDraft: string | null;
   /** Insert at the editing line's cursor — null when no line is being edited. */
   onInsert: ((text: string) => void) | null;
-  /** Every word in the song — the offline rung's corpus. */
-  corpus: string[];
+  /** Every line of the song — offline corpus, auto-theme, and phrase mining. */
+  songLines: string[];
   onClose: () => void;
 }
 
-const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onClose }: RhymeSchemerProps) => {
+const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, songLines, onClose }: RhymeSchemerProps) => {
   const [ctx, setCtx] = useState<RhymeContext>(() => loadCtx(songId));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [palette, setPalette] = useState<RhymePaletteGroups | null>(null);
   const [loading, setLoading] = useState(false);
   const [fromOwnWords, setFromOwnWords] = useState(false);
+  const [wordPick, setWordPick] = useState<string | null>(null);
   const live = useLiveTranscript();
 
-  // Seed: the line being edited wins; while singing, the transcript tail.
+  const hasExplicitTheme = ctx.theme.trim().length > 0 || ctx.scriptures.length > 0;
+  const corpus = useMemo(() => corpusFromBodies(songLines), [songLines]);
+  // Auto-theme: the song's own frequent words, but only when the writer has
+  // set no theme of their own (an explicit theme always wins entirely).
+  const boostWords = useMemo(
+    () => (hasExplicitTheme ? [] : frequentContentWords(songLines)),
+    [hasExplicitTheme, songLines],
+  );
+
   const liveTail = live.partial || (live.words.length > 0 ? live.words[live.words.length - 1].text : "");
-  const seedSource = editingDraft ?? (live.listening || live.words.length > 0 ? liveTail : "");
-  const seed = useMemo(() => lastWord(seedSource), [seedSource]);
+
+  // The most recent written line that ISN'T the one being edited — the default
+  // seed on open, and the rhyme-to-match target when starting a fresh line.
+  const lastWritten = useMemo(() => {
+    for (let i = activeLines.length - 1; i >= 0; i--) {
+      const t = activeLines[i];
+      if (t.trim() && t !== editingDraft) return t;
+    }
+    return "";
+  }, [activeLines, editingDraft]);
+
+  const editingHasWord = editingDraft != null && lastWord(editingDraft) !== "";
+  // Priority: singing now > typing a line with an ending word > the last
+  // written line (so a fresh empty line rhymes the PREVIOUS line) > a sung tail.
+  const seedSource = live.listening
+    ? liveTail
+    : editingHasWord
+      ? editingDraft!
+      : lastWritten || liveTail;
+
+  // "Rhyme on" word picker — only when brainstorming (not typing / singing),
+  // so the writer can explore any word of the last line, not just its end.
+  const pickable = useMemo(
+    () => (editingHasWord || live.listening ? [] : pickableFrom(lastWritten)),
+    [editingHasWord, live.listening, lastWritten],
+  );
+  useEffect(() => setWordPick(null), [lastWritten]);
+
+  const seed = useMemo(() => {
+    if (wordPick && pickable.includes(wordPick)) return wordPick;
+    return lastWord(seedSource);
+  }, [wordPick, pickable, seedSource]);
 
   // Meter target: a parallel line's syllable count in the active section.
   const meterTarget = useMemo(() => {
@@ -104,7 +155,8 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
   useEffect(() => saveCtx(songId, ctx), [songId, ctx]);
 
   // The ladder, debounced, aborted, entirely off the input path.
-  const ctxKey = `${ctx.theme}|${ctx.scriptures.map((s) => s.label).join(",")}`;
+  const ctxKey = `${ctx.theme}|${ctx.scriptures.map((s) => s.label).join(",")}|${boostWords.join(",")}`;
+  const lineText = editingHasWord ? editingDraft ?? undefined : undefined;
   useEffect(() => {
     if (!seed) {
       setPalette(null);
@@ -114,8 +166,9 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
     let alive = true;
     const ctrl = new AbortController();
     setLoading(true);
+    const opts = { lineText, meterTarget, boostWords, songLines };
     const timer = setTimeout(() => {
-      suggestPalette(seed, ctx, { lineText: editingDraft ?? undefined, meterTarget, signal: ctrl.signal })
+      suggestPalette(seed, ctx, { ...opts, signal: ctrl.signal })
         .then((p) => {
           if (!alive) return;
           setPalette(p);
@@ -125,7 +178,7 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
         .catch(() => {
           if (!alive) return;
           try {
-            setPalette(paletteFromCorpus(seed, corpus, ctx, { lineText: editingDraft ?? undefined, meterTarget }));
+            setPalette(paletteFromCorpus(seed, corpus, ctx, opts));
             setFromOwnWords(true);
           } catch {
             setPalette(null); // rung 3: silence — never an error at the writer
@@ -139,7 +192,7 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, ctxKey, meterTarget, editingDraft == null]);
+  }, [seed, ctxKey, meterTarget, lineText]);
 
   return (
     <section
@@ -148,11 +201,11 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
         borderRadius: 16,
         border: "1px solid var(--cog-border)",
         backgroundColor: "var(--cog-cream-light)",
+        boxShadow: "0 6px 20px rgba(28,26,23,0.06)",
         padding: "12px 14px",
-        marginBottom: 20,
       }}
     >
-      {/* Header: title · mic · ribbon · close */}
+      {/* Header: title · scheme ribbon · mic · close */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <BookOpen size={14} strokeWidth={2} style={{ color: "var(--cog-gold)", flexShrink: 0 }} />
         <p style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--cog-warm-gray)" }}>
@@ -198,7 +251,7 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
         <input
           value={ctx.theme}
           onChange={(e) => setCtx((c) => ({ ...c, theme: e.target.value }))}
-          placeholder="Theme — e.g. grace, mercy, morning"
+          placeholder={boostWords.length ? "Theme — following your song's words" : "Theme — e.g. grace, mercy, morning"}
           aria-label="Song theme — rhymes on these words rank first"
           style={{
             flex: "1 1 150px", minHeight: 36, borderRadius: 10, padding: "0 10px",
@@ -255,6 +308,36 @@ const RhymeSchemer = ({ songId, activeLines, editingDraft, onInsert, corpus, onC
             }}
             onFallback={() => setPickerOpen(false)}
           />
+        </div>
+      )}
+
+      {/* "Rhyme on" — pick which word of the last line to explore (brainstorm
+          mode only; while typing, the seed follows the line's ending live). */}
+      {pickable.length > 1 && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 8 }}>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 10.5, fontWeight: 600, color: "var(--cog-muted)" }}>
+            Rhyme on
+          </span>
+          {pickable.map((w) => {
+            const active = seed === w;
+            return (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setWordPick(w)}
+                aria-pressed={active}
+                style={{
+                  minHeight: 32, padding: "0 10px", borderRadius: 999, cursor: "pointer",
+                  border: active ? "1.5px solid var(--cog-gold)" : "1px solid rgba(28,26,23,0.12)",
+                  backgroundColor: active ? "var(--cog-gold-pale)" : "transparent",
+                  fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
+                  color: "var(--cog-charcoal)",
+                }}
+              >
+                {w}
+              </button>
+            );
+          })}
         </div>
       )}
 
