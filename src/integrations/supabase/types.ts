@@ -451,6 +451,87 @@ export type Database = {
         }
         Relationships: []
       }
+      email_preferences: {
+        Row: {
+          encouragement: boolean
+          invite_suggestions: boolean
+          product_news: boolean
+          song_activity: boolean
+          tips_guides: boolean
+          unsubscribed_all: boolean
+          updated_at: string
+          user_id: string
+          weekly_recaps: boolean
+        }
+        Insert: {
+          encouragement?: boolean
+          invite_suggestions?: boolean
+          product_news?: boolean
+          song_activity?: boolean
+          tips_guides?: boolean
+          unsubscribed_all?: boolean
+          updated_at?: string
+          user_id: string
+          weekly_recaps?: boolean
+        }
+        Update: {
+          encouragement?: boolean
+          invite_suggestions?: boolean
+          product_news?: boolean
+          song_activity?: boolean
+          tips_guides?: boolean
+          unsubscribed_all?: boolean
+          updated_at?: string
+          user_id?: string
+          weekly_recaps?: boolean
+        }
+        Relationships: []
+      }
+      email_suppressions: {
+        Row: {
+          category: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          reason?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          reason?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      feature_usage: {
+        Row: {
+          feature: string
+          first_used_at: string
+          user_id: string
+        }
+        Insert: {
+          feature: string
+          first_used_at?: string
+          user_id: string
+        }
+        Update: {
+          feature?: string
+          first_used_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       founder_codes: {
         Row: {
           active: boolean
@@ -724,34 +805,67 @@ export type Database = {
       notification_queue: {
         Row: {
           attempts: number
+          category: string | null
           created_at: string
+          dedupe_key: string | null
           id: string
           kind: string
           last_error: string | null
           payload: Json
+          scheduled_for: string
           sent_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           attempts?: number
+          category?: string | null
           created_at?: string
+          dedupe_key?: string | null
           id?: string
           kind: string
           last_error?: string | null
           payload?: Json
+          scheduled_for?: string
           sent_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           attempts?: number
+          category?: string | null
           created_at?: string
+          dedupe_key?: string | null
           id?: string
           kind?: string
           last_error?: string | null
           payload?: Json
+          scheduled_for?: string
           sent_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nudge_dismissals: {
+        Row: {
+          count: number
+          kind: string
+          suppressed_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          count?: number
+          kind: string
+          suppressed_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          count?: number
+          kind?: string
+          suppressed_until?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1685,6 +1799,7 @@ export type Database = {
         Row: {
           cover_color: string | null
           created_at: string
+          dedication: string | null
           id: string
           is_locked: boolean
           key_signature: string | null
@@ -1701,6 +1816,7 @@ export type Database = {
         Insert: {
           cover_color?: string | null
           created_at?: string
+          dedication?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null
@@ -1717,6 +1833,7 @@ export type Database = {
         Update: {
           cover_color?: string | null
           created_at?: string
+          dedication?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null
@@ -2685,6 +2802,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      catalog_size: {
+        Args: { _user_id: string }
+        Returns: {
+          member_songs: number
+          owned_songs: number
+        }[]
+      }
       check_and_record_otp_send: {
         Args: { _country: string; _ip_hash: string; _phone: string }
         Returns: Json
@@ -2733,9 +2857,27 @@ export type Database = {
         Args: { _amount_cents?: number; _kind?: string; _referred_user: string }
         Returns: Json
       }
+      dormancy: {
+        Args: { _user_id: string }
+        Returns: {
+          collaborator_waiting: boolean
+          days_inactive: number
+          has_unfinished_song: boolean
+          last_active_at: string
+        }[]
+      }
+      education_candidates: { Args: { _user_id: string }; Returns: Json }
       effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
+      email_rolling_counts: {
+        Args: { _user_id: string }
+        Returns: {
+          last_24h: number
+          last_7d: number
+        }[]
+      }
       expire_pending_invites: { Args: never; Returns: number }
+      first_invite_ever: { Args: { _user_id: string }; Returns: boolean }
       generate_referral_code: { Args: never; Returns: string }
       get_my_profile: {
         Args: never
@@ -2894,6 +3036,7 @@ export type Database = {
         }
         Returns: string
       }
+      mark_feature_used: { Args: { _feature: string }; Returns: undefined }
       mark_memo_failed: {
         Args: { _memo_id: string; _reason: string }
         Returns: undefined
@@ -2977,6 +3120,10 @@ export type Database = {
         Returns: number
       }
       owned_active_song_count: { Args: { _user_id: string }; Returns: number }
+      owner_first_accepted_invite: {
+        Args: { _owner_id: string; _song_id: string }
+        Returns: boolean
+      }
       plan_tier_key_for_user: { Args: { _user_id: string }; Returns: string }
       quick_capture: {
         Args: {
@@ -3107,6 +3254,14 @@ export type Database = {
       stash_pending_code: {
         Args: { _code: string; _user_id: string }
         Returns: undefined
+      }
+      storage_usage_summary: {
+        Args: { _user_id: string }
+        Returns: {
+          pct: number
+          quota_bytes: number
+          used_bytes: number
+        }[]
       }
       unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
