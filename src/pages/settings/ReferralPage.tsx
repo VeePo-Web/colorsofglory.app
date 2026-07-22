@@ -52,6 +52,24 @@ const ReferralPage = () => {
     }
   };
 
+  // "Give it forward" — the referrer donates their payout instead of
+  // collecting it. COG gives the amount on their behalf; the ledger still
+  // batches + reconciles exactly like a cash payout.
+  const handleDonatePayout = async () => {
+    setSavingPayout(true);
+    try {
+      await setMyPayoutMethod({ method: "donate" });
+      const fresh = await fetchReferralStats();
+      setStats(fresh);
+      setEditingPayout(false);
+      toast.success("Thank you — your earnings will be given forward");
+    } catch (err) {
+      toast.error((err as Error)?.message ?? "Couldn't save that. Please try again.");
+    } finally {
+      setSavingPayout(false);
+    }
+  };
+
   const referralLink = stats?.link ?? "colorsofglory.app/r/...";
   const fullLink = stats?.link ?? `https://colorsofglory.app/r/...`;
 
@@ -267,8 +285,12 @@ const ReferralPage = () => {
               {method && !editingPayout ? (
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm truncate" style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}>
-                    {stats.payoutMethod.email ?? "Saved"}
-                    <span style={{ color: "var(--cog-warm-gray)" }}> · {method === "paypal" ? "PayPal" : method}</span>
+                    {method === "donate"
+                      ? "Given forward — your earnings become a gift"
+                      : (stats.payoutMethod.email ?? "Saved")}
+                    {method !== "donate" && (
+                      <span style={{ color: "var(--cog-warm-gray)" }}> · {method === "paypal" ? "PayPal" : method}</span>
+                    )}
                   </p>
                   <button
                     type="button"
@@ -316,6 +338,17 @@ const ReferralPage = () => {
                       {savingPayout ? "Saving…" : "Save"}
                     </button>
                   </div>
+                  {/* Give it forward — quiet, never an upsell. One tap donates
+                      future payouts; changeable any time via "Change". */}
+                  <button
+                    type="button"
+                    onClick={handleDonatePayout}
+                    disabled={savingPayout}
+                    className="text-xs mt-3 block transition-opacity hover:opacity-70"
+                    style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", opacity: savingPayout ? 0.6 : 1 }}
+                  >
+                    Or give it forward — donate my earnings instead
+                  </button>
                   {method && (
                     <button
                       type="button"

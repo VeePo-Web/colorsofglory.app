@@ -13,6 +13,8 @@ import {
   markPayoutPaid,
   markPayoutFailed,
   retryPayout,
+  getPayoutFreezeStatus,
+  setPayoutsFrozen,
   type PayoutRow,
 } from "@/integrations/cog/admin";
 import { qk } from "@/hooks/queryKeys";
@@ -48,6 +50,7 @@ function friendlyError(e: unknown): string {
   if (m.includes("payout_not_failed")) return "Only failed payouts can be retried.";
   if (m.includes("provider_id_required")) return "Enter the provider payout / transfer id so this payment can be reconciled.";
   if (m.includes("reason_required")) return "Add a reason so the failed payout is auditable.";
+  if (m.includes("payouts_frozen")) return "Payouts are frozen — resume them before approving or paying.";
   return m;
 }
 
@@ -79,10 +82,22 @@ export default function PayoutBatchesPage() {
   });
   const flaggedSubjects = new Set(flags.map((f) => `${f.subject_type}:${f.subject_id}`));
 
-  const [dlg, setDlg] = useState<{ kind: "approve" | "paid" | "failed"; row: PayoutRow } | null>(null);
+  // Global kill switch — frozen blocks approve + mark_paid server-side;
+  // accrual, maturation, and monthly drafting keep running.
+  const { data: freeze } = useQuery({
+    queryKey: qk.admin.payoutFreeze(),
+    queryFn: getPayoutFreezeStatus,
+    staleTime: 15_000,
+  });
+  const frozen = freeze?.frozen === true;
+
+  const [dlg, setDlg] = useState<{ kind: "approve" | "paid" | "failed" | "freeze"; row: PayoutRow | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: qk.admin.payoutBatches() });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.admin.payoutBatches() });
+    qc.invalidateQueries({ queryKey: qk.admin.payoutFreeze() });
+  };
   const run = (fn: () => Promise<unknown>, okMsg: string) =>
     fn().then(() => { toast.success(okMsg); invalidate(); }).catch((e) => toast.error(friendlyError(e)));
 
@@ -91,10 +106,18 @@ export default function PayoutBatchesPage() {
     const { kind, row } = dlg;
     setBusy(true);
     const op =
-      kind === "approve" ? approvePayout(row.id)
-      : kind === "paid" ? markPayoutPaid(row.id, value)
-      : markPayoutFailed(row.id, value);
-    op.then(() => { toast.success(kind === "approve" ? "Approved" : kind === "paid" ? "Marked paid" : "Marked failed"); invalidate(); })
+      kind === "freeze" ? setPayoutsFrozen(true, value)
+      : kind === "approve" ? approvePayout(row!.id)
+      : kind === "paid" ? markPayoutPaid(row!.id, value)
+      : markPayoutFailed(row!.id, value);
+    op.then(() => {
+        toast.success(
+          kind === "freeze" ? "Payouts frozen"
+          : kind === "approve" ? "Approved"
+          : kind === "paid" ? "Marked paid" : "Marked failed",
+        );
+        invalidate();
+      })
       .catch((e) => toast.error(friendlyError(e)))
       .finally(() => { setBusy(false); setDlg(null); });
   };
@@ -104,7 +127,25 @@ export default function PayoutBatchesPage() {
       <div className="mb-4 flex items-center gap-3">
         <Link to="/admin/payouts" className="text-sm text-[var(--cog-warm-gray)] hover:underline">← Monthly report</Link>
         <span className="ml-auto text-xs text-[var(--cog-muted)]">{rows.length} batches · approval requires a payout method on file</span>
+        {frozen ? (
+          <Button size="sm" variant="outline" disabled={busy}
+            onClick={() => run(() => setPayoutsFrozen(false), "Payouts resumed")}>
+            Resume payouts
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" disabled={busy}
+            onClick={() => setDlg({ kind: "freeze", row: null })}>
+            Freeze payouts
+          </Button>
+        )}
       </div>
+
+      {frozen && (
+        <div className="mb-4 rounded-lg border border-[#b3261e]/40 bg-[#b3261e]/5 px-4 py-3 text-sm text-[#b3261e]">
+          Payouts are frozen — approvals and payments are blocked everywhere until resumed.
+          Accrual, holds, and monthly drafts keep running normally.
+        </div>
+      )}
 
       <div className="rounded-lg border border-[var(--cog-border)] bg-[var(--cog-cream-light)] overflow-hidden">
         <table className="w-full text-sm">
@@ -156,8 +197,12 @@ export default function PayoutBatchesPage() {
                     {r.status === "draft" && (
                       <Button
                         size="sm"
-                        disabled={busy || !!flagged}
-                        title={flagged ? "Recipient has an open fraud flag — resolve it in Fraud review first." : undefined}
+                        disabled={busy || !!flagged || frozen}
+                        title={
+                          frozen ? "Payouts are frozen — resume them first."
+                          : flagged ? "Recipient has an open fraud flag — resolve it in Fraud review first."
+                          : undefined
+                        }
                         onClick={() => setDlg({ kind: "approve", row: r })}
                       >
                         Approve
@@ -165,7 +210,9 @@ export default function PayoutBatchesPage() {
                     )}
                     {r.status === "approved" && (
                       <>
-                        <Button size="sm" onClick={() => setDlg({ kind: "paid", row: r })}>Mark paid</Button>
+                        <Button size="sm" disabled={frozen}
+                          title={frozen ? "Payouts are frozen — resume them first." : undefined}
+                          onClick={() => setDlg({ kind: "paid", row: r })}>Mark paid</Button>
                         <Button size="sm" variant="outline" onClick={() => setDlg({ kind: "failed", row: r })}>Mark failed</Button>
                       </>
                     )}
@@ -182,13 +229,32 @@ export default function PayoutBatchesPage() {
 
       <PromptDialog
         open={!!dlg}
-        title={dlg?.kind === "approve" ? "Approve payout" : dlg?.kind === "paid" ? "Mark payout paid" : "Mark payout failed"}
-        description={dlg?.kind === "approve" ? approveDescription(dlg.row, payeeByKey) : undefined}
-        label={dlg?.kind === "approve" ? undefined : dlg?.kind === "paid" ? "Provider payout / transfer id" : "Failure reason"}
-        placeholder={dlg?.kind === "paid" ? "e.g. tr_… or PayPal batch id" : "e.g. invalid account"}
+        title={
+          dlg?.kind === "freeze" ? "Freeze all payouts"
+          : dlg?.kind === "approve" ? "Approve payout"
+          : dlg?.kind === "paid" ? "Mark payout paid" : "Mark payout failed"
+        }
+        description={
+          dlg?.kind === "freeze"
+            ? "This blocks every approval and payment, for every recipient, until resumed. Accrual and drafting keep running. The reason is written to the audit log."
+            : dlg?.kind === "approve" && dlg.row ? approveDescription(dlg.row, payeeByKey) : undefined
+        }
+        label={
+          dlg?.kind === "approve" ? undefined
+          : dlg?.kind === "paid" ? "Provider payout / transfer id"
+          : dlg?.kind === "freeze" ? "Why are payouts being frozen?" : "Failure reason"
+        }
+        placeholder={
+          dlg?.kind === "paid" ? "e.g. tr_… or PayPal batch id"
+          : dlg?.kind === "freeze" ? "e.g. suspected fraud ring under review" : "e.g. invalid account"
+        }
         required={dlg?.kind !== "approve"}
-        confirmLabel={dlg?.kind === "approve" ? "Approve payout" : dlg?.kind === "paid" ? "Mark paid" : "Mark failed"}
-        tone={dlg?.kind === "failed" ? "danger" : "default"}
+        confirmLabel={
+          dlg?.kind === "freeze" ? "Freeze payouts"
+          : dlg?.kind === "approve" ? "Approve payout"
+          : dlg?.kind === "paid" ? "Mark paid" : "Mark failed"
+        }
+        tone={dlg?.kind === "failed" || dlg?.kind === "freeze" ? "danger" : "default"}
         busy={busy}
         onConfirm={confirmDialog}
         onOpenChange={(o) => { if (!o) setDlg(null); }}

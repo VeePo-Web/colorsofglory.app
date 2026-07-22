@@ -31,7 +31,7 @@ export type MyReferralsSummary = {
     total_earned_cents: number;
   }>;
   payout_method: {
-    kind: "manual" | "paypal" | "stripe_connect" | null;
+    kind: "manual" | "paypal" | "stripe_connect" | "donate" | null;
     email: string | null;
     country: string | null;
     complete: boolean;
@@ -62,7 +62,7 @@ export async function claimReferralCode(code: string): Promise<string> {
 }
 
 export type PayoutMethodInput = {
-  method: "manual" | "paypal" | "stripe_connect";
+  method: "manual" | "paypal" | "stripe_connect" | "donate";
   email?: string | null;
   country?: string | null;
 };

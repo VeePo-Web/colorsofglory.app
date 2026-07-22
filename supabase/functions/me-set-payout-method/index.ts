@@ -3,7 +3,9 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { z } from "npm:zod@3";
 
 const BodySchema = z.object({
-  method: z.enum(["manual", "paypal", "stripe_connect"]),
+  // "donate" = give-it-forward: COG donates the payout on the referrer's
+  // behalf; no email or account needed, the batch still reconciles normally.
+  method: z.enum(["manual", "paypal", "stripe_connect", "donate"]),
   email: z.string().trim().email().max(255).optional().nullable(),
   country: z.string().trim().min(2).max(2).optional().nullable(),
 });
@@ -45,7 +47,7 @@ Deno.serve(async (req) => {
     .from("profiles")
     .update({
       payout_method: method,
-      payout_email: email ?? null,
+      payout_email: method === "donate" ? null : (email ?? null),
       payout_country: country ? country.toUpperCase() : null,
     })
     .eq("user_id", user.id);

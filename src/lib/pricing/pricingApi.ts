@@ -112,7 +112,7 @@ export interface ReferralStats {
   }>;
   /** Where earnings get sent. kind is null until the referrer sets it. */
   payoutMethod: {
-    kind: "manual" | "paypal" | "stripe_connect" | null;
+    kind: "manual" | "paypal" | "stripe_connect" | "donate" | null;
     email: string | null;
   };
 }

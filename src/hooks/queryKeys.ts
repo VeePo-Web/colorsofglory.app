@@ -84,6 +84,7 @@ export const qk = {
     referrerLedger: () => ["admin", "referrer-ledger"] as const,
     payouts: (month: string) => ["admin", "payouts", month] as const,
     payoutBatches: () => ["admin", "payout-batches"] as const,
+    payoutFreeze: () => ["admin", "payout-freeze"] as const,
     /** Full key with the filter; call with no arg for the invalidation prefix. */
     billingEvents: (onlyFailed?: boolean): QueryKey =>
       onlyFailed === undefined ? ["admin", "billing-events"] : ["admin", "billing-events", onlyFailed],

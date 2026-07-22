@@ -70,6 +70,25 @@ Deno.serve(async (req) => {
       if (error) return j({ error: error.message }, 400)
       return j({ ok: true, payout: data })
     }
+    if (action === 'freeze_status') {
+      const { data, error } = await admin
+        .from('app_settings').select('value').eq('key', 'payouts_frozen').maybeSingle()
+      if (error) return j({ error: error.message }, 400)
+      return j({ ok: true, frozen: data?.value === true })
+    }
+    if (action === 'set_frozen') {
+      // The global kill switch. Freezing halts approve + mark_paid everywhere
+      // (accrual, maturation, and drafting keep running); a reason is required
+      // to freeze so the audit log always says why money stopped.
+      const frozen = body.frozen === true
+      const reason = String(body.reason ?? '').trim()
+      if (frozen && !reason) return j({ error: 'reason_required' }, 400)
+      const { data, error } = await userClient.rpc('admin_set_payouts_frozen', {
+        _frozen: frozen, _reason: reason || null,
+      })
+      if (error) return j({ error: error.message }, 400)
+      return j({ ok: true, frozen: data === true })
+    }
     return j({ error: 'unknown_action' }, 400)
   } catch (e) {
     return j({ error: String(e) }, 500)

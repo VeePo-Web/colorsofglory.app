@@ -368,6 +368,13 @@ export const markPayoutPaid = (payout_id: string, provider_id: string) =>
   callAdmin("admin-payouts", { action: "mark_paid", payout_id, provider_id });
 export const markPayoutFailed = (payout_id: string, reason: string) =>
   callAdmin("admin-payouts", { action: "mark_failed", payout_id, reason });
+// Global payout kill switch: frozen blocks approve + mark_paid everywhere
+// (accrual, maturation, and monthly drafting keep running). Freezing requires
+// a reason so the audit log always says why money stopped.
+export const getPayoutFreezeStatus = (): Promise<{ ok: boolean; frozen: boolean }> =>
+  callAdmin("admin-payouts", { action: "freeze_status" });
+export const setPayoutsFrozen = (frozen: boolean, reason?: string): Promise<{ ok: boolean; frozen: boolean }> =>
+  callAdmin("admin-payouts", { action: "set_frozen", frozen, reason });
 
 // =========================================================================
 // Audit log search (admin only) — backed by admin-audit-search edge function.
