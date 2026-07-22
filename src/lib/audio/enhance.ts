@@ -370,7 +370,7 @@ export async function polishAttach(
         ctx.resume().catch(() => {}),
         new Promise((r) => setTimeout(r, 250)),
       ]);
-      if (ctx.state !== "running") return;
+      if ((ctx.state as string) !== "running") return;
     }
     if (attachedEls.has(el)) return; // re-check across the await
     const source = ctx.createMediaElementSource(el);
