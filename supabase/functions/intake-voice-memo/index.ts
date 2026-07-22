@@ -102,6 +102,10 @@ Deno.serve(async (req) => {
     });
     if (takeErr) return json({ error: takeErr.message }, 500);
 
+    // Fire-and-forget feature usage marker (never blocks the intake).
+    admin.rpc("mark_feature_used", { _user_id: userId, _feature: "voice_memo" })
+      .then(({ error }) => { if (error) console.warn("mark_feature_used failed", error.message); });
+
     return json({ voice_memo_id: memo.id, song_id: songId }, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";

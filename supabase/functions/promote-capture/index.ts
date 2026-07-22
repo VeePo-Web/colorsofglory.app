@@ -135,6 +135,12 @@ Deno.serve(async (req) => {
     payload: { capture_id: capture.id, take_id, tree: input.target_tree },
   });
 
+  // Fire-and-forget feature usage marker (never blocks the promote).
+  admin.rpc("mark_feature_used", { _user_id: user.id, _feature: "canvas_promote" })
+    .then(({ error }: { error: { message: string } | null }) => {
+      if (error) console.warn("mark_feature_used failed", error.message);
+    });
+
   // 9. Fire-and-forget transcription if needed
   let transcript_pending = false;
   if (take_id && (take_transcript_status === "none" || take_transcript_status === "failed")) {
