@@ -363,14 +363,14 @@ export async function polishAttach(
     if (!el.src || !el.src.startsWith("blob:")) return;
     const ctx = ensureBus();
     if (!ctx) return;
-    if (ctx.state !== "running") {
+    if ((ctx.state as string) !== "running") {
       // Rule 2: resume INSIDE the gesture; if it won't run, stay dry this
       // play and retry on the next tap. Bounded so play is never delayed.
       await Promise.race([
         ctx.resume().catch(() => {}),
         new Promise((r) => setTimeout(r, 250)),
       ]);
-      if (ctx.state !== "running") return;
+      if ((ctx.state as string) !== "running") return;
     }
     if (attachedEls.has(el)) return; // re-check across the await
     const source = ctx.createMediaElementSource(el);
