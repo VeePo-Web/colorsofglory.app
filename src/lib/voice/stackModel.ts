@@ -58,7 +58,15 @@ export function groupIntoStacks<T extends StackableMemo>(memos: T[]): MemoStackG
   const baseOrder: T[] = [];
 
   for (const m of memos) {
-    const parentId = m.parentMemoId ?? null;
+    let parentId = m.parentMemoId ?? null;
+    // ONE LEVEL ONLY: if the parent is itself a layer, flatten to the TOP
+    // base (mirrors the DB trigger) — a layer-of-a-layer still sounds with
+    // its family, never errors, never disappears.
+    if (parentId && parentId !== m.id) {
+      const parent = byId.get(parentId);
+      const grandId = parent?.parentMemoId ?? null;
+      if (grandId && grandId !== m.id && byId.has(grandId)) parentId = grandId;
+    }
     if (parentId && byId.has(parentId) && parentId !== m.id) {
       const arr = layersByParent.get(parentId) ?? [];
       arr.push(m);
@@ -98,4 +106,38 @@ export function resolveAudible(
     return new Set([soloId]);
   }
   return new Set(allIds.filter((id) => !muted.has(id)));
+}
+
+/** Gain range for the quick mixer (matches the DB CHECK). */
+export const LAYER_GAIN_MIN = 0;
+export const LAYER_GAIN_MAX = 1.5;
+export const LAYER_GAIN_DEFAULT = 1.0;
+
+export function clampLayerGain(gain: number): number {
+  if (!Number.isFinite(gain)) return LAYER_GAIN_DEFAULT;
+  return Math.min(LAYER_GAIN_MAX, Math.max(LAYER_GAIN_MIN, gain));
+}
+
+/**
+ * The effective gain per id for the whole mixing surface — volume + mute +
+ * solo, nothing else (a calm sketchbook, not a DAW):
+ *
+ *  - Solo wins: the soloed id plays at ITS gain; everything else is 0.
+ *  - A muted id is 0; everyone else plays at their persisted gain.
+ *
+ * Pure and total — never throws, safe to call every frame. The audio engine
+ * ramps toward these targets so changes never click.
+ */
+export function resolveMix(
+  allIds: string[],
+  gains: Readonly<Record<string, number>>,
+  muted: ReadonlySet<string>,
+  soloId: string | null,
+): Record<string, number> {
+  const audible = resolveAudible(allIds, muted, soloId);
+  const out: Record<string, number> = {};
+  for (const id of allIds) {
+    out[id] = audible.has(id) ? clampLayerGain(gains[id] ?? LAYER_GAIN_DEFAULT) : 0;
+  }
+  return out;
 }

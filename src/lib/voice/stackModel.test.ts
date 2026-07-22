@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { groupIntoStacks, resolveAudible, stackPlayOrder } from "./stackModel";
+import {
+  clampLayerGain,
+  groupIntoStacks,
+  LAYER_GAIN_DEFAULT,
+  LAYER_GAIN_MAX,
+  resolveAudible,
+  resolveMix,
+  stackPlayOrder,
+} from "./stackModel";
 
 interface M {
   id: string;
@@ -64,5 +72,53 @@ describe("resolveAudible", () => {
 
   it("ignores a solo id that isn't in the stack", () => {
     expect(resolveAudible(ids, new Set(), "ghost")).toEqual(new Set(ids));
+  });
+});
+
+describe("one level only — a layer-of-a-layer flattens to the top base", () => {
+  it("attaches the grandchild to the base, keeping the family together", () => {
+    const groups = groupIntoStacks([
+      { id: "base" },
+      { id: "harmony", parentMemoId: "base", createdAt: "2026-07-22T10:00:00Z" },
+      { id: "over-harmony", parentMemoId: "harmony", createdAt: "2026-07-22T10:01:00Z" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].base.id).toBe("base");
+    expect(groups[0].layers.map((l) => l.id)).toEqual(["harmony", "over-harmony"]);
+  });
+});
+
+describe("resolveMix — the entire mixing surface (volume + mute + solo)", () => {
+  const ids = ["base", "l1", "l2"];
+
+  it("plays everyone at their persisted gain (default 1.0)", () => {
+    expect(resolveMix(ids, { l1: 0.4 }, new Set(), null)).toEqual({
+      base: 1.0,
+      l1: 0.4,
+      l2: 1.0,
+    });
+  });
+
+  it("a muted layer is 0; the others keep their gain", () => {
+    expect(resolveMix(ids, { l1: 0.4 }, new Set(["l2"]), null)).toEqual({
+      base: 1.0,
+      l1: 0.4,
+      l2: 0,
+    });
+  });
+
+  it("solo wins: the soloed layer plays at ITS gain, everything else is 0", () => {
+    expect(resolveMix(ids, { l1: 0.6 }, new Set(["l1"]), "l1")).toEqual({
+      base: 0,
+      l1: 0.6,
+      l2: 0,
+    });
+  });
+
+  it("gains clamp into the headroom range; garbage becomes the default", () => {
+    expect(clampLayerGain(9)).toBe(LAYER_GAIN_MAX);
+    expect(clampLayerGain(-1)).toBe(0);
+    expect(clampLayerGain(Number.NaN)).toBe(LAYER_GAIN_DEFAULT);
+    expect(resolveMix(["a"], { a: 99 }, new Set(), null)).toEqual({ a: LAYER_GAIN_MAX });
   });
 });

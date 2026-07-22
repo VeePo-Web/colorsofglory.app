@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Play, Pause, Mic, Volume2, VolumeX } from "lucide-react";
 import { useStackPlayer } from "@/hooks/useStackPlayer";
 import { stackPlayOrder, type MemoStackGroup } from "@/lib/voice/stackModel";
+import { setLayerMix } from "@/integrations/cog/memos";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { formatDuration } from "@/lib/voice/audioFormat";
@@ -25,6 +26,11 @@ export interface StackMemoView {
   waveformPeaks?: number[] | null;
   /** Melody Lens contour — the base row rides the primary take's tune. */
   pitchContour?: number[] | null;
+  /** Persisted quick-mix (voice_memos.layer_gain / layer_muted). */
+  layerGain?: number;
+  layerMuted?: boolean;
+  /** Persisted record-latency offset (playback starts this far into the layer). */
+  layerOffsetMs?: number;
 }
 
 interface MemoStackProps {
@@ -43,7 +49,44 @@ const STACK_WAVE_H = 34;
 const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: MemoStackProps) => {
   const group: MemoStackGroup<StackMemoView> = { base, layers };
   const playIds = stackPlayOrder(group);
-  const { state, prepare, playPause, toggleMute, toggleSolo } = useStackPlayer(playIds);
+  // Seed the mixer from the PERSISTED mix — the balance the room last set —
+  // and hand the engine the record-latency offsets so layers line up.
+  const seeds = useMemo(() => {
+    const initialGains: Record<string, number> = {};
+    const initialMuted: string[] = [];
+    const serverOffsets: Record<string, number> = {};
+    for (const l of layers) {
+      if (typeof l.layerGain === "number") initialGains[l.id] = l.layerGain;
+      if (l.layerMuted) initialMuted.push(l.id);
+      if (l.layerOffsetMs) serverOffsets[l.id] = l.layerOffsetMs;
+    }
+    return { initialGains, initialMuted, serverOffsets };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playIds.join("|")]);
+  const { state, prepare, playPause, toggleMute, toggleSolo, setGain } = useStackPlayer(
+    playIds,
+    seeds,
+  );
+
+  // Persist a gain drag debounced (offline-quiet: a failed save just waits
+  // for the next adjustment — the local mix rules the session either way).
+  const saveTimers = useRef<Map<string, number>>(new Map());
+  const persistGain = (id: string, gain: number) => {
+    const timers = saveTimers.current;
+    const prev = timers.get(id);
+    if (prev) window.clearTimeout(prev);
+    timers.set(
+      id,
+      window.setTimeout(() => {
+        timers.delete(id);
+        void setLayerMix(id, { gain });
+      }, 600),
+    );
+  };
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, []);
 
   // Resolve audio when the stack opens so the first tap plays instantly (iOS).
   useEffect(() => { void prepare(); }, [prepare]);
@@ -162,11 +205,39 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
               <p style={{ margin: "1px 0 0", fontFamily: "var(--font-body)", fontSize: 10, color: "var(--cog-muted)" }}>
                 {layer.contributor} · layer · {formatDuration(layer.durationMs)}
               </p>
+              {/* The quick mix — a quiet per-layer volume. Live (ramped, no
+                  clicks, mid-playback) + persisted debounced, shared with
+                  the room. Volume + mute + solo is the ENTIRE mixer. */}
+              <input
+                type="range"
+                min={0}
+                max={1.5}
+                step={0.05}
+                value={state.gains[layer.id] ?? layer.layerGain ?? 1}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setGain(layer.id, v);
+                  persistGain(layer.id, v);
+                }}
+                aria-label={`${layer.contributor}'s layer volume`}
+                style={{
+                  width: "100%",
+                  maxWidth: 150,
+                  height: 20,
+                  marginTop: 4,
+                  accentColor: lc.base,
+                  cursor: "pointer",
+                }}
+              />
             </div>
             {/* Mute */}
             <button
               type="button"
-              onClick={() => toggleMute(layer.id)}
+              onClick={() => {
+                const nowMuted = !state.muted.has(layer.id);
+                toggleMute(layer.id);
+                void setLayerMix(layer.id, { muted: nowMuted });
+              }}
               aria-pressed={isMuted}
               aria-label={isMuted ? `Unmute ${layer.contributor}'s layer` : `Mute ${layer.contributor}'s layer`}
               style={{

@@ -3,6 +3,62 @@ import type { Database } from "@/integrations/supabase/types";
 import { CogError, call, toCogError } from "./errors";
 
 export type VoiceMemo = Database["public"]["Tables"]["voice_memos"]["Row"];
+
+/**
+ * Stacking columns (migration 20260722210000) — read via cast until
+ * types.ts is regenerated (the established pattern, cf. pitch_contour).
+ * A base has parent_memo_id null; a layer points at its base and carries
+ * its own quick-mix (gain + mute, shared with the room) and a best-effort
+ * record-latency offset.
+ */
+export type VoiceMemoStacking = {
+  parent_memo_id?: string | null;
+  layer_gain?: number | null;
+  layer_muted?: boolean | null;
+  layer_offset_ms?: number | null;
+};
+
+export function readStacking(row: VoiceMemo): Required<VoiceMemoStacking> {
+  const r = row as VoiceMemo & VoiceMemoStacking;
+  return {
+    parent_memo_id: r.parent_memo_id ?? null,
+    layer_gain: typeof r.layer_gain === "number" ? r.layer_gain : 1.0,
+    layer_muted: r.layer_muted === true,
+    layer_offset_ms: typeof r.layer_offset_ms === "number" ? r.layer_offset_ms : 0,
+  };
+}
+
+/**
+ * Persist a layer's quick mix (volume/mute) — optimistic callers keep their
+ * local value either way; a failure returns false and never throws (the mix
+ * re-saves on the next adjustment). RLS: song members may update memos in
+ * their songs; if policy tightens to author-only, the local mix still rules
+ * the session and this quietly no-ops.
+ */
+export async function setLayerMix(
+  memoId: string,
+  mix: { gain?: number; muted?: boolean },
+): Promise<boolean> {
+  try {
+    const patch: Record<string, unknown> = {};
+    if (typeof mix.gain === "number" && Number.isFinite(mix.gain)) {
+      patch.layer_gain = Math.min(1.5, Math.max(0, mix.gain));
+    }
+    if (typeof mix.muted === "boolean") patch.layer_muted = mix.muted;
+    if (Object.keys(patch).length === 0) return true;
+    const { error } = await (supabase as never as {
+      from: (t: string) => {
+        update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> };
+      };
+    })
+      .from("voice_memos")
+      .update(patch)
+      .eq("id", memoId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
 export type VoiceMemoTranscript = Database["public"]["Tables"]["voice_memo_transcripts"]["Row"];
 
 /** Lifecycle stages for a voice memo. `ready` is legacy — new rows use the others. */

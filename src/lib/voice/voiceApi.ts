@@ -4,6 +4,7 @@ import {
   transcribeMemo as transcribeMemoSeam,
   uploadVoiceMemo as uploadVoiceMemoCore,
   listMemoRowsWithSection,
+  readStacking,
   type VoiceMemo,
   type VoiceMemoWithSection,
 } from "@/integrations/cog/memos";
@@ -39,6 +40,13 @@ export interface VoiceMemoRecord {
    * never written to the DB — the server uses the narrower `VoiceMemo` union.
    */
   status?: VoiceMemo["status"] | "queued";
+  /** Stacking (F16): the base this memo layers over. null ⇒ this IS a base. */
+  parentMemoId: string | null;
+  /** The layer's persisted quick-mix (shared with the room). */
+  layerGain: number;
+  layerMuted: boolean;
+  /** Best-effort record-latency offset — playback starts this far INTO the layer. */
+  layerOffsetMs: number;
 }
 
 const PROCESSING_STATUSES = new Set<VoiceMemo["status"]>([
@@ -47,6 +55,7 @@ const PROCESSING_STATUSES = new Set<VoiceMemo["status"]>([
 ]);
 
 function toVoiceMemoRecord(row: VoiceMemoWithSection): VoiceMemoRecord {
+  const stacking = readStacking(row);
   return {
     id: row.id,
     song_id: row.song_id,
@@ -71,6 +80,11 @@ function toVoiceMemoRecord(row: VoiceMemoWithSection): VoiceMemoRecord {
     created_by: "Contributor",
     is_processing: PROCESSING_STATUSES.has(row.status),
     status: row.status,
+    // Stacking rides the same row (readStacking casts until types regen).
+    parentMemoId: stacking.parent_memo_id,
+    layerGain: stacking.layer_gain,
+    layerMuted: stacking.layer_muted,
+    layerOffsetMs: stacking.layer_offset_ms,
   };
 }
 

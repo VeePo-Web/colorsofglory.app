@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json();
-    const { song_id, section_id, mime_type, byte_size, duration_ms, title } = body ?? {};
+    const { song_id, section_id, mime_type, byte_size, duration_ms, title, parent_memo_id, layer_offset_ms } =
+      body ?? {};
     if (!song_id || typeof song_id !== "string") return jsonResponse({ error: "song_id required" }, 400);
     if (!mime_type || !ALLOWED_MIME.has(mime_type)) return jsonResponse({ error: "Unsupported mime_type" }, 400);
     if (!Number.isFinite(byte_size) || byte_size <= 0 || byte_size > MAX_BYTES) {
@@ -96,11 +97,29 @@ Deno.serve(async (req) => {
       ? "ogg"
       : "webm";
 
+    // Layering ("record over this", F16): persist the base→layer link. The
+    // parent must be a real memo in THIS song; the DB trigger flattens a
+    // child-of-child to the top base and clears anything invalid — the
+    // upload itself never fails over parentage (nothing is ever lost).
+    let parentId: string | null = null;
+    if (typeof parent_memo_id === "string" && parent_memo_id.length > 0) {
+      const { data: parent } = await admin
+        .from("voice_memos")
+        .select("id, song_id")
+        .eq("id", parent_memo_id)
+        .maybeSingle();
+      if (parent && parent.song_id === song_id) parentId = parent.id;
+    }
+    const offsetMs =
+      Number.isFinite(layer_offset_ms) && layer_offset_ms >= 0 && layer_offset_ms <= 2000
+        ? Math.round(layer_offset_ms)
+        : 0;
+
     // Create memo row first (status=uploading)
     const memoId = crypto.randomUUID();
     const storagePath = `${ownerId}/${song_id}/${memoId}.${ext}`;
 
-    const { error: insErr } = await admin.from("voice_memos").insert({
+    const baseRow = {
       id: memoId,
       song_id,
       section_id: section_id ?? null,
@@ -111,7 +130,16 @@ Deno.serve(async (req) => {
       duration_ms: duration_ms ?? null,
       title: title ?? null,
       status: "uploading",
-    });
+    };
+    let { error: insErr } = await admin
+      .from("voice_memos")
+      .insert({ ...baseRow, parent_memo_id: parentId, layer_offset_ms: offsetMs });
+    if (insErr && /parent_memo_id|layer_offset_ms/.test(insErr.message ?? "")) {
+      // Migration not applied yet — an upload must NEVER fail over the new
+      // columns. Insert without them (the memo lands as a base; the link is
+      // restored once the schema ships and the layer is re-recorded).
+      ({ error: insErr } = await admin.from("voice_memos").insert(baseRow));
+    }
     if (insErr) return jsonResponse({ error: insErr.message }, 500);
 
     // Signed upload URL
