@@ -66,7 +66,43 @@ export async function canSend(
   try {
     const nowIso = new Date().toISOString();
 
-    // 1) Suppressions (global 'all' + this category), honoring expiry.
+    // 1a) User preference center (unsubscribed_all + per-category switch).
+    // Maps the L11 §7 category namespaces to the preference boolean columns.
+    const PREF_COL: Record<string, string> = {
+      collab: "song_activity",
+      digest: "weekly_recaps",
+      edu: "tips_guides",
+      growth: "invite_suggestions",
+      retain: "encouragement",
+      care: "encouragement",
+      onboarding: "encouragement",
+      money: "product_news",
+    };
+    const prefCol = PREF_COL[category];
+    if (prefCol) {
+      const { data: pref } = await admin
+        .from("email_preferences")
+        .select(`unsubscribed_all, ${prefCol}`)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (pref?.unsubscribed_all) return { allow: false, reason: "pref_paused_all" };
+      if (pref && (pref as any)[prefCol] === false) {
+        return { allow: false, reason: `pref_off_${prefCol}` };
+      }
+    }
+
+    // 1b) Nudge dismissals — respect suppressed_until for this kind.
+    const { data: dism } = await admin
+      .from("nudge_dismissals")
+      .select("suppressed_until")
+      .eq("user_id", userId)
+      .eq("kind", category)
+      .maybeSingle();
+    if (dism?.suppressed_until && dism.suppressed_until > nowIso) {
+      return { allow: false, reason: "nudge_suppressed", deferUntil: dism.suppressed_until };
+    }
+
+    // 1c) Suppressions (global 'all' + this category), honoring expiry.
     const { data: sup } = await admin
       .from("email_suppressions")
       .select("category, expires_at")
