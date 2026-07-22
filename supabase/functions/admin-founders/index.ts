@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     const action = body.action as string
 
     if (action === 'create') {
-      const { display_name, slug, tier, code_value, discount_cents, reward_profile, user_id } = body
+      const { display_name, slug, tier, code_value, discount_cents, reward_profile, user_id, max_redemptions } = body
       if (!display_name || !slug) return j({ error: 'missing_fields' }, 400)
       const { data: f, error: ferr } = await admin.from('founders').insert({
         display_name, slug, tier: tier ?? 'standard',
@@ -38,10 +38,25 @@ Deno.serve(async (req) => {
       }).select().single()
       if (ferr) return j({ error: ferr.message }, 400)
 
+      // Scarcity guard: a founder code is an ALLOCATION, never unlimited by
+      // accident. Explicit max_redemptions wins; otherwise the settings
+      // default applies so "50% off" stays a special hook, not the de facto
+      // Pro price.
+      let allocation: number | null =
+        Number.isInteger(max_redemptions) && max_redemptions > 0 ? max_redemptions : null
+      if (allocation === null) {
+        const { data: s } = await admin
+          .from('app_settings').select('value')
+          .eq('key', 'founder_code_default_max_redemptions').maybeSingle()
+        const v = Number(s?.value)
+        allocation = Number.isInteger(v) && v > 0 ? v : null
+      }
+
       const value = (code_value ?? slug.toUpperCase() + '50').replace(/\s+/g, '')
       const { data: c, error: cerr } = await admin.from('codes').insert({
         value, kind: 'founder', owner_founder_id: f.id,
         discount_cents: discount_cents ?? 5000,
+        max_redemptions: allocation,
         created_by_user_id: actor.id,
       }).select().single()
       if (cerr) {
