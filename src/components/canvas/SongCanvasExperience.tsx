@@ -23,7 +23,6 @@ import {
   History,
   UserPlus,
   Inbox,
-  Maximize2,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import CrownMark from "@/components/cog/CrownMark";
@@ -126,7 +125,8 @@ import WeaveBar from "@/components/canvas/WeaveBar";
 import { useWeave } from "@/components/canvas/useWeave";
 import { corpusFromBodies } from "@/lib/lyrics/rhymeSuggest";
 import CompareModeSheet from "@/components/canvas/CompareModeSheet";
-import FinalArrangementBar from "@/components/canvas/FinalArrangementBar";
+import CanvasModeSwitcher from "@/components/canvas/CanvasModeSwitcher";
+import FinalSongSurface from "@/components/canvas/FinalSongSurface";
 import CanvasMetronomeToggle from "@/components/canvas/CanvasMetronomeToggle";
 import type { CanvasBoardCard, CanvasBoardCardType, CanvasContributionType } from "@/lib/canvas/canvasTypes";
 import {
@@ -1731,14 +1731,6 @@ const SongCanvasExperience = () => {
     };
   }, []);
 
-  // Fit-to-view — the whole song (root + every card) framed in one calm move.
-  // The primary "show me everything" gesture on a phone that can't see it all.
-  const fitAll = useCallback(() => {
-    const { vw, vh } = viewportDims();
-    viewportApiRef.current?.fitTo(boundsOfCards(boardCards, true), vw, vh, 72, 560);
-    setSelectedId(null);
-  }, [boardCards, boundsOfCards, viewportDims]);
-
   // Tap a cluster → fan its members back onto the board and frame them; tap
   // again (or fit) to re-collapse. Framing reuses the semantic-nav fitTo.
   const handleExpandCluster = useCallback((clusterId: string) => {
@@ -1758,25 +1750,53 @@ const SongCanvasExperience = () => {
     requestAnimationFrame(() => viewportApiRef.current?.fitTo(boundsOfCards(members, false), vw, vh, 90, 520));
   }, [clusterFlagList, boardCards, boundsOfCards, viewportDims]);
 
-  // One-tap navigation to a zone — frames that zone's cards (Ideas includes the
-  // root it branches from). Primary mobile nav: the phone can't show both zones,
-  // so one tap flies to and frames each.
+  // Mobile has two peer surfaces: Ideas stays spatial while Final reads like a
+  // song. Returning to Ideas remounts the canvas, then calmly frames its cards.
   const goToZone = useCallback((zone: "ideas" | "final") => {
     setViewZone(zone);
-    const { vw, vh } = viewportDims();
-    const zoneCards = zone === "ideas" ? ideasCards : finalCards;
-    if (zoneCards.length > 0) {
-      viewportApiRef.current?.fitTo(boundsOfCards(zoneCards, zone === "ideas"), vw, vh, 72, 480);
+    if (zone === "final") {
+      setShowWorkPanel(false);
       return;
     }
-    // Empty zone: frame its column area (Ideas also shows the root card) so the
-    // jump is never a leap into blank space.
-    const colX = zone === "ideas" ? IDEAS_COLUMN_X : FINAL_COLUMN_X;
-    const box = zone === "ideas"
-      ? { minX: ROOT_LEFT, minY: ROOT_TOP, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 }
-      : { minX: colX - 40, minY: COLUMN_TOP - 60, maxX: colX + CARD_WIDTH + 40, maxY: COLUMN_TOP + 420 };
-    viewportApiRef.current?.fitTo(box, vw, vh, 72, 480);
-  }, [ideasCards, finalCards, boundsOfCards, viewportDims]);
+
+    requestAnimationFrame(() => {
+      const { vw, vh } = viewportDims();
+      if (ideasCards.length > 0) {
+        viewportApiRef.current?.fitTo(boundsOfCards(ideasCards, true), vw, vh, 72, 480);
+        return;
+      }
+      viewportApiRef.current?.fitTo(
+        {
+          minX: ROOT_LEFT,
+          minY: ROOT_TOP,
+          maxX: IDEAS_COLUMN_X + CARD_WIDTH + 40,
+          maxY: COLUMN_TOP + 420,
+        },
+        vw,
+        vh,
+        72,
+        480,
+      );
+    });
+  }, [ideasCards, boundsOfCards, viewportDims]);
+
+  const fitIdeas = useCallback(() => {
+    goToZone("ideas");
+  }, [goToZone]);
+
+  const playFinalSong = useCallback(() => {
+    setPathExpanded(true);
+    listenPath.playAll(arrangement.orderedFinalCards.map((card) => card.id));
+  }, [arrangement.orderedFinalCards, listenPath]);
+
+  const playFinalSection = useCallback((cardId: string) => {
+    setPathExpanded(true);
+    listenPath.playAll([cardId]);
+  }, [listenPath]);
+
+  const openSongSheet = useCallback(() => {
+    navigate("/songs/" + songId + "/sheet");
+  }, [navigate, songId]);
 
   const closeWorkPanel = useCallback(() => {
     setShowWorkPanel(false);
@@ -2301,8 +2321,17 @@ const SongCanvasExperience = () => {
         )}
       </div>
 
-      {/* ── Canvas stage — D1's render surface (viewport, trees, cards) ──── */}
+      {/* Ideas is the spatial capture room; Final is the ordered song. */}
       <div ref={canvasAreaRef} className="relative flex-1 min-h-0">
+        <CanvasModeSwitcher
+          ref={ideasTourRef}
+          mode={viewZone}
+          ideasCount={ideasCards.filter((card) => !card.parentMemoId && !card.isDimmedReference).length}
+          finalCount={arrangement.orderedFinalCards.length}
+          onModeChange={goToZone}
+          onFitIdeas={fitIdeas}
+        />
+        {viewZone === "ideas" ? (
         <CanvasStage
           className="w-full h-full"
           initialZoom={0.8}
@@ -2318,52 +2347,6 @@ const SongCanvasExperience = () => {
           viewportApiRef={viewportApiRef}
           overlay={
             <>
-              {/* Semantic nav — the PRIMARY way to move on a phone that can't
-                  show both zones at once. One tap frames Ideas or Final; Fit
-                  frames the whole song. Pinch/pan stay as a secondary path. */}
-              <div
-                className="pointer-events-none absolute left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5"
-                style={{ top: 12 }}
-              >
-                <div
-                  role="tablist"
-                  aria-label="Jump between Ideas and Final"
-                  ref={ideasTourRef}
-                  className="pointer-events-auto flex items-center gap-1 rounded-full p-1"
-                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)" }}
-                >
-                  {(["ideas", "final"] as const).map((zone) => {
-                    const active = viewZone === zone;
-                    return (
-                      <button
-                        key={zone}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        onClick={() => goToZone(zone)}
-                        className="flex min-h-9 items-center rounded-full px-4 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
-                        style={{
-                          backgroundColor: active ? (zone === "ideas" ? "var(--cog-gold)" : GLORY.sage.base) : "transparent",
-                          color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
-                          fontFamily: "var(--font-body)",
-                        }}
-                      >
-                        {zone === "ideas" ? "Ideas" : "Final"}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={fitAll}
-                  className="pointer-events-auto flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
-                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-                  aria-label="Fit the whole song to view"
-                >
-                  <Maximize2 size={13} strokeWidth={2.2} />
-                  Fit
-                </button>
-              </div>
               {showFirstRun && (
                 <FirstActionPrompt
                   // "Tap to record" OPENS THE RECORDER — the chip used to
@@ -2448,6 +2431,21 @@ const SongCanvasExperience = () => {
             </>
           }
         />
+        ) : (
+          <FinalSongSurface
+            songTitle={songTitle}
+            cards={arrangement.orderedFinalCards}
+            arranging={arrangement.arranging}
+            canArrange={arrangement.canArrange}
+            onBeginArrange={arrangement.begin}
+            onMove={arrangement.moveBy}
+            onSave={arrangement.save}
+            onCancel={arrangement.cancel}
+            onPlayAll={playFinalSong}
+            onPlaySection={playFinalSection}
+            onOpenSongSheet={openSongSheet}
+          />
+        )}
 
         {/* Work layer — a mobile bottom sheet (was a desktop right drawer) */}
         {showWorkPanel && (
@@ -2569,22 +2567,6 @@ const SongCanvasExperience = () => {
           onClear={listenPath.clear}
           onSave={listenPath.save}
         />
-      )}
-      {!weave.active && (
-      <FinalArrangementBar
-        arranging={arrangement.arranging}
-        canArrange={arrangement.canArrange}
-        canPlay={arrangement.orderedFinalCards.length >= 2}
-        orderedCards={arrangement.orderedFinalCards}
-        onBegin={arrangement.begin}
-        onMove={arrangement.moveBy}
-        onSave={arrangement.save}
-        onCancel={arrangement.cancel}
-        onPlayFinal={() => {
-          setPathExpanded(true);
-          listenPath.playAll(arrangement.orderedFinalCards.map((c) => c.id));
-        }}
-      />
       )}
       {compare.pair && (
         <CompareModeSheet
