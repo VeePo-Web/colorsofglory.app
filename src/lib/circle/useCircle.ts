@@ -76,14 +76,14 @@ export function useCircle(): CircleData {
             })),
           ),
           // One roster query across all songs — the people band.
-          supabase
-            .from("song_members")
-            .select("song_id, user_id, profiles!inner(display_name)")
-            .in("song_id", songs.map((s) => s.id))
-            .limit(200)
-            .then(({ data: rows }) => rows ?? [])
-            .then((rows) =>
-              rows.map((r) => {
+          (async () => {
+            try {
+              const { data: rows } = await supabase
+                .from("song_members")
+                .select("song_id, user_id, profiles!inner(display_name)")
+                .in("song_id", songs.map((s) => s.id))
+                .limit(200);
+              return (rows ?? []).map((r) => {
                 const song = songs.find((s) => s.id === r.song_id);
                 const prof = (r as { profiles?: { display_name?: string | null } }).profiles;
                 return {
@@ -92,9 +92,11 @@ export function useCircle(): CircleData {
                   songId: r.song_id as string,
                   songTitle: song?.title ?? "a song",
                 };
-              }),
-            )
-            .catch(() => [] as Array<{ userId: string; name: string; songId: string; songTitle: string }>),
+              });
+            } catch {
+              return [] as Array<{ userId: string; name: string; songId: string; songTitle: string }>;
+            }
+          })(),
         ]);
 
         const amens = countRecentAmens(
