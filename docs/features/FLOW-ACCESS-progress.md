@@ -1,5 +1,27 @@
 # Lift — Flow Access · Progress
 
+## 2026-07-22 (later) — Pass 2: one gesture family, one feel
+
+Deep audit against the horizontal pager (the Snapchat standard) found five
+gaps; all closed:
+1. Constants drifted from the tuned family → NEW `liftDecision.ts`
+   mirrors `swipeDecision.ts` exactly (7 unit tests, incl. one that
+   asserts the two constant sets never diverge).
+2. The flick could commit on velocity alone (no min-travel/sign guards) —
+   the same regression class the horizontal tests exist for → fixed in
+   the pure decision.
+3. No armed haptic at the commit line → added (5ms tick, matching).
+4. Commits hard-cut → now the pager's velocity-responsive fly-out + fade
+   (150/90 flick · 220/150 slow), route changing into the fade.
+5. The set-down only moved the grabber → `visualTarget` + the fixed
+   inset-0 wrapper (containing-block technique): the WHOLE practice/Flow
+   page now rides the finger down and slides off — the Apple-Music sheet
+   dismissal. Reduced motion commits instantly with no visuals.
+Horizontal sweep: all four peer surfaces already share `useSwipeNav` —
+no drift found. Two gesture hooks in the app, ever.
+Verified: 31 practice+nav tests (incl. 7 new) · 10 practice regressions ·
+tsc clean · build green.
+
 ## 2026-07-22 — Shipped
 
 **What changed**

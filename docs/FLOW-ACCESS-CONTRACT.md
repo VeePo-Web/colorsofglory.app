@@ -47,12 +47,37 @@ understood "reach the player" interaction on earth, worship-framed as
 itself** — anchored by construction. Canvas pan, list scroll, and the
 top-level horizontal pager live in the content, which the handle floats
 above; there is no shared surface to fight over. Within the gesture:
-horizontal-dominant movement stands down immediately (the pager/pan wins);
-vertical tracking follows the finger (capped at 96px, damped 0.25× in
-unarmed directions), commits at **56px or a 0.55 px/ms flick**, springs
-back otherwise. Callbacks are latched in a ref (the useSwipeNav lesson) so
-a re-render mid-drag never drops the gesture. Reduced motion: visual
-tracking skipped, thresholds intact, tap always works.
+horizontal-dominant movement stands down immediately (the pager/pan wins).
+Callbacks are latched in a ref (the useSwipeNav lesson) so a re-render
+mid-drag never drops the gesture. Reduced motion: every visual skipped,
+thresholds intact, tap always works.
+
+## One family, one feel (the pass-2 audit)
+
+The vertical gesture is now the exact sibling of the horizontal pager:
+
+- **`liftDecision.ts` mirrors `swipeDecision.ts`** — a pure, unit-tested
+  commit function with the SAME family constants (INTENT 14 · TRIGGER 64 ·
+  MIN_FLICK 24 · FLICK_VELOCITY 0.4 · AXIS_RATIO 1.6 · RESIST 0.22). A
+  test asserts the constants never drift apart. The flick carries the
+  min-travel + sign-match guards, so a jittery tap can never commit on
+  velocity alone (the same regression class the horizontal tests catch).
+- **The armed haptic** — crossing the commit line gives the same soft
+  Android tick (5ms) as the pager; release gives the same 8ms.
+- **The commit choreography** — the visual flies the rest of the way in
+  the drag direction AND fades, with the pager's velocity-responsive
+  timing (flick: 150ms fly / 90ms to route; slow drag: 220/150), the
+  route changing into the fade.
+- **`visualTarget`** — what follows the finger. The entry pill rides its
+  own drag; the SET-DOWN passes the practice page's wrapper (a fixed
+  inset-0 div with no transform at rest — the moment the drag applies a
+  transform it becomes the players' containing block at identical
+  geometry), so the WHOLE surface rides the finger down and slides off —
+  the Apple-Music sheet dismissal, not a lone pill sliding.
+- **The horizontal sweep** — all four peer surfaces (Capture, Songs,
+  Circle, the song room) already share the one `useSwipeNav` engine;
+  nothing drifted. Two hooks total: horizontal `useSwipeNav`, vertical
+  `useLiftGesture`. Never a third.
 
 ## The trance guard
 

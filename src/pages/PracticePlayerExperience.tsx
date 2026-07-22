@@ -15,11 +15,19 @@ import type { PracticeSection } from "@/lib/audio/practiceTypes";
  * The set-down grabber — the top-center pull-down that returns you exactly
  * where you were (the mirror of the Flow handle's lift). Anchored to
  * itself, so it never fights the player's own content or Flow's autoscroll;
- * also a plain tappable button (the non-gesture path).
+ * also a plain tappable button (the non-gesture path). `visualTarget` is
+ * the page wrapper, so the WHOLE surface rides the finger down — the
+ * Apple-Music sheet dismissal, not a lone pill sliding.
  */
-function SetDownGrabber({ onDismiss }: { onDismiss: () => void }) {
+function SetDownGrabber({
+  onDismiss,
+  visualTarget,
+}: {
+  onDismiss: () => void;
+  visualTarget?: React.RefObject<HTMLElement>;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
-  useLiftGesture(ref, { onPullDown: onDismiss });
+  useLiftGesture(ref, { onPullDown: onDismiss, visualTarget });
   return (
     <button
       ref={ref}
@@ -111,6 +119,8 @@ export default function PracticePlayerPage() {
   const [flowMode, setFlowMode] = useState(
     () => Boolean((location.state as { flow?: boolean } | null)?.flow),
   );
+  // The set-down drag's visual target — the whole page rides the finger.
+  const dismissRef = useRef<HTMLDivElement>(null);
 
   // Screen stays awake for the whole live session (full player, drive mode,
   // and Flow — a music stand that sleeps mid-verse fails its one job).
@@ -243,25 +253,31 @@ export default function PracticePlayerPage() {
   }
 
   // ─── Flow — hands-free autoscroll perform mode ──────────────────────────
+  // The dismissal wrapper: fixed inset-0 with no transform at rest, so the
+  // players' own fixed layouts are untouched — the moment the set-down drag
+  // applies a transform, the wrapper becomes their containing block at the
+  // exact same geometry, and the WHOLE surface rides the finger down.
   if (flowMode) {
     return (
-      <>
-        <SetDownGrabber onDismiss={handleClose} />
+      <div ref={dismissRef} style={{ position: "fixed", inset: 0 }}>
+        <SetDownGrabber onDismiss={handleClose} visualTarget={dismissRef} />
         <FlowPlayer hook={hook} onExit={() => setFlowMode(false)} />
-      </>
+      </div>
     );
   }
 
   // ─── Drive Mode — separate render tree ─────────────────────────────────
+  // Deliberately NO set-down grabber: a small top target is a mis-tap
+  // hazard for a driver; Drive Mode keeps its own big exit.
   if (state.driveMode) {
     return <DriveModePlayer hook={hook} />;
   }
 
   // ─── Normal full-screen player ──────────────────────────────────────────
   return (
-    <>
-      <SetDownGrabber onDismiss={handleClose} />
+    <div ref={dismissRef} style={{ position: "fixed", inset: 0 }}>
+      <SetDownGrabber onDismiss={handleClose} visualTarget={dismissRef} />
       <FullPracticePlayer hook={hook} onClose={handleClose} onEnterFlow={() => setFlowMode(true)} />
-    </>
+    </div>
   );
 }
