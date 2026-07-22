@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeft, Settings, MicOff, RefreshCw, AlertTriangle, CloudOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings, MicOff, RefreshCw, AlertTriangle, CloudOff } from "lucide-react";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { toast } from "sonner";
 
@@ -779,8 +779,15 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     setNavDirection("left");
     navigate("/songs");
   }, [navigate]);
+  // Circle lives to the RIGHT of Capture — your work alive, with your
+  // people (Library ← Capture → Circle). Same geography contract as Songs.
+  const goToCircle = useCallback(() => {
+    setNavDirection("right");
+    navigate("/circle");
+  }, [navigate]);
   useSwipeNav(sceneRef, {
     onSwipeRight: goToSongs,
+    onSwipeLeft: goToCircle,
     disabled: phase !== "idle" || review.open || sheetAction !== null,
   });
   const enterClass = useSpatialEntrance(useLocation().pathname);
@@ -790,6 +797,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   useEffect(() => {
     preloadOnIdle(
       () => import("@/pages/SongCatalogPage"),
+      () => import("@/pages/CirclePage"),
       // Warm the split capture surfaces while idle so they're instant when
       // needed, even though they're out of the entry chunk for a faster first
       // paint. ReviewSheet especially — it's needed the moment a take stops.
@@ -878,6 +886,12 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
               cursor: navLocked ? "default" : "pointer",
               opacity: navLocked ? 0.35 : 1,
               transition: "opacity 200ms ease",
+              // Four header items now share 390px — a long title must
+              // truncate, never push Circle/Settings off the edge.
+              maxWidth: "34vw",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {songTitle ?? "Open room"}
@@ -936,26 +950,59 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           </button>
         )}
 
-        <button
-          type="button"
-          aria-label="Settings"
-          onClick={() => navigate("/settings")}
-          disabled={navLocked}
-          className="flex items-center justify-center transition-transform active:scale-95"
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--cog-charcoal)",
-            cursor: navLocked ? "default" : "pointer",
-            opacity: navLocked ? 0.35 : 1,
-            transition: "opacity 200ms ease",
-            padding: 8,
-            minHeight: 44,
-            minWidth: 44,
-          }}
-        >
-          <Settings size={20} />
-        </button>
+        <div className="flex items-center">
+          {/* Circle — the mirrored contract of the Songs chevron: your work
+              alive with your people, one swipe (or tap) to the right. */}
+          <button
+            type="button"
+            onClick={goToCircle}
+            disabled={navLocked}
+            aria-label="Open your circle"
+            className="flex items-center transition-transform active:scale-95"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--cog-charcoal)",
+              cursor: navLocked ? "default" : "pointer",
+              opacity: navLocked ? 0.35 : 1,
+              transition: "opacity 200ms ease",
+              padding: "8px 6px 8px 10px",
+              minHeight: 44,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: 14,
+                fontWeight: 500,
+                marginRight: 2,
+              }}
+            >
+              Circle
+            </span>
+            <ChevronRight size={20} />
+          </button>
+          <button
+            type="button"
+            aria-label="Settings"
+            onClick={() => navigate("/settings")}
+            disabled={navLocked}
+            className="flex items-center justify-center transition-transform active:scale-95"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--cog-charcoal)",
+              cursor: navLocked ? "default" : "pointer",
+              opacity: navLocked ? 0.35 : 1,
+              transition: "opacity 200ms ease",
+              padding: 8,
+              minHeight: 44,
+              minWidth: 44,
+            }}
+          >
+            <Settings size={20} />
+          </button>
+        </div>
       </header>
 
       {/* Main scene */}

@@ -28,7 +28,7 @@ const InviteWelcomePage = lazy(() => import("@/pages/invite/InviteWelcomeBackPag
 const InviteVerifyPage = lazy(() => import("@/pages/invite/InviteVerifyPage"));
 const InviteNamePage = lazy(() => import("@/pages/invite/InviteNamePage"));
 const InviteTeamPage = lazy(() => import("@/pages/invite/InviteTeamIntroPage"));
-const ReturningHomePage = lazy(() => import("@/pages/ReturningHomePage"));
+const CirclePage = lazy(() => import("@/pages/CirclePage"));
 
 export const authRoutes = (
   <>
@@ -54,7 +54,9 @@ export const authRoutes = (
     <Route path="/invite/name" element={<InviteNamePage />} />
     <Route path="/invite/team" element={<InviteTeamPage />} />
 
-    {/* Returning user smart home — requires an authed session */}
-    <Route path="/home" element={<RequireAuth><ReturningHomePage /></RequireAuth>} />
+    {/* Circle — the swipe-right return surface (absorbs the old /home).
+        Library ← Capture → Circle: your work alive, with your people. */}
+    <Route path="/circle" element={<RequireAuth><CirclePage /></RequireAuth>} />
+    <Route path="/home" element={<RequireAuth><CirclePage /></RequireAuth>} />
   </>
 );

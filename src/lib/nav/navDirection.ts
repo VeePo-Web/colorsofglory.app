@@ -64,6 +64,7 @@ interface Coord { x: number; depth: number }
 
 export function coordFor(pathname: string): Coord {
   if (pathname === "/songs") return { x: -1, depth: 0 };       // library, left of the mic
+  if (pathname === "/circle" || pathname === "/home") return { x: 1, depth: 0 }; // circle, right of the mic
   if (pathname !== "/songs" && /^\/songs\/[^/]+/.test(pathname)) return { x: 0, depth: 1 }; // a song's surfaces
   return { x: 0, depth: 0 };                                    // Capture (home) and peers
 }
