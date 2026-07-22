@@ -2,18 +2,25 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { sendViaResend, COG_SENDERS } from "../_shared/resend.ts";
 import {
+  firstCaptureWinEmail,
   firstCollaboratorEmail,
   firstSongNudgeEmail,
+  gentleReturnEmail,
   humCaptureEmail,
+  inviteNudgeEmail,
   inviteReminderEmail,
   lyricsChordsEmail,
   referralExplainerEmail,
   rewardEmail,
+  roomReadyEmail,
+  stalledSongEmail,
+  UNSUB_URL_PLACEHOLDER,
   welcomeEmail,
   whatChangedEmail,
+  yourWeekEmail,
   type RenderedTemplate,
 } from "../_shared/email.ts";
-import { canSend } from "../_shared/emailGovernance.ts";
+import { canSend, unsubscribeUrl } from "../_shared/emailGovernance.ts";
 
 // The GOVERNED email outbox drain (docs/email/COG-EMAIL-SYSTEM.md §1/§7/§8).
 //
@@ -77,7 +84,7 @@ async function renderRow(admin: any, row: QueueRow): Promise<
       const { count } = await admin
         .from("songs")
         .select("id", { count: "exact", head: true })
-        .eq("created_by", row.user_id);
+        .eq("owner_user_id", row.user_id);
       if ((count ?? 0) > 0) return { skip: "already_has_song" };
       return { template: firstSongNudgeEmail(), from: COG_SENDERS.primary };
     }
@@ -148,6 +155,77 @@ async function renderRow(admin: any, row: QueueRow): Promise<
     case "growth.referral_explainer": {
       return { template: referralExplainerEmail(), from: COG_SENDERS.referrals };
     }
+    case "onboarding.first_capture_win": {
+      return {
+        template: firstCaptureWinEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "onboarding.room_ready": {
+      return {
+        template: roomReadyEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "onboarding.stalled_day3": {
+      // Evaporates if the song has been touched since this was queued.
+      const songId = p.song_id as string | undefined;
+      if (!songId) return { skip: "missing_song_id" };
+      const { count } = await admin
+        .from("song_activity")
+        .select("id", { count: "exact", head: true })
+        .eq("song_id", songId)
+        .gte("created_at", new Date(Date.now() - 72 * 3600 * 1000).toISOString());
+      if ((count ?? 0) > 0) return { skip: "song_no_longer_stalled" };
+      return {
+        template: stalledSongEmail({
+          songTitle: (p.song_title as string) ?? "Your song",
+          songId,
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "digest.your_week": {
+      return {
+        template: yourWeekEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+          ideaCount: typeof p.idea_count === "number" ? p.idea_count : 1,
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "growth.invite_nudge": {
+      // Evaporates if they've since sent an invite — the nudge's job is done.
+      const { count } = await admin
+        .from("song_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by_user_id", row.user_id)
+        .gte("created_at", new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString());
+      if ((count ?? 0) > 0) return { skip: "already_invited_recently" };
+      return {
+        template: inviteNudgeEmail({
+          songTitle: (p.song_title as string) ?? "your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
+    case "retain.gentle_return": {
+      return {
+        template: gentleReturnEmail({
+          songTitle: (p.song_title as string) ?? "Your song",
+          songId: (p.song_id as string) ?? "",
+        }),
+        from: COG_SENDERS.primary,
+      };
+    }
     case "collab.invite_reminder": {
       // Exactly once, and only while the invite is still pending.
       const inviteId = p.invite_id as string | undefined;
@@ -198,6 +276,19 @@ Deno.serve(async (req) => {
       headers: corsHeaders,
     });
   }
+
+  // §7 priority within a batch — when the daily cap admits only one email,
+  // the winner should be the one that matters most:
+  // collab.* > digest.what_changed > edu.* > growth.* > retain.* > rest.
+  const prio = (r: QueueRow) => {
+    if (r.category === "collab") return 0;
+    if (r.kind === "digest.what_changed") return 1;
+    if (r.category === "edu") return 2;
+    if (r.category === "growth") return 3;
+    if (r.category === "retain") return 4;
+    return 5;
+  };
+  (rows ?? []).sort((a, b) => prio(a as QueueRow) - prio(b as QueueRow));
 
   const resendKey = Deno.env.get("RESEND_API_KEY");
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
@@ -261,12 +352,28 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Lifecycle mail to a real user carries the RFC 8058 one-click
+      // unsubscribe: tokenized URL in the footer placeholder + the
+      // List-Unsubscribe headers Gmail/Yahoo require of bulk senders.
+      let { html, text } = rendered.template;
+      let headers: Record<string, string> | undefined;
+      if (row.category && recipientIsUser) {
+        const unsub = await unsubscribeUrl(row.user_id, row.category);
+        html = html.split(UNSUB_URL_PLACEHOLDER).join(unsub);
+        text = text.split(UNSUB_URL_PLACEHOLDER).join(unsub);
+        headers = {
+          "List-Unsubscribe": `<${unsub}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        };
+      }
+
       const result = await sendViaResend({
         from: rendered.from,
         to,
         subject: rendered.template.subject,
-        html: rendered.template.html,
-        text: rendered.template.text,
+        html,
+        text,
+        headers,
         tags: [
           { name: "app", value: "cog" },
           { name: "category", value: row.category ?? (REWARD_KINDS.has(row.kind) ? "growth" : "system") },

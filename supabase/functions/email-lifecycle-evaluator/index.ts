@@ -1,30 +1,30 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { humanizeActivityKind } from "../_shared/email.ts";
 import { enqueueEmail } from "../_shared/emailGovernance.ts";
 
-// The scheduled lifecycle-email brain (docs/email/COG-EMAIL-SYSTEM.md §8.3).
-// Run daily by cron (service role). It EVALUATES gates and ENQUEUES — it
+// The scheduled lifecycle-email brain (docs/email/COG-EMAIL-SYSTEM.md Â§8.3).
+// Run daily by cron (service role). It EVALUATES gates and ENQUEUES â€” it
 // never sends; the governed drain (notify-referral-event) owns delivery,
 // caps, quiet hours, and suppressions. Everything it enqueues is deduped by
 // a DB constraint, so re-running is always safe.
 //
 // Programs evaluated:
-//   D1 digest.what_changed — per (member × song) with OTHER-actor activity
+//   D1 digest.what_changed â€” per (member Ã— song) with OTHER-actor activity
 //     since that member's last visit; weekly per song via an ISO-week key.
-//   B1 edu.hum_capture     — signed up 2–14 days ago, has a song, zero
+//   B1 edu.hum_capture     â€” signed up 2â€“14 days ago, has a song, zero
 //     voice memos authored. Once ever.
-//   B2 edu.lyrics_chords   — signed up 4–21 days ago, has memos, song has
+//   B2 edu.lyrics_chords   â€” signed up 4â€“21 days ago, has memos, song has
 //     zero lyric lines. Once ever.
 //
 // THE PRIVACY FENCE: payloads carry song titles, display names, and
-// HUMANIZED KIND PHRASES only ("Sarah added 2 voice memos") — never lyric,
+// HUMANIZED KIND PHRASES only ("Sarah added 2 voice memos") â€” never lyric,
 // memo, transcript, or note content. Same allow-list as digest-recap.
 
 const DAY = 24 * 3600 * 1000;
 
 function isoWeek(d: Date): string {
-  // ISO-8601 week number — the D1 dedupe period.
+  // ISO-8601 week number â€” the D1 dedupe period.
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
   const week = isoWeek(now);
   let digests = 0, edu = 0, scannedSongs = 0, scannedProfiles = 0;
 
-  // ── D1 · digest.what_changed ────────────────────────────────────────────
+  // â”€â”€ D1 Â· digest.what_changed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   try {
     // Songs with any activity in the last 7 days (bounded).
     const since7d = new Date(now.getTime() - 7 * DAY).toISOString();
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const songIds = Array.from(new Set((activeSongs ?? []).map((r) => r.song_id))).slice(0, 200);
 
     for (const songId of songIds) {
-      if (digests >= 300) break; // work budget — the rest catch the next run
+      if (digests >= 300) break; // work budget â€” the rest catch the next run
       scannedSongs++;
       const { data: members } = await admin
         .from("song_members")
@@ -91,9 +91,9 @@ Deno.serve(async (req) => {
           .neq("actor_user_id", m.user_id)
           .limit(200);
         const others = (events ?? []).filter((e) => e.actor_user_id);
-        if (others.length === 0) continue; // nothing changed → not sent (§5 D1)
+        if (others.length === 0) continue; // nothing changed â†’ not sent (Â§5 D1)
 
-        // Group (actor, kind) → "Name did X n times", newest-agnostic order.
+        // Group (actor, kind) â†’ "Name did X n times", newest-agnostic order.
         const actorIds = Array.from(new Set(others.map((e) => e.actor_user_id as string)));
         const { data: profs } = await admin
           .from("profiles")
@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
     console.error("[evaluator] digest_pass_failed", String(e));
   }
 
-  // ── B1/B2 · education (event-gated, once ever) ──────────────────────────
+  // â”€â”€ B1/B2 Â· education (event-gated, once ever) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   try {
     const oldest = new Date(now.getTime() - 21 * DAY).toISOString();
     const newest = new Date(now.getTime() - 2 * DAY).toISOString();
@@ -145,11 +145,11 @@ Deno.serve(async (req) => {
         : await admin
             .from("songs")
             .select("id, title")
-            .eq("created_by", prof.user_id)
+            .eq("owner_user_id", prof.user_id)
             .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle();
-      if (!songRow) continue; // no song yet → A2's territory, not education's
+      if (!songRow) continue; // no song yet â†’ A2's territory, not education's
 
       const { count: memoCount } = await admin
         .from("voice_memos")
@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
           dedupe_key: `edu.hum_capture:${prof.user_id}`,
         });
         edu++;
-        continue; // one education thread at a time — B2 waits for memos
+        continue; // one education thread at a time â€” B2 waits for memos
       }
 
       const ageDays = (now.getTime() - new Date(prof.created_at).getTime()) / DAY;
@@ -192,8 +192,187 @@ Deno.serve(async (req) => {
     console.error("[evaluator] education_pass_failed", String(e));
   }
 
+  // â”€â”€ A4/A5 Â· room-ready + stalled (per recent song, once each) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  let onboarding = 0;
+  try {
+    const { data: youngSongs } = await admin
+      .from("songs")
+      .select("id, title, owner_user_id, created_at")
+      .gte("created_at", new Date(now.getTime() - 14 * DAY).toISOString())
+      .limit(400);
+    for (const song of youngSongs ?? []) {
+      const [{ count: lyricN }, { count: memoN }] = await Promise.all([
+        admin.from("song_lyrics").select("id", { count: "exact", head: true }).eq("song_id", song.id),
+        admin.from("voice_memos").select("id", { count: "exact", head: true }).eq("song_id", song.id),
+      ]);
+      if ((lyricN ?? 0) >= 1 && (memoN ?? 0) >= 1) {
+        await enqueueEmail(admin, {
+          user_id: song.owner_user_id,
+          kind: "onboarding.room_ready",
+          category: "onboarding",
+          payload: { song_id: song.id, song_title: song.title },
+          dedupe_key: `onboarding.room_ready:${song.id}`,
+        });
+        onboarding++;
+        continue;
+      }
+      // A5: the song exists, is 3â€“10 days old, and nothing has happened in 72h.
+      const ageDays = (now.getTime() - new Date(song.created_at).getTime()) / DAY;
+      if (ageDays >= 3 && ageDays <= 10) {
+        const { count: recentN } = await admin
+          .from("song_activity")
+          .select("id", { count: "exact", head: true })
+          .eq("song_id", song.id)
+          .gte("created_at", new Date(now.getTime() - 3 * DAY).toISOString());
+        if ((recentN ?? 0) === 0) {
+          await enqueueEmail(admin, {
+            user_id: song.owner_user_id,
+            kind: "onboarding.stalled_day3",
+            category: "onboarding",
+            payload: { song_id: song.id, song_title: song.title },
+            dedupe_key: `onboarding.stalled_day3:${song.id}`,
+          });
+          onboarding++;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[evaluator] onboarding_pass_failed", String(e));
+  }
+
+  // â”€â”€ D2/D3 Â· solo weekly rhythm: your-week OR the Â§4-gated invite nudge â”€â”€
+  // One heartbeat per solo writer per week, chosen here; the drain's caps
+  // and priority keep it to at most one either way.
+  let rhythm = 0;
+  try {
+    const since7d = new Date(now.getTime() - 7 * DAY).toISOString();
+    const { data: recentActors } = await admin
+      .from("song_activity")
+      .select("song_id, actor_user_id")
+      .gte("created_at", since7d)
+      .limit(2000);
+    // Solo candidates: (song, actor) pairs where the actor is the only member.
+    const bySong = new Map<string, Set<string>>();
+    for (const r of recentActors ?? []) {
+      if (!r.actor_user_id) continue;
+      if (!bySong.has(r.song_id)) bySong.set(r.song_id, new Set());
+      bySong.get(r.song_id)!.add(r.actor_user_id);
+    }
+    const nudgedUsers = new Set<string>();
+    for (const [songId, actors] of Array.from(bySong.entries()).slice(0, 200)) {
+      if (rhythm >= 200) break; // work budget
+      const { count: memberN } = await admin
+        .from("song_members")
+        .select("id", { count: "exact", head: true })
+        .eq("song_id", songId);
+      if ((memberN ?? 0) > 1) continue; // multi-member rooms get D1 instead
+      const owner = actors.values().next().value as string | undefined;
+      if (!owner || nudgedUsers.has(owner)) continue;
+
+      const { data: song } = await admin
+        .from("songs")
+        .select("id, title, owner_user_id")
+        .eq("id", songId)
+        .maybeSingle();
+      if (!song || song.owner_user_id !== owner) continue;
+
+      // Â§4 gates for the invite nudge: real content (â‰¥3 elements) AND no
+      // invite sent in 14 days. If gates fail â†’ the gentle D2 instead.
+      const [{ count: memoN }, { count: lyricN }, { count: inviteN }, { count: weekActivityN }] =
+        await Promise.all([
+          admin.from("voice_memos").select("id", { count: "exact", head: true }).eq("song_id", songId),
+          admin.from("song_lyrics").select("id", { count: "exact", head: true }).eq("song_id", songId),
+          admin
+            .from("song_invites")
+            .select("id", { count: "exact", head: true })
+            .eq("created_by_user_id", owner)
+            .gte("created_at", new Date(now.getTime() - 14 * DAY).toISOString()),
+          admin
+            .from("song_activity")
+            .select("id", { count: "exact", head: true })
+            .eq("song_id", songId)
+            .eq("actor_user_id", owner)
+            .gte("created_at", since7d),
+        ]);
+      const elements = (memoN ?? 0) + (lyricN ?? 0);
+
+      if (elements >= 3 && (inviteN ?? 0) === 0) {
+        await enqueueEmail(admin, {
+          user_id: owner,
+          kind: "growth.invite_nudge",
+          category: "growth",
+          payload: { song_id: songId, song_title: song.title },
+          dedupe_key: `growth.invite_nudge:${owner}:${week}`,
+        });
+      } else if ((weekActivityN ?? 0) > 0) {
+        await enqueueEmail(admin, {
+          user_id: owner,
+          kind: "digest.your_week",
+          category: "digest",
+          payload: { song_id: songId, song_title: song.title, idea_count: weekActivityN ?? 1 },
+          dedupe_key: `digest.your_week:${owner}:${week}`,
+        });
+      } else {
+        continue;
+      }
+      nudgedUsers.add(owner);
+      rhythm++;
+    }
+  } catch (e) {
+    console.error("[evaluator] rhythm_pass_failed", String(e));
+  }
+
+  // â”€â”€ F1 Â· gentle return: 14â€“45 days away, has a song, once per month â”€â”€â”€â”€â”€
+  let retention = 0;
+  try {
+    const active14 = new Date(now.getTime() - 14 * DAY).toISOString();
+    const active45 = new Date(now.getTime() - 45 * DAY).toISOString();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    // Users whose LAST activity anywhere landed in the 14â€“45 day window.
+    const { data: lastActs } = await admin
+      .from("song_activity")
+      .select("actor_user_id, song_id, created_at")
+      .gte("created_at", active45)
+      .lt("created_at", active14)
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    const seen = new Set<string>();
+    for (const act of lastActs ?? []) {
+      if (retention >= 100) break; // work budget
+      const uid = act.actor_user_id;
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      // Truly dormant only â€” nothing newer than the window start.
+      const { count: newer } = await admin
+        .from("song_activity")
+        .select("id", { count: "exact", head: true })
+        .eq("actor_user_id", uid)
+        .gte("created_at", active14);
+      if ((newer ?? 0) > 0) continue;
+      const { data: song } = await admin
+        .from("songs")
+        .select("id, title")
+        .eq("owner_user_id", uid)
+        .order("last_activity_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!song) continue;
+      await enqueueEmail(admin, {
+        user_id: uid,
+        kind: "retain.gentle_return",
+        category: "retain",
+        payload: { song_id: song.id, song_title: song.title },
+        dedupe_key: `retain.gentle_return:${uid}:${monthKey}`,
+      });
+      retention++;
+    }
+  } catch (e) {
+    console.error("[evaluator] retention_pass_failed", String(e));
+  }
+
   return new Response(
-    JSON.stringify({ ok: true, week, digests, edu, scannedSongs, scannedProfiles }),
+    JSON.stringify({ ok: true, week, digests, edu, onboarding, rhythm, retention, scannedSongs, scannedProfiles }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });
+

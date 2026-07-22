@@ -222,11 +222,38 @@ Never: "🔥 50% OFF — 24 HOURS ONLY!!" · "we miss you 😢" · "supercharge"
   accepted invite (+30 min, once ever) · **E1** referral explainer enqueued
   +1h after the first invite ever (once ever, referrals@).
 
-**Not yet built (next slices, in §9 order):** D2 solo digest + D3 invite
-nudge (needs the §4 gates + dismissal tracking), remaining A (A3/A4/A5) and
-B (B3–B8) programs, E2/E4/E5, G billing set (on payments-webhook), F/H
-programs, preference-center wiring to `email_suppressions`, List-Unsubscribe
-headers + one-click endpoint, per-kind A/B subjects.
-**Ops ask (Lovable):** schedule `email-lifecycle-evaluator` daily (morning
-UTC) alongside the existing `notify-referral-event` drain cron (drain every
-5–15 min).
+**Shipped 2026-07-22 (second pass — launch-hardening + remaining A/D/F core):**
+- **RFC 8058 one-click unsubscribe is live:** stateless HMAC tokens
+  (`EMAIL_UNSUB_SECRET`, service-key fallback), the public
+  `email-unsubscribe` fn (GET = branded confirm + perform; POST = mail-client
+  one-click), `verify_jwt=false` in config.toml. Every lifecycle send now
+  carries `List-Unsubscribe` + `List-Unsubscribe-Post` headers and a
+  tokenized footer link (drain-resolved placeholder) — the Gmail/Yahoo
+  bulk-sender requirement. Writes the same `email_suppressions` store
+  `canSend` reads; one source of truth.
+- **Bulletproof CTA:** MSO/VML roundrect fallback so the gold button renders
+  in Outlook.
+- **§7 priority draining:** within a batch, collab > digest.what_changed >
+  edu > growth > retain — when the daily cap admits one, the right one wins.
+- **A3** first-capture-win (hooked in `voice-memo-finalize`, once ever,
+  quiet-hours deferred) · **A4** room-ready (lyrics+memo, once per song) ·
+  **A5** stalled-day3 (3–10d-old silent songs; evaporates at send if
+  touched) · **D2** your-week (solo writers with real activity) · **D3**
+  invite nudge (§4 gates: solo active song, ≥3 elements, 0–1 members, no
+  invite in 14d; evaporates at send if they've since invited) · **F1**
+  gentle return (last activity 14–45d ago, once per month).
+- **Column-truth audit:** `songs.owner_user_id` (NOT `created_by`) — fixed
+  in the A2 drain gate and all evaluator passes; `song_invites` keeps
+  `created_by_user_id`; F1 orders by `songs.last_activity_at`.
+- C2 invite reminder reclassified transactional-note (recipient may have no
+  account → no dead unsubscribe link; structurally the only reminder).
+
+**Not yet built:** B3–B8 (need feature-usage signals — data asks), C4
+role_set (no role-change edge fn exists yet), E2/E4/E5, G billing set (on
+`payments-webhook` — coordinate with the admin lane), F2–F4, H program,
+D3 dismissal tracking (needs an in-app dismiss surface writing 60-day
+expiring `email_suppressions` rows), the `/settings/notifications` email
+toggles UI, per-kind A/B subjects, bounce/complaint webhook intake.
+**Ops asks (Lovable):** run the migration; cron `notify-referral-event`
+every 5–15 min + `email-lifecycle-evaluator` daily (morning UTC); set
+`EMAIL_UNSUB_SECRET`; verify SPF/DKIM/DMARC on all three senders.

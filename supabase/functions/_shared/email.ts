@@ -84,15 +84,32 @@ function stripTags(html: string): string {
  * sendViaResend (a plain-text alternative on every send is deliverability
  * hygiene, §7).
  */
+/**
+ * Lifecycle footers carry this placeholder; the DRAIN replaces it with the
+ * recipient's tokenized one-click unsubscribe URL (lifecycle mail only ever
+ * leaves through the drain, so it is always resolved before sending).
+ */
+export const UNSUB_URL_PLACEHOLDER = "{{UNSUB_URL}}";
+
 export function renderEmail(args: RenderEmailArgs): { html: string; text: string } {
   const prefsUrl = `${APP_URL}/settings/notifications`;
   const footerLine = args.transactional
     ? escapeHtml(args.transactionalNote ?? "This is a service message about your account or a song you're part of.")
-    : `<a href="${prefsUrl}" style="color:#6B6459;">Email preferences</a> · <a href="${prefsUrl}" style="color:#6B6459;">Unsubscribe from ${escapeHtml(args.categoryLabel ?? "these emails")}</a>`;
+    : `<a href="${prefsUrl}" style="color:#6B6459;">Email preferences</a> · <a href="${UNSUB_URL_PLACEHOLDER}" style="color:#6B6459;">Unsubscribe from ${escapeHtml(args.categoryLabel ?? "these emails")}</a>`;
 
+  // Bulletproof button: VML rect for Outlook (which ignores border-radius +
+  // padding on <a>), the styled anchor for everyone else.
   const cta = args.ctaLabel && args.ctaUrl
     ? `<tr><td style="padding:12px 32px 32px;text-align:center;">
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${args.ctaUrl}" style="height:48px;v-text-anchor:middle;width:260px;" arcsize="29%" fillcolor="#B8953A" stroke="f">
+          <w:anchorlock/>
+          <center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:16px;font-weight:600;">${escapeHtml(args.ctaLabel)}</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
         <a href="${args.ctaUrl}" style="display:inline-block;background:#B8953A;color:#FFFFFF;text-decoration:none;font-family:${SANS};font-weight:600;font-size:16px;padding:15px 34px;border-radius:14px;">${escapeHtml(args.ctaLabel)}</a>
+        <!--<![endif]-->
       </td></tr>`
     : `<tr><td style="padding:0 32px 28px;"></td></tr>`;
 
@@ -134,7 +151,7 @@ export function renderEmail(args: RenderEmailArgs): { html: string; text: string
     "Every part of your song, in one room.",
     args.transactional
       ? (args.transactionalNote ?? "This is a service message about your account or a song you're part of.")
-      : `Email preferences: ${prefsUrl}`,
+      : `Email preferences: ${prefsUrl}\nUnsubscribe: ${UNSUB_URL_PLACEHOLDER}`,
   ].join("\n").replace(/\n{3,}/g, "\n\n").trim();
 
   return { html, text };
@@ -201,7 +218,11 @@ export function inviteReminderEmail(args: {
     ctaLabel: "Step into the room",
     ctaUrl: `${APP_URL}/invite/${args.token}`,
     category: "collab",
-    categoryLabel: "invite reminders",
+    // The recipient may have no account (no unsubscribe token to give), and
+    // this is structurally the ONLY reminder — an honest service note beats
+    // a dead unsubscribe link.
+    transactional: true,
+    transactionalNote: `You received this because ${escapeHtml(args.inviterName)} invited you to a song. This is the only reminder.`,
   });
   return { subject: `${args.songTitle} is still holding a place for you`, html, text };
 }
@@ -390,6 +411,109 @@ export function referralExplainerEmail(): RenderedTemplate {
     categoryLabel: "referral emails",
   });
   return { subject: "A small thank-you for bringing someone in", html, text };
+}
+
+/** A3 · onboarding.first_capture_win — reinforce the first aha. */
+export function firstCaptureWinEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "It's captured, timestamped, and it isn't going anywhere.",
+    headline: "Caught it.",
+    bodyHtml:
+      p(`Your first idea for <strong>${escapeHtml(args.songTitle)}</strong> is saved — waveform, timestamp, and all. It'll be right there every time you open the room, and so will everything you add next.`) +
+      p(`Here's the quiet magic: you never have to remember where you put it again.`),
+    ctaLabel: "Add the next piece",
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "onboarding",
+    categoryLabel: "getting-started emails",
+  });
+  return { subject: "That idea is safe now", html, text };
+}
+
+/** A4 · onboarding.room_ready — lyrics + voice now live together. */
+export function roomReadyEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "Lyrics and voice, in one place — this is the whole point.",
+    headline: "Your song is starting to feel like a room.",
+    bodyHtml:
+      p(`<strong>${escapeHtml(args.songTitle)}</strong> now has words AND a voice — the two halves of a song, finally living in the same place. No more melody in one app and lyrics in another.`) +
+      p(`Everything for this song stays connected here. Keep adding; nothing scatters.`),
+    ctaLabel: "See it come together",
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "onboarding",
+    categoryLabel: "getting-started emails",
+  });
+  return { subject: "Your song is starting to feel like a room", html, text };
+}
+
+/** A5 · onboarding.stalled_day3 — gentle, zero guilt. */
+export function stalledSongEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "No rush. It'll keep.",
+    headline: `${args.songTitle} is still waiting for you.`,
+    bodyHtml:
+      p(`No rush — it'll keep. Every memo and every line is exactly where you left it.`) +
+      p(`When you've got two minutes, add one line or hum one bar. Small additions are how songs get finished.`),
+    ctaLabel: "Pick it back up",
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "onboarding",
+    categoryLabel: "getting-started emails",
+  });
+  return { subject: `${args.songTitle} is still waiting for you`, html, text };
+}
+
+/** D2 · digest.your_week — the solo writer's gentle reflection. */
+export function yourWeekEmail(args: {
+  songTitle: string;
+  songId: string;
+  ideaCount: number;
+}): RenderedTemplate {
+  const n = args.ideaCount;
+  const { html, text } = renderEmail({
+    preheader: "A quiet look at what you built this week.",
+    headline: `Your week in ${args.songTitle}.`,
+    bodyHtml:
+      p(`You added ${n === 1 ? "an idea" : `${n} ideas`} to <strong>${escapeHtml(args.songTitle)}</strong> this week. It's coming along — not by force, just by showing up.`) +
+      p(`The room's ready whenever the next piece arrives.`),
+    ctaLabel: "Keep going",
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "digest",
+    categoryLabel: "weekly recaps",
+  });
+  return { subject: `Your week in ${args.songTitle}`, html, text };
+}
+
+/** D3 · growth.invite_nudge — the §4-gated weekly invite prompt. */
+export function inviteNudgeEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const title = escapeHtml(args.songTitle);
+  const { html, text } = renderEmail({
+    preheader: "A worship leader, a co-writer, the friend who always knows the right line — the room has space.",
+    headline: "Some songs want company.",
+    bodyHtml:
+      p(`<strong>${title}</strong> is far enough along that another set of ears might be exactly what it needs — a co-writer, the worship leader who'll actually sing it, the friend who always finds the line you couldn't.`) +
+      p(`Bringing someone in takes ten seconds. They'll see everything in one room and can jump in wherever they're useful. And every part they touch gets remembered in the credits.`) +
+      p(`No pressure at all — just an open door if there's someone in mind.`),
+    ctaLabel: "Invite someone in",
+    ctaUrl: `${APP_URL}/songs/${args.songId}/people`,
+    category: "growth",
+    categoryLabel: "invite suggestions",
+  });
+  return { subject: `Who are you writing ${args.songTitle} for?`, html, text };
+}
+
+/** F1 · retain.gentle_return — 14 days away, zero guilt. */
+export function gentleReturnEmail(args: { songTitle: string; songId: string }): RenderedTemplate {
+  const { html, text } = renderEmail({
+    preheader: "Every memo, every line — exactly as you left it.",
+    headline: `${args.songTitle} is right where you left it.`,
+    bodyHtml:
+      p(`It's all still here — every memo, every line, exactly as you left it.`) +
+      p(`When you've got a spare two minutes, one small addition is enough to feel the thread again.`),
+    ctaLabel: "Pick it back up",
+    ctaUrl: `${APP_URL}/songs/${args.songId}`,
+    category: "retain",
+    categoryLabel: "return reminders",
+  });
+  return { subject: `${args.songTitle} is right where you left it`, html, text };
 }
 
 /** E3 · growth.reward_* — the LIVE reward mail, re-skinned through the shell. */

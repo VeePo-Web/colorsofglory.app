@@ -20,3 +20,5 @@ verify_jwt = false
 
 [functions.phone-otp-verify]
 verify_jwt = false
+[functions.email-unsubscribe]
+verify_jwt = false

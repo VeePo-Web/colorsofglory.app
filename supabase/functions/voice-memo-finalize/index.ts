@@ -103,6 +103,27 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ memo_id }),
     }).catch((e) => console.error("transcribe dispatch error", e));
 
+    // A3 · onboarding.first_capture_win — the first idea a user ever lands
+    // is worth a warm word (docs/email/COG-EMAIL-SYSTEM.md §5). Once ever
+    // (DB dedupe); quiet hours defer it to morning at the drain. Non-fatal.
+    try {
+      const { enqueueEmail } = await import("../_shared/emailGovernance.ts");
+      const { data: song } = await admin
+        .from("songs")
+        .select("title")
+        .eq("id", memo.song_id)
+        .maybeSingle();
+      await enqueueEmail(admin, {
+        user_id: memo.author_user_id,
+        kind: "onboarding.first_capture_win",
+        category: "onboarding",
+        payload: { song_id: memo.song_id, song_title: song?.title ?? "your song" },
+        dedupe_key: `onboarding.first_capture_win:${memo.author_user_id}`,
+      });
+    } catch (e) {
+      console.error("[voice-memo-finalize] capture_win_enqueue_failed", String(e));
+    }
+
     return jsonResponse({ memo_id, status: "finalized", byte_size: realSize });
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : "Unknown error" }, 500);

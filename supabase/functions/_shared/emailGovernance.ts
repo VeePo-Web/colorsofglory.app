@@ -114,6 +114,64 @@ export async function canSend(
   }
 }
 
+// ── One-click unsubscribe tokens (RFC 8058) ──────────────────────────────
+// Stateless HMAC tokens: no schema, unguessable, scoped to the user. The
+// secret is EMAIL_UNSUB_SECRET (falls back to the service-role key, which
+// HMAC never reveals). token = base64url(userId).base64url(hmac(userId)).
+
+function b64url(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(s: string): Uint8Array {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  const raw = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function hmacKey(): Promise<CryptoKey> {
+  const secret =
+    Deno.env.get("EMAIL_UNSUB_SECRET") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "cog-dev";
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+
+export async function makeUnsubToken(userId: string): Promise<string> {
+  const key = await hmacKey();
+  const data = new TextEncoder().encode(userId);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, data));
+  return `${b64url(data)}.${b64url(sig)}`;
+}
+
+/** Returns the userId when the token is authentic, else null. Never throws. */
+export async function verifyUnsubToken(token: string): Promise<string | null> {
+  try {
+    const [dataPart, sigPart] = token.split(".");
+    if (!dataPart || !sigPart) return null;
+    const data = b64urlDecode(dataPart);
+    const sig = b64urlDecode(sigPart);
+    const key = await hmacKey();
+    const ok = await crypto.subtle.verify("HMAC", key, sig, data);
+    return ok ? new TextDecoder().decode(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The one-click unsubscribe URL for a user+category (RFC 8058 target). */
+export async function unsubscribeUrl(userId: string, category: string): Promise<string> {
+  const base = Deno.env.get("SUPABASE_URL") ?? "";
+  const token = await makeUnsubToken(userId);
+  return `${base}/functions/v1/email-unsubscribe?t=${encodeURIComponent(token)}&c=${encodeURIComponent(category)}`;
+}
+
 /**
  * Enqueue helper — the one way lifecycle emails enter the outbox. Dedupe is
  * a DB constraint (partial unique index), so double-enqueue is impossible,
