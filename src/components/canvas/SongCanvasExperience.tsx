@@ -514,6 +514,9 @@ const SongCanvasExperience = () => {
     setIsPracticeLaunching(true);
     try {
       const sections = await loadPracticeSections(songId);
+      // One grammar: practice/Flow always RISES (the same depth motion as
+      // the Flow handle's lift — docs/FLOW-ACCESS-CONTRACT.md).
+      setNavDirection("up");
       navigate(`/songs/${songId}/practice`, {
         state: { songTitle, sections },
       });

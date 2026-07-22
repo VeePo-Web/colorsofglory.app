@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader2, Mic } from "lucide-react";
 import { goBackOr } from "@/lib/nav/safeBack";
@@ -6,9 +6,52 @@ import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
 import { FlowPlayer } from "@/components/practice/FlowPlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
+import { useLiftGesture } from "@/components/practice/useLiftGesture";
 import { loadSession, loadLoopMode } from "@/lib/audio/practiceStorage";
 import { loadPracticeBundle } from "@/lib/practice/practiceApi";
 import type { PracticeSection } from "@/lib/audio/practiceTypes";
+
+/**
+ * The set-down grabber — the top-center pull-down that returns you exactly
+ * where you were (the mirror of the Flow handle's lift). Anchored to
+ * itself, so it never fights the player's own content or Flow's autoscroll;
+ * also a plain tappable button (the non-gesture path).
+ */
+function SetDownGrabber({ onDismiss }: { onDismiss: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useLiftGesture(ref, { onPullDown: onDismiss });
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onDismiss}
+      aria-label="Set the song down — back to where you were"
+      className="fixed left-1/2 z-50 flex items-center justify-center"
+      style={{
+        top: 0,
+        transform: "translateX(-50%)",
+        paddingTop: "calc(env(safe-area-inset-top) + 6px)",
+        paddingBottom: 10,
+        paddingInline: 28,
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        minHeight: 44,
+        minWidth: 64,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 36,
+          height: 5,
+          borderRadius: 999,
+          backgroundColor: "rgba(28,26,23,0.22)",
+        }}
+      />
+    </button>
+  );
+}
 
 /**
  * Keep the screen awake while a practice session is live on this route — a
@@ -63,7 +106,11 @@ export default function PracticePlayerPage() {
   const hook       = usePracticeContext();
   const { state, initSession, applyEnrichment } = hook;
   // Flow — the hands-free autoscroll perform mode (self-paced, no playback).
-  const [flowMode, setFlowMode] = useState(false);
+  // The Flow handle lifts straight here with { flow: true } in nav state
+  // (docs/FLOW-ACCESS-CONTRACT.md) — arriving in perform mode, one gesture.
+  const [flowMode, setFlowMode] = useState(
+    () => Boolean((location.state as { flow?: boolean } | null)?.flow),
+  );
 
   // Screen stays awake for the whole live session (full player, drive mode,
   // and Flow — a music stand that sleeps mid-verse fails its one job).
@@ -197,7 +244,12 @@ export default function PracticePlayerPage() {
 
   // ─── Flow — hands-free autoscroll perform mode ──────────────────────────
   if (flowMode) {
-    return <FlowPlayer hook={hook} onExit={() => setFlowMode(false)} />;
+    return (
+      <>
+        <SetDownGrabber onDismiss={handleClose} />
+        <FlowPlayer hook={hook} onExit={() => setFlowMode(false)} />
+      </>
+    );
   }
 
   // ─── Drive Mode — separate render tree ─────────────────────────────────
@@ -206,5 +258,10 @@ export default function PracticePlayerPage() {
   }
 
   // ─── Normal full-screen player ──────────────────────────────────────────
-  return <FullPracticePlayer hook={hook} onClose={handleClose} onEnterFlow={() => setFlowMode(true)} />;
+  return (
+    <>
+      <SetDownGrabber onDismiss={handleClose} />
+      <FullPracticePlayer hook={hook} onClose={handleClose} onEnterFlow={() => setFlowMode(true)} />
+    </>
+  );
 }
