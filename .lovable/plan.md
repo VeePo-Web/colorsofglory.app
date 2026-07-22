@@ -1,62 +1,81 @@
-# Fix: Email signup silently drops the OTP step
+## L11 — Email System Data Spine + Deliverability
 
-## Problem
+Extend the existing email foundation (queue + suppressions + governance + evaluator + drain already exist) with the missing pieces L11 calls for: preferences table, feature-usage signals, fenced RPCs, dismissal-based suppression, cron scheduling, Resend delivery webhook, and the `cog/notifications.ts` client seam. No UI.
 
-When you tap "Create account" on `/auth/email`, `signUpWithPassword` (in `src/integrations/cog/auth.ts`) already calls `startEmailOtp({ purpose: "signup" })` — a 6-digit branded code is sent via Resend from `email-otp-start`. But the UI just flips back to the "Sign in" tab and shows a small "check your inbox" hint. There is **no screen to enter the code**, so the user has to leave, come back, and type their password blind. The phone flow, by contrast, has a dedicated `CodeVerifyPage` with 6 lit-up cells, auto-submit, resend timer, and a gold success flash.
+### What's already live (do not rebuild)
+- `notification_queue` with `scheduled_for`, `category`, `dedupe_key` + indexes
+- `email_suppressions` (user_id, category, reason, expires_at)
+- `_shared/emailGovernance.ts` with `canSend()` (caps, quiet hours, suppression) + HMAC unsub tokens
+- `_shared/resend.ts` sender w/ Reply-To to `people@colorsofglory.com`
+- `notify-referral-event` = the governed multi-category drain
+- `email-lifecycle-evaluator` (D1 digest, B1 hum, B2 lyrics)
+- `email-unsubscribe` endpoint (writes `email_suppressions`)
 
-The backend is already there:
-- `startEmailOtp({ email, purpose: "signup" | "login" | "reset" })`
-- `verifyEmailOtp(...)` / `completeEmailSignup({ email, password, code, firstName?, lastName? })` — verifies the code, sets the password server-side, then signs in.
+### Gaps this plan closes
 
-We just need the missing screen.
+**1. Migration `20260722_email_spine_extensions.sql`**
+- `email_preferences` table: `user_id pk → auth.users`, one bool per §7 category (`song_activity, weekly_recaps, tips_guides, invite_suggestions, encouragement, product_news`), `unsubscribed_all`, `updated_at`. Auto-provision via trigger on `profiles` insert + backfill existing rows. RLS: owner select/update only; service_role full; no client insert/delete.
+- `nudge_dismissals(user_id, kind, count, suppressed_until, updated_at)` — service-role only. Extend `canSend()` to read it for nudge kinds.
+- `feature_usage(user_id, feature, first_used_at)` unique on `(user_id, feature)`; service-role only + `mark_feature_used(_feature text)` SECURITY DEFINER RPC callable by `authenticated`.
+- Category-level suppression enforcement — patch `canSend()` to also gate on `email_preferences` (unsubscribed_all + per-category boolean maps to category namespace root).
 
-## Plan
+**2. Fenced evaluator RPCs (SECURITY DEFINER, titles/IDs/counts only)**
+Add to same migration:
+- `email_rolling_counts(_user_id) → (last_24h int, last_7d int)`
+- `first_invite_ever(_user_id) → bool`
+- `owner_first_accepted_invite(_song_id, _owner_id) → bool`
+- `education_candidates(_user_id) → jsonb` per active song: `song_id, title, has_memo, has_lyrics_chords, section_count, duplicate_take_sections, take_count, contributor_count, element_count, editor_count` + feature-used flags joined from `feature_usage`
+- `dormancy(_user_id) → (last_active_at, days_inactive, has_unfinished_song, collaborator_waiting)`
+- `storage_usage_summary(_user_id) → (used_bytes, quota_bytes, pct)` (wrap existing `storage_usage` table)
+- `song_milestones(_user_id)` + `catalog_size(_user_id)`
 
-### 1. New page `src/pages/auth/EmailCodeVerifyPage.tsx` at route `/auth/email/verify`
+All return IDs/titles/counts only — no lyric/transcript/memo/scripture/note text.
 
-Mirror `CodeVerifyPage.tsx` exactly in look and behaviour, adapted for email:
+**3. Feature-usage writes**
+- Call `mark_feature_used` from within `intake-voice-memo` (canvas_open), `promote-capture` (canvas_open), plus expose SDK helper in `cog/memory.ts` for client-side one-shots (listen_path, metronome, compare_mode, version_history_open, credits_open). Client wiring is Fable/Claude's job; backend just publishes the RPC + SDK.
 
-- Reads `cog:email-address` + `cog:email-purpose` (`"signup" | "login"`) + optionally `cog:email-password` (only for signup, held in `sessionStorage` for the length of the flow, cleared on success/back) from sessionStorage. If missing, redirect back to `/auth/email`.
-- Uses the existing `OTPInput` (6 cells, `one-time-code` autofill, paste, auto-submit) — same cells "light up" as digits fill.
-- Masked recipient line: `we sent a code to j•••@gmail.com`.
-- 30s resend countdown → calls `startEmailOtp` again; "Change email" link → back to `/auth/email`.
-- On 6 digits: for `signup` calls `completeEmailSignup(...)`; for `login` calls `verifyEmailOtp({ purpose: "login" })` then `signInWithPassword` (login path is a small follow-up, main fix is signup).
-- On success: same gold flash animation as `CodeVerifyPage` (reduced-motion aware) → `reconcileInviteToken()` → `routeAfterAuth(navigate)`.
-- Friendly error mapping via the existing `AuthError` classifier (invalid_code / expired / too_many_attempts / weak_password).
-- Clears `cog:email-password` from sessionStorage in a `finally` after success or on unmount.
+**4. Resend delivery webhook**
+New edge fn `resend-webhook` (verify_jwt=false, signature-verified via `RESEND_WEBHOOK_SECRET`):
+- `email.bounced` (hard) / `email.complained` → upsert `email_suppressions(user_id, 'all', reason=bounce|complaint, expires_at=null)` looked up by recipient email → `profiles.email`
+- `email.delivered/opened/clicked` → optionally log to `notification_queue` metadata (cheap, no PII beyond user_id)
+- Register URL in Resend dashboard (documented, not tool-invokable)
 
-### 2. Wire the route
+**5. Cron scheduling (pg_cron via `insert` tool, not migration — user-specific fn URL)**
+- `drain-notifications` every 1 min → invokes existing `notify-referral-event`
+- `email-lifecycle-evaluator` daily at 15:00 UTC
+- `weekly-rhythm-evaluator` (new light edge fn) hourly — for each user whose local time is Sunday 18:00, enqueue one of {digest | your-week | invite-nudge}
+- `retention-evaluator` (new light edge fn) daily — F1–F4 dormancy via `dormancy()` RPC
 
-`src/routes/authRoutes.tsx` — add `<Route path="/auth/email/verify" element={<EmailCodeVerifyPage />} />` next to the phone verify route, lazy-loaded.
-
-### 3. Update `EmailAuthPage.tsx` create-account submit
-
-Replace the current "flip back to Sign in and show info line" branch with:
-
+**6. Client seam — `src/integrations/cog/notifications.ts` (data only, no UI)**
 ```
-// signup
-sessionStorage.setItem("cog:email-address", email);
-sessionStorage.setItem("cog:email-purpose", "signup");
-sessionStorage.setItem("cog:email-password", password); // consumed by verify page, cleared after
-navigate("/auth/email/verify");
+getEmailPreferences() → row
+setEmailPreferences(patch) → row
+pauseAllEmail(bool) → row
+markFeatureUsed(feature) → void
 ```
+All via typed Supabase client over `email_preferences` (RLS-owner) and `mark_feature_used` RPC.
 
-Sign-in tab is unchanged (still `signInWithPassword` → route).
+**7. DNS / deliverability (documented — Lovable can't set DNS)**
+Add `docs/email/DELIVERABILITY.md` documenting:
+- SPF/DKIM/DMARC records to publish for `colorsofglory.app` (start `p=none; rua=mailto:people@colorsofglory.com`)
+- Stream isolation: keep `security@` sender on current domain; recommend moving lifecycle to `mail.colorsofglory.app` subdomain later (call out as future work, don't block)
+- Warmup ramp + <0.1% complaint monitoring via Resend dashboard
+- List-Unsubscribe passthrough (already set in headers from drain — verify)
 
-### 4. Nothing else changes
+### Deliverables
+1. `supabase/migrations/20260722010000_email_spine_extensions.sql`
+2. New edge fns: `resend-webhook`, `weekly-rhythm-evaluator`, `retention-evaluator` + `config.toml` entries (verify_jwt=false on webhook)
+3. Patch `_shared/emailGovernance.ts` `canSend()` to consult `email_preferences` + `nudge_dismissals`
+4. Patch `intake-voice-memo` + `promote-capture` to write `feature_usage`
+5. New `src/integrations/cog/notifications.ts`
+6. Cron schedule inserts via `supabase--insert` (separate step, contains project ref + anon key)
+7. `docs/email/DELIVERABILITY.md`
+8. Update `_shared/resend.ts` to pass `RESEND_WEBHOOK_SECRET` header check helper (or new `_shared/resendWebhook.ts`)
 
-- Backend, edge functions, RLS, Stripe, phone flow, forgot-password flow — all untouched.
-- No new dependencies.
-- `signUpWithPassword` in `auth.ts` stays as the single source of truth for "start signup"; the page just routes to the verify screen instead of showing a hint.
-
-## Technical notes
-
-- Password briefly sits in `sessionStorage` under `cog:email-password` so the verify page can call `completeEmailSignup`. Alternative would be passing it via `navigate(..., { state })`, which survives back-nav less predictably on iOS Safari. sessionStorage is scoped to the tab, cleared on tab close, and we wipe it in a `finally` block once the code call resolves (success or terminal error). Matches how the phone flow stashes `cog:phone-e164` / `cog:phone-display`.
-- Reuse `OTPInput`, `GoldButton`, `OnboardingShell`, `CogBrand`, `useIdlePrefetch`, `reconcileInviteToken`, `routeAfterAuth` — no new primitives.
-- Success animation: copy the exact gold-flash block from `CodeVerifyPage` so both flows feel identical.
-
-## Files touched
-
-- **new**: `src/pages/auth/EmailCodeVerifyPage.tsx`
-- **edit**: `src/routes/authRoutes.tsx` (one lazy import + one `<Route>`)
-- **edit**: `src/pages/auth/EmailAuthPage.tsx` (replace signup branch, drop the `info` banner + "flip to signin" behaviour)
+### Acceptance
+- Preference-center reads/writes flow through owner-RLS `email_preferences`
+- `canSend()` blocks on unsubscribed_all, per-category pref off, suppression row, or nudge_dismissals.suppressed_until > now
+- Evaluator RPCs return zero content strings (verified by inspecting return types — only IDs/titles/counts/bools)
+- `resend-webhook` hard-bounce test → suppression row visible; subsequent `canSend` returns false
+- Cron confirmed in `cron.job`
+- Fable/Claude handoff doc lists exactly the SDK surface + preference categories
