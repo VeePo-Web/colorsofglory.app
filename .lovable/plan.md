@@ -8,7 +8,7 @@ Evaluators like `education_candidates` check `feature_usage` to skip users who a
 
 - `supabase/functions/intake-voice-memo/index.ts` — on successful memo insert, call `mark_feature_used(user_id, 'voice_memo')`.
 - `supabase/functions/promote-capture/index.ts` — on successful promotion, call `mark_feature_used(user_id, 'canvas_promote')`.
-- `src/integrations/cog/memory.ts` — add a thin `markFeatureUsed(feature)` client helper (already exists in `notifications.ts`; re-export or call directly) and invoke on first successful save from memory-graph views.
+- `src/integrations/cog/notifications.ts` — expose `markFeatureUsed(feature)` so client memory-graph views can call it on first successful save.
 
 Writes are fire-and-forget (log-and-continue) — a failure here must never break the primary action.
 
