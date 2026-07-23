@@ -661,7 +661,11 @@ const ReviewSheet = ({
                     value={b.label}
                     aria-label="Block label"
                     onChange={(e) => updateBlock(b.id, { label: e.target.value })}
-                    className="flex-1 h-8 text-sm"
+                    // No `text-sm`: it clobbered the base's mobile 16px back to
+                    // 14px, which makes iOS Safari zoom the sheet the instant
+                    // this field is focused. The base is text-base sm:text-[14px]
+                    // (16 on phones, 14 on desktop) — exactly what we want.
+                    className="flex-1 h-8"
                     style={{ fontFamily: "var(--font-display)" }}
                   />
                   <div className="flex items-center" style={{ gap: 2 }}>
@@ -724,7 +728,10 @@ const ReviewSheet = ({
                   }}
                   placeholder="Edit this block…"
                   rows={Math.max(2, Math.min(8, b.text.split("\n").length + 1))}
-                  className="resize-none text-sm"
+                  // No `text-sm` here either — editing a block on a phone must
+                  // not zoom. The base (text-base sm:text-[14px]) keeps it 16px
+                  // on mobile, 14px on desktop.
+                  className="resize-none"
                 />
                 <div className="flex items-center gap-1 mt-1.5">
                   {audioUrl && b.end_ms > b.start_ms + 300 && (

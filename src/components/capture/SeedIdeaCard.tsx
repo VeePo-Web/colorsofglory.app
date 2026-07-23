@@ -379,6 +379,11 @@ interface SongPickerSheetProps {
  */
 const SongPickerSheet = ({ songs, busy, onPick, onStartNew, onClose }: SongPickerSheetProps) => {
   const [visible, setVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  // Always call the LATEST onClose (parent already guards it with `busy`), so
+  // Escape can never close mid-file.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const reduceMotion =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -386,6 +391,42 @@ const SongPickerSheet = ({ songs, busy, onPick, onStartNew, onClose }: SongPicke
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
+  }, []);
+
+  // Modal a11y — the same proven pattern the song-sheet dialogs use: move focus
+  // INTO the dialog on open (aria-modal hides the rest of the page from screen
+  // readers, so leaving focus on the now-hidden shelf would strand an SR user),
+  // trap Tab inside it, Escape closes, and focus returns to the trigger on close.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusTimer = window.setTimeout(() => dialogRef.current?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === dialogRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
   }, []);
 
   return (
@@ -408,15 +449,18 @@ const SongPickerSheet = ({ songs, busy, onPick, onStartNew, onClose }: SongPicke
 
       {/* Bottom sheet */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Choose a song for this idea"
+        tabIndex={-1}
         style={{
           position: "fixed",
           bottom: 0,
           left: 0,
           right: 0,
           zIndex: 800,
+          outline: "none",
           display: "flex",
           flexDirection: "column",
           maxHeight: "70dvh",

@@ -183,6 +183,9 @@ const ReviewAudioPlayer = forwardRef<ReviewAudioPlayerHandle, ReviewAudioPlayerP
           value={Math.min(current, duration || 0)}
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Seek"
+          // Without this a screen reader announces the raw seconds ("12.34");
+          // aria-valuetext makes the transport position meaningful ("0:12 of 3:45").
+          aria-valuetext={`${fmt(current)} of ${fmt(duration)}`}
           className="cog-scrub"
           // The gold-fill position rides a CSS var so the visible track can stay a
           // thin 4px line while the input itself is a tall, grabbable touch target.
