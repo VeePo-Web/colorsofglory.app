@@ -3,6 +3,7 @@ import { Heart, Sparkles } from "lucide-react";
 import type { CardReactionKind } from "@/integrations/cog/reactions";
 import type { AmenSummary } from "@/lib/canvas/collab/amens";
 import { getCreatorInitials } from "@/lib/canvas/creatorColors";
+import { useVibration } from "@/hooks/useVibration";
 
 /**
  * AmenChip — the encouragement layer's card footer (D3 fills D1's adornment
@@ -109,12 +110,15 @@ const kindBtn = (active: boolean): CSSProperties => ({
   border: active ? `1.5px solid rgba(184,149,58,0.45)` : "1.5px solid rgba(28,26,23,0.10)",
   backgroundColor: active ? GOLD_PALE : "rgba(255,255,255,0.7)",
   color: active ? GOLD : "var(--cog-warm-gray, #6B6459)",
+  // A soft, STATIC warm lift on your own affirmation — "yours" reads as gently
+  // lit, not merely tinted. Static (no pulse) → reduced-motion-safe.
+  boxShadow: active ? "0 1px 10px rgba(184,149,58,0.30)" : "none",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   gap: 6,
   cursor: "pointer",
-  transition: "background-color 150ms ease, border-color 150ms ease, transform 150ms ease",
+  transition: "background-color 150ms ease, border-color 150ms ease, box-shadow 200ms ease, transform 150ms ease",
 });
 
 export interface AmenChipProps {
@@ -125,6 +129,14 @@ export interface AmenChipProps {
 }
 
 const AmenChip = memo(function AmenChip({ summary, selected, cardTitle, onToggle }: AmenChipProps) {
+  const { vibrate } = useVibration();
+  // Giving an affirmation should be FELT — a warmer tick when you bless a card,
+  // a lighter one when you quietly withdraw. (No-op on iOS, which has no
+  // Vibration API — the amen still lands; the tap just isn't haptic there.)
+  const affirm = (kind: CardReactionKind, wasMine: boolean) => {
+    vibrate(wasMine ? 4 : 10);
+    onToggle(kind);
+  };
   const count = summary?.count ?? 0;
   if (!selected && count === 0) return null;
 
@@ -165,7 +177,7 @@ const AmenChip = memo(function AmenChip({ summary, selected, cardTitle, onToggle
           {...swallow}
           onClick={(e) => {
             e.stopPropagation();
-            onToggle("amen");
+            affirm("amen", mineAmen);
           }}
           aria-pressed={mineAmen}
           aria-label={mineAmen ? `Remove your amen from ${cardTitle}` : `Say amen to ${cardTitle}`}
@@ -188,7 +200,7 @@ const AmenChip = memo(function AmenChip({ summary, selected, cardTitle, onToggle
           {...swallow}
           onClick={(e) => {
             e.stopPropagation();
-            onToggle("heart");
+            affirm("heart", mineHeart);
           }}
           aria-pressed={mineHeart}
           aria-label={mineHeart ? `Remove your heart from ${cardTitle}` : `Send a heart to ${cardTitle}`}
@@ -201,7 +213,7 @@ const AmenChip = memo(function AmenChip({ summary, selected, cardTitle, onToggle
           {...swallow}
           onClick={(e) => {
             e.stopPropagation();
-            onToggle("keeper");
+            affirm("keeper", mineKeeper);
           }}
           aria-pressed={mineKeeper}
           aria-label={mineKeeper ? `Remove your keeper mark from ${cardTitle}` : `Mark ${cardTitle} as a keeper`}
