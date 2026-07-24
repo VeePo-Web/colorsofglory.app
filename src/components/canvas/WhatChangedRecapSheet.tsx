@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -66,12 +67,10 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
     }
   }, [phase]);
 
-  // Escape key dismisses (consistent with every other canvas sheet).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDismiss(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onDismiss]);
+  // Modal focus safety (focus-in / Tab-trap / Escape / focus-return) — the CTA
+  // still self-focuses when the digest is ready; the hook only fills the vacuum
+  // during the loading phase and adds the trap + return.
+  const dialogRef = useModalFocusTrap(onDismiss);
 
   // The gold CTA does what it says: opens the review queue when the host
   // wired one, otherwise it's an honest acknowledge.
@@ -112,11 +111,14 @@ const WhatChangedRecapSheet = ({ songId: _songId, onDismiss, items: providedItem
 
       {/* ── Sheet panel ───────────────────────────────────────────────── */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="What changed since you left"
         className="cog-recap-sheet"
+        tabIndex={-1}
         style={{
+          outline: "none",
           position: "fixed",
           left: 0,
           right: 0,

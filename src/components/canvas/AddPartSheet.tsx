@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Mic, Music, PenLine, StickyNote, X } from "lucide-react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 
 /**
  * AddPartSheet — the clean, instant way to build the song's structure.
@@ -33,17 +34,12 @@ const QUICK: Array<{ label: string; type: AddPartType; icon: typeof Mic }> = [
 
 const AddPartSheet = ({ onPick, onClose }: AddPartSheetProps) => {
   const [visible, setVisible] = useState(false);
+  const dialogRef = useModalFocusTrap(onClose);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
   }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   return (
     <>
@@ -57,11 +53,14 @@ const AddPartSheet = ({ onPick, onClose }: AddPartSheetProps) => {
         }}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Add a part to the song"
+        tabIndex={-1}
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
+          outline: "none",
           backgroundColor: "#FAFAF6",
           borderRadius: "24px 24px 0 0",
           borderTop: "1px solid rgba(0,0,0,0.08)",
