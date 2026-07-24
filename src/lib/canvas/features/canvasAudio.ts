@@ -44,6 +44,15 @@ async function resolveUrl(memoId: string): Promise<string> {
   return url;
 }
 
+/**
+ * Tapping a card's play button: if that card is the one already auditioning,
+ * stop it (a play button that can't pause is half a control); otherwise play it
+ * — which, through this singleton, silences whatever else was sounding.
+ */
+export function soloPlayAction(tappedId: string, currentSoloId: string | null): "stop" | "play" {
+  return currentSoloId === tappedId ? "stop" : "play";
+}
+
 let active: HTMLAudioElement | null = null;
 let spare: HTMLAudioElement | null = null;
 /** What the spare element is primed with (null = cold). */

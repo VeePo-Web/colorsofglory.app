@@ -7,6 +7,7 @@ import {
   BAR_WIDTH,
   BAR_GAP,
 } from "@/lib/canvas/waveformSeed";
+import CardPlayButton from "./CardPlayButton";
 import type { CardFaceProps } from "./cardFace";
 
 /**
@@ -16,7 +17,7 @@ import type { CardFaceProps } from "./cardFace";
  * and the id-seeded fake survives only for legacy rows. The "QUICK HUM" label
  * carries the creator's color and a fresh dot. Presentational only.
  */
-const HumCard = memo(({ card, tone, playing }: CardFaceProps) => {
+const HumCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
   const wave = useMemo(
     () =>
       resolveWaveformBars({
@@ -56,29 +57,33 @@ const HumCard = memo(({ card, tone, playing }: CardFaceProps) => {
         )}
       </div>
 
-      {/* Waveform — fewer, taller bars = raw idea; a hum's contour makes them
-          ride the tune. Always system gold; breathes while sounding. */}
-      <div
-        style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP + 2, height: HUM_MAX_BAR_HEIGHT, overflow: "hidden" }}
-        aria-hidden="true"
-      >
-        {wave.bars.map((bar, i) => (
-          <div
-            key={i}
-            style={{
-              width: BAR_WIDTH + 1, height: bar.height, marginTop: bar.top, borderRadius: 3,
-              backgroundColor: "var(--cog-gold, #B8953A)",
-              opacity: !bar.voiced
-                ? 0.16
-                : playing
-                  ? bar.amp * 0.45 + 0.5
-                  : bar.amp * 0.65 + 0.25,
-              flexShrink: 0,
-              transformOrigin: "bottom",
-              animation: playing ? `cog-wave-play 1.1s ease-in-out ${(i % 5) * 110}ms infinite` : "none",
-            }}
-          />
-        ))}
+      {/* Play control fused to the waveform — one tap to hear the hum. Fewer,
+          taller bars = raw idea; a hum's contour makes them ride the tune.
+          Always system gold; breathes while sounding. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {onPlay && <CardPlayButton playing={Boolean(playing)} onPlay={onPlay} />}
+        <div
+          style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP + 2, height: HUM_MAX_BAR_HEIGHT, flex: "0 1 auto", minWidth: 0, overflow: "hidden" }}
+          aria-hidden="true"
+        >
+          {wave.bars.map((bar, i) => (
+            <div
+              key={i}
+              style={{
+                width: BAR_WIDTH + 1, height: bar.height, marginTop: bar.top, borderRadius: 3,
+                backgroundColor: "var(--cog-gold, #B8953A)",
+                opacity: !bar.voiced
+                  ? 0.16
+                  : playing
+                    ? bar.amp * 0.45 + 0.5
+                    : bar.amp * 0.65 + 0.25,
+                flexShrink: 0,
+                transformOrigin: "bottom",
+                animation: playing ? `cog-wave-play 1.1s ease-in-out ${(i % 5) * 110}ms infinite` : "none",
+              }}
+            />
+          ))}
+        </div>
       </div>
     </>
   );

@@ -25,4 +25,8 @@ export interface CardFaceProps {
   selected: boolean;
   /** This card is sounding right now — waveforms breathe. */
   playing?: boolean;
+  /** Audio faces (voice/hum) only: one-tap audition. Absent → no play control
+   *  (unplayable/legacy card). Provided by the orchestrator, wired to the
+   *  shared canvasAudio voice in the host. */
+  onPlay?: () => void;
 }

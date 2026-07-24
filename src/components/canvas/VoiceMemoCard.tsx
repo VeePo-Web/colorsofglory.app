@@ -7,6 +7,7 @@ import {
   BAR_GAP,
   VOICE_BAR_COUNT,
 } from "@/lib/canvas/waveformSeed";
+import CardPlayButton from "./CardPlayButton";
 import type { CardFaceProps } from "./cardFace";
 
 /**
@@ -17,7 +18,7 @@ import type { CardFaceProps } from "./cardFace";
  * rows so a card is never blank. Duration + section as quiet metadata.
  * Playback lives in the stack sheet / Listen Path (D2). Presentational only.
  */
-const VoiceMemoCard = memo(({ card, tone, playing }: CardFaceProps) => {
+const VoiceMemoCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
   const wave = useMemo(
     () =>
       resolveWaveformBars({
@@ -49,14 +50,17 @@ const VoiceMemoCard = memo(({ card, tone, playing }: CardFaceProps) => {
         )}
       </div>
 
-      {/* Waveform — always system gold; melody bars ride the tune via
-          marginTop; while sounding, the bars breathe (GPU scaleY, staggered
-          per bar; keyframe lives in CanvasStage). */}
-      <div
-        style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP, height: MAX_BAR_HEIGHT, width: totalBarsPx, marginBottom: 6, overflow: "hidden" }}
-        aria-hidden="true"
-      >
-        {wave.bars.map((bar, i) => (
+      {/* Play control fused to the waveform (SoundCloud/BandLab) — one tap to
+          hear the take, right on the card. Waveform flexes to fill what's left;
+          melody bars ride the tune via marginTop; while sounding, the bars
+          breathe (GPU scaleY, staggered; keyframe lives in CanvasStage). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        {onPlay && <CardPlayButton playing={Boolean(playing)} onPlay={onPlay} />}
+        <div
+          style={{ display: "flex", alignItems: "flex-start", gap: BAR_GAP, height: MAX_BAR_HEIGHT, flex: 1, minWidth: 0, maxWidth: totalBarsPx, overflow: "hidden" }}
+          aria-hidden="true"
+        >
+          {wave.bars.map((bar, i) => (
           <div
             key={i}
             style={{
@@ -72,7 +76,8 @@ const VoiceMemoCard = memo(({ card, tone, playing }: CardFaceProps) => {
               animation: playing ? `cog-wave-play 1.1s ease-in-out ${(i % 5) * 110}ms infinite` : "none",
             }}
           />
-        ))}
+          ))}
+        </div>
       </div>
     </>
   );

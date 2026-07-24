@@ -140,6 +140,10 @@ import {
   useCanvasMetronome,
   stopCanvasAudio,
   applyPromoteToFinal,
+  memoIdForCard,
+  playMemoOnCanvas,
+  pauseCanvasAudio,
+  soloPlayAction,
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "@/lib/canvas/features";
@@ -1470,6 +1474,37 @@ const SongCanvasExperience = () => {
   const comparePlayingId = compare.playingId;
   const mergeSelection = merge.selection;
 
+  // ── Solo audition — tap a voice/hum card's play button to hear it right here.
+  // A voice memo you can't play is a tease. Playback rides the shared canvasAudio
+  // voice, so it silences (and is silenced by) Listen Path / Compare — one voice
+  // sounds at a time — and my never-bleed fix already stops it when recording arms.
+  const [soloPlayId, setSoloPlayId] = useState<string | null>(null);
+  const soloPlayIdRef = useRef<string | null>(null);
+  soloPlayIdRef.current = soloPlayId;
+  const handlePlayCard = useCallback((cardId: string) => {
+    const memoId = memoIdForCard(cardId);
+    if (!memoId) return; // no backing audio (local/legacy) → no-op
+    if (soloPlayAction(cardId, soloPlayIdRef.current) === "stop") {
+      pauseCanvasAudio();
+      setSoloPlayId(null);
+      return;
+    }
+    setSoloPlayId(cardId);
+    void playMemoOnCanvas(memoId, {
+      onEnded: () => setSoloPlayId((cur) => (cur === cardId ? null : cur)),
+      onError: () => setSoloPlayId((cur) => (cur === cardId ? null : cur)),
+    });
+  }, []);
+  const handlePlayCardRef = useRef(handlePlayCard);
+  handlePlayCardRef.current = handlePlayCard;
+  // A sequenced player OR an arming recording takes the voice — drop the stale
+  // solo indicator (recording's stopCanvasAudio already silenced the audio).
+  useEffect(() => {
+    if (listenPlaying || comparePlayingId || recordingFlow === "recording") setSoloPlayId(null);
+  }, [listenPlaying, comparePlayingId, recordingFlow]);
+  // Leaving the room silences the audition (canvasAudio is app-global).
+  useEffect(() => () => { stopCanvasAudio(); }, []);
+
   const interactionsById = useMemo(() => {
     const map = new Map<string, CanvasCardInteractions>();
     for (const card of boardCards) {
@@ -1504,11 +1539,17 @@ const SongCanvasExperience = () => {
         onMore: () => setMoreCardId(card.id),
         finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
         onRestore: !isViewer && card.isDimmedReference ? () => handleRestoreCard(card.id) : undefined,
-        // "Now sounding" ring: the active listen-path step while playing, or
-        // the take auditioning in compare mode.
+        // "Now sounding" ring: the active listen-path step, the compare
+        // audition, or a solo card the songwriter tapped to hear.
         playing:
           (listenPlaying && listenQueue[listenStep] === card.id) ||
-          comparePlayingId === card.id,
+          comparePlayingId === card.id ||
+          soloPlayId === card.id,
+        // One-tap audition on audio cards that have real backing audio.
+        onPlay:
+          (card.type === "voice" || card.type === "hum") && memoIdForCard(card.id)
+            ? () => handlePlayCardRef.current(card.id)
+            : undefined,
         // Weave mode: this card is the forming section (ribbon + meter), a
         // candidate (glowing lines), or a bystander (recedes, stays tappable).
         // D2 computed everything here; the card only paints. Handlers ride
@@ -1539,6 +1580,7 @@ const SongCanvasExperience = () => {
     listenStep,
     listenPlaying,
     comparePlayingId,
+    soloPlayId,
     mergeSelection,
     finalOrder,
     handleCardMove,

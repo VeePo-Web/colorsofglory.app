@@ -52,8 +52,10 @@ export interface CanvasCardInteractions {
   finalOrder?: number;
   /** Bring a dimmed "kept" reference back to life ("nothing is deleted"). */
   onRestore?: () => void;
-  /** This card is sounding right now (listen path / compare audition). */
+  /** This card is sounding right now (listen path / compare / solo audition). */
   playing?: boolean;
+  /** Audio cards only: one-tap audition play/pause (voice + hum faces). */
+  onPlay?: () => void;
 
   // ── Weave mode (D2 computes, this layer renders — docs/WEAVE-CONTRACT.md) ──
   /** This idea card's lines, scored against the forming section. */
@@ -146,6 +148,7 @@ const CanvasCard = memo(function CanvasCard({
   finalOrder,
   onRestore,
   playing = false,
+  onPlay,
   weaveLines,
   onWeaveLineTap,
   weaveTarget,
@@ -443,7 +446,7 @@ const CanvasCard = memo(function CanvasCard({
       ) : weaveLines && onWeaveLineTap ? (
         <WeaveCardFace card={card} tone={tone} lines={weaveLines} sectionName={weaveSectionName} onLineTap={onWeaveLineTap} />
       ) : (
-        <Face card={card} color={color} tone={tone} selected={selected} playing={playing} />
+        <Face card={card} color={color} tone={tone} selected={selected} playing={playing} onPlay={onPlay} />
       )}
 
       {/* Who wrote it — ONE identity signal: a color dot always paired with

@@ -24,7 +24,17 @@ const memosMock = vi.hoisted(() => {
 
 vi.mock("@/integrations/cog/memos", () => ({ getPlaybackUrl: memosMock.getPlaybackUrl }));
 
-import { playMemoOnCanvas, stopCanvasAudio, getCanvasPlayback } from "./canvasAudio";
+import { playMemoOnCanvas, stopCanvasAudio, getCanvasPlayback, soloPlayAction } from "./canvasAudio";
+
+describe("soloPlayAction — the card play button toggles the right way", () => {
+  it("plays a different card", () => {
+    expect(soloPlayAction("b", "a")).toBe("play");
+    expect(soloPlayAction("a", null)).toBe("play");
+  });
+  it("stops the card that's already auditioning (play must be able to pause)", () => {
+    expect(soloPlayAction("a", "a")).toBe("stop");
+  });
+});
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
