@@ -30,6 +30,7 @@ import { setNavDirection } from "@/lib/nav/navDirection";
 import CrownMark from "@/components/cog/CrownMark";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
+import { isBottomWorkflowActive } from "@/lib/canvas/bottomSurface";
 import SongRoomSaveToast, { type SongRoomSaveMoment } from "@/components/cog/SongRoomSaveToast";
 import { useSongTitle } from "@/lib/songContext";
 import type { ViewportCtx } from "@/components/canvas/CanvasViewport";
@@ -2169,6 +2170,17 @@ const SongCanvasExperience = () => {
     [handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
   );
 
+  // One bottom action surface at a time: the creation dock steps aside whenever
+  // a focused workflow owns the bottom (weave / merge / arrange / an expanded
+  // listen path), so the songwriter never sees two competing action bars.
+  const bottomWorkflowActive = isBottomWorkflowActive({
+    weaveActive: weave.active,
+    arranging: arrangement.arranging,
+    mergeSelectionCount: merge.selection.length,
+    listenPathExpanded: pathExpanded,
+    listenPathQueueCount: listenPath.queue.length,
+  });
+
   return (
     <div
       className="relative flex flex-col"
@@ -2380,7 +2392,7 @@ const SongCanvasExperience = () => {
                   onChords={() => addCard("chord")}
                 />
               )}
-              <CreativeActionDock actions={dockActions} />
+              {!bottomWorkflowActive && <CreativeActionDock actions={dockActions} />}
               {SHOW_LEGACY_CANVAS_FABS && (
                 <>
               {/* Practice FAB */}
