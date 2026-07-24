@@ -139,6 +139,7 @@ import {
   useFinalArrangement,
   useCanvasMetronome,
   stopCanvasAudio,
+  applyPromoteToFinal,
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "@/lib/canvas/features";
@@ -654,15 +655,9 @@ const SongCanvasExperience = () => {
         );
       },
       promoteToFinal: (sourceId, finalCopy) => {
-        setCards((prev) =>
-          prev
-            .map((c) =>
-              c.id === sourceId
-                ? { ...c, isDimmedReference: true, dimReason: "moved_to_final" as const }
-                : c,
-            )
-            .concat(finalCopy),
-        );
+        // Idempotent by finalCopy.id — a double-tap can't plant a duplicate
+        // Final card (see applyPromoteToFinal).
+        setCards((prev) => applyPromoteToFinal(prev, sourceId, finalCopy));
         setSelectedId(null);
         setIsDragOver(false);
         // Undo lives in the toast (useFinalArrangement) — the pill only states

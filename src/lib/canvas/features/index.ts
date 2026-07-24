@@ -11,6 +11,7 @@ export { useCanvasMetronome, type CanvasMetronomeApi } from "./useCanvasMetronom
 export { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 export {
   newFeatureCardId,
+  applyPromoteToFinal,
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "./mutations";

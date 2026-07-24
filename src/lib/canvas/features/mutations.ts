@@ -41,3 +41,33 @@ export function newFeatureCardId(prefix: string): string {
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   return `${prefix}-${uuid}`;
 }
+
+/**
+ * Move-to-Final as a pure, idempotent card-array transform: dim the source
+ * (never delete) and append the final-tree copy.
+ *
+ * Idempotent BY THE COPY'S ID. "Add to Final" uses a deterministic
+ * `${sourceId}-final` id, and the moveToFinal callback closes over `cards`; a
+ * fast double-tap (common on a laggy phone) fires the SECOND tap before the
+ * first dim has flushed, so the stale closure passes its guard again. Without
+ * this check the copy would be `.concat`ed twice — two cards sharing one id,
+ * a React key collision and a phantom duplicate in the arrangement. If the
+ * copy already exists we return the SAME array (no dim, no re-render).
+ *
+ * Shared by the host's mutation impl and any future useCanvasStore so the
+ * guarantee can't diverge between them.
+ */
+export function applyPromoteToFinal(
+  cards: CanvasBoardCard[],
+  sourceId: string,
+  finalCopy: CanvasBoardCard,
+): CanvasBoardCard[] {
+  if (cards.some((c) => c.id === finalCopy.id)) return cards;
+  return cards
+    .map((c) =>
+      c.id === sourceId
+        ? { ...c, isDimmedReference: true, dimReason: "moved_to_final" as const }
+        : c,
+    )
+    .concat(finalCopy);
+}
