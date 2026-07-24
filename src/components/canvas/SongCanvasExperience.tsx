@@ -210,7 +210,6 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
     return {};
   }
 };
-const SHOW_LEGACY_CANVAS_FABS = false;
 
 // Warm amber pending-review dot — attention, never alarm. ONE element
 // descriptor shared by every card (elements are immutable; identity-stable
@@ -2393,77 +2392,6 @@ const SongCanvasExperience = () => {
                 />
               )}
               {!bottomWorkflowActive && <CreativeActionDock actions={dockActions} />}
-              {SHOW_LEGACY_CANVAS_FABS && (
-                <>
-              {/* Practice FAB */}
-              <button
-                type="button"
-                onClick={() => { void handleLaunchPractice(); }}
-                disabled={isPracticeLaunching}
-                className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
-                style={{
-                  left: 20, bottom: 80, width: 140, height: 52, zIndex: 40,
-                  backgroundColor: isPracticeLaunching ? "rgba(181,147,90,0.55)" : "rgba(181,147,90,0.14)",
-                  border: "1px solid rgba(181,147,90,0.40)",
-                  color: "#B5935A",
-                  boxShadow: "none",
-                  fontFamily: "var(--font-body)",
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-                aria-label="Practice this song"
-              >
-                <BookOpen size={18} strokeWidth={2} />
-                <span>{isPracticeLaunching ? "Loading…" : "Practice"}</span>
-              </button>
-
-              {/* Mic FAB — record voice memo */}
-              <button
-                type="button"
-                onClick={() => { void handleStartRecording(); }}
-                disabled={isViewer || recordingFlow !== "idle"}
-                className="absolute flex items-center justify-center gap-2 rounded-2xl transition-all duration-150 active:scale-95"
-                style={{
-                  right: 168, bottom: 80, width: 140, height: 52, zIndex: 40,
-                  backgroundColor: recordingFlow === "recording" ? "var(--cog-charcoal)" : "#FFFFFF",
-                  border: recordingFlow === "recording" ? "none" : "1px solid rgba(181,147,90,0.28)",
-                  color: recordingFlow === "recording" ? "#FFFFFF" : "var(--cog-charcoal)",
-                  boxShadow: recordingFlow === "recording"
-                    ? "0 0 0 6px var(--cog-gold-glow), 0 4px 16px rgba(28,26,23,0.30)"
-                    : "0 8px 24px rgba(28,26,23,0.12)",
-                  animation: recordingFlow === "recording" ? "mic-pulse 1.4s ease-in-out infinite" : "none",
-                  fontFamily: "var(--font-body)",
-                  fontSize: 13,
-                  fontWeight: 800,
-                }}
-                aria-label={recordingFlow === "recording" ? "Recording..." : "Record idea / Record memo"}
-                aria-pressed={recordingFlow === "recording"}
-              >
-                <Mic size={20} strokeWidth={2} />
-                <span>{recordingFlow === "recording" ? "Recording..." : "Record memo"}</span>
-              </button>
-
-              {/* Quick-add FAB */}
-              <button
-                type="button"
-                onClick={() => addCard("note")}
-                disabled={isViewer}
-                className="absolute flex items-center justify-center gap-2 rounded-2xl text-white transition-all duration-150 active:scale-95"
-                style={{
-                  right: 20, bottom: 80, width: 140, height: 52, zIndex: 40,
-                  backgroundColor: "#B5935A",
-                  boxShadow: "0 4px 16px rgba(181,147,90,0.45)",
-                  fontFamily: "var(--font-body)",
-                  fontSize: 13,
-                  fontWeight: 800,
-                }}
-                aria-label="Add idea"
-              >
-                <Plus size={22} strokeWidth={2.5} />
-                <span>Add idea</span>
-              </button>
-                </>
-              )}
             </>
           }
         />
