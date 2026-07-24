@@ -83,11 +83,11 @@ const SongRootCard = ({ title }: SongRootCardProps) => (
     </div>
     <p
       style={{
-        margin: "0 0 6px",
+        margin: "0 0 5px",
         fontFamily: "var(--font-display)",
-        fontSize: 25,
+        fontSize: 22,
         fontWeight: 700,
-        lineHeight: 1.08,
+        lineHeight: 1.1,
         color: "#1A1A1A",
       }}
     >
@@ -98,11 +98,11 @@ const SongRootCard = ({ title }: SongRootCardProps) => (
         margin: 0,
         fontFamily: "var(--font-body)",
         fontSize: 13,
-        lineHeight: 1.5,
+        lineHeight: 1.45,
         color: "#6B6459",
       }}
     >
-      Start building the song here. Add a lyric, voice memo, chord idea, story note, or scripture note.
+      Start the song here — add your first idea.
     </p>
   </section>
 );

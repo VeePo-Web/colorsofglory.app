@@ -34,7 +34,7 @@ describe("Feature 04 song whiteboard canvas", () => {
     renderCanvas();
 
     expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByText(/start building the song here/i)).toBeInTheDocument();
+    expect(screen.getByText(/start the song here/i)).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeEnabled();
     expect(lastButton(/record idea|record memo/i)).toBeEnabled();
     // The pill opens on a neutral truth — "Saved" would be a false claim on an

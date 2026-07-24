@@ -89,10 +89,14 @@ export const clampToBoard = (x: number, y: number, type: CanvasBoardCardType) =>
 
 // ─── Root song card box ────────────────────────────────────────────────────
 
-/** The root song card's box — SongRootCard renders it, connectors branch from it. */
+/** The root song card's box — SongRootCard renders it, connectors branch from it.
+ *  Width sits just above a normal idea card (208) so it reads as the anchor of
+ *  the room without dominating a 390px phone — at 420 it was wider than the
+ *  screen and swallowed the whole first view of a new song. Connectors branch
+ *  from this exact box, so they follow the narrower width in lockstep. */
 export const ROOT_LEFT = 80;
 export const ROOT_TOP = 48;
-export const ROOT_WIDTH = 420;
+export const ROOT_WIDTH = 260;
 export const ROOT_HEIGHT = 132;
 
 // ─── Connector anchor points ───────────────────────────────────────────────
