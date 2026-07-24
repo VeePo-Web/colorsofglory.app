@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import { BookOpen, X } from "lucide-react";
 import ScripturePicker from "@/components/capture/ScripturePicker";
 
@@ -75,14 +76,11 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
     if (changed) onSave(buildDraft());
     onClose();
   };
-  const dismissRef = useRef(dismiss);
-  dismissRef.current = dismiss;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismissRef.current(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // Modal focus safety — the title still autofocuses for typing; the hook fills
+  // the screen-reader vacuum before that lands, traps Tab inside, returns focus
+  // to the card on close, and routes Escape through `dismiss` so a stray Escape
+  // SAVES the draft (never discards a just-composed lyric).
+  const dialogRef = useModalFocusTrap(dismiss);
 
   const fieldStyle: React.CSSProperties = {
     width: "100%", borderRadius: 12, padding: "12px 14px",
@@ -104,11 +102,14 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
         aria-hidden="true"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Edit idea"
+        tabIndex={-1}
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
+          outline: "none",
           backgroundColor: "#FAFAF6",
           borderRadius: "24px 24px 0 0",
           borderTop: "1px solid rgba(0,0,0,0.08)",
