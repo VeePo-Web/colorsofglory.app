@@ -138,6 +138,7 @@ import {
   useMergeSplice,
   useFinalArrangement,
   useCanvasMetronome,
+  stopCanvasAudio,
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "@/lib/canvas/features";
@@ -1068,10 +1069,14 @@ const SongCanvasExperience = () => {
     takeStartInFlightRef.current = true;
     const seq = ++takeSeqRef.current;
     try {
-      // Never-bleed invariant: the speaker click must not bake into the take.
+      // Never-bleed invariant: nothing on the speaker may bake into the take.
       // The beat can be restarted after the take; losing a click is recoverable,
-      // a ruined recording is not.
+      // a ruined recording is not. The metronome is one source; the shared canvas
+      // voice (Listen Path / Compare auditioning a take aloud) is the other —
+      // silence BOTH structurally at the record choke point, so the guarantee
+      // never depends on which bottom bar happens to be visible.
       if (metronome.running) metronome.stop();
+      stopCanvasAudio();
       recordingParentIdRef.current = parentId ?? null;
       setRecordingSection(parentId ? "Layer" : "Raw idea");
       setRecordingNote("");
