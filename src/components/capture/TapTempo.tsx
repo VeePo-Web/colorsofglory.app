@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { Hand } from "lucide-react";
 import { useVibration } from "@/hooks/useVibration";
 
@@ -17,11 +17,15 @@ const MAX_BPM = 300;
  * Tap-tempo — the songwriter taps in time and we read the BPM from the gaps.
  * No typing. Resets after a pause so a fresh tempo isn't averaged with the old one.
  * Pure UI; calls `onBpm` with a clamped, rounded value. ≥44px, haptic on tap.
+ *
+ * The label is CONSTANT ("Tap tempo") — the button's width never changes and it
+ * never moves under the thumb between taps. The resulting BPM is shown (and
+ * fine-tuned) by the ± stepper beside it, which is the single source of the
+ * number, so it can never drift out of sync with a stepper nudge.
  */
 const TapTempo = ({ onBpm, className }: TapTempoProps) => {
   const { vibrate } = useVibration();
   const tapsRef = useRef<number[]>([]);
-  const [bpm, setBpm] = useState<number | null>(null);
 
   const handleTap = useCallback(() => {
     const now = performance.now();
@@ -38,9 +42,7 @@ const TapTempo = ({ onBpm, className }: TapTempoProps) => {
       for (let i = 1; i < taps.length; i += 1) sum += taps[i] - taps[i - 1];
       const avgMs = sum / (taps.length - 1);
       const computed = Math.round(60000 / avgMs);
-      const clamped = Math.min(MAX_BPM, Math.max(MIN_BPM, computed));
-      setBpm(clamped);
-      onBpm(clamped);
+      onBpm(Math.min(MAX_BPM, Math.max(MIN_BPM, computed)));
     }
   }, [onBpm, vibrate]);
 
@@ -48,7 +50,7 @@ const TapTempo = ({ onBpm, className }: TapTempoProps) => {
     <button
       type="button"
       onClick={handleTap}
-      aria-label={bpm ? `Tap tempo, currently ${bpm} BPM` : "Tap tempo to set BPM"}
+      aria-label="Tap in time to set the beat"
       className={`flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${className ?? ""}`}
       style={{
         minHeight: 44,
@@ -64,7 +66,7 @@ const TapTempo = ({ onBpm, className }: TapTempoProps) => {
       }}
     >
       <Hand size={14} strokeWidth={2} />
-      <span>{bpm ? `${bpm} BPM` : "Tap tempo"}</span>
+      <span>Tap tempo</span>
     </button>
   );
 };

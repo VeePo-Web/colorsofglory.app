@@ -46,43 +46,48 @@ const MetronomeBar = ({
     >
       <TapTempo onBpm={onBpmChange} />
 
-      {/* ± nudge — visible only once a tempo exists, so the bar stays minimal. */}
-      {bpm != null && (
-        <div
-          className="flex items-center"
-          style={{
-            gap: 2,
-            borderRadius: 9999,
-            background: "rgba(184,149,58,0.10)",
-            border: "1px solid rgba(184,149,58,0.25)",
-          }}
+      {/* ± nudge — the BPM readout + fine-tune. Its space is RESERVED even
+          before a tempo exists (visibility, not conditional render), so tapping
+          Tap tempo can never re-center the row and slide the button out from
+          under the thumb mid-rhythm. It's the single source of the number. */}
+      <div
+        className="flex items-center"
+        aria-hidden={bpm == null}
+        style={{
+          gap: 2,
+          borderRadius: 9999,
+          background: "rgba(184,149,58,0.10)",
+          border: "1px solid rgba(184,149,58,0.25)",
+          visibility: bpm != null ? "visible" : "hidden",
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Decrease BPM"
+          tabIndex={bpm == null ? -1 : 0}
+          onClick={() => nudge(-1)}
+          className="flex items-center justify-center transition-transform active:scale-90"
+          style={{ width: 44, height: 44, color: "var(--cog-warm-gray)", background: "transparent", border: "none", cursor: "pointer" }}
         >
-          <button
-            type="button"
-            aria-label="Decrease BPM"
-            onClick={() => nudge(-1)}
-            className="flex items-center justify-center transition-transform active:scale-90"
-            style={{ width: 44, height: 44, color: "var(--cog-warm-gray)", background: "transparent", border: "none", cursor: "pointer" }}
-          >
-            <Minus size={15} />
-          </button>
-          <span
-            aria-live="polite"
-            style={{ minWidth: 48, textAlign: "center", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, color: "var(--cog-charcoal)" }}
-          >
-            {bpm}
-          </span>
-          <button
-            type="button"
-            aria-label="Increase BPM"
-            onClick={() => nudge(1)}
-            className="flex items-center justify-center transition-transform active:scale-90"
-            style={{ width: 44, height: 44, color: "var(--cog-warm-gray)", background: "transparent", border: "none", cursor: "pointer" }}
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-      )}
+          <Minus size={15} />
+        </button>
+        <span
+          aria-live="polite"
+          style={{ minWidth: 46, textAlign: "center", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, color: "var(--cog-charcoal)" }}
+        >
+          {bpm ?? ""}
+        </span>
+        <button
+          type="button"
+          aria-label="Increase BPM"
+          tabIndex={bpm == null ? -1 : 0}
+          onClick={() => nudge(1)}
+          className="flex items-center justify-center transition-transform active:scale-90"
+          style={{ width: 44, height: 44, color: "var(--cog-warm-gray)", background: "transparent", border: "none", cursor: "pointer" }}
+        >
+          <Plus size={15} />
+        </button>
+      </div>
 
       <button
         type="button"
@@ -92,6 +97,9 @@ const MetronomeBar = ({
         onClick={() => { vibrate(5); onClickToggle(!clickOn); }}
         className="flex items-center justify-center gap-1.5 transition-transform active:scale-95"
         style={{
+          // Width fits the longer "Count-in on" label so toggling never resizes
+          // the button and nudges the row — the tempo controls stay put.
+          minWidth: 112,
           minHeight: 44,
           padding: "0 14px",
           borderRadius: 9999,
