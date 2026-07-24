@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { newFeatureCardId, type CanvasFeatureMutations } from "./mutations";
@@ -28,6 +28,12 @@ interface UseMergeSpliceArgs {
 
 export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMergeSpliceArgs): MergeSpliceApi {
   const [selection, setSelection] = useState<string[]>([]);
+  // A double-tap on "Create draft" fires the 2nd press before setSelection([])
+  // re-renders executeMerge, so the stale closure still sees two selected cards
+  // and would persist a SECOND merged draft (fresh id, no key collision but a
+  // real duplicate on the server). This latch stops the re-entry; it releases
+  // when the selection clears (a fresh 2-card selection can merge again).
+  const executeInFlightRef = useRef(false);
 
   const toggleSelect = useCallback((id: string) => {
     setSelection((prev) => {
@@ -48,11 +54,13 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
   }, []);
 
   const executeMerge = useCallback(() => {
-    if (isViewer || selection.length !== 2) return;
+    if (isViewer || selection.length !== 2 || executeInFlightRef.current) return;
     const [idA, idB] = selection;
     const cardA = cards.find((c) => c.id === idA);
     const cardB = cards.find((c) => c.id === idB);
     if (!cardA || !cardB) return;
+    // Latch AFTER the early returns so a not-found merge can't wedge it shut.
+    executeInFlightRef.current = true;
 
     const contributors =
       cardA.contributor === cardB.contributor
@@ -85,6 +93,12 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
       },
     });
   }, [isViewer, selection, cards, mutations, onMoment]);
+
+  // Release the latch once the merge's setSelection([]) lands (or the selection
+  // otherwise drops below two) — the next real 2-card selection can merge again.
+  useEffect(() => {
+    if (selection.length !== 2) executeInFlightRef.current = false;
+  }, [selection.length]);
 
   return { selection, toggleSelect, removeFromSelection, clearSelection, swapSelection, executeMerge };
 }
