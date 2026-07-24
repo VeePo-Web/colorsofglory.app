@@ -1,6 +1,34 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { SWIPE, decideSwipe } from "./swipeDecision";
 
+/**
+ * Should a touch that started on `target` be left alone by the page-swipe
+ * gesture? True for: horizontal drag controls (an `<input type="range">` or any
+ * `role="slider"` — e.g. the Pad volume + the audio scrubber, whose whole job
+ * is a left/right drag), anything opted out with `data-no-swipe-nav`, and any
+ * real horizontal scroller. Walks up to (but not including) `container`.
+ *
+ * Pure + exported so the slider-vs-swipe rule is unit-tested without a gesture.
+ */
+export function isSwipeOptOut(target: EventTarget | null, container: Element): boolean {
+  let node: Element | null = target instanceof Element ? target : null;
+  while (node && node !== container) {
+    // A range slider / ARIA slider IS a horizontal drag — the page must never
+    // steal it (dragging the Pad volume must not page over to Songs/Circle).
+    if (node instanceof HTMLInputElement && node.type === "range") return true;
+    if (node.getAttribute("role") === "slider") return true;
+    if (node instanceof HTMLElement) {
+      if (node.dataset.noSwipeNav !== undefined) return true;
+      const { overflowX } = getComputedStyle(node);
+      if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth) {
+        return true;
+      }
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
 interface SwipeNavOptions {
   /** Finger moved right (revealing the surface to the LEFT). */
   onSwipeRight?: () => void;
@@ -67,21 +95,6 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
     const now = () =>
       (typeof performance !== "undefined" && performance.now) ? performance.now() : new Date().getTime();
 
-    const insideOptOut = (target: EventTarget | null): boolean => {
-      let node = target instanceof Element ? target : null;
-      while (node && node !== el) {
-        if (node instanceof HTMLElement) {
-          if (node.dataset.noSwipeNav !== undefined) return true;
-          const { overflowX } = getComputedStyle(node);
-          if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth) {
-            return true;
-          }
-        }
-        node = node.parentElement;
-      }
-      return false;
-    };
-
     const dampen = (dx: number): number => {
       // Full travel only toward a real destination; heavy resistance otherwise.
       if (dx > 0) return cbRef.current.onSwipeRight ? dx : dx * RESIST;
@@ -146,7 +159,7 @@ export function useSwipeNav(ref: RefObject<HTMLElement>, opts: SwipeNavOptions):
       const t = e.touches[0];
       const vw = window.innerWidth;
       if (t.clientX < EDGE_GUARD_PX || t.clientX > vw - EDGE_GUARD_PX) { tracking = false; return; }
-      if (insideOptOut(e.target)) { tracking = false; return; }
+      if (isSwipeOptOut(e.target, el)) { tracking = false; return; }
       startX = t.clientX;
       startY = t.clientY;
       tracking = true;

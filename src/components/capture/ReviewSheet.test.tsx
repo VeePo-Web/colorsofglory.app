@@ -248,4 +248,45 @@ describe("ReviewSheet — on-device structure fallback (F12)", () => {
       expect(btn.className).toContain("min-h-[44px]");
     }
   });
+
+  // The post-capture pipeline: add chords right after (then lyrics, etc.), or
+  // skip. Adding a part appends an editable block of that kind; an empty one is
+  // dropped on save so it never forces structure onto the take.
+  it("adds a chords part on tap and commits only the parts the writer fills", async () => {
+    const onCommitted = vi.fn();
+    render(
+      <MemoryRouter>
+        <ReviewSheet
+          open
+          takeId="take-1"
+          songId="song-1"
+          songTitle="Grace"
+          storagePath="takes/take-1.webm"
+          durationMs={4200}
+          pendingBlocks={[]}
+          liveBlocks={liveBlocks}
+          onClose={vi.fn()}
+          onCommitted={onCommitted}
+        />
+      </MemoryRouter>,
+    );
+    await screen.findByDisplayValue("Chorus");
+
+    const before = screen.getAllByPlaceholderText("Edit this block…").length;
+    fireEvent.click(screen.getByRole("button", { name: /add a chords part/i }));
+    // A new editable block appeared (one more block textarea than before).
+    await waitFor(() =>
+      expect(screen.getAllByPlaceholderText("Edit this block…").length).toBe(before + 1),
+    );
+
+    // Fill the new part, then save. The empty-by-default part would have been
+    // dropped; a filled one commits as a Chords block.
+    const textareas = screen.getAllByPlaceholderText("Edit this block…");
+    fireEvent.change(textareas[textareas.length - 1], { target: { value: "G  D  Em  C" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add to song" }));
+
+    await waitFor(() => expect(commitTakeToCanvas).toHaveBeenCalledTimes(1));
+    const payload = (commitTakeToCanvas as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.blocks.some((b: { kind: string; text: string }) => b.kind === "chords" && b.text === "G  D  Em  C")).toBe(true);
+  });
 });

@@ -280,6 +280,11 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
               value={volume}
               onChange={(e) => changeVolume(Number(e.target.value))}
               aria-label="Pad volume"
+              // Dragging the volume is a left/right gesture — it must never be
+              // hijacked by the page-swipe nav (Songs ← Capture → Circle).
+              // useSwipeNav now opts out range inputs by type; this is belt-and-
+              // suspenders and documents the intent at the control.
+              data-no-swipe-nav
               style={{ width: 90, accentColor: "var(--cog-gold)" }}
             />
           </div>

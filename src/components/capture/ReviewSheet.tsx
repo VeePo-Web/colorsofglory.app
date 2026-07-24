@@ -77,6 +77,18 @@ interface ReviewSheetProps {
   onCommitted?: (info: { songId: string; songTitle?: string; blockCount: number }) => void;
 }
 
+// The five "parts" a writer can add to a take in Review — the SAME vocabulary
+// as the capture rail (Lyrics / Chords / Section / Scripture / Idea), so the
+// post-capture pipeline reads as "keep shaping it": add chords right after,
+// then lyrics, in any order — or skip and just save.
+const ADD_KINDS: Array<{ kind: EditableBlock["kind"]; label: string }> = [
+  { kind: "lyrics", label: "Lyrics" },
+  { kind: "chords", label: "Chords" },
+  { kind: "section", label: "Section" },
+  { kind: "scripture", label: "Scripture" },
+  { kind: "idea", label: "Idea" },
+];
+
 const KIND_LABELS: Record<EditableBlock["kind"], string> = {
   section: "Section",
   lyrics: "Lyrics",
@@ -159,6 +171,7 @@ const ReviewSheet = ({
   const [playingClipId, setPlayingClipId] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const playerRef = useRef<ReviewAudioPlayerHandle | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   // The server transcript is authoritative — but never over the user's hands.
   // Once they touch a block, the AI result must not stomp their edits.
   const dirtyRef = useRef(false);
@@ -307,6 +320,42 @@ const ReviewSheet = ({
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
 
+  /**
+   * Add a fresh, empty part (the "keep shaping it" pipeline) — a new block of
+   * the chosen kind, ready to type. Empty parts are dropped on commit (the same
+   * rule the manual-fallback block already follows), so adding one and skipping
+   * it never creates a stray card. Marks the edit dirty so a late transcript
+   * can't stomp it, and scrolls the new part into view.
+   */
+  const addBlock = (kind: EditableBlock["kind"]) => {
+    dirtyRef.current = true;
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: makeBlockId(),
+        kind,
+        section_kind: kind === "section" ? "verse" : null,
+        label: KIND_LABELS[kind],
+        text: "",
+        start_ms: 0,
+        end_ms: 0,
+      },
+    ]);
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => {
+      const pane = scrollRef.current;
+      // scrollTo is absent in some environments (older webviews, jsdom) — the
+      // scroll is a courtesy, never let it throw.
+      try {
+        pane?.scrollTo({ top: pane.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+      } catch {
+        /* no smooth scroll here — the new part is still appended and editable */
+      }
+    });
+  };
+
   const moveBlock = (id: string, dir: -1 | 1) => {
     dirtyRef.current = true;
     setBlocks((prev) => {
@@ -422,7 +471,7 @@ const ReviewSheet = ({
     if (!takeId || !songId) return;
     const usable = blocks.filter((b) => b.text.trim().length > 0 || b.kind === "section");
     if (usable.length === 0) {
-      toast.message("Nothing to save yet", { description: "Add a block or wait for the transcript." });
+      toast.message("Nothing to save yet", { description: "Add a part below, or wait for the transcript." });
       return;
     }
     setCommitting(true);
@@ -513,7 +562,7 @@ const ReviewSheet = ({
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-3" style={{ scrollbarGutter: "stable" }}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-3" style={{ scrollbarGutter: "stable" }}>
           {audioUrl && (
             <ReviewAudioPlayer
               ref={playerRef}
@@ -811,6 +860,37 @@ const ReviewSheet = ({
               </article>
             ))}
           </div>
+
+          {/* Keep shaping it — add chords right after, then lyrics, in any
+              order, or skip and just save. Same five parts as the capture rail;
+              an empty one is dropped on save, so this never forces structure. */}
+          {status !== "loading" && (
+            <div className="mt-4 pt-3" style={{ borderTop: "1px dashed rgba(184,149,58,0.30)" }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: "var(--cog-warm-gray)" }}>
+                Add a part
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ADD_KINDS.map(({ kind, label }) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => addBlock(kind)}
+                    aria-label={`Add a ${label.toLowerCase()} part`}
+                    className="inline-flex items-center rounded-full text-sm font-semibold transition-transform active:scale-95"
+                    style={{
+                      minHeight: 44,
+                      padding: "0 14px",
+                      background: "rgba(184,149,58,0.10)",
+                      color: "var(--cog-gold)",
+                      border: "1px solid rgba(184,149,58,0.35)",
+                    }}
+                  >
+                    + {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div
