@@ -74,7 +74,12 @@ const ListenPathBar = ({
         style={{
           position: "fixed",
           left: 16,
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)",
+          // Sit ABOVE the centered creation dock (bottom +88, ~56px tall), not
+          // in its band — at +84 this left pill painted over the dock's leftmost
+          // button (Practice), since it's z-520 vs the dock's z-42. +148 matches
+          // the Final-arrangement launcher so both side pills form a clean row
+          // above the dock instead of occluding it.
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 148px)",
           zIndex: 520,
           display: "flex",
           alignItems: "center",
