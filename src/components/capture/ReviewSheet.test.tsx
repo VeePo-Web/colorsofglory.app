@@ -231,4 +231,21 @@ describe("ReviewSheet — on-device structure fallback (F12)", () => {
     expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();
     expect(screen.queryByDisplayValue("Bridge")).toBeNull();
   });
+
+  // jsdom can't measure layout, so this locks the CLASS CONTRACT that yields the
+  // ≥44px touch target — a regression to `p-1.5` (~26px) would fail here.
+  it("gives every block control a 44px touch target", async () => {
+    renderWithLive();
+    await screen.findByDisplayValue("Chorus");
+    for (const name of [
+      "Move block up",
+      "Move block down",
+      "Delete block",
+      "Split block at cursor",
+    ]) {
+      const btn = screen.getAllByRole("button", { name })[0];
+      expect(btn.className).toContain("min-w-[44px]");
+      expect(btn.className).toContain("min-h-[44px]");
+    }
+  });
 });

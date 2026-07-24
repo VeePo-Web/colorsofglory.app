@@ -638,7 +638,10 @@ const ReviewSheet = ({
                   boxShadow: "0 2px 8px rgba(28,26,23,0.04)",
                 }}
               >
-                <div className="flex items-center gap-2 mb-2">
+                {/* flex-wrap: with 44px touch targets a dense row (type +
+                    label + reorder cluster) wraps calmly at 390px instead of
+                    clipping a control off-screen. */}
+                <div className="flex flex-wrap items-center gap-2 mb-2">
                   <select
                     value={b.kind}
                     aria-label="Block type"
@@ -665,7 +668,7 @@ const ReviewSheet = ({
                     // 14px, which makes iOS Safari zoom the sheet the instant
                     // this field is focused. The base is text-base sm:text-[14px]
                     // (16 on phones, 14 on desktop) — exactly what we want.
-                    className="flex-1 h-8"
+                    className="flex-1 min-w-[96px] h-8"
                     style={{ fontFamily: "var(--font-display)" }}
                   />
                   <div className="flex items-center" style={{ gap: 2 }}>
@@ -674,7 +677,7 @@ const ReviewSheet = ({
                       aria-label="Move block up"
                       disabled={idx === 0}
                       onClick={() => moveBlock(b.id, -1)}
-                      className="p-1.5 rounded-full transition-colors"
+                      className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full transition-colors"
                       style={{ color: idx === 0 ? "var(--cog-muted)" : "var(--cog-warm-gray)", opacity: idx === 0 ? 0.4 : 1 }}
                     >
                       <ChevronUp size={14} />
@@ -684,7 +687,7 @@ const ReviewSheet = ({
                       aria-label="Move block down"
                       disabled={idx === blocks.length - 1}
                       onClick={() => moveBlock(b.id, 1)}
-                      className="p-1.5 rounded-full transition-colors"
+                      className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full transition-colors"
                       style={{
                         color: idx === blocks.length - 1 ? "var(--cog-muted)" : "var(--cog-warm-gray)",
                         opacity: idx === blocks.length - 1 ? 0.4 : 1,
@@ -697,7 +700,7 @@ const ReviewSheet = ({
                         type="button"
                         aria-label="Merge into previous block"
                         onClick={() => mergeUp(b.id)}
-                        className="p-1.5 rounded-full transition-colors"
+                        className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full transition-colors"
                         style={{ color: "var(--cog-warm-gray)" }}
                       >
                         <Merge size={14} />
@@ -707,7 +710,7 @@ const ReviewSheet = ({
                     type="button"
                     aria-label="Delete block"
                     onClick={() => deleteBlock(b.id)}
-                    className="p-2 rounded-full transition-colors"
+                    className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full transition-colors"
                     style={{ color: "var(--cog-muted)" }}
                     >
                       <Trash2 size={14} />
@@ -733,7 +736,7 @@ const ReviewSheet = ({
                   // on mobile, 14px on desktop.
                   className="resize-none"
                 />
-                <div className="flex items-center gap-1 mt-1.5">
+                <div className="flex flex-wrap items-center gap-1 mt-1.5">
                   {audioUrl && b.end_ms > b.start_ms + 300 && (
                     <button
                       type="button"
@@ -772,7 +775,7 @@ const ReviewSheet = ({
                     type="button"
                     aria-label="Split block at cursor"
                     onClick={() => splitBlock(b.id)}
-                    className="p-1.5 rounded-full"
+                    className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full"
                     style={{ color: "var(--cog-warm-gray)" }}
                   >
                     <Scissors size={13} />
@@ -782,7 +785,7 @@ const ReviewSheet = ({
                       type="button"
                       aria-label="Send this line to the previous block"
                       onClick={() => sendLine(b.id, -1)}
-                      className="p-1.5 rounded-full"
+                      className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full"
                       style={{ color: "var(--cog-warm-gray)" }}
                     >
                       <CornerLeftUp size={13} />
@@ -793,7 +796,7 @@ const ReviewSheet = ({
                       type="button"
                       aria-label="Send this line to the next block"
                       onClick={() => sendLine(b.id, 1)}
-                      className="p-1.5 rounded-full"
+                      className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full"
                       style={{ color: "var(--cog-warm-gray)" }}
                     >
                       <CornerRightDown size={13} />
