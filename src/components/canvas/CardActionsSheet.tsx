@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 export interface CardAction {
@@ -28,17 +28,50 @@ interface CardActionsSheetProps {
  */
 const CardActionsSheet = ({ title, subtitle, actions, onClose }: CardActionsSheetProps) => {
   const [visible, setVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
   }, []);
 
+  // Modal a11y — aria-modal hides the rest of the board from screen readers, so
+  // focus must move INTO the sheet on open (leaving it on the now-hidden card
+  // strands an SR user), Tab is trapped inside, Escape closes, and focus returns
+  // to the card on close. The proven in-repo dialog pattern (LineLabSheet).
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusTimer = window.setTimeout(() => dialogRef.current?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === dialogRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   return (
     <>
@@ -52,11 +85,14 @@ const CardActionsSheet = ({ title, subtitle, actions, onClose }: CardActionsShee
         aria-hidden="true"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`Actions for ${title}`}
+        tabIndex={-1}
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
+          outline: "none",
           backgroundColor: "#FAFAF6",
           borderRadius: "24px 24px 0 0",
           borderTop: "1px solid rgba(0,0,0,0.08)",
