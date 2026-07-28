@@ -122,6 +122,8 @@ import WhatChangedRecapSheet from "@/components/canvas/WhatChangedRecapSheet";
 import CanvasRecapGate from "@/components/canvas/CanvasRecapGate";
 import AmenChip from "@/components/canvas/AmenChip";
 import { useAmens } from "@/lib/canvas/collab/useAmens";
+import CanvasFeed from "@/components/canvas/feed/CanvasFeed";
+import { readCanvasView, writeCanvasView, type CanvasViewMode } from "@/lib/canvas/feed/feedModel";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
@@ -514,6 +516,17 @@ const SongCanvasExperience = () => {
     () => listLineSuggestions(songId),
   );
 
+  // ── The Glory Feed ⇄ Map — two lenses over one song ────────────────────────
+  // Phones open the Feed (the ideas→final flow); the spatial room stays one
+  // tap away as the Map. Same cards, same interactions, two lenses.
+  const [canvasView, setCanvasView] = useState<CanvasViewMode>(() =>
+    readCanvasView(typeof window !== "undefined" ? window.innerWidth : 1440),
+  );
+  const switchView = useCallback((view: CanvasViewMode) => {
+    setCanvasView(view);
+    writeCanvasView(view);
+  }, []);
+
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
 
@@ -543,8 +556,27 @@ const SongCanvasExperience = () => {
   }, []);
 
   // ── Voice recording state ────────────────────────────────────────────────────
-  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>("idle");
+  // A take auto-finalized by an interruption (incoming call, Bluetooth swap,
+  // backgrounding, the length ceiling) is salvaged by the recorder — hand it to
+  // review exactly like a manual Stop, or the idea is silently lost and the
+  // sheet freezes at "Recording…". (Guide + click cleanup runs in the
+  // live→ended effect below, which fires however a take ends.)
+  const handleAutoFinalize = useCallback((result: RecordingResult | null) => {
+    if (result) {
+      setPendingRecording(result);
+      setRecordingFlow("reviewing");
+    } else {
+      setRecordingFlow("idle");
+    }
+  }, []);
+  const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder({
+    onAutoFinalize: handleAutoFinalize,
+  });
+  // Fresh mirror for post-await reads — the closure's snapshot goes stale the
+  // moment the recorder's own setState lands (start-failure copy lives there).
+  const recorderStateRef = useRef(recorderState);
+  recorderStateRef.current = recorderState;
   const [recordingSection, setRecordingSection] = useState("Raw idea");
   const [recordingNote, setRecordingNote] = useState("");
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
@@ -648,11 +680,18 @@ const SongCanvasExperience = () => {
         persistNewCard(stamped);
       },
       revertMerge: (mergedId, idA, idB) => {
+        // The Undo toast closes over the merged card's LOCAL id, but
+        // persistNewCard may have already swapped it to db-card-<uuid> —
+        // resolve through the alias map or Undo silently does nothing in a
+        // server-backed room.
+        const realMergedId = idAliasRef.current.get(mergedId) ?? mergedId;
+        const realA = idAliasRef.current.get(idA) ?? idA;
+        const realB = idAliasRef.current.get(idB) ?? idB;
         setCards((prev) =>
           prev
-            .filter((c) => c.id !== mergedId)
+            .filter((c) => c.id !== realMergedId)
             .map((c) =>
-              c.id === idA || c.id === idB
+              c.id === realA || c.id === realB
                 ? { ...c, isDimmedReference: false, dimReason: undefined }
                 : c,
             ),
@@ -669,11 +708,15 @@ const SongCanvasExperience = () => {
         setCanvasStatus("Moved to Final.");
       },
       returnToIdeas: (finalCardId, sourceId) => {
+        // Same alias hazard as revertMerge: an Undo closure can hold an id
+        // that persistNewCard has since swapped to its db-card form.
+        const realFinalId = idAliasRef.current.get(finalCardId) ?? finalCardId;
+        const realSourceId = sourceId ? idAliasRef.current.get(sourceId) ?? sourceId : null;
         setCards((prev) =>
           prev
-            .filter((c) => c.id !== finalCardId)
+            .filter((c) => c.id !== realFinalId)
             .map((c) =>
-              sourceId && c.id === sourceId
+              realSourceId && c.id === realSourceId
                 ? { ...c, isDimmedReference: false, dimReason: undefined }
                 : c,
             ),
@@ -1114,6 +1157,15 @@ const SongCanvasExperience = () => {
         // The mic never opened — the count-in click must not keep ticking
         // into the room forever.
         stopClick();
+        // Say WHY, or the tap silently does nothing: the hook's human copy
+        // ("mic busy in another app", "no microphone found", the HTTPS hint)
+        // lands in its state AFTER this await resolves — read it once React
+        // has committed, through the room's calm status line. (The
+        // permission-denied case has its own full sheet already.)
+        window.setTimeout(() => {
+          const s = recorderStateRef.current;
+          if (s.phase === "error" && s.error) setCanvasStatus(s.error);
+        }, 80);
         return;
       }
       // The click may continue through the take — the session authority decides:
@@ -1349,6 +1401,16 @@ const SongCanvasExperience = () => {
     [cards, weave.labIndex],
   );
 
+  // The Feed never sits over a live map workflow: entering it exits weave /
+  // arrange, and any merge selection (its bar is map-idiom) clears on sight.
+  useEffect(() => {
+    if (canvasView !== "feed") return;
+    if (weave.active) weave.exit();
+    if (arrangement.arranging) arrangement.cancel();
+    if (merge.selection.length > 0) merge.clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasView, weave.active, arrangement.arranging, merge.selection.length]);
+
   const { clusterData, hiddenCardIds } = useMemo(() => {
     // While weaving, stacks yield: a collapsed cluster would HIDE glowing
     // candidate lines the mode just promised ("tap a glowing line").
@@ -1489,6 +1551,11 @@ const SongCanvasExperience = () => {
       setSoloPlayId(null);
       return;
     }
+    // Solo takes the shared voice HONESTLY: pause a playing listen path first
+    // so its transport reads "paused" instead of sticking at "playing" with a
+    // dead onEnded chain (playMemoOnCanvas invalidates in-flight handlers).
+    const lp = apisRef.current?.listenPath;
+    if (lp?.playing) lp.playPause();
     setSoloPlayId(cardId);
     void playMemoOnCanvas(memoId, {
       onEnded: () => setSoloPlayId((cur) => (cur === cardId ? null : cur)),
@@ -2363,6 +2430,24 @@ const SongCanvasExperience = () => {
 
       {/* ── Canvas stage — D1's render surface (viewport, trees, cards) ──── */}
       <div ref={canvasAreaRef} className="relative flex-1 min-h-0">
+        {canvasView === "feed" ? (
+          <CanvasFeed
+            cards={boardCards}
+            selectedId={selectedId}
+            getInteractions={getCardInteractions}
+            cardAdornment={renderCardAdornment}
+            dockActions={dockActions}
+            listening={listenPlaying}
+            currentListenId={listenQueue[listenStep] ?? null}
+            onPlaySong={(ids) => listenPath.playAll(ids)}
+            onPlayPause={listenPath.playPause}
+            onNext={listenPath.next}
+            onPrev={listenPath.prev}
+            onReorderFinal={arrangement.moveBy}
+            isViewer={isViewer}
+            onOpenMap={() => switchView("map")}
+          />
+        ) : (
         <CanvasStage
           className="w-full h-full"
           initialZoom={0.8}
@@ -2423,6 +2508,15 @@ const SongCanvasExperience = () => {
                   <Maximize2 size={13} strokeWidth={2.2} />
                   Fit
                 </button>
+                <button
+                  type="button"
+                  onClick={() => switchView("feed")}
+                  className="pointer-events-auto flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-all duration-150 active:scale-[0.97]"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", border: "1px solid rgba(28,26,23,0.10)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", backdropFilter: "blur(8px)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                  aria-label="Open the feed view of this song"
+                >
+                  Feed
+                </button>
               </div>
               {showFirstRun && (
                 <FirstActionPrompt
@@ -2437,6 +2531,7 @@ const SongCanvasExperience = () => {
             </>
           }
         />
+        )}
 
         {/* Work layer — a mobile bottom sheet (was a desktop right drawer) */}
         {showWorkPanel && (
@@ -2531,7 +2626,7 @@ const SongCanvasExperience = () => {
           />
         </Suspense>
       )}
-      {!arrangement.arranging && !weave.active && (
+      {canvasView === "map" && !arrangement.arranging && !weave.active && (
         <MergeActionBar
           selection={merge.selection}
           cards={boardCards}
@@ -2541,7 +2636,7 @@ const SongCanvasExperience = () => {
           onSwap={merge.swapSelection}
         />
       )}
-      {!arrangement.arranging && !weave.active && merge.selection.length === 0 && (
+      {canvasView === "map" && !arrangement.arranging && !weave.active && merge.selection.length === 0 && (
         <ListenPathBar
           queue={listenPath.queue}
           cards={boardCards}
@@ -2559,7 +2654,7 @@ const SongCanvasExperience = () => {
           onSave={listenPath.save}
         />
       )}
-      {!weave.active && (
+      {canvasView === "map" && !weave.active && (
       <FinalArrangementBar
         arranging={arrangement.arranging}
         canArrange={arrangement.canArrange}

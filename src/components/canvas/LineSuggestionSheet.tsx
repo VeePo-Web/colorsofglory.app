@@ -63,8 +63,11 @@ const LineSuggestionSheet = ({
         return;
       }
       if (e.key !== "Tab" || !sheetRef.current) return;
+      // :not([disabled]) matters: the Send button is disabled while the field
+      // is empty — wrapping focus onto a disabled element silently drops the
+      // trap and Tab escapes the dialog.
       const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       if (focusables.length === 0) return;
       const first = focusables[0];

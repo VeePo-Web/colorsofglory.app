@@ -26,6 +26,10 @@ describe("Feature 04 song whiteboard canvas", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    // This suite exercises the SPATIAL map (root card, zone tabs, drag grammar).
+    // Phones default to the Glory Feed now — pin the map view explicitly.
+    // The feed's own coverage lives in canvas-feed.test.tsx.
+    localStorage.setItem("cog:canvas-view", "map");
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
   });
