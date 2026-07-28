@@ -9,6 +9,7 @@ import NoteCard from "@/components/canvas/NoteCard";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
 import { GLORY, PLAYBACK_TONE, TYPE_TONE } from "@/lib/canvas/glorySpectrum";
 import { cardWidth, clampToBoard, DRAG_THRESHOLD_PX } from "@/lib/canvas/canvasGeometry";
+import { activePointerCount } from "@/lib/canvas/pointerTally";
 import { DIVIDER_X } from "@/lib/canvas/canvasConstants";
 import type { CanvasBoardCard, CanvasBoardCardType } from "@/lib/canvas/canvasTypes";
 import type { CardFaceProps } from "@/components/canvas/cardFace";
@@ -296,6 +297,10 @@ const CanvasCard = memo(function CanvasCard({
     // and therefore the click — to the card, so every real tap on the action
     // row silently toggled selection instead of firing the button.
     if ((e.target as Element).closest("button")) return;
+    // Reverse-order pinch: if ANOTHER finger is already down (the tally
+    // includes this one — capture ran first), this press is pinch intent —
+    // never arm a drag under it, or the room zooms WHILE the card moves.
+    if (activePointerCount() >= 2) return;
     justDragged.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     const grab = screenToCanvas(e.clientX, e.clientY);

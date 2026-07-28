@@ -53,9 +53,12 @@ export interface FeedCardProps {
   /** The cinematic hand-off: called with the card's rect so the feed can fly
    *  a ghost toward the Final tab before the promote actually runs. */
   onFlyToFinal?: (card: CanvasBoardCard, rect: DOMRect) => void;
+  /** Entrance-cascade stagger: cards settle onto the page one after another
+   *  like pages laid on a desk, not a wall appearing at once. */
+  entranceDelayMs?: number;
 }
 
-const FeedCard = memo(function FeedCard({ card, selected, interactions, adornment, onFlyToFinal }: FeedCardProps) {
+const FeedCard = memo(function FeedCard({ card, selected, interactions, adornment, onFlyToFinal, entranceDelayMs = 0 }: FeedCardProps) {
   const color = getCreatorColor(card.contributor);
   const tone = TYPE_TONE[card.type] ?? TYPE_TONE.note;
   const Face = FACES[card.type] ?? LyricCard;
@@ -103,8 +106,13 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         boxSizing: "border-box",
         cursor: "pointer",
         userSelect: "none",
-        transition: "box-shadow 200ms ease, border-color 200ms ease, opacity 280ms ease",
-        animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1)",
+        // transform included so the tactile press (CSS :active) EASES rather
+        // than snaps — inline transition wins over the stylesheet's.
+        transition: "box-shadow 200ms ease, border-color 200ms ease, opacity 280ms ease, transform 150ms cubic-bezier(0.25,0.46,0.45,0.94)",
+        // `both` holds the card invisible through its cascade delay, then it
+        // settles like paper laid on a desk.
+        animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) both",
+        animationDelay: `${entranceDelayMs}ms`,
       }}
     >
       {/* The type's tone stripe — same material language as the map. */}

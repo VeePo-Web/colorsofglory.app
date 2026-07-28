@@ -72,6 +72,11 @@ const CanvasFeed = memo(function CanvasFeed({
   const groups = useMemo(() => ideasFeedGroups(cards), [cards]);
   const finalCards = useMemo(() => finalFeedCards(cards), [cards]);
   const hasIdeas = groups.some((g) => g.label !== USED_GROUP);
+  // The entrance cascade: one running position across every group, so the
+  // page settles top-to-bottom in one continuous fall (capped — deep cards
+  // arrive together rather than making the writer wait).
+  let entrancePos = 0;
+  const nextEntranceDelay = () => Math.min(entrancePos++ * 45, 360);
 
   /** The cinematic promote: a ghost travels from the card to the Final tab,
    *  the tab pulses warm, THEN the real move runs. Reduced motion: instant. */
@@ -144,10 +149,21 @@ const CanvasFeed = memo(function CanvasFeed({
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
     >
-      {/* Feed keyframes — injected once with the feed, not per card. */}
+      {/* Feed keyframes + the TACTILE GRAMMAR, injected once with the feed.
+          Every press on this surface compresses (the warm-&-alive register:
+          the room responds to your touch), and every keyboard focus wears the
+          gold ring — one rule each, the whole surface obeys. */}
       <style>{`
         @keyframes cog-feed-enter { 0% { opacity: 0; transform: translateY(10px) scale(0.985); } 100% { opacity: 1; transform: none; } }
         @keyframes cog-final-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        [data-canvas-feed] button { transition: transform 130ms cubic-bezier(0.25,0.46,0.45,0.94), background-color 150ms ease, color 150ms ease, box-shadow 200ms ease; }
+        [data-canvas-feed] button:active { transform: scale(0.96); }
+        [data-canvas-feed] [data-feed-card]:active { transform: scale(0.988); }
+        [data-canvas-feed] button:focus-visible,
+        [data-canvas-feed] [role="button"]:focus-visible {
+          outline: 2px solid var(--cog-gold, #B8953A);
+          outline-offset: 2px;
+        }
         @media (prefers-reduced-motion: reduce) {
           [data-canvas-feed] * { animation: none !important; }
         }
@@ -272,6 +288,7 @@ const CanvasFeed = memo(function CanvasFeed({
                       interactions={getInteractions(card)}
                       adornment={cardAdornment?.(card)}
                       onFlyToFinal={flyToFinal}
+                      entranceDelayMs={nextEntranceDelay()}
                     />
                   ))}
                 </div>

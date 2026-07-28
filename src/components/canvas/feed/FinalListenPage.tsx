@@ -179,7 +179,15 @@ const FinalListenPage = memo(function FinalListenPage({
           const color = getCreatorColor(card.contributor);
           const preview = (card.body || card.meta || "").split("\n")[0];
           return (
-            <li key={card.id}>
+            <li
+              key={card.id}
+              style={{
+                // The set list settles in top-to-bottom — same cascade grammar
+                // as the Ideas stream (reduced-motion neutralizes it upstream).
+                animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) both",
+                animationDelay: `${Math.min(i * 40, 320)}ms`,
+              }}
+            >
               <div
                 role="button"
                 tabIndex={0}

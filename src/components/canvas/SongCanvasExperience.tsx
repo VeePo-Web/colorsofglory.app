@@ -126,6 +126,7 @@ import { useAmens } from "@/lib/canvas/collab/useAmens";
 import CanvasFeed from "@/components/canvas/feed/CanvasFeed";
 import { readCanvasView, writeCanvasView, type CanvasViewMode } from "@/lib/canvas/feed/feedModel";
 import { markReviewedId, readReviewedIds } from "@/lib/canvas/reviewedStore";
+import TrappedDialog from "@/components/canvas/TrappedDialog";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
@@ -1909,13 +1910,8 @@ const SongCanvasExperience = () => {
     setActiveLayer("room");
   }, []);
 
-  // Escape closes the work bottom sheet, like every other sheet in the room.
-  useEffect(() => {
-    if (!showWorkPanel) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeWorkPanel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showWorkPanel, closeWorkPanel]);
+  // Escape + focus trapping for the work sheet live in TrappedDialog now —
+  // the old window-level Escape listener would double-handle the same key.
 
   // Bring a just-created card into view once it's on the board (add / record).
   // If it landed inside a collapsed section cluster, fan that cluster open
@@ -2562,9 +2558,8 @@ const SongCanvasExperience = () => {
                 animation: "cog-fade-in 220ms ease",
               }}
             />
-            <div
-              role="dialog"
-              aria-modal="true"
+            <TrappedDialog
+              onClose={closeWorkPanel}
               aria-label={`${LAYERS.find((l) => l.id === activeLayer)?.label ?? "Song"} panel`}
               style={{
                 position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 800,
@@ -2611,7 +2606,7 @@ const SongCanvasExperience = () => {
                   </Suspense>
                 )}
               </div>
-            </div>
+            </TrappedDialog>
           </>
         )}
       </div>
