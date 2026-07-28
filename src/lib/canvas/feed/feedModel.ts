@@ -1,4 +1,5 @@
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
+import { finalRunningOrder } from "@/lib/canvas/canvasGeometry";
 
 /**
  * feedModel — the pure organize-brain of the Glory Feed (the canvas's
@@ -70,13 +71,14 @@ export function ideasFeedGroups(cards: CanvasBoardCard[]): FeedGroup[] {
 }
 
 /**
- * The Final page: the arrangement in running order (top-to-bottom y — the
- * same order the map's set-list numbers and Play-the-song use). Layers excluded.
+ * The Final page: the arrangement in running order — the SAME comparator the
+ * map's set-list numbers and Play-the-song use (column-major, stable past 10
+ * wrapped parts). Layers excluded.
  */
 export function finalFeedCards(cards: CanvasBoardCard[]): CanvasBoardCard[] {
   return cards
     .filter((c) => c.tree === "final" && !isLayer(c))
-    .sort((a, b) => a.y - b.y);
+    .sort(finalRunningOrder);
 }
 
 /** Count of live (undimmed, non-layer) ideas — drives the Ideas tab badge. */

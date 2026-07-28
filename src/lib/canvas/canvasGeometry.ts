@@ -87,6 +87,33 @@ export const clampToBoard = (x: number, y: number, type: CanvasBoardCardType) =>
   y: Math.min(Math.max(y, BOARD_MARGIN), CANVAS_HEIGHT - CARD_MIN_HEIGHT - BOARD_MARGIN - 48),
 });
 
+// ─── Final running order ───────────────────────────────────────────────────
+
+/**
+ * The arrangement's running order, as ONE comparator every consumer shares
+ * (useFinalArrangement, the map's set-list numbers, the feed's listen mode).
+ *
+ * "Top-to-bottom y = play order" breaks past COLUMN_ROWS parts: finalColumnSlot
+ * wraps into a second sub-column, so index 0 and index 10 both sit at
+ * COLUMN_TOP and a y-only sort ties — the order past 10 parts was ambiguous
+ * and moveBy swaps went unstable. Running order is COLUMN-MAJOR: the card's
+ * sub-column strip first (derived from x, exactly as the slots lay them down),
+ * then top-to-bottom within it, with a deterministic id tie-break. A common
+ * single-column board keeps the old pure y-order to the pixel.
+ */
+export function finalRunningOrder(
+  a: { x: number; y: number; id: string },
+  b: { x: number; y: number; id: string },
+): number {
+  const col = (c: { x: number }) =>
+    Math.max(0, Math.round((c.x - FINAL_COLUMN_X) / SUBCOLUMN_STEP));
+  const colA = col(a);
+  const colB = col(b);
+  if (colA !== colB) return colA - colB;
+  if (a.y !== b.y) return a.y - b.y;
+  return a.id.localeCompare(b.id);
+}
+
 // ─── Root song card box ────────────────────────────────────────────────────
 
 /** The root song card's box — SongRootCard renders it, connectors branch from it.

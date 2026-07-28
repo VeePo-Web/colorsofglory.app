@@ -50,6 +50,7 @@ import {
   cardWidth,
   ideaColumnSlot,
   finalColumnSlot,
+  finalRunningOrder,
 } from "@/lib/canvas/canvasGeometry";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
@@ -124,6 +125,7 @@ import AmenChip from "@/components/canvas/AmenChip";
 import { useAmens } from "@/lib/canvas/collab/useAmens";
 import CanvasFeed from "@/components/canvas/feed/CanvasFeed";
 import { readCanvasView, writeCanvasView, type CanvasViewMode } from "@/lib/canvas/feed/feedModel";
+import { markReviewedId, readReviewedIds } from "@/lib/canvas/reviewedStore";
 import LineSuggestionSheet, { type LineSuggestionMode } from "@/components/canvas/LineSuggestionSheet";
 import ListenPathBar from "@/components/canvas/ListenPathBar";
 import MergeActionBar from "@/components/canvas/MergeActionBar";
@@ -1470,7 +1472,9 @@ const SongCanvasExperience = () => {
   // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
   // Number each Final card by its vertical position so it reads like a set list.
   const finalOrder = useMemo(() => {
-    const ordered = [...finalCards].sort((a, b) => a.y - b.y);
+    // Same comparator as useFinalArrangement + the feed's listen mode — the
+    // set-list numbers must agree with the play order past 10 wrapped parts.
+    const ordered = [...finalCards].sort(finalRunningOrder);
     const map: Record<string, number> = {};
     ordered.forEach((c, i) => { map[c.id] = i + 1; });
     return map;
@@ -1589,7 +1593,13 @@ const SongCanvasExperience = () => {
         layerCount: layerCountByBase[card.id] ?? 0,
         onOpenStack:
           card.type === "voice" || card.type === "hum"
-            ? () => setStackBaseId(card.id)
+            ? () => {
+                // The stack sheet plays through its own Web Audio engine — the
+                // shared canvas voice must fall silent first (one voice, ever).
+                stopCanvasAudio();
+                setSoloPlayId(null);
+                setStackBaseId(card.id);
+              }
             : undefined,
         onSuggestLine:
           card.type === "lyric" && !isViewer
@@ -2097,6 +2107,9 @@ const SongCanvasExperience = () => {
     }),
     [],
   );
+  // The owner's remembered "Keep in Ideas" decisions for this song (device-
+  // local until the backend carries review state — filed with Lovable).
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(() => readReviewedIds(songId));
   const pendingReview = useMemo(
     () =>
       cards
@@ -2106,6 +2119,7 @@ const SongCanvasExperience = () => {
             !c.parentMemoId &&
             !c.isDimmedReference &&
             !c.reviewed &&
+            !reviewedIds.has(c.id) &&
             c.status !== "approved" &&
             (c.createdBy || c.contributor) &&
             !isMine(c),
@@ -2119,13 +2133,16 @@ const SongCanvasExperience = () => {
           accent: c.accent || "var(--cog-gold)",
           kind: KIND_BY_TYPE[c.type] ?? "Idea",
         })),
-    [cards, isMine, KIND_BY_TYPE],
+    [cards, isMine, KIND_BY_TYPE, reviewedIds],
   );
 
   // Keep-in-Ideas: mark reviewed so it leaves the queue but stays on the board.
+  // The decision is PERSISTED (reviewedStore) — the card flag alone died on
+  // every reload/hydrate and resurrected already-decided items into the queue.
   const handleKeepInIdeas = useCallback((cardId: string) => {
     setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, reviewed: true } : c)));
-  }, []);
+    setReviewedIds(markReviewedId(songId, cardId));
+  }, [songId]);
 
   // Not-this-one: archive from the board, with a calm Undo (never a hard
   // delete). Server rows get a TOMBSTONE so the next hydrate can't quietly

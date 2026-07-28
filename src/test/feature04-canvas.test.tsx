@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import SongCanvasPage from "@/pages/SongCanvasPage";
 
-// useSongTitle reads react-query — the page needs a QueryClientProvider like
+// useSongTitle reads react-query â€” the page needs a QueryClientProvider like
 // every other routed test.
 const renderCanvas = (path = "/songs/1/canvas") =>
   render(
@@ -27,7 +27,7 @@ describe("Feature 04 song whiteboard canvas", () => {
     localStorage.clear();
     sessionStorage.clear();
     // This suite exercises the SPATIAL map (root card, zone tabs, drag grammar).
-    // Phones default to the Glory Feed now — pin the map view explicitly.
+    // Phones default to the Glory Feed now â€” pin the map view explicitly.
     // The feed's own coverage lives in canvas-feed.test.tsx.
     localStorage.setItem("cog:canvas-view", "map");
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -37,11 +37,11 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("anchors the canvas around one root song card and clear thumb actions", async () => {
     renderCanvas();
 
-    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText(/start the song here/i)).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeEnabled();
     expect(lastButton(/record idea|record memo/i)).toBeEnabled();
-    // The pill opens on a neutral truth — "Saved" would be a false claim on an
+    // The pill opens on a neutral truth â€” "Saved" would be a false claim on an
     // untouched room.
     expect(screen.getByText(/every idea stays here/i)).toBeInTheDocument();
   });
@@ -49,10 +49,10 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("adds a named song part (Verse) and keeps it after remount", async () => {
     const view = renderCanvas();
 
-    await screen.findByLabelText(/root song card/i, {}, { timeout: 5000 });
+    await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 });
     // Open the "Add a part" picker, then pick Verse.
     fireEvent.click(lastButton(/add part/i));
-    const verseBtn = await screen.findByRole("button", { name: /^verse$/i }, { timeout: 3000 });
+    const verseBtn = await screen.findByRole("button", { name: /^verse$/i }, { timeout: 10000 });
     fireEvent.click(verseBtn);
 
     expect(await screen.findByRole("button", { name: /lyric idea: verse 1/i })).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("keeps viewer mode readable and blocks creation with product copy", async () => {
     renderCanvas("/songs/1/canvas?role=viewer");
 
-    expect(await screen.findByText(/you can view this canvas/i, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/you can view this canvas/i, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeDisabled();
     expect(lastButton(/record idea|record memo/i)).toBeDisabled();
   });

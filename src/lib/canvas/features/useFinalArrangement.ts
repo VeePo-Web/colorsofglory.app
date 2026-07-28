@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
+import { finalRunningOrder } from "@/lib/canvas/canvasGeometry";
 import type { CanvasFeatureMutations } from "./mutations";
 
 /**
@@ -67,7 +68,9 @@ export function useFinalArrangement({
     () =>
       cards
         .filter((c) => c.tree === "final" && !c.parentMemoId)
-        .sort((a, b) => a.y - b.y),
+        // Column-major + deterministic: stays true past 10 wrapped parts
+        // (a y-only sort tied across sub-columns — see finalRunningOrder).
+        .sort(finalRunningOrder),
     [cards],
   );
 
@@ -194,7 +197,21 @@ export function useFinalArrangement({
           : null;
       if (sourceId) {
         // The dimmed Ideas source exists: drop the copy, wake the source.
+        // Snapshot the copy FIRST — it may carry edits made after promotion,
+        // and this was the one branch in the feature without an Undo.
+        const copySnapshot: CanvasBoardCard = { ...finalCard };
         mutations.returnToIdeas(finalCardId, sourceId);
+        toast("Returned to Ideas", {
+          duration: 7000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              // Re-promote the exact copy (same id, same edits) — idempotent
+              // through applyPromoteToFinal, so a double-tap can't duplicate.
+              mutations.promoteToFinal(sourceId, copySnapshot);
+            },
+          },
+        });
       } else {
         // No source on the board (backend-hydrated / demo final). NEVER delete
         // — this was the one hard-destroy in a never-delete system. Patch the
