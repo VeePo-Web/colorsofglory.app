@@ -534,6 +534,10 @@ const SongCanvasExperience = () => {
     setCanvasView(view);
     writeCanvasView(view);
   }, []);
+  // Bumped when a moment wants the feed turned to the Final page (the
+  // "Hear it" hand-off after a promote). A nonce, not a boolean — every
+  // request turns the page, even two in a row.
+  const [finalPageRequest, setFinalPageRequest] = useState(0);
 
   // ── Practice launcher state ──────────────────────────────────────────────────
   const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
@@ -795,6 +799,18 @@ const SongCanvasExperience = () => {
     mutations: featureMutations,
     finalSlot: finalColumnSlot,
     ideaSlot: ideaColumnSlot,
+    // The momentum hand-off: "Hear it" on the promote toast plays the song
+    // from the freshly landed part and turns the feed to the Final page.
+    // (apisRef/setters resolve at tap time — the closure outlives this render.)
+    onHearInPlace: (finalCardId) => {
+      const ordered = apisRef.current.arrangement.orderedFinalCards;
+      const idx = ordered.findIndex((c) => c.id === finalCardId);
+      const ids = (idx >= 0 ? ordered.slice(idx) : ordered).map((c) => c.id);
+      if (ids.length === 0) return;
+      apisRef.current.listenPath.playAll(ids);
+      setPathExpanded(true); // map feedback: the transport bar opens
+      setFinalPageRequest((n) => n + 1); // feed feedback: turn to the Final page
+    },
     // EVERY server-hydrated card moves in place (a locally minted `-final`
     // ghost id would desync from its server row); canvas_cards tree changes
     // write through so co-writers see the promotion. Voice memos have no
@@ -2498,6 +2514,7 @@ const SongCanvasExperience = () => {
             listening={listenPlaying}
             currentListenId={listenQueue[listenStep] ?? null}
             listenFinished={listenPath.finished}
+            finalPageRequest={finalPageRequest}
             onPlaySong={(ids) => listenPath.playAll(ids)}
             onPlayPause={listenPath.playPause}
             onNext={listenPath.next}

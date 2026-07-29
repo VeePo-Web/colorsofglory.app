@@ -48,6 +48,12 @@ interface UseFinalArrangementArgs {
   /** Fired after an in-place tree change so the host can sync the server row. */
   onTreeChange?: (cardId: string, tree: "ideas" | "final") => void;
   onMoment?: (title: string, destination: string, detail?: string) => void;
+  /**
+   * The momentum hand-off: when provided, the promote toast offers "Hear it"
+   * (play the song from the freshly landed part) beside Undo — after you move
+   * an idea to Final, the next most-likely thing is one tap away.
+   */
+  onHearInPlace?: (finalCardId: string) => void;
 }
 
 export function useFinalArrangement({
@@ -59,6 +65,7 @@ export function useFinalArrangement({
   movesInPlace,
   onTreeChange,
   onMoment,
+  onHearInPlace,
 }: UseFinalArrangementArgs): FinalArrangementApi {
   const [arranging, setArranging] = useState(false);
   // Snapshot of every final card's position at begin() — cancel/undo restores it.
@@ -145,16 +152,20 @@ export function useFinalArrangement({
         ]);
         onTreeChange?.(cardId, "final");
         onMoment?.("Approved idea", "Final tree", "Arrangement");
-        toast("Idea moved to Final", {
-          duration: 7000,
-          action: {
-            label: "Undo",
-            onClick: () => {
-              mutations.patchCards([before]);
-              onTreeChange?.(cardId, "ideas");
-            },
-          },
-        });
+        const undoInPlace = () => {
+          mutations.patchCards([before]);
+          onTreeChange?.(cardId, "ideas");
+        };
+        toast(
+          "Idea moved to Final",
+          onHearInPlace
+            ? {
+                duration: 7000,
+                action: { label: "Hear it", onClick: () => onHearInPlace(cardId) },
+                cancel: { label: "Undo", onClick: undoInPlace },
+              }
+            : { duration: 7000, action: { label: "Undo", onClick: undoInPlace } },
+        );
         return;
       }
       const finalCopy: CanvasBoardCard = {
@@ -169,15 +180,19 @@ export function useFinalArrangement({
       };
       mutations.promoteToFinal(cardId, finalCopy);
       onMoment?.("Approved idea", "Final tree", "Arrangement");
-      toast("Idea moved to Final", {
-        duration: 7000,
-        action: {
-          label: "Undo",
-          onClick: () => mutations.returnToIdeas(finalCopy.id, cardId),
-        },
-      });
+      const undoCopy = () => mutations.returnToIdeas(finalCopy.id, cardId);
+      toast(
+        "Idea moved to Final",
+        onHearInPlace
+          ? {
+              duration: 7000,
+              action: { label: "Hear it", onClick: () => onHearInPlace(finalCopy.id) },
+              cancel: { label: "Undo", onClick: undoCopy },
+            }
+          : { duration: 7000, action: { label: "Undo", onClick: undoCopy } },
+      );
     },
-    [isViewer, cards, orderedFinalCards.length, finalSlot, mutations, movesInPlace, onTreeChange, onMoment],
+    [isViewer, cards, orderedFinalCards.length, finalSlot, mutations, movesInPlace, onTreeChange, onMoment, onHearInPlace],
   );
 
   const moveToIdeas = useCallback(

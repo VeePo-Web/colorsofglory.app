@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, type ReactNode, type PointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent } from "react";
 import { Map as MapIcon, Sparkles } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
@@ -39,6 +39,9 @@ export interface CanvasFeedProps {
   currentListenId: string | null;
   /** The song played all the way through — the Final page offers what's next. */
   listenFinished: boolean;
+  /** Nonce: a moment (e.g. the promote toast's "Hear it") asks the feed to
+   *  turn to the Final page. Every bump turns the page. */
+  finalPageRequest?: number;
   onPlaySong: (ids: string[]) => void;
   onPlayPause: () => void;
   onNext: () => void;
@@ -58,6 +61,7 @@ const CanvasFeed = memo(function CanvasFeed({
   listening,
   currentListenId,
   listenFinished,
+  finalPageRequest = 0,
   onPlaySong,
   onPlayPause,
   onNext,
@@ -67,6 +71,11 @@ const CanvasFeed = memo(function CanvasFeed({
   onOpenMap,
 }: CanvasFeedProps) {
   const [page, setPage] = useState<FeedPage>("ideas");
+  // A moment asked for the Final page (the promote toast's "Hear it") —
+  // turn to it. Nonce-driven so back-to-back requests both turn.
+  useEffect(() => {
+    if (finalPageRequest > 0) setPage("final");
+  }, [finalPageRequest]);
   const [finalPulse, setFinalPulse] = useState(false);
   const [ghost, setGhost] = useState<{ from: DOMRect; toX: number; toY: number; go: boolean } | null>(null);
   const reducedMotion = usePrefersReducedMotion();
