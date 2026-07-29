@@ -37,6 +37,7 @@ import {
   splitBlockAtChar,
 } from "@/lib/capture/reviewEdits";
 import ReviewAudioPlayer, { type ReviewAudioPlayerHandle } from "./ReviewAudioPlayer";
+import GuidedShapeRail from "./GuidedShapeRail";
 import type { PendingBlock } from "./CaptureSheet";
 
 type EditableBlock = {
@@ -169,6 +170,13 @@ const ReviewSheet = ({
   const [audioBlob, setAudioBlob] = useState<Blob | undefined>(undefined);
   const [committing, setCommitting] = useState(false);
   const [playingClipId, setPlayingClipId] = useState<string | null>(null);
+  // The guided shape path is ON for every fresh review (one question per card:
+  // words → part → chords → home). Dismissing drops to the full editor —
+  // for this take only; the next capture gets the guide again.
+  const [guided, setGuided] = useState(true);
+  useEffect(() => {
+    if (open) setGuided(true);
+  }, [open]);
   const objectUrlRef = useRef<string | null>(null);
   const playerRef = useRef<ReviewAudioPlayerHandle | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -327,6 +335,30 @@ const ReviewSheet = ({
    * it never creates a stray card. Marks the edit dirty so a late transcript
    * can't stomp it, and scrolls the new part into view.
    */
+  // The guided rail's spine: land a part WITH its content in one move (the
+  // plain addBlock appends an empty part for hand-editing; the rail already
+  // asked the question, so the answer arrives whole).
+  const addFilledBlock = (
+    kind: EditableBlock["kind"],
+    text: string,
+    label?: string,
+    section_kind?: string | null,
+  ) => {
+    dirtyRef.current = true;
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: makeBlockId(),
+        kind,
+        section_kind: section_kind ?? (kind === "section" ? "verse" : null),
+        label: label ?? KIND_LABELS[kind],
+        text,
+        start_ms: 0,
+        end_ms: 0,
+      },
+    ]);
+  };
+
   const addBlock = (kind: EditableBlock["kind"]) => {
     dirtyRef.current = true;
     setBlocks((prev) => [
@@ -570,6 +602,27 @@ const ReviewSheet = ({
               durationMs={durationMs}
               onClipStop={() => setPlayingClipId(null)}
               blob={audioBlob}
+            />
+          )}
+
+          {/* The guided path — one question per card walks THIS idea home:
+              words → which part → chords → where it lives. Every step skips
+              in one tap, Back is always there, and answers land as real
+              blocks below as they're given. */}
+          {guided && (
+            <GuidedShapeRail
+              songTitle={songTitle}
+              canCommit={Boolean(takeId && songId)}
+              committing={committing}
+              onAddLyrics={(text) => addFilledBlock("lyrics", text)}
+              onSetSection={(kind, label) => addFilledBlock("section", "", label, kind)}
+              onAddChords={(text) => addFilledBlock("chords", text)}
+              onCommit={handleCommit}
+              onKeepLoose={() => {
+                toast("Kept with your ideas — shape it any time.");
+                onClose();
+              }}
+              onDismiss={() => setGuided(false)}
             />
           )}
 
