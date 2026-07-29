@@ -41,6 +41,9 @@ export interface CanvasCardInteractions {
   onCardDrop?: (id: string, zone: CanvasZone, x: number, y: number) => void;
   layerCount?: number;
   onOpenStack?: () => void;
+  /** One-tap "record over this" — sing a layer on top of the take, right
+   *  from the card (the stack sheet remains the mixing room). */
+  onRecordOver?: () => void;
   canCompare?: boolean;
   onCompare?: () => void;
   onSuggestLine?: () => void;

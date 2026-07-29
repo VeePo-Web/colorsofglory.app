@@ -55,3 +55,19 @@ export const DIATONIC_QUALITY: Record<Mode, Array<"maj" | "min" | "dim">> = {
   major: ["maj", "min", "min", "maj", "maj", "min", "dim"],
   minor: ["min", "dim", "maj", "min", "min", "maj", "maj"],
 };
+
+/**
+ * The six workhorse chords of a major key (I ii iii IV V vi), spelled for
+ * that key — e.g. G → G, Am, Bm, C, D, Em. The tap-to-build chord pickers
+ * ride this; the diminished vii° is deliberately left off (a chip nobody
+ * reaches for while sketching a song).
+ */
+export function diatonicChords(tonic: string): string[] {
+  const pc = pitchClass(tonic);
+  if (pc < 0) return [];
+  const prefer = keyAccidental(tonic, "major");
+  return SCALE.major.slice(0, 6).map((iv, i) => {
+    const letter = pcToLetter(pc + iv, prefer);
+    return DIATONIC_QUALITY.major[i] === "min" ? `${letter}m` : letter;
+  });
+}

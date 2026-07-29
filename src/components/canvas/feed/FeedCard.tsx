@@ -1,4 +1,5 @@
 import { memo, type ReactNode, type KeyboardEvent } from "react";
+import { Mic } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
 import type { CardFaceProps } from "@/components/canvas/cardFace";
@@ -133,6 +134,30 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         playing={playing}
         onPlay={interactions.onPlay}
       />
+
+      {/* One-tap layering — the second half of "listen to them and stack
+          them super easily": sing a harmony straight over this take. Always
+          visible on audio cards (a gesture-hidden layer path failed the
+          intuition test); the stack sheet stays the mixing room. */}
+      {isVoice && !dimmed && interactions.onRecordOver && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
+          aria-label="Record a layer over this take"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            minHeight: 44, padding: "0 14px", marginTop: 8,
+            borderRadius: 999, cursor: "pointer",
+            backgroundColor: "rgba(184,149,58,0.10)",
+            border: "1.5px solid rgba(184,149,58,0.35)",
+            color: "var(--cog-gold)",
+            fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700,
+          }}
+        >
+          <Mic size={14} strokeWidth={2.1} />
+          Layer over this
+        </button>
+      )}
 
       {/* Who wrote it — dot always paired with a readable name. */}
       {!dimmed && card.contributor && (

@@ -1647,6 +1647,13 @@ const SongCanvasExperience = () => {
                 setStackBaseId(card.id);
               }
             : undefined,
+        // Layering is ONE tap from the card ("super easy" is the spec): the
+        // recorder opens with this take as the base — count-in, guide, all of
+        // the never-bleed machinery included.
+        onRecordOver:
+          (card.type === "voice" || card.type === "hum") && !isViewer && !card.isDimmedReference
+            ? () => handleRecordOver(card.id)
+            : undefined,
         onSuggestLine:
           card.type === "lyric" && !isViewer
             ? () => setLineSuggest({ cardId: card.id, originalLine: card.body, sectionLabel: card.section })
@@ -1712,6 +1719,7 @@ const SongCanvasExperience = () => {
     finalOrder,
     handleCardMove,
     handleRestoreCard,
+    handleRecordOver,
     weave.active,
     weave.targetId,
     weave.targetView,

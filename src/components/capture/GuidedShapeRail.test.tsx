@@ -75,6 +75,35 @@ describe("GuidedShapeRail — the guided path from a fresh idea to its home", ()
     expect(screen.getByRole("button", { name: /keep it loose in my ideas/i })).toBeInTheDocument();
   });
 
+  it("chords are tap-to-build: pick a key, tap its chords, the key rides along", () => {
+    const p = setup();
+    // Skip words and part to land on the chords step.
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    // One tap picks the key…
+    fireEvent.click(screen.getByRole("button", { name: /key of g/i }));
+    // …and the key's own chords appear as chips.
+    fireEvent.click(screen.getByRole("button", { name: /^add c$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add g$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add em$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add chords/i }));
+    expect(p.onAddChords).toHaveBeenCalledWith("Key: G · C  G  Em");
+    // The path moves on to the home question.
+    expect(screen.getByText(/4 of 4/i)).toBeInTheDocument();
+  });
+
+  it("a tapped chord can be tapped back out of the progression", () => {
+    const p = setup();
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /key of c/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add c$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add am$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove c$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add chords/i }));
+    expect(p.onAddChords).toHaveBeenCalledWith("Key: C · Am");
+  });
+
   it("a song-less capture offers the writer's own songs inline — one tap files it", () => {
     const p = setup({
       canCommit: false,

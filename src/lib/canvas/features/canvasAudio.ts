@@ -1,4 +1,5 @@
 import { getPlaybackUrl } from "@/integrations/cog/memos";
+import { audioCache } from "@/lib/voice/audioCache";
 
 /**
  * canvasAudio — the ONE audio voice for canvas feature playback.
@@ -39,6 +40,22 @@ const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 async function resolveUrl(memoId: string): Promise<string> {
   const cached = urlCache.get(memoId);
   if (cached && Date.now() - cached.fetchedAt < URL_TTL_MS) return cached.url;
+  // LOCAL-FIRST: a take you just recorded (or one still uploading, offline,
+  // or in a demo room) plays instantly from the device blob — the play button
+  // must never wait on a server that hasn't met this take yet. This was the
+  // root of "why can't I listen to them": the signed-URL call has nothing to
+  // sign until the upload lands, so fresh takes silently refused to play.
+  try {
+    const blob = await audioCache.get(memoId);
+    if (blob) {
+      if (cached?.url.startsWith("blob:")) URL.revokeObjectURL(cached.url);
+      const url = URL.createObjectURL(blob);
+      urlCache.set(memoId, { url, fetchedAt: Date.now() });
+      return url;
+    }
+  } catch {
+    /* cache unavailable — the signed URL below still serves */
+  }
   const url = await getPlaybackUrl(memoId);
   urlCache.set(memoId, { url, fetchedAt: Date.now() });
   return url;

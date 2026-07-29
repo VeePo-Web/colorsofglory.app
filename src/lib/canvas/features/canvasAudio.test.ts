@@ -24,6 +24,9 @@ const memosMock = vi.hoisted(() => {
 
 vi.mock("@/integrations/cog/memos", () => ({ getPlaybackUrl: memosMock.getPlaybackUrl }));
 
+const cacheMock = vi.hoisted(() => ({ get: vi.fn(async () => null as Blob | null) }));
+vi.mock("@/lib/voice/audioCache", () => ({ audioCache: cacheMock }));
+
 import { playMemoOnCanvas, stopCanvasAudio, getCanvasPlayback, soloPlayAction } from "./canvasAudio";
 
 describe("soloPlayAction — the card play button toggles the right way", () => {
@@ -54,6 +57,9 @@ describe("canvasAudio — the shared voice honours a hard stop (never-bleed mech
 
   it("marks a memo as sounding, then stopCanvasAudio() clears it", async () => {
     const p = playMemoOnCanvas(A);
+    // The local-cache check runs first — wait for the server fetch to be
+    // reached before releasing its parked URL.
+    await vi.waitFor(() => expect(memosMock.getPlaybackUrl).toHaveBeenCalled());
     memosMock.flush();
     await p;
     expect(getCanvasPlayback().memoId).toBe(A);
@@ -62,9 +68,27 @@ describe("canvasAudio — the shared voice honours a hard stop (never-bleed mech
     expect(getCanvasPlayback().memoId).toBeNull();
   });
 
+  it("LOCAL-FIRST: a freshly recorded take plays from the device blob — no server, no waiting", async () => {
+    // The root of "why can't I listen to them": a take mid-upload has no
+    // server memo, so the signed-URL call fails. The device cache has held
+    // the blob since the take was saved — play from THERE first.
+    cacheMock.get.mockResolvedValueOnce(new Blob(["hum"], { type: "audio/mp4" }));
+    const orig = URL.createObjectURL;
+    (URL as unknown as { createObjectURL: () => string }).createObjectURL = () => "blob:local-take";
+    try {
+      const ok = await playMemoOnCanvas(A);
+      expect(ok).toBe(true);
+      expect(getCanvasPlayback().memoId).toBe(A);
+      expect(memosMock.getPlaybackUrl).not.toHaveBeenCalled(); // never hit the server
+    } finally {
+      (URL as unknown as { createObjectURL: typeof orig }).createObjectURL = orig;
+    }
+  });
+
   it("invalidates an in-flight play: a URL landing AFTER the stop can't resurrect sound", async () => {
     // Record is tapped while a memo's signed URL is still being fetched.
     const p = playMemoOnCanvas(B);
+    await vi.waitFor(() => expect(memosMock.getPlaybackUrl).toHaveBeenCalled());
     stopCanvasAudio();      // ← the mic-arm choke point runs this
     memosMock.flush();      // the fetch finally resolves, too late
     const ok = await p;

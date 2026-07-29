@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, X, Check } from "lucide-react";
+import { diatonicChords } from "@/lib/chords/keys";
 
 /**
  * GuidedShapeRail — the hand that walks a fresh idea home.
@@ -26,6 +27,9 @@ const SECTION_CHIPS: Array<{ kind: string; label: string }> = [
   { kind: "tag", label: "Tag" },
   { kind: "intro", label: "Intro" },
 ];
+
+/** The keys a worship writer actually reaches for, most common first. */
+const KEY_CHIPS = ["C", "G", "D", "A", "E", "F", "Bb", "Eb"] as const;
 
 interface GuidedShapeRailProps {
   songTitle?: string;
@@ -116,6 +120,10 @@ const GuidedShapeRail = ({
   const [step, setStep] = useState(0);
   const [lyrics, setLyrics] = useState("");
   const [chords, setChords] = useState("");
+  // Tap-to-build harmony: pick the key, then the key's own chords are chips —
+  // clicking assembles the progression (typing stays as the free fallback).
+  const [songKey, setSongKey] = useState<string | null>(null);
+  const [prog, setProg] = useState<string[]>([]);
   const reduce =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -130,9 +138,12 @@ const GuidedShapeRail = ({
     next();
   };
   const addChords = () => {
-    const t = chords.trim();
-    if (t) onAddChords(t);
+    // Chips first (the one-tap path), typed text as the free fallback —
+    // either way the key rides along so the chart knows its home.
+    const line = prog.length > 0 ? prog.join("  ") : chords.trim();
+    if (line) onAddChords(songKey ? `Key: ${songKey} · ${line}` : line);
     setChords("");
+    setProg([]);
     next();
   };
 
@@ -318,23 +329,103 @@ const GuidedShapeRail = ({
         {STEPS[step] === "chords" && (
           <div>
             {question("Any chords underneath it?")}
-            <input
-              value={chords}
-              onChange={(e) => setChords(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && chords.trim()) {
-                  e.preventDefault();
-                  addChords();
-                }
-              }}
-              placeholder="C  G  Am  F"
-              aria-label="Chords for this idea"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              style={{ ...fieldStyle, fontFamily: "var(--font-body)" }}
-            />
-            {actions({ canAdd: chords.trim().length > 0, onAdd: addChords, addLabel: "Add chords" })}
+            {/* 1 · Pick the key — one tap. */}
+            <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+              Key
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {KEY_CHIPS.map((k) => {
+                const active = songKey === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => { setSongKey(active ? null : k); setProg([]); }}
+                    aria-pressed={active}
+                    aria-label={`Key of ${k}`}
+                    style={{
+                      minWidth: 44, minHeight: 44, padding: "0 10px", borderRadius: 12, cursor: "pointer",
+                      border: active ? "1.5px solid var(--cog-gold)" : "1.5px solid rgba(28,26,23,0.12)",
+                      backgroundColor: active ? "var(--cog-gold)" : "#FFFFFF",
+                      color: active ? "#FFFFFF" : "var(--cog-charcoal)",
+                      fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700,
+                    }}
+                  >
+                    {k}
+                  </button>
+                );
+              })}
+            </div>
+            {/* 2 · That key's own chords — tap to build the progression. */}
+            {songKey && (
+              <>
+                <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+                  Chords in {songKey}
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  {diatonicChords(songKey).map((ch) => (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => setProg((p) => [...p, ch])}
+                      aria-label={`Add ${ch}`}
+                      style={{
+                        minWidth: 44, minHeight: 44, padding: "0 12px", borderRadius: 999, cursor: "pointer",
+                        border: "1.5px solid rgba(184,149,58,0.35)",
+                        backgroundColor: "var(--cog-gold-pale, #E8D5A0)",
+                        color: "var(--cog-charcoal)",
+                        fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700,
+                      }}
+                    >
+                      {ch}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {/* The progression as it builds — tap a chord to take it back out. */}
+            {prog.length > 0 && (
+              <div
+                aria-label={`Your progression: ${prog.join(", ")} — tap a chord to remove it`}
+                style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 10, padding: "10px 12px", borderRadius: 12, backgroundColor: "#FFFFFF", border: "1.5px solid var(--cog-border, rgba(28,26,23,0.10))" }}
+              >
+                {prog.map((ch, i) => (
+                  <button
+                    key={`${ch}-${i}`}
+                    type="button"
+                    onClick={() => setProg((p) => p.filter((_, j) => j !== i))}
+                    aria-label={`Remove ${ch}`}
+                    style={{
+                      minHeight: 36, padding: "0 10px", borderRadius: 999, cursor: "pointer",
+                      border: "none", backgroundColor: "var(--cog-gold)", color: "#FFFFFF",
+                      fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 800,
+                    }}
+                  >
+                    {ch} ×
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Typed fallback for anything beyond the chips (sus, slash, 7ths). */}
+            {prog.length === 0 && (
+              <input
+                value={chords}
+                onChange={(e) => setChords(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && chords.trim()) {
+                    e.preventDefault();
+                    addChords();
+                  }
+                }}
+                placeholder="or type them — C  G  Am7  F/C"
+                aria-label="Chords for this idea"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ ...fieldStyle, fontFamily: "var(--font-body)" }}
+              />
+            )}
+            {actions({ canAdd: prog.length > 0 || chords.trim().length > 0, onAdd: addChords, addLabel: "Add chords" })}
           </div>
         )}
 
