@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Plus, Disc3 } from "lucide-react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import type { SongAlbum } from "@/lib/library/albums";
 
 interface BatchAlbumSheetProps {
@@ -23,13 +24,8 @@ const BatchAlbumSheet = ({ count, albums, onPick, onNewAlbum, onClose }: BatchAl
     return () => cancelAnimationFrame(t);
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Full modal safety — replaces the Escape-only listener (Tab could walk out).
+  const dialogRef = useModalFocusTrap(onClose);
 
   const rowClass =
     "flex w-full items-center gap-3 rounded-xl px-3 text-left transition-colors duration-150 hover:bg-[var(--cog-cream)] active:scale-[0.99]";
@@ -49,11 +45,14 @@ const BatchAlbumSheet = ({ count, albums, onPick, onNewAlbum, onClose }: BatchAl
         }}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`Add ${count} songs to an album`}
+        tabIndex={-1}
         className="fixed inset-x-0 bottom-0 z-[811] mx-auto w-full max-w-[430px] rounded-t-3xl md:max-w-md"
         style={{
+          outline: "none",
           backgroundColor: "var(--cog-cream-light)",
           borderTop: "1px solid var(--cog-border)",
           boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks, Pencil, Trash2, LogOut } from "lucide-react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -62,13 +63,9 @@ const SongActionsSheet = ({
     return () => cancelAnimationFrame(t);
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Full modal safety (focus-in, Tab trap, Escape, focus-return) — the manual
+  // Escape-only listener this replaces let Tab walk out of an aria-modal sheet.
+  const dialogRef = useModalFocusTrap(onClose);
 
   const rowClass =
     "flex w-full items-center gap-3 rounded-xl px-3 text-left transition-colors duration-150 hover:bg-[var(--cog-cream)] active:scale-[0.99]";
@@ -89,11 +86,14 @@ const SongActionsSheet = ({
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`Actions for ${song.title}`}
+        tabIndex={-1}
         className="fixed inset-x-0 bottom-0 z-[800] mx-auto w-full max-w-[430px] rounded-t-3xl md:max-w-md"
         style={{
+          outline: "none",
           backgroundColor: "var(--cog-cream-light)",
           borderTop: "1px solid var(--cog-border)",
           boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",

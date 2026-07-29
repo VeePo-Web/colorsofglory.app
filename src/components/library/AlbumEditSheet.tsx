@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Check, Search } from "lucide-react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -45,13 +46,9 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
     return () => cancelAnimationFrame(t);
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Full modal safety — replaces the Escape-only listener (Tab could walk out).
+  // The hook won't steal focus from the name field if it autofocuses first.
+  const dialogRef = useModalFocusTrap(onClose);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -81,11 +78,14 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
 
       {/* Sheet */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={album ? `Edit album ${album.name}` : "New album"}
+        tabIndex={-1}
         className="fixed inset-x-0 bottom-0 z-[800] mx-auto w-full max-w-[430px] rounded-t-3xl md:max-w-md"
         style={{
+          outline: "none",
           backgroundColor: "var(--cog-cream-light)",
           borderTop: "1px solid var(--cog-border)",
           boxShadow: "0 -24px 60px rgba(28,26,23,0.20)",

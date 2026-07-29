@@ -371,7 +371,10 @@ const SongCatalogPage = () => {
 
   // ── The calm library: every surface earns its place (libraryCalm) ────────
   const tabsVisible = showLibraryTabs(tabCounts);
-  const controlsVisible = showLibraryControls(tabCounts[activeTab]);
+  // `|| query`: if archiving results mid-search drops the count below the
+  // threshold, the search field must NOT unmount while its filter is still
+  // applied — a stranded query with no clear affordance is a trap.
+  const controlsVisible = showLibraryControls(tabCounts[activeTab]) || query.trim() !== "";
   const albumsVisible = showAlbumsShelf(albums.length, ownedSongs.length);
   // ONE continue moment: a saved practice session outranks the last-touched
   // song; two stacked "pick up where you left off" cards was the loudest
