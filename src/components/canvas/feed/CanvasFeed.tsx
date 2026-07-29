@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent } from "react";
-import { Map as MapIcon, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
 import CreativeActionDock, { type CreativeDockAction } from "@/components/cog/CreativeActionDock";
@@ -39,6 +39,8 @@ export interface CanvasFeedProps {
   currentListenId: string | null;
   /** The song played all the way through — the Final page offers what's next. */
   listenFinished: boolean;
+  /** Paused mid-song — the Final page keeps its transport up for Resume. */
+  listenPaused: boolean;
   /** Nonce: a moment (e.g. the promote toast's "Hear it") asks the feed to
    *  turn to the Final page. Every bump turns the page. */
   finalPageRequest?: number;
@@ -48,8 +50,6 @@ export interface CanvasFeedProps {
   onPrev: () => void;
   onReorderFinal: (id: string, delta: number) => void;
   isViewer: boolean;
-  /** Absent = the whiteboard is retired (current state) — no map entry shown. */
-  onOpenMap?: () => void;
 }
 
 const CanvasFeed = memo(function CanvasFeed({
@@ -61,6 +61,7 @@ const CanvasFeed = memo(function CanvasFeed({
   listening,
   currentListenId,
   listenFinished,
+  listenPaused,
   finalPageRequest = 0,
   onPlaySong,
   onPlayPause,
@@ -68,7 +69,6 @@ const CanvasFeed = memo(function CanvasFeed({
   onPrev,
   onReorderFinal,
   isViewer,
-  onOpenMap,
 }: CanvasFeedProps) {
   const [page, setPage] = useState<FeedPage>("ideas");
   // A moment asked for the Final page (the promote toast's "Hear it") —
@@ -143,7 +143,9 @@ const CanvasFeed = memo(function CanvasFeed({
     cursor: "pointer",
     fontFamily: "var(--font-body)",
     fontSize: 13.5,
-    fontWeight: 800,
+    // The active page is the head's ONE bold; the inactive tab reads, never
+    // shouts (two 800-weight texts at the top was a double headline).
+    fontWeight: active ? 800 : 600,
     letterSpacing: "0.01em",
     color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
     backgroundColor: active
@@ -183,7 +185,9 @@ const CanvasFeed = memo(function CanvasFeed({
         }
       `}</style>
 
-      {/* The pager head — Ideas | Final, plus the Map one tap away. */}
+      {/* The pager head — Ideas | Final. (The whiteboard's map button is
+          gone with the whiteboard; the code path back lives behind the
+          stored view preference only.) */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 8px" }}>
         <div
           role="tablist"
@@ -219,21 +223,6 @@ const CanvasFeed = memo(function CanvasFeed({
             Final{finalCards.length > 0 ? ` · ${finalCards.length}` : ""}
           </button>
         </div>
-        {onOpenMap && (
-          <button
-            type="button"
-            onClick={onOpenMap}
-            aria-label="Open the map view of this song"
-            style={{
-              width: 44, height: 44, borderRadius: 999, border: "1px solid rgba(28,26,23,0.10)",
-              backgroundColor: "rgba(255,255,255,0.92)", color: "var(--cog-warm-gray)",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.08)", flexShrink: 0,
-            }}
-          >
-            <MapIcon size={17} strokeWidth={2} />
-          </button>
-        )}
       </div>
 
       {/* The two full-screen pages, sliding as one continuous surface. */}
@@ -265,12 +254,28 @@ const CanvasFeed = memo(function CanvasFeed({
                 >
                   <Sparkles size={22} strokeWidth={1.8} style={{ color: "#B5935A" }} />
                 </div>
-                <p style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, color: "var(--cog-charcoal)", margin: "0 0 8px" }}>
-                  The song starts here
-                </p>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: 0 }}>
-                  Hum it, speak it, or write it — one tap below and the first spark is safe.
-                </p>
+                {/* Honest per-state story: a truly empty song starts here; a
+                    song whose every idea is already IN the Final tells that
+                    truth instead ("starts here" over used cards was a lie). */}
+                {groups.length === 0 ? (
+                  <>
+                    <p style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, color: "var(--cog-charcoal)", margin: "0 0 8px" }}>
+                      The song starts here
+                    </p>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: 0 }}>
+                      Hum it, speak it, or write it — one tap below and the first spark is safe.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, color: "var(--cog-charcoal)", margin: "0 0 8px" }}>
+                      Every idea is in the song
+                    </p>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: 0 }}>
+                      Swipe to Final to hear it — or catch the next spark below.
+                    </p>
+                  </>
+                )}
               </div>
             )}
             {groups.map((group) => (
@@ -291,7 +296,7 @@ const CanvasFeed = memo(function CanvasFeed({
                     <Sparkles size={13} strokeWidth={2} style={{ color: "var(--cog-gold)" }} aria-hidden="true" />
                   )}
                   {group.label}
-                  <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, color: "var(--cog-muted)" }}>
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 500, color: "var(--cog-muted)" }}>
                     {group.cards.length}
                   </span>
                 </h3>
@@ -329,6 +334,7 @@ const CanvasFeed = memo(function CanvasFeed({
               listening={listening}
               currentId={currentListenId}
               finished={listenFinished}
+              paused={listenPaused}
               onPlaySong={onPlaySong}
               onPlayPause={onPlayPause}
               onNext={onNext}
@@ -341,8 +347,9 @@ const CanvasFeed = memo(function CanvasFeed({
         </div>
       </div>
 
-      {/* The creation dock — Ideas page only; Final owns its own transport. */}
-      {page === "ideas" && <CreativeActionDock actions={dockActions} />}
+      {/* The creation dock — Ideas page only; Final owns its own transport.
+          Viewers get no dock at all (an all-ghosted dock is not an interface). */}
+      {page === "ideas" && dockActions.length > 0 && <CreativeActionDock actions={dockActions} />}
 
       {/* The traveling ghost — a promoted idea physically flies to Final. */}
       {ghost && (

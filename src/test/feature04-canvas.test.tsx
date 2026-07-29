@@ -41,9 +41,9 @@ describe("Feature 04 song whiteboard canvas", () => {
     expect(screen.getByText(/start the song here/i)).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeEnabled();
     expect(lastButton(/record idea|record memo/i)).toBeEnabled();
-    // The pill opens on a neutral truth â€” "Saved" would be a false claim on an
-    // untouched room.
-    expect(screen.getByText(/every idea stays here/i)).toBeInTheDocument();
+    // The status line is EMPTY at rest — it speaks only when something
+    // happens (the old resting slogan was a permanent claim with no state).
+    expect(screen.queryByText(/every idea stays here/i)).toBeNull();
   });
 
   it("adds a named song part (Verse) and keeps it after remount", async () => {
@@ -70,7 +70,9 @@ describe("Feature 04 song whiteboard canvas", () => {
     renderCanvas("/songs/1/canvas?role=viewer");
 
     expect(await screen.findByText(/you can view this canvas/i, {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(lastButton(/add part/i)).toBeDisabled();
-    expect(lastButton(/record idea|record memo/i)).toBeDisabled();
+    // A viewer's creation dock doesn't render AT ALL — two permanently
+    // ghosted pills were a dead control row, not an interface.
+    expect(screen.queryByRole("button", { name: /add part/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /record idea|record memo/i })).toBeNull();
   });
 });

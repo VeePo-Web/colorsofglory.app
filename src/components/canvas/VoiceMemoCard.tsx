@@ -35,11 +35,10 @@ const VoiceMemoCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
   return (
     <>
       {/* The take's NAME is the headline — one crisp serif line at a legible
-          size (Playfair muddies below ~15px), duration quietly right-aligned. */}
+          size (Playfair muddies below ~15px), duration quietly right-aligned.
+          No icon tile: the tone stripe already says "audio", and the waveform
+          says it louder — the title is the face's one bold. */}
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-        <div style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Mic size={12} strokeWidth={1.8} style={{ color: tone.base }} />
-        </div>
         <p style={{ fontSize: 15, fontWeight: 700, color: "var(--cog-charcoal)", fontFamily: "var(--font-display)", lineHeight: 1.15, flex: 1, minWidth: 0, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {card.title}
         </p>

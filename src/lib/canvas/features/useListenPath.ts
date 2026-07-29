@@ -28,6 +28,8 @@ export interface ListenPathApi {
   playing: boolean;
   /** True after the path plays ALL the way through (cleared on any new play). */
   finished: boolean;
+  /** True while paused mid-song — the transport must stay up for Resume. */
+  paused: boolean;
   /** Toggle a card in/out of the queue (card face / overflow "Listen Path" action). */
   toggleCard: (id: string) => void;
   removeCard: (id: string) => void;
@@ -62,6 +64,10 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
   // The path played all the way through (vs merely paused) — the moment a
   // surface can offer the natural NEXT thing ("play it again", "keep shaping").
   const [finished, setFinished] = useState(false);
+  // Paused MID-SONG (vs stopped/at rest) — surfaces must keep the transport
+  // up so Resume is reachable; without this flag a pause looked like rest and
+  // the only visible control restarted the song from the top.
+  const [paused, setPaused] = useState(false);
 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
@@ -84,6 +90,7 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
     clearDwell();
     stopCanvasAudio();
     setPlaying(false);
+    setPaused(false);
   }, [clearDwell]);
 
   /** Play the queue from `index`, auto-advancing to the end. */
@@ -95,6 +102,7 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
         clearDwell();
         stopCanvasAudio();
         setPlaying(false);
+        setPaused(false);
         setStep(0);
         setFinished(true);
         return;
@@ -102,6 +110,7 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
       clearDwell();
       setStep(index);
       setPlaying(true);
+      setPaused(false);
       setFinished(false);
       const card = cardsRef.current.find((c) => c.id === q[index]);
       const advance = () => playStep(index + 1);
@@ -194,6 +203,7 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
       clearDwell();
       pauseCanvasAudio();
       setPlaying(false);
+      setPaused(true);
     } else {
       playStep(step);
     }
@@ -267,5 +277,5 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
     };
   }, [clearDwell]);
 
-  return { queue, step, playing, finished, toggleCard, removeCard, clear, playPause, next, prev, goTo, save, playAll, replaceCardId };
+  return { queue, step, playing, finished, paused, toggleCard, removeCard, clear, playPause, next, prev, goTo, save, playAll, replaceCardId };
 }

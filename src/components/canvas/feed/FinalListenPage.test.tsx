@@ -31,6 +31,7 @@ const setup = (over: Partial<React.ComponentProps<typeof FinalListenPage>> = {})
     listening: false,
     currentId: null,
     finished: false,
+    paused: false,
     onPlaySong: vi.fn(),
     onPlayPause: vi.fn(),
     onNext: vi.fn(),
@@ -78,5 +79,21 @@ describe("FinalListenPage — the song as a performance", () => {
   it("the finished moment never shows while the song is still sounding", () => {
     setup({ finished: true, listening: true, currentId: "v1" });
     expect(screen.queryByText(/that.s the whole song/i)).toBeNull();
+  });
+
+  it("while finished, the finished card owns the ONE gold play — the header yields", () => {
+    setup({ finished: true });
+    expect(screen.queryByRole("button", { name: /play the whole song/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /play the song again/i })).toBeInTheDocument();
+  });
+
+  it("paused mid-song keeps the transport up: Resume is one tap, the row stays lit", () => {
+    const p = setup({ paused: true, currentId: "v1" });
+    // The resting "Play the song" (which would RESTART) is replaced by Resume.
+    expect(screen.queryByRole("button", { name: /play the whole song/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /resume the song/i }));
+    expect(p.onPlayPause).toHaveBeenCalledTimes(1);
+    // The paused row still narrates its held place.
+    expect(screen.getByRole("button", { name: /part 1: verse 1.*paused here — tap to resume/i })).toBeInTheDocument();
   });
 });

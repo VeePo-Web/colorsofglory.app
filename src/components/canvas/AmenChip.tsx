@@ -1,5 +1,4 @@
 import { memo, type CSSProperties, type PointerEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { Heart, Sparkles } from "lucide-react";
 import type { CardReactionKind } from "@/integrations/cog/reactions";
 import type { AmenSummary } from "@/lib/canvas/collab/amens";
 import { getCreatorInitials } from "@/lib/canvas/creatorColors";
@@ -167,73 +166,38 @@ const AmenChip = memo(function AmenChip({ summary, selected, cardTitle, onToggle
     );
   }
 
-  // Selected: the warm action row. Buttons swallow events so an amen tap
-  // never becomes a card drag/select/keyboard toggle.
+  // Selected: ONE warm act. Three near-synonymous affirmations (amen, heart,
+  // keeper) were the classic 3-equal-choice stall — and heart/keeper were
+  // unlabeled icons nobody could name. The product named the concept "Amen";
+  // the chip is Amen, and the DotCluster inside it already tells who agreed
+  // (the separate "X said amen" line was the same fact twice). Heart/keeper
+  // survive in the data seam, not as live targets. Button swallows events so
+  // an amen tap never becomes a card drag/select/keyboard toggle.
   return (
     <div style={{ marginTop: 10, ...fadeIn }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button
-          type="button"
-          {...swallow}
-          onClick={(e) => {
-            e.stopPropagation();
-            affirm("amen", mineAmen);
-          }}
-          aria-pressed={mineAmen}
-          aria-label={mineAmen ? `Remove your amen from ${cardTitle}` : `Say amen to ${cardTitle}`}
-          style={{ ...kindBtn(mineAmen), flex: 1, padding: "0 14px" }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-display)",
-              fontStyle: "italic",
-              fontWeight: 700,
-              fontSize: 14.5,
-            }}
-          >
-            Amen
-          </span>
-          {count > 0 && <DotCluster summary={summary!} />}
-        </button>
-        <button
-          type="button"
-          {...swallow}
-          onClick={(e) => {
-            e.stopPropagation();
-            affirm("heart", mineHeart);
-          }}
-          aria-pressed={mineHeart}
-          aria-label={mineHeart ? `Remove your heart from ${cardTitle}` : `Send a heart to ${cardTitle}`}
-          style={kindBtn(mineHeart)}
-        >
-          <Heart size={16} fill={mineHeart ? GOLD : "none"} strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          {...swallow}
-          onClick={(e) => {
-            e.stopPropagation();
-            affirm("keeper", mineKeeper);
-          }}
-          aria-pressed={mineKeeper}
-          aria-label={mineKeeper ? `Remove your keeper mark from ${cardTitle}` : `Mark ${cardTitle} as a keeper`}
-          style={kindBtn(mineKeeper)}
-        >
-          <Sparkles size={16} strokeWidth={2} />
-        </button>
-      </div>
-      {count > 0 && (
-        <div
+      <button
+        type="button"
+        {...swallow}
+        onClick={(e) => {
+          e.stopPropagation();
+          affirm("amen", mineAmen);
+        }}
+        aria-pressed={mineAmen}
+        aria-label={mineAmen ? `Remove your amen from ${cardTitle}` : `Say amen to ${cardTitle}`}
+        style={{ ...kindBtn(mineAmen), width: "100%", padding: "0 14px" }}
+      >
+        <span
           style={{
-            marginTop: 6,
-            fontSize: 10.5,
-            color: "var(--cog-warm-gray, #6B6459)",
-            fontFamily: "var(--font-body)",
+            fontFamily: "var(--font-display)",
+            fontStyle: "italic",
+            fontWeight: 700,
+            fontSize: 14.5,
           }}
         >
-          {describe(summary!)}
-        </div>
-      )}
+          Amen
+        </span>
+        {count > 0 && <DotCluster summary={summary!} />}
+      </button>
     </div>
   );
 });

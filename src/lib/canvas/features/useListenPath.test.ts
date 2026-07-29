@@ -54,6 +54,24 @@ describe("useListenPath — the F20 queue state machine", () => {
     expect(result.current.step).toBe(0);
   });
 
+  it("`paused` is a first-class state: true only mid-song, cleared by resume and by finishing", () => {
+    const { result } = setup();
+    act(() => { result.current.playAll(["a", "b"]); });
+    expect(result.current.paused).toBe(false);
+    act(() => { result.current.playPause(); });
+    expect(result.current.paused).toBe(true);
+    expect(result.current.playing).toBe(false);
+    // Resume clears it…
+    act(() => { result.current.playPause(); });
+    expect(result.current.paused).toBe(false);
+    expect(result.current.playing).toBe(true);
+    // …and running out the path never leaves it set.
+    act(() => { vi.advanceTimersByTime(3600); });
+    act(() => { vi.advanceTimersByTime(3600); });
+    expect(result.current.paused).toBe(false);
+    expect(result.current.finished).toBe(true);
+  });
+
   it("`finished` means played ALL the way through — not merely paused — and clears on replay", () => {
     const { result } = setup();
     act(() => { result.current.playAll(["a"]); });

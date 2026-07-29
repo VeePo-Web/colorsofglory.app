@@ -1,5 +1,4 @@
 import { memo } from "react";
-import { FileText } from "lucide-react";
 import { STATUS_COLORS } from "@/lib/canvas/creatorColors";
 import type { CardFaceProps } from "./cardFace";
 
@@ -16,12 +15,9 @@ const LyricCard = memo(({ card, tone, selected }: CardFaceProps) => {
     <>
       {/* THE CROWN: the section name in serif — "Chorus" must read at arm's
           length, because which part of the song this is IS the card's
-          identity. The tiny rose icon keeps the material language; an EARNED
-          status (never "raw") rides quietly on the right. */}
+          identity. No icon tile (the tone stripe already carries the type);
+          an EARNED status (never "raw") rides quietly on the right. */}
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-        <div style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: tone.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <FileText size={12} strokeWidth={1.8} style={{ color: tone.base }} />
-        </div>
         <span
           style={{
             flex: 1, minWidth: 0,

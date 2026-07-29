@@ -31,7 +31,6 @@ import {
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import { setNavDirection } from "@/lib/nav/navDirection";
-import CrownMark from "@/components/cog/CrownMark";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
 import { isBottomWorkflowActive } from "@/lib/canvas/bottomSurface";
@@ -416,7 +415,9 @@ const SongCanvasExperience = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Neutral opening line — "Saved" would be a false claim on an empty room.
   // Short on purpose: the pill shares a 390px row with the metronome + invite.
-  const [canvasStatus, setCanvasStatus] = useState("Every idea stays here.");
+  // Empty at rest — the status line speaks only when something happens (the
+  // old resting slogan was a permanent gold pill carrying no state).
+  const [canvasStatus, setCanvasStatus] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);  // for divider glow
   const [activeLayer, setActiveLayer] = useState<LayerId>(() => {
     const layer = searchParams.get("layer");
@@ -715,9 +716,9 @@ const SongCanvasExperience = () => {
         setCards((prev) => applyPromoteToFinal(prev, sourceId, finalCopy));
         setSelectedId(null);
         setIsDragOver(false);
-        // Undo lives in the toast (useFinalArrangement) — the pill only states
-        // what happened; it was never tappable.
-        setCanvasStatus("Moved to Final.");
+        // ONE narrator per event: the promote already speaks through the
+        // ghost, the Final-tab pulse, and the Hear-it/Undo toast — a fourth
+        // simultaneous status line was confirmation noise.
       },
       returnToIdeas: (finalCardId, sourceId) => {
         // Same alias hazard as revertMerge: an Undo closure can hold an id
@@ -825,7 +826,9 @@ const SongCanvasExperience = () => {
         cardId,
       );
     },
-    onMoment: showSavedMoment,
+    // No onMoment here: the promote's ONE narrator is the sonner toast
+    // (Hear it / Undo). Firing SongRoomSaveToast at the same instant put two
+    // confirmations on screen for every promote.
   });
   const metronome = useCanvasMetronome(songId);
 
@@ -1300,10 +1303,13 @@ const SongCanvasExperience = () => {
     const parentMemoId = recordingParentIdRef.current ?? undefined;
     recordingParentIdRef.current = null;
     voiceMemoCountRef.current++;
-    setCanvasStatus("Saving...");
+    // ONE save narrator: the toast. (A simultaneous "Saving..." status line
+    // contradicted the "Saved" toast for its whole life.) The destination
+    // must read as a place — "Saved to the stack", not "Saved to Layer
+    // added to stack".
     showSavedMoment(
       name || "Voice memo",
-      parentMemoId ? "Layer added to stack" : (section || "Raw idea"),
+      parentMemoId ? "the stack" : (section || "Raw idea"),
       "Voice memo",
     );
     setRecordingFlow("idle");
@@ -1512,7 +1518,11 @@ const SongCanvasExperience = () => {
   // orient to every part of the song), then Ideas (the two-tree mental model),
   // then Invite. Ref + hook only; see docs/onboarding/first-run-tour-plan.md.
   const featuresTour = useCoachMark("tour_features_seen", !isViewer && !showFirstRun);
-  const ideasTour = useCoachMark("tour_ideas_seen", !isViewer && !showFirstRun);
+  // MAP ONLY: the ideas beat anchors the map's zone tablist and its copy is
+  // whiteboard grammar ("drag it across"). In the feed it claimed the
+  // one-tip-at-a-time lock with a null anchor — rendering nothing and
+  // starving the invite beat forever.
+  const ideasTour = useCoachMark("tour_ideas_seen", !isViewer && !showFirstRun && canvasView === "map");
   const inviteTour = useCoachMark("tour_invite_seen", !isViewer && !showFirstRun);
 
   // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
@@ -1870,18 +1880,35 @@ const SongCanvasExperience = () => {
     [songMembers, roomCollaborators],
   );
 
-  // Fly the canvas so a card lands at the viewport center, then select it.
+  // Take the songwriter TO a card. Map: fly the viewport there. Feed: turn to
+  // the right page and scroll the card into view — without this, every deep
+  // link ("See it" toasts, recap rows, review queue) silently did nothing in
+  // the feed (panTo hits a null viewport there).
   const jumpToCard = useCallback((card: CanvasCard) => {
-    const area = canvasAreaRef.current;
-    // Land the card's center at the viewport's center (card is 200px wide).
-    viewportApiRef.current?.panTo(
-      card.x + 100,
-      card.y + 70,
-      (area?.clientWidth ?? window.innerWidth) / 2,
-      (area?.clientHeight ?? window.innerHeight) / 2,
-      450,
-    );
     setSelectedId(card.id);
+    if (viewportApiRef.current) {
+      const area = canvasAreaRef.current;
+      // Land the card's center at the viewport's center (card is 200px wide).
+      viewportApiRef.current.panTo(
+        card.x + 100,
+        card.y + 70,
+        (area?.clientWidth ?? window.innerWidth) / 2,
+        (area?.clientHeight ?? window.innerHeight) / 2,
+        450,
+      );
+      return;
+    }
+    // Feed: Final cards live on the Final page — turn to it first.
+    if (card.tree === "final") setFinalPageRequest((n) => n + 1);
+    requestAnimationFrame(() => {
+      try {
+        document
+          .querySelector(`[data-feed-card="${card.id}"], [data-final-row="${card.id}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch {
+        /* the selection ring still marks the card wherever it is */
+      }
+    });
   }, []);
 
   // The canvas-space bounding box of a set of cards (+ optionally the root
@@ -2328,36 +2355,35 @@ const SongCanvasExperience = () => {
     if (s) resolveSuggestion(s);
   }, [allSuggestions, resolveSuggestion]);
 
+  // The dock has ONE job: creation. Two verbs, one gold primary. (Practice is
+  // a consumption verb with its own homes — the Flow handle and the library —
+  // and its pill sat first in the thumb arc, diluting the mic. For viewers the
+  // dock renders nothing at all: two permanently-ghosted pills were a dead
+  // control row, not an interface.)
   const dockActions = useMemo(
-    () => [
-      {
-        id: "practice",
-        label: isPracticeLaunching ? "Loading" : "Practice",
-        icon: BookOpen,
-        onClick: () => { void handleLaunchPractice(); },
-        loading: isPracticeLaunching,
-        haptic: [4],
-      },
-      {
-        id: "record",
-        label: recordingFlow === "recording" ? "Recording" : "Record memo",
-        icon: Mic,
-        onClick: () => { void handleStartRecording(); },
-        primary: true,
-        disabled: isViewer || recordingFlow !== "idle",
-        haptic: [10],
-        ariaLabel: recordingFlow === "recording" ? "Recording voice memo" : "Record memo",
-      },
-      {
-        id: "idea",
-        label: "Add part",
-        icon: Plus,
-        onClick: () => setShowAddPart(true),
-        disabled: isViewer,
-        haptic: [5],
-      },
-    ],
-    [handleLaunchPractice, handleStartRecording, isPracticeLaunching, isViewer, recordingFlow],
+    () =>
+      isViewer
+        ? []
+        : [
+            {
+              id: "record",
+              label: recordingFlow === "recording" ? "Recording" : "Record memo",
+              icon: Mic,
+              onClick: () => { void handleStartRecording(); },
+              primary: true,
+              disabled: recordingFlow !== "idle",
+              haptic: [10],
+              ariaLabel: recordingFlow === "recording" ? "Recording voice memo" : "Record memo",
+            },
+            {
+              id: "idea",
+              label: "Add part",
+              icon: Plus,
+              onClick: () => setShowAddPart(true),
+              haptic: [5],
+            },
+          ],
+    [handleStartRecording, isViewer, recordingFlow],
   );
 
   // One bottom action surface at a time: the creation dock steps aside whenever
@@ -2403,21 +2429,24 @@ const SongCanvasExperience = () => {
           {songTitle}
         </h1>
 
-        {/* Just the crown mark — the full wordmark wrapped to three lines at
-            390px and shoved the title off-center. */}
-        <div className="flex flex-shrink-0 items-center" style={{ minWidth: 64, justifyContent: "flex-end" }} aria-hidden="true">
-          <CrownMark size={22} color="#B5935A" />
-        </div>
+        {/* Spacer mirroring the back button so the serif title truly centers.
+            The decorative crown is gone — the title is the header's one bold,
+            and the brand already lives in the gold system itself. */}
+        <div className="flex-shrink-0" style={{ minWidth: 64 }} aria-hidden="true" />
       </header>
 
       {/* Both rows wrap on narrow screens — the owner's "Review N" pill must
           never be pushed off the right edge of a 390px phone. */}
       <div className="relative z-30 mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-5 pb-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {/* Quiet status line — plain text, never pill chrome: a passive
+              status wearing the gold-control costume read as a dead button.
+              Empty at rest (the resting slogan was a permanent claim with no
+              state); the aria-live region stays mounted for announcements. */}
           <p
             aria-live="polite"
-            className="truncate rounded-full px-3 py-1.5 text-[11px] font-semibold"
-            style={{ backgroundColor: "rgba(184,149,58,0.10)", color: "var(--cog-gold)" }}
+            className="truncate px-1 text-[11px] font-medium"
+            style={{ color: "var(--cog-warm-gray)" }}
           >
             {canvasStatus}
           </p>
@@ -2482,15 +2511,15 @@ const SongCanvasExperience = () => {
               <span className="relative flex items-center">
                 <CollaboratorAvatarStack collaborators={presenceStack} size={26} maxVisible={3} />
                 {othersHereNow > 0 && (
+                  // Static sage dot — "here now" without an infinite pulse.
+                  // Motion outranks size and color in the attention order, so
+                  // a forever-looping ping in the header beat every card in
+                  // the stream.
                   <span
                     className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5"
                     aria-hidden="true"
                     title="Here now"
                   >
-                    <span
-                      className="absolute inline-flex h-full w-full rounded-full opacity-60"
-                      style={{ backgroundColor: GLORY.sage.base, animation: "cog-live-ping 1.8s cubic-bezier(0,0,0.2,1) infinite" }}
-                    />
                     <span
                       className="relative inline-flex h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: GLORY.sage.base, border: "1.5px solid #FAFAF6" }}
@@ -2499,9 +2528,17 @@ const SongCanvasExperience = () => {
                 )}
               </span>
             )}
+            {/* Ghost register: when the owner has pending reviews, "Review N"
+                is the row's one gold element — two gold-filled pills side by
+                side were two equal headlines. */}
             <span
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold"
-              style={{ backgroundColor: "var(--cog-gold)", color: "#FFFFFF", fontFamily: "var(--font-body)" }}
+              style={{
+                backgroundColor: "transparent",
+                border: "1.5px solid rgba(184,149,58,0.45)",
+                color: "var(--cog-gold)",
+                fontFamily: "var(--font-body)",
+              }}
             >
               <UserPlus size={12} strokeWidth={2.2} />
               Invite
@@ -2522,6 +2559,7 @@ const SongCanvasExperience = () => {
             listening={listenPlaying}
             currentListenId={listenQueue[listenStep] ?? null}
             listenFinished={listenPath.finished}
+            listenPaused={listenPath.paused}
             finalPageRequest={finalPageRequest}
             onPlaySong={(ids) => listenPath.playAll(ids)}
             onPlayPause={listenPath.playPause}
@@ -2940,8 +2978,9 @@ const SongCanvasExperience = () => {
           }
         }
         // WEAVE — compose this final section line-by-line from the Ideas tree
-        // (the star action for a forming section; docs/WEAVE-CONTRACT.md).
-        if ((c.type === "lyric" || c.type === "section") && c.tree === "final" && !isViewer && !c.isDimmedReference) {
+        // (docs/WEAVE-CONTRACT.md). MAP ONLY: in the feed the exclusivity
+        // effect exits weave on sight, so this row was a self-cancelling tap.
+        if (canvasView === "map" && (c.type === "lyric" || c.type === "section") && c.tree === "final" && !isViewer && !c.isDimmedReference) {
           actions.push({
             id: "weave",
             label: "Weave lines into this section",
@@ -2978,31 +3017,19 @@ const SongCanvasExperience = () => {
             onClick: () => handleNewVariant(c.id),
           });
         }
-        const inPath = listenPath.queue.includes(c.id);
-        actions.push({
-          id: "path",
-          label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to Listen Path",
-          icon: <ListMusic size={16} strokeWidth={1.9} />,
-          onClick: () => {
-            listenPath.toggleCard(c.id);
-            // In the feed there's no pill to witness the queue growing — say
-            // what happened, and offer the natural next thing in one tap.
-            if (!inPath) {
-              const count = listenPath.queue.length + 1;
-              toast(`Added to your listen path — stop #${count}`, {
-                duration: 5000,
-                action: {
-                  label: "Play it",
-                  onClick: () => {
-                    const lp = apisRef.current.listenPath;
-                    if (lp.queue.length > 0) lp.playAll(lp.queue);
-                  },
-                },
-              });
-            }
-          },
-          active: inPath,
-        });
+        // MAP ONLY: the queue's whole management surface (ListenPathBar) is
+        // map furniture — in the feed the Final page owns sequenced listening,
+        // and a queue with no visible home was a feature that "didn't work".
+        if (canvasView === "map") {
+          const inPath = listenPath.queue.includes(c.id);
+          actions.push({
+            id: "path",
+            label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to Listen Path",
+            icon: <ListMusic size={16} strokeWidth={1.9} />,
+            onClick: () => listenPath.toggleCard(c.id),
+            active: inPath,
+          });
+        }
         // Map-idiom only: the merge selection bar lives on the whiteboard, and
         // the feed's exclusivity effect clears selections on sight — offering
         // this row there was a dead button.
@@ -3131,14 +3158,9 @@ const SongCanvasExperience = () => {
           0%, 100% { box-shadow: 0 0 0 6px rgba(184,149,58,0.20), 0 4px 16px rgba(28,26,23,0.35); }
           50%       { box-shadow: 0 0 0 14px rgba(184,149,58,0.08), 0 4px 16px rgba(28,26,23,0.35); }
         }
-        @keyframes cog-live-ping {
-          0%   { transform: scale(1);   opacity: 0.6; }
-          75%, 100% { transform: scale(2.2); opacity: 0; }
-        }
         @keyframes cog-fade-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes cog-sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
-          [style*="cog-live-ping"] { animation: none !important; }
           [style*="cog-sheet-rise"], [style*="cog-fade-in"] { animation: none !important; }
         }
       `}</style>

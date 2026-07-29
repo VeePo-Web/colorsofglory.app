@@ -49,6 +49,8 @@ export interface FinalListenPageProps {
   currentId: string | null;
   /** The song played all the way through — time for the next-moment card. */
   finished: boolean;
+  /** Paused mid-song — the transport stays up so Resume is one tap. */
+  paused: boolean;
   /** Play these parts in order — the page passes the full song or a
    *  play-from-here tail (tap any row to start THERE, Apple Music style). */
   onPlaySong: (ids: string[]) => void;
@@ -67,6 +69,7 @@ const FinalListenPage = memo(function FinalListenPage({
   listening,
   currentId,
   finished,
+  paused,
   onPlaySong,
   onPlayPause,
   onNext,
@@ -141,13 +144,15 @@ const FinalListenPage = memo(function FinalListenPage({
           marginBottom: 18,
         }}
       >
-        <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: GLORY.sage.dark, fontFamily: "var(--font-body)" }}>
-          The final song
-        </p>
-        <p style={{ margin: "6px 0 14px", fontFamily: "var(--font-display)", fontSize: 21, fontWeight: 700, lineHeight: 1.15, color: "var(--cog-charcoal)" }}>
+        {/* No eyebrow: the active "Final" tab sits 60px above — restating the
+            surface's name here was the same fact twice. The serif line is the
+            header's one claim. */}
+        <p style={{ margin: "0 0 14px", fontFamily: "var(--font-display)", fontSize: 21, fontWeight: 700, lineHeight: 1.15, color: "var(--cog-charcoal)" }}>
           {cards.length} {cards.length === 1 ? "part" : "parts"}, in order
         </p>
-        {listening ? (
+        {listening || paused ? (
+          // The transport stays up while PAUSED too — otherwise Resume was
+          // unreachable and the only visible control restarted the song.
           <div style={{ display: "flex", alignItems: "center", gap: 10 }} role="group" aria-label="Song playback">
             <button type="button" onClick={onPrev} style={iconBtn} aria-label="Previous part">
               <SkipBack size={17} strokeWidth={2} />
@@ -155,23 +160,32 @@ const FinalListenPage = memo(function FinalListenPage({
             <button
               type="button"
               onClick={onPlayPause}
-              aria-label="Pause the song"
+              aria-label={paused ? "Resume the song" : "Pause the song"}
               style={{
-                flex: 1, minHeight: 52, borderRadius: 15, border: "none", cursor: "pointer",
-                backgroundColor: "var(--cog-gold)", color: "#FFF",
+                flex: 1, minHeight: 52, borderRadius: 15, cursor: "pointer",
+                // While the song sounds, the SOUNDING ROW is the one bold thing —
+                // the pause control is quiet chrome, not a second gold headline.
+                border: `1.5px solid ${paused ? "var(--cog-gold)" : "rgba(28,26,23,0.14)"}`,
+                backgroundColor: paused ? "var(--cog-gold)" : "rgba(255,255,255,0.85)",
+                color: paused ? "#FFF" : "var(--cog-charcoal)",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
-                fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 800,
-                boxShadow: "0 6px 18px rgba(184,149,58,0.35)",
+                fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 700,
               }}
             >
-              <Pause size={18} strokeWidth={2} fill="currentColor" />
-              Playing the song
+              {paused ? (
+                <Play size={18} strokeWidth={2} fill="currentColor" style={{ marginLeft: 2 }} />
+              ) : (
+                <Pause size={18} strokeWidth={2} fill="currentColor" />
+              )}
+              {paused ? "Resume" : "Pause"}
             </button>
             <button type="button" onClick={onNext} style={iconBtn} aria-label="Next part">
               <SkipForward size={17} strokeWidth={2} />
             </button>
           </div>
-        ) : (
+        ) : finished ? null : (
+          // While the finished card is up it owns the ONE gold play — the
+          // header yields rather than doubling the same verb on one screen.
           <button
             type="button"
             onClick={() => onPlaySong(cards.map((c) => c.id))}
@@ -246,7 +260,9 @@ const FinalListenPage = memo(function FinalListenPage({
       <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         {cards.map((card, i) => {
           const interactions = getInteractions(card);
-          const sounding = currentId === card.id && listening;
+          // The sounding row stays lit while PAUSED too — the song's place is
+          // held, the read-along stays open, and tapping it resumes.
+          const sounding = currentId === card.id && (listening || paused);
           const selected = selectedId === card.id;
           const Icon = TYPE_ICON[card.type] ?? StickyNote;
           const color = getCreatorColor(card.contributor);
@@ -265,10 +281,10 @@ const FinalListenPage = memo(function FinalListenPage({
               key={card.id}
               data-final-row={card.id}
               style={{
-                // The set list settles in top-to-bottom — same cascade grammar
-                // as the Ideas stream (reduced-motion neutralizes it upstream).
+                // One settle, no index-keyed stagger: a delay derived from `i`
+                // restarts the CSS animation on every reorder (the renumbered
+                // rows below a moved part would re-flash their entrance).
                 animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) both",
-                animationDelay: `${Math.min(i * 40, 320)}ms`,
               }}
             >
               <div
@@ -276,7 +292,11 @@ const FinalListenPage = memo(function FinalListenPage({
                 tabIndex={0}
                 aria-pressed={selected}
                 aria-label={`Part ${i + 1}: ${card.section || card.title || card.type}${
-                  sounding ? ", sounding now — tap to pause" : ", tap to play from here"
+                  sounding
+                    ? paused
+                      ? ", paused here — tap to resume"
+                      : ", sounding now — tap to pause"
+                    : ", tap to play from here"
                 }`}
                 onClick={tapRow}
                 onKeyDown={(e) => {
@@ -312,7 +332,9 @@ const FinalListenPage = memo(function FinalListenPage({
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-display)", fontSize: 15.5, fontWeight: 700, color: "var(--cog-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <Icon size={13} strokeWidth={1.9} style={{ color: color.base, flexShrink: 0 }} />
+                    {/* Neutral glyph: creator color on a type icon double-encoded
+                        with no legend here — the set list keeps sage/cobalt only. */}
+                    <Icon size={13} strokeWidth={1.9} style={{ color: "var(--cog-warm-gray)", flexShrink: 0 }} />
                     {card.section || card.title || "Part"}
                   </p>
                   {/* READ-ALONG: while this part sounds, its full words open
@@ -342,13 +364,16 @@ const FinalListenPage = memo(function FinalListenPage({
                   ) : null}
                 </div>
                 {!isViewer && (
+                  // Quiet chrome: borderless ghost chevrons — the honest,
+                  // always-reachable reorder path without 2N bordered buttons
+                  // fighting the Play primary (targets stay 40px).
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       disabled={i === 0}
                       onClick={(e) => { e.stopPropagation(); onReorder(card.id, -1); }}
                       aria-label={`Move ${card.section || card.title || "this part"} earlier`}
-                      style={{ ...iconBtn, width: 40, height: 40, opacity: i === 0 ? 0.35 : 1, cursor: i === 0 ? "default" : "pointer" }}
+                      style={{ width: 40, height: 40, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === 0 ? 0.25 : 0.7, cursor: i === 0 ? "default" : "pointer" }}
                     >
                       <ChevronUp size={16} strokeWidth={2.2} />
                     </button>
@@ -357,7 +382,7 @@ const FinalListenPage = memo(function FinalListenPage({
                       disabled={i === cards.length - 1}
                       onClick={(e) => { e.stopPropagation(); onReorder(card.id, 1); }}
                       aria-label={`Move ${card.section || card.title || "this part"} later`}
-                      style={{ ...iconBtn, width: 40, height: 40, opacity: i === cards.length - 1 ? 0.35 : 1, cursor: i === cards.length - 1 ? "default" : "pointer" }}
+                      style={{ width: 40, height: 40, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === cards.length - 1 ? 0.25 : 0.7, cursor: i === cards.length - 1 ? "default" : "pointer" }}
                     >
                       <ChevronDown size={16} strokeWidth={2.2} />
                     </button>
