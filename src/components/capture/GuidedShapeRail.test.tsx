@@ -75,6 +75,22 @@ describe("GuidedShapeRail — the guided path from a fresh idea to its home", ()
     expect(screen.getByRole("button", { name: /keep it loose in my ideas/i })).toBeInTheDocument();
   });
 
+  it("a song-less capture offers the writer's own songs inline — one tap files it", () => {
+    const p = setup({
+      canCommit: false,
+      homeSongs: [
+        { id: "s1", title: "Grace in the Waiting" },
+        { id: "s2", title: "Hold On" },
+      ],
+      onCommitToSong: vi.fn(),
+    });
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add this idea to hold on/i }));
+    expect(p.onCommitToSong).toHaveBeenCalledWith("s2");
+    // The loose home stays available beneath the list.
+    expect(screen.getByRole("button", { name: /keep it loose in my ideas/i })).toBeInTheDocument();
+  });
+
   it("a section the take already holds shows as done and never duplicates", () => {
     const p = setup({ heardSections: ["chorus"] });
     fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));

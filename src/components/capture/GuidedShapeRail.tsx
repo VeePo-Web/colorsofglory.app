@@ -38,6 +38,10 @@ interface GuidedShapeRailProps {
   /** Section kinds the take already holds (spoken "verse", added chips) —
    *  their chips show as done, and tapping one just advances (no duplicate). */
   heardSections?: string[];
+  /** Song-less captures only: the writer's own songs, offered inline on the
+   *  home card so filing is one tap — no second sheet over a sheet. */
+  homeSongs?: Array<{ id: string; title: string }>;
+  onCommitToSong?: (songId: string) => void;
   onAddLyrics: (text: string) => void;
   onSetSection: (kind: string, label: string) => void;
   onAddChords: (text: string) => void;
@@ -100,6 +104,8 @@ const GuidedShapeRail = ({
   committing = false,
   hasWords = false,
   heardSections = [],
+  homeSongs = [],
+  onCommitToSong,
   onAddLyrics,
   onSetSection,
   onAddChords,
@@ -346,6 +352,47 @@ const GuidedShapeRail = ({
                   <Check size={16} strokeWidth={2.4} />
                   {committing ? "Adding…" : `Add to ${songTitle ?? "the song"}`}
                 </button>
+              )}
+              {/* Song-less capture: the writer's own songs, one tap to file —
+                  inline (never a second sheet stacked over this one). */}
+              {!canCommit && onCommitToSong && homeSongs.length > 0 && (
+                <div
+                  role="list"
+                  aria-label="File this idea into one of your songs"
+                  style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}
+                >
+                  {homeSongs.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => onCommitToSong(s.id)}
+                      disabled={committing}
+                      aria-label={`Add this idea to ${s.title}`}
+                      style={{
+                        minHeight: 48,
+                        padding: "0 14px",
+                        borderRadius: 12,
+                        border: "1.5px solid rgba(184,149,58,0.30)",
+                        backgroundColor: "#FFFFFF",
+                        color: "var(--cog-charcoal)",
+                        fontFamily: "var(--font-body)",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        textAlign: "left",
+                        opacity: committing ? 0.6 : 1,
+                      }}
+                    >
+                      <ArrowRight size={15} strokeWidth={2.2} style={{ color: "var(--cog-gold)", flexShrink: 0 }} />
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.title}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               )}
               <button
                 type="button"

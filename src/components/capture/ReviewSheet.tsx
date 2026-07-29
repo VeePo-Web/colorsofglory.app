@@ -27,6 +27,7 @@ import {
 } from "@/integrations/cog/transcript";
 import { getTakeSignedUrl } from "@/integrations/cog/takes";
 import { commitTakeToCanvas } from "@/integrations/cog/canvas";
+import { listMySongs } from "@/integrations/cog/songs";
 import { fetchPassage } from "@/integrations/cog/scripture";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import { audioCache } from "@/lib/voice/audioCache";
@@ -177,6 +178,32 @@ const ReviewSheet = ({
   useEffect(() => {
     if (open) setGuided(true);
   }, [open]);
+
+  // Song-less captures only: the writer's own songs for the rail's inline
+  // home list. Fetched lazily and only when there's actually no song attached
+  // — a song-scoped review never pays for this.
+  const [homeSongs, setHomeSongs] = useState<Array<{ id: string; title: string }>>([]);
+  useEffect(() => {
+    if (!open || songId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listMySongs();
+        if (!cancelled) {
+          setHomeSongs(
+            rows
+              .filter((r) => r.my_role === "owner" && r.status !== "archived")
+              .map((r) => ({ id: r.id, title: r.title })),
+          );
+        }
+      } catch {
+        /* the loose-ideas home remains — filing can happen from the shelf */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, songId]);
   const objectUrlRef = useRef<string | null>(null);
   const playerRef = useRef<ReviewAudioPlayerHandle | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -499,8 +526,11 @@ const ReviewSheet = ({
     }
   };
 
-  const handleCommit = async () => {
-    if (!takeId || !songId) return;
+  const handleCommit = async (targetSongId?: unknown) => {
+    // The rail's song-less home card passes a chosen song id; every other
+    // caller passes nothing (or a click event — hence the typeof guard).
+    const target = typeof targetSongId === "string" ? targetSongId : songId;
+    if (!takeId || !target) return;
     const usable = blocks.filter((b) => b.text.trim().length > 0 || b.kind === "section");
     if (usable.length === 0) {
       toast.message("Nothing to save yet", { description: "Add a part below, or wait for the transcript." });
@@ -510,7 +540,7 @@ const ReviewSheet = ({
     try {
       const result = await commitTakeToCanvas({
         take_id: takeId,
-        song_id: songId,
+        song_id: target,
         blocks: usable.map((b) => ({
           kind: b.kind,
           section_kind: b.section_kind,
@@ -521,10 +551,11 @@ const ReviewSheet = ({
         })),
       });
       if (onCommitted) {
-        // Parent handles the ribbon + navigation.
+        // Parent handles the ribbon + navigation. For a rail-picked song the
+        // title comes from the picked row, not the (absent) prop.
         onCommitted({
           songId: result.song_id,
-          songTitle,
+          songTitle: songTitle ?? homeSongs.find((s) => s.id === target)?.title,
           blockCount: usable.length,
         });
       } else {
@@ -623,6 +654,8 @@ const ReviewSheet = ({
               heardSections={blocks
                 .map((b) => b.section_kind)
                 .filter((k): k is string => Boolean(k))}
+              homeSongs={songId ? [] : homeSongs}
+              onCommitToSong={(id) => void handleCommit(id)}
               onAddLyrics={(text) => addFilledBlock("lyrics", text)}
               onSetSection={(kind, label) => addFilledBlock("section", "", label, kind)}
               onAddChords={(text) => addFilledBlock("chords", text)}
