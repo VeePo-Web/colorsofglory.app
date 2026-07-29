@@ -47,11 +47,13 @@ interface UseListenPathArgs {
   mutations: Pick<CanvasFeatureMutations, "saveListenPath">;
   /** Restored queue from the store, applied once on mount. */
   initialQueue?: string[];
+  /** The CURRENTLY persisted path (live) — so an id rename can rewrite it. */
+  savedQueue?: string[];
   /** Fired when playback lands on a step — the host flies the board there. */
   onStepChange?: (cardId: string) => void;
 }
 
-export function useListenPath({ cards, mutations, initialQueue, onStepChange }: UseListenPathArgs): ListenPathApi {
+export function useListenPath({ cards, mutations, initialQueue, savedQueue, onStepChange }: UseListenPathArgs): ListenPathApi {
   const [queue, setQueue] = useState<string[]>(() => initialQueue ?? []);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -60,6 +62,8 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
   cardsRef.current = cards;
   const queueRef = useRef(queue);
   queueRef.current = queue;
+  const savedQueueRef = useRef(savedQueue);
+  savedQueueRef.current = savedQueue;
   const dwellRef = useRef<number | null>(null);
   const onStepChangeRef = useRef(onStepChange);
   onStepChangeRef.current = onStepChange;
@@ -220,14 +224,24 @@ export function useListenPath({ cards, mutations, initialQueue, onStepChange }: 
   );
 
   /** Keep queue + saved path truthful when a pending card id becomes real. */
-  const replaceCardId = useCallback((oldId: string, newId: string) => {
-    setQueue((prev) => {
-      if (!prev.includes(oldId)) return prev;
-      const next = prev.map((id) => (id === oldId ? newId : id));
-      queueRef.current = next;
-      return next;
-    });
-  }, []);
+  const replaceCardId = useCallback(
+    (oldId: string, newId: string) => {
+      setQueue((prev) => {
+        if (!prev.includes(oldId)) return prev;
+        const next = prev.map((id) => (id === oldId ? newId : id));
+        queueRef.current = next;
+        return next;
+      });
+      // The PERSISTED path must rename too — a path saved mid-upload used to
+      // keep the temp id and restore with a phantom stop after reload. Silent
+      // rewrite (no toast): nothing changed from the songwriter's view.
+      const saved = savedQueueRef.current;
+      if (saved?.includes(oldId)) {
+        mutations.saveListenPath(saved.map((id) => (id === oldId ? newId : id)));
+      }
+    },
+    [mutations],
+  );
 
   // Keep step valid as the queue shrinks; silence on empty.
   useEffect(() => {

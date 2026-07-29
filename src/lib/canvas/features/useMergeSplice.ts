@@ -35,13 +35,22 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
   // when the selection clears (a fresh 2-card selection can merge again).
   const executeInFlightRef = useRef(false);
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelection((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 2) return prev;
-      return [...prev, id];
-    });
-  }, []);
+  const toggleSelect = useCallback(
+    (id: string) => {
+      // The cap must SPEAK: a third select used to silently no-op while the
+      // action sheet still offered it as if it would work.
+      if (!selection.includes(id) && selection.length >= 2) {
+        toast("Merge takes two ideas at a time — remove one first.");
+        return;
+      }
+      setSelection((prev) => {
+        if (prev.includes(id)) return prev.filter((x) => x !== id);
+        if (prev.length >= 2) return prev;
+        return [...prev, id];
+      });
+    },
+    [selection],
+  );
 
   const removeFromSelection = useCallback((id: string) => {
     setSelection((prev) => prev.filter((x) => x !== id));

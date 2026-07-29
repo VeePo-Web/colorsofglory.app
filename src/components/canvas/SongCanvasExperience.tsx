@@ -764,6 +764,9 @@ const SongCanvasExperience = () => {
     cards,
     mutations: featureMutations,
     initialQueue: featureMeta.listenPath,
+    // Live persisted path, so an upload's id rename rewrites the SAVED
+    // sequence too (not just the in-memory queue).
+    savedQueue: featureMeta.listenPath,
     onStepChange: (cardId) => followPlaybackRef.current(cardId),
   });
   // The create spine renames cards (local uuid → db-card-<uuid>); the listen
@@ -1987,9 +1990,21 @@ const SongCanvasExperience = () => {
   const jumpToCardId = useCallback(
     (cardId: string) => {
       const target = cards.find((c) => c.id === cardId);
-      if (target) jumpToCard(target);
+      if (!target) return;
+      // A recap/review deep link must reach a card hidden inside a COLLAPSED
+      // section stack: fan the cluster open first, then frame the card once
+      // it exists on the stage (same wait-a-frame dance as expand-by-tap).
+      if (hiddenCardIds.has(cardId)) {
+        const cluster = clusterFlagList.find((cl) => cl.cardIds.includes(cardId));
+        if (cluster) {
+          setExpandedClusters((prev) => new Set(prev).add(cluster.id));
+          requestAnimationFrame(() => jumpToCard(target));
+          return;
+        }
+      }
+      jumpToCard(target);
     },
-    [cards, jumpToCard],
+    [cards, jumpToCard, hiddenCardIds, clusterFlagList],
   );
 
   // Presence as navigation: fly the canvas to this person's latest idea and
