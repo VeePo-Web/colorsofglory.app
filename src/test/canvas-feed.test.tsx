@@ -48,15 +48,18 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
     await waitFor(() => expect(screen.getByRole("tab", { name: /^ideas$/i })).toHaveAttribute("aria-selected", "true"));
   });
 
-  it("the map stays one tap away — and the choice persists", async () => {
+  it("the whiteboard is retired: no map entry anywhere in the feed", async () => {
     renderCanvas();
-    const mapBtn = await screen.findByRole("button", { name: /open the map view/i }, { timeout: 10000 });
-    fireEvent.click(mapBtn);
-    // The spatial room: root song card + Fit control.
+    await screen.findByRole("tab", { name: /^ideas$/i }, { timeout: 10000 });
+    expect(screen.queryByRole("button", { name: /open the map view/i })).toBeNull();
+  });
+
+  it("the stored preference is the map's only door — and its Feed pill leads back", async () => {
+    localStorage.setItem("cog:canvas-view", "map");
+    renderCanvas();
+    // The dormant spatial room still works behind the hatch (weave/merge live on).
     expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getByLabelText(/fit the whole song to view/i)).toBeInTheDocument();
-    expect(localStorage.getItem("cog:canvas-view")).toBe("map");
-    // And back to the feed.
+    // And its Feed pill returns to the one true canvas.
     fireEvent.click(screen.getByRole("button", { name: /open the feed view/i }));
     expect(await screen.findByRole("tab", { name: /^ideas$/i })).toBeInTheDocument();
     expect(localStorage.getItem("cog:canvas-view")).toBe("feed");

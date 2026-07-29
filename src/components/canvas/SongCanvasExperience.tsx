@@ -61,6 +61,7 @@ import {
   enqueuePendingUpload,
   flushPendingUpload,
   listPendingUploads,
+  remapPendingParents,
 } from "@/lib/voice/pendingUploads";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import {
@@ -1225,6 +1226,9 @@ const SongCanvasExperience = () => {
   // the temp card id becomes the real memo id; on failure the card stays put with
   // its blob safe in the cache, to be retried by the recovery sweep on next load /
   // reconnect. The creed holds on the canvas exactly as it does in the song room.
+  // Self-reference so a base's flush can re-flush the layers it just healed
+  // (a useCallback can't name itself while it's being defined).
+  const flushCanvasUploadRef = useRef<(pendingId: string) => Promise<void>>(async () => {});
   const flushCanvasUpload = useCallback(async (pendingId: string) => {
     try {
       const memoId = await flushPendingUpload(pendingId);
@@ -1236,10 +1240,27 @@ const SongCanvasExperience = () => {
         // BEFORE this swap lands — drop it here so one take never shows twice.
         .filter((c) => !(memoId && c.id === `db-voice-${memoId}`))
         .map((c) =>
-          c.id === pendingId ? { ...c, id: memoId ?? c.id, isProcessing: false } : c,
+          c.id === pendingId
+            ? { ...c, id: memoId ?? c.id, isProcessing: false }
+            // Layers must FOLLOW their base's rename, or the stack orphans:
+            // the layer card points at a ghost id and — because layer cards
+            // only render inside their base's stack — vanishes entirely.
+            : memoId && c.parentMemoId === pendingId
+            ? { ...c, parentMemoId: memoId }
+            : c,
         ));
-      // The listen queue tracks the same rename, or its entry goes phantom.
-      if (memoId) listenPath.replaceCardId(pendingId, memoId);
+      if (memoId) {
+        // The listen queue tracks the same rename, or its entry goes phantom.
+        listenPath.replaceCardId(pendingId, memoId);
+        // An OPEN stack sheet / tries player on the renamed take must follow
+        // too — mid-upload they used to vanish the moment the flush landed.
+        setStackBaseId((s) => (s === pendingId ? memoId : s));
+        setTakesFor((t) => (t && t.id === pendingId ? { ...t, id: memoId } : t));
+        // Queued layers held back by the parent-still-uploading guard now
+        // point at the real memo id — send them on their way immediately.
+        const healed = remapPendingParents(pendingId, memoId);
+        for (const healedId of healed) void flushCanvasUploadRef.current(healedId);
+      }
       setCanvasStatus("Saved to this song.");
     } catch {
       setCards((prev) => prev.map((c) =>
@@ -1249,6 +1270,7 @@ const SongCanvasExperience = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listenPath.replaceCardId]);
+  flushCanvasUploadRef.current = flushCanvasUpload;
 
   const handleSaveMemo = useCallback(async ({ name, section, transcribe }: { name: string; section: string; transcribe: boolean }) => {
     if (!pendingRecording) return;
@@ -1612,7 +1634,10 @@ const SongCanvasExperience = () => {
         onAddToListenPath: () => apisRef.current.listenPath.toggleCard(card.id),
         listenIndex: listenQueue.includes(card.id) ? listenQueue.indexOf(card.id) : undefined,
         onMergeSelect:
-          !isViewer && card.tree === "ideas" && !card.isDimmedReference
+          // Map-idiom only: the merge selection bar lives on the whiteboard.
+          // Offering it in the feed was a broken promise (the feed's
+          // exclusivity effect clears the selection on sight).
+          !isViewer && card.tree === "ideas" && !card.isDimmedReference && canvasView === "map"
             ? () => apisRef.current.merge.toggleSelect(card.id)
             : undefined,
         mergeSelected: mergeSelection.includes(card.id),
@@ -1663,6 +1688,7 @@ const SongCanvasExperience = () => {
     comparePlayingId,
     soloPlayId,
     mergeSelection,
+    canvasView,
     finalOrder,
     handleCardMove,
     handleRestoreCard,
@@ -2473,7 +2499,9 @@ const SongCanvasExperience = () => {
             onPrev={listenPath.prev}
             onReorderFinal={arrangement.moveBy}
             isViewer={isViewer}
-            onOpenMap={() => switchView("map")}
+            // The whiteboard is retired for now — no map entry. The map stays
+            // reachable only via the stored view preference (dev/test hatch),
+            // and its own "Feed" pill leads back here.
           />
         ) : (
         <CanvasStage

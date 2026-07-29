@@ -63,12 +63,12 @@ describe("feedModel — the feed's organize-brain", () => {
 describe("feedModel — view preference", () => {
   beforeEach(() => localStorage.clear());
 
-  it("phones default to the feed, big screens to the map", () => {
+  it("the feed is the canvas on EVERY device (the whiteboard is retired for now)", () => {
     expect(readCanvasView(390)).toBe("feed");
-    expect(readCanvasView(1440)).toBe("map");
+    expect(readCanvasView(1440)).toBe("feed");
   });
 
-  it("an explicit choice wins over the device default", () => {
+  it("the stored preference is the map's only remaining door (dev/test hatch)", () => {
     writeCanvasView("map");
     expect(readCanvasView(390)).toBe("map");
     writeCanvasView("feed");

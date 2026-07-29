@@ -92,15 +92,17 @@ const VIEW_KEY = "cog:canvas-view";
 
 export type CanvasViewMode = "feed" | "map";
 
-export function readCanvasView(viewportWidth: number): CanvasViewMode {
+export function readCanvasView(_viewportWidth: number): CanvasViewMode {
   try {
     const stored = localStorage.getItem(VIEW_KEY);
     if (stored === "feed" || stored === "map") return stored;
   } catch {
-    /* storage unavailable — fall through to the device default */
+    /* storage unavailable — fall through to the default */
   }
-  // Phones live in the flow; big screens open the spatial room.
-  return viewportWidth < 1024 ? "feed" : "map";
+  // The whiteboard is RETIRED for now (user call): the feed is the canvas on
+  // every device. The map stays alive behind the stored preference only — a
+  // dev/test escape hatch until it earns its way back.
+  return "feed";
 }
 
 export function writeCanvasView(view: CanvasViewMode): void {

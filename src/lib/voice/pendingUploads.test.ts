@@ -24,6 +24,7 @@ import {
   enqueuePendingUpload,
   flushPendingUpload,
   listPendingUploads,
+  remapPendingParents,
 } from "./pendingUploads";
 
 const mockAudioCache = vi.mocked(audioCache);
@@ -189,6 +190,49 @@ describe("pendingUploads — in-song take retain + retry", () => {
 
       const forSong1 = await listPendingUploads("song-1");
       expect(forSong1.map((p) => p.id)).toEqual([b.id, a.id]);
+    });
+  });
+
+  describe("layered takes — a layer never uploads with a temp parent id", () => {
+    it("holds a layer back while its base is still in the queue (never a garbage parent on the server)", async () => {
+      const base = await enqueuePendingUpload({ ...baseParams, blob: makeBlob("base") });
+      const layer = await enqueuePendingUpload({
+        ...baseParams,
+        blob: makeBlob("layer"),
+        parentMemoId: base.id, // recorded over a base that hasn't flushed yet
+      });
+      mockAudioCache.get.mockResolvedValue(makeBlob("layer"));
+
+      await expect(flushPendingUpload(layer.id)).rejects.toThrow("parent-take-still-uploading");
+      expect(mockUploadVoiceMemo).not.toHaveBeenCalled();
+      // The take is safe and waiting, not lost.
+      expect(readRawIndex().find((r) => r.id === layer.id)).toMatchObject({ status: "failed" });
+    });
+
+    it("remapPendingParents heals held-back layers to the real memo id and reports them for re-flush", async () => {
+      const base = await enqueuePendingUpload({ ...baseParams, blob: makeBlob("base") });
+      const layer = await enqueuePendingUpload({
+        ...baseParams,
+        blob: makeBlob("layer"),
+        parentMemoId: base.id,
+      });
+      const unrelated = await enqueuePendingUpload({ ...baseParams, blob: makeBlob("solo") });
+
+      const healed = remapPendingParents(base.id, "memo-real-9");
+      expect(healed).toEqual([layer.id]);
+
+      // The healed layer now uploads with the REAL parent id.
+      localStorage.setItem(
+        INDEX_KEY,
+        JSON.stringify(JSON.parse(localStorage.getItem(INDEX_KEY)!).filter((r: { id: string }) => r.id !== base.id)),
+      );
+      mockAudioCache.get.mockResolvedValue(makeBlob("layer"));
+      await flushPendingUpload(layer.id);
+      expect(mockUploadVoiceMemo).toHaveBeenCalledWith(
+        expect.objectContaining({ parentMemoId: "memo-real-9" }),
+      );
+      // The unrelated take was left alone.
+      expect(readRawIndex().find((r) => r.id === unrelated.id)).toBeTruthy();
     });
   });
 

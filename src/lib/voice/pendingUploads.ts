@@ -120,6 +120,16 @@ export async function flushPendingUpload(id: string): Promise<string | null> {
   const record = readIndex().find((r) => r.id === id);
   if (!record) return null;
 
+  // A layer recorded while its BASE was still uploading carries the base's
+  // TEMP id as parentMemoId. Sending that to the server writes a garbage
+  // parent and the stack relationship is lost forever. Hold the layer back:
+  // when the base flushes, remapPendingParents() heals this row to the real
+  // memo id and the caller re-flushes it. The blob stays safe throughout.
+  if (record.parentMemoId && readIndex().some((r) => r.id === record.parentMemoId)) {
+    updateRecord(id, { status: "failed" });
+    throw new Error("parent-take-still-uploading");
+  }
+
   const blob = await audioCache.get(id);
   if (!blob) {
     // The blob is gone (cache evicted / already claimed) — drop the orphan row
@@ -165,6 +175,24 @@ export async function listPendingUploads(songId: string): Promise<PendingUpload[
   return readIndex()
     .filter((r) => r.songId === songId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/**
+ * A base take's temp id just became its real memo id — heal every queued
+ * layer that still points at the temp parent, and return the healed row ids
+ * so the caller can re-flush them immediately (they were held back by the
+ * parent-still-uploading guard above).
+ */
+export function remapPendingParents(oldParentId: string, newParentId: string): string[] {
+  const healed: string[] = [];
+  writeIndex(
+    readIndex().map((r) => {
+      if (r.parentMemoId !== oldParentId) return r;
+      healed.push(r.id);
+      return { ...r, parentMemoId: newParentId, status: "pending" as const };
+    }),
+  );
+  return healed;
 }
 
 /** Permanently discard a queued take — removes the index row and the cached blob. */

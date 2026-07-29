@@ -42,7 +42,8 @@ export interface CanvasFeedProps {
   onPrev: () => void;
   onReorderFinal: (id: string, delta: number) => void;
   isViewer: boolean;
-  onOpenMap: () => void;
+  /** Absent = the whiteboard is retired (current state) — no map entry shown. */
+  onOpenMap?: () => void;
 }
 
 const CanvasFeed = memo(function CanvasFeed({
@@ -205,19 +206,21 @@ const CanvasFeed = memo(function CanvasFeed({
             Final{finalCards.length > 0 ? ` · ${finalCards.length}` : ""}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onOpenMap}
-          aria-label="Open the map view of this song"
-          style={{
-            width: 44, height: 44, borderRadius: 999, border: "1px solid rgba(28,26,23,0.10)",
-            backgroundColor: "rgba(255,255,255,0.92)", color: "var(--cog-warm-gray)",
-            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.08)", flexShrink: 0,
-          }}
-        >
-          <MapIcon size={17} strokeWidth={2} />
-        </button>
+        {onOpenMap && (
+          <button
+            type="button"
+            onClick={onOpenMap}
+            aria-label="Open the map view of this song"
+            style={{
+              width: 44, height: 44, borderRadius: 999, border: "1px solid rgba(28,26,23,0.10)",
+              backgroundColor: "rgba(255,255,255,0.92)", color: "var(--cog-warm-gray)",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.08)", flexShrink: 0,
+            }}
+          >
+            <MapIcon size={17} strokeWidth={2} />
+          </button>
+        )}
       </div>
 
       {/* The two full-screen pages, sliding as one continuous surface. */}
