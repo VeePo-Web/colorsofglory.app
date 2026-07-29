@@ -614,12 +614,27 @@ const ReviewSheet = ({
               songTitle={songTitle}
               canCommit={Boolean(takeId && songId)}
               committing={committing}
+              // The rail adapts to what the take already told us: words on
+              // the transcript soften step 1; spoken/added sections show as
+              // done chips (tapping one advances, never duplicates).
+              hasWords={blocks.some(
+                (b) => b.text.trim().length > 0 && (b.kind === "lyrics" || b.kind === "idea"),
+              )}
+              heardSections={blocks
+                .map((b) => b.section_kind)
+                .filter((k): k is string => Boolean(k))}
               onAddLyrics={(text) => addFilledBlock("lyrics", text)}
               onSetSection={(kind, label) => addFilledBlock("section", "", label, kind)}
               onAddChords={(text) => addFilledBlock("chords", text)}
               onCommit={handleCommit}
               onKeepLoose={() => {
-                toast("Kept with your ideas — shape it any time.");
+                // Honest per context: in a song the take is already attached
+                // to it; only a song-less capture lives in the loose ideas.
+                toast(
+                  songId
+                    ? `Saved with ${songTitle ?? "your song"} — shape it any time.`
+                    : "Kept with your ideas — shape it any time.",
+                );
                 onClose();
               }}
               onDismiss={() => setGuided(false)}

@@ -57,20 +57,35 @@ describe("GuidedShapeRail — the guided path from a fresh idea to its home", ()
     expect(screen.getByText(/1 of 4/)).toBeInTheDocument();
   });
 
-  it("the last card: Add to the song commits; Keep it loose keeps it loose", () => {
+  it("the last card in a song: Add commits; the honest secondary is 'finish later' (the take is already attached)", () => {
     const p = setup();
     for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
     fireEvent.click(screen.getByRole("button", { name: /add to grace in the waiting/i }));
     expect(p.onCommit).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: /keep it loose/i }));
+    // In a song, "keep it in my ideas" would be a lie — the take lives here.
+    expect(screen.queryByRole("button", { name: /keep it loose/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /finish shaping it later/i }));
     expect(p.onKeepLoose).toHaveBeenCalledTimes(1);
   });
 
-  it("without a song attached, the last card offers only the loose home", () => {
+  it("without a song attached, the last card offers the loose ideas home", () => {
     setup({ canCommit: false });
     for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
     expect(screen.queryByRole("button", { name: /add to/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /keep it loose/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /keep it loose in my ideas/i })).toBeInTheDocument();
+  });
+
+  it("a section the take already holds shows as done and never duplicates", () => {
+    const p = setup({ heardSections: ["chorus"] });
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /chorus — already in this take/i }));
+    expect(p.onSetSection).not.toHaveBeenCalled(); // advance only, no duplicate
+    expect(screen.getByText(/3 of 4/)).toBeInTheDocument();
+  });
+
+  it("when the transcript already carries words, step 1 says so", () => {
+    setup({ hasWords: true });
+    expect(screen.getByText(/spoken words are already below/i)).toBeInTheDocument();
   });
 
   it("dismiss closes the guide — a path, never a cage", () => {

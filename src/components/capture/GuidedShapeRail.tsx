@@ -32,6 +32,12 @@ interface GuidedShapeRailProps {
   /** A real song is attached — the final card can commit to its canvas. */
   canCommit: boolean;
   committing?: boolean;
+  /** The transcript already carries words — step 1 acknowledges instead of
+   *  asking as if the take were silent. */
+  hasWords?: boolean;
+  /** Section kinds the take already holds (spoken "verse", added chips) —
+   *  their chips show as done, and tapping one just advances (no duplicate). */
+  heardSections?: string[];
   onAddLyrics: (text: string) => void;
   onSetSection: (kind: string, label: string) => void;
   onAddChords: (text: string) => void;
@@ -92,6 +98,8 @@ const GuidedShapeRail = ({
   songTitle,
   canCommit,
   committing = false,
+  hasWords = false,
+  heardSections = [],
   onAddLyrics,
   onSetSection,
   onAddChords,
@@ -238,6 +246,11 @@ const GuidedShapeRail = ({
         {STEPS[step] === "lyrics" && (
           <div>
             {question("What words go with it?")}
+            {hasWords && (
+              <p style={{ margin: "-4px 0 8px", fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}>
+                Your spoken words are already below — add more, or skip.
+              </p>
+            )}
             <textarea
               value={lyrics}
               onChange={(e) => setLyrics(e.target.value)}
@@ -257,30 +270,40 @@ const GuidedShapeRail = ({
           <div>
             {question("Which part of the song is this?")}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {SECTION_CHIPS.map((c) => (
-                <button
-                  key={c.kind}
-                  type="button"
-                  onClick={() => {
-                    onSetSection(c.kind, c.label);
-                    next();
-                  }}
-                  style={{
-                    minHeight: 44,
-                    padding: "0 16px",
-                    borderRadius: 999,
-                    border: "1.5px solid rgba(184,149,58,0.35)",
-                    backgroundColor: "var(--cog-gold-pale, #E8D5A0)",
-                    color: "var(--cog-charcoal)",
-                    fontFamily: "var(--font-body)",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  {c.label}
-                </button>
-              ))}
+              {SECTION_CHIPS.map((c) => {
+                const heard = heardSections.includes(c.kind);
+                return (
+                  <button
+                    key={c.kind}
+                    type="button"
+                    onClick={() => {
+                      // A part the take already holds just advances — tapping
+                      // "Chorus" twice must never duplicate the section.
+                      if (!heard) onSetSection(c.kind, c.label);
+                      next();
+                    }}
+                    aria-label={heard ? `${c.label} — already in this take` : c.label}
+                    style={{
+                      minHeight: 44,
+                      padding: "0 16px",
+                      borderRadius: 999,
+                      border: heard ? "1.5px solid var(--cog-gold)" : "1.5px solid rgba(184,149,58,0.35)",
+                      backgroundColor: heard ? "var(--cog-gold)" : "var(--cog-gold-pale, #E8D5A0)",
+                      color: heard ? "#FFFFFF" : "var(--cog-charcoal)",
+                      fontFamily: "var(--font-body)",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {heard && <Check size={13} strokeWidth={3} />}
+                    {c.label}
+                  </button>
+                );
+              })}
             </div>
             {actions({})}
           </div>
@@ -329,7 +352,9 @@ const GuidedShapeRail = ({
                 onClick={onKeepLoose}
                 style={{ ...ghostBtn, width: "100%", minHeight: 48, textAlign: "center" }}
               >
-                Keep it loose in my ideas for now
+                {/* Honesty per context: in a song, the take is ALREADY attached
+                    to it — "keep it in my ideas" would be a lie there. */}
+                {canCommit ? "Finish shaping it later" : "Keep it loose in my ideas for now"}
               </button>
               <p style={{ margin: 0, fontSize: 11.5, color: "var(--cog-muted)", fontFamily: "var(--font-body)", textAlign: "center" }}>
                 Either way, the recording is already safe.
