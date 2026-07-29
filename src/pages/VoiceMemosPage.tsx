@@ -552,6 +552,10 @@ const VoiceMemosPage = () => {
           created_by: "You",
           is_processing: o.status !== "failed",
           status: o.status === "failed" ? "failed" : "uploading",
+          parentMemoId: (o.extra?.parentMemoId as string | undefined) ?? null,
+          layerGain: 1,
+          layerMuted: false,
+          layerOffsetMs: 0,
         }));
       return cards.length ? [...cards, ...prev] : prev;
     });
