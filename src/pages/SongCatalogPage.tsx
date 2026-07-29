@@ -424,16 +424,23 @@ const SongCatalogPage = () => {
     exitSelect();
   };
 
-  // Archive/restore every selected song at once — optimistic, reversible.
+  // Archive/restore every selected song at once — optimistic, reversible, and
+  // HONEST under partial failure: Promise.all + a wholesale rollback used to
+  // lie when some calls had already succeeded server-side (the local list
+  // showed them un-archived; the next refetch flipped them back — songs
+  // "moving on their own"). allSettled applies exactly what really happened.
   const batchSetStatus = async (archived: boolean) => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    const prev = songs;
     const status = (archived ? "archived" : "active") as SongRow["status"];
+    const prevStatusById = new Map(songs.map((x) => [x.id, x.status]));
     setSongs((s) => s.map((x) => (selectedIds.has(x.id) ? { ...x, status } : x)));
     exitSelect();
-    try {
-      await Promise.all(ids.map((id) => (archived ? archiveSong(id) : unarchiveSong(id))));
+    const results = await Promise.allSettled(
+      ids.map((id) => (archived ? archiveSong(id) : unarchiveSong(id))),
+    );
+    const failedIds = new Set(ids.filter((_, i) => results[i].status === "rejected"));
+    if (failedIds.size === 0) {
       toast(
         archived
           ? `${ids.length} songs archived — safe in the Archived tab`
@@ -451,10 +458,20 @@ const SongCatalogPage = () => {
             }
           : undefined,
       );
-    } catch {
-      setSongs(prev);
-      toast.error("Some songs couldn't be updated");
+      return;
     }
+    // Revert ONLY the songs whose call failed — the succeeded ones stay true.
+    setSongs((s) =>
+      s.map((x) =>
+        failedIds.has(x.id) ? { ...x, status: prevStatusById.get(x.id) ?? x.status } : x,
+      ),
+    );
+    const okCount = ids.length - failedIds.size;
+    toast.error(
+      okCount > 0
+        ? `${okCount} updated, ${failedIds.size} couldn't be — try those again`
+        : "Couldn't update those songs — try again",
+    );
   };
 
   const handleCreateSong = async () => {
@@ -736,6 +753,13 @@ const SongCatalogPage = () => {
               const songs = activeAlbum.songIds
                 .filter((id) => byId.has(id))
                 .map((id) => ({ id, title: byId.get(id) ?? "Untitled Song" }));
+              // Every tracklist entry can be gone (songs deleted or archived
+              // since the album was made) — never hand the practice player an
+              // empty set; say why, calmly.
+              if (songs.length === 0) {
+                toast("Nothing to practice yet — this album's songs were archived or removed.");
+                return;
+              }
               setNavDirection("up");
               navigate(`/albums/${activeAlbum.id}/practice`, { state: { songs } });
             }}
