@@ -5,6 +5,7 @@ import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
 import CreativeActionDock, { type CreativeDockAction } from "@/components/cog/CreativeActionDock";
 import FeedCard from "./FeedCard";
 import FinalListenPage from "./FinalListenPage";
+import SwipePromoteRow from "./SwipePromoteRow";
 import { ideasFeedGroups, finalFeedCards, SPARKS_GROUP, USED_GROUP } from "@/lib/canvas/feed/feedModel";
 import { usePrefersReducedMotion } from "@/lib/canvas/features";
 import { GLORY } from "@/lib/canvas/glorySpectrum";
@@ -284,15 +285,20 @@ const CanvasFeed = memo(function CanvasFeed({
                 </h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {group.cards.map((card) => (
-                    <FeedCard
+                    <SwipePromoteRow
                       key={card.id}
-                      card={card}
-                      selected={selectedId === card.id}
-                      interactions={getInteractions(card)}
-                      adornment={cardAdornment?.(card)}
-                      onFlyToFinal={flyToFinal}
-                      entranceDelayMs={nextEntranceDelay()}
-                    />
+                      enabled={!isViewer && card.tree === "ideas" && !card.isDimmedReference}
+                      onPromote={(rect) => flyToFinal(card, rect)}
+                    >
+                      <FeedCard
+                        card={card}
+                        selected={selectedId === card.id}
+                        interactions={getInteractions(card)}
+                        adornment={cardAdornment?.(card)}
+                        onFlyToFinal={flyToFinal}
+                        entranceDelayMs={nextEntranceDelay()}
+                      />
+                    </SwipePromoteRow>
                   ))}
                 </div>
               </section>

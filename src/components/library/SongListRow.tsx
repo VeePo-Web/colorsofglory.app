@@ -42,7 +42,7 @@ const SongListRow = ({
       {...(selecting ? {} : useLongPress(onLongPress))}
       aria-label={selecting ? `${selected ? "Deselect" : "Select"} ${song.title}` : `Open ${song.title}, ${meta}`}
       aria-pressed={selecting ? selected : undefined}
-      className="group flex w-full select-none items-center gap-3 rounded-2xl bg-white border border-[var(--cog-border)] p-3 text-left shadow-[0_1px_4px_rgba(28,26,23,0.05)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-0.5 hover:border-[var(--cog-border-gold)] hover:shadow-[0_10px_24px_-14px_rgba(184,149,58,0.30)] active:scale-[0.98]"
+      className="group flex w-full select-none items-center gap-3 rounded-2xl bg-white border border-[var(--cog-border)] p-3 text-left shadow-[0_1px_4px_rgba(28,26,23,0.05)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-0.5 hover:border-[var(--cog-border-gold)] hover:shadow-[0_10px_24px_-14px_rgba(184,149,58,0.30)] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cog-gold)]"
       style={{
         minHeight: 68,
         WebkitTouchCallout: "none",
