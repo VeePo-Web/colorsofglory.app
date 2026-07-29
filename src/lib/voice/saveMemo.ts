@@ -93,6 +93,10 @@ export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoR
     created_by: params.createdBy ?? "You",
     is_processing: true,
     status: "uploading",
+    parentMemoId: params.parentMemoId ?? null,
+    layerGain: 1,
+    layerMuted: false,
+    layerOffsetMs: 0,
   };
 
   return { outboxId, optimistic };
