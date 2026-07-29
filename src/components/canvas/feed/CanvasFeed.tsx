@@ -37,6 +37,8 @@ export interface CanvasFeedProps {
   dockActions: CreativeDockAction[];
   listening: boolean;
   currentListenId: string | null;
+  /** The song played all the way through — the Final page offers what's next. */
+  listenFinished: boolean;
   onPlaySong: (ids: string[]) => void;
   onPlayPause: () => void;
   onNext: () => void;
@@ -55,6 +57,7 @@ const CanvasFeed = memo(function CanvasFeed({
   dockActions,
   listening,
   currentListenId,
+  listenFinished,
   onPlaySong,
   onPlayPause,
   onNext,
@@ -316,7 +319,8 @@ const CanvasFeed = memo(function CanvasFeed({
               getInteractions={getInteractions}
               listening={listening}
               currentId={currentListenId}
-              onPlaySong={() => onPlaySong(finalCards.map((c) => c.id))}
+              finished={listenFinished}
+              onPlaySong={onPlaySong}
               onPlayPause={onPlayPause}
               onNext={onNext}
               onPrev={onPrev}

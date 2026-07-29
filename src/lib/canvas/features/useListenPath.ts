@@ -26,6 +26,8 @@ export interface ListenPathApi {
   queue: string[];
   step: number;
   playing: boolean;
+  /** True after the path plays ALL the way through (cleared on any new play). */
+  finished: boolean;
   /** Toggle a card in/out of the queue (card face / overflow "Listen Path" action). */
   toggleCard: (id: string) => void;
   removeCard: (id: string) => void;
@@ -57,6 +59,9 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
   const [queue, setQueue] = useState<string[]>(() => initialQueue ?? []);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // The path played all the way through (vs merely paused) — the moment a
+  // surface can offer the natural NEXT thing ("play it again", "keep shaping").
+  const [finished, setFinished] = useState(false);
 
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
@@ -91,11 +96,13 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
         stopCanvasAudio();
         setPlaying(false);
         setStep(0);
+        setFinished(true);
         return;
       }
       clearDwell();
       setStep(index);
       setPlaying(true);
+      setFinished(false);
       const card = cardsRef.current.find((c) => c.id === q[index]);
       const advance = () => playStep(index + 1);
       if (!card) {
@@ -260,5 +267,5 @@ export function useListenPath({ cards, mutations, initialQueue, savedQueue, onSt
     };
   }, [clearDwell]);
 
-  return { queue, step, playing, toggleCard, removeCard, clear, playPause, next, prev, goTo, save, playAll, replaceCardId };
+  return { queue, step, playing, finished, toggleCard, removeCard, clear, playPause, next, prev, goTo, save, playAll, replaceCardId };
 }

@@ -2493,6 +2493,7 @@ const SongCanvasExperience = () => {
             dockActions={dockActions}
             listening={listenPlaying}
             currentListenId={listenQueue[listenStep] ?? null}
+            listenFinished={listenPath.finished}
             onPlaySong={(ids) => listenPath.playAll(ids)}
             onPlayPause={listenPath.playPause}
             onNext={listenPath.next}

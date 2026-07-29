@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Play, Pause, SkipBack, SkipForward, ChevronUp, ChevronDown, Mic, FileText, Music, BookOpen, StickyNote } from "lucide-react";
+import { memo, useEffect } from "react";
+import { Play, Pause, SkipBack, SkipForward, ChevronUp, ChevronDown, Mic, FileText, Music, BookOpen, StickyNote, Repeat } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
 import { GLORY, PLAYBACK_TONE } from "@/lib/canvas/glorySpectrum";
@@ -47,7 +47,11 @@ export interface FinalListenPageProps {
   getInteractions: (card: CanvasBoardCard) => CanvasCardInteractions;
   listening: boolean;
   currentId: string | null;
-  onPlaySong: () => void;
+  /** The song played all the way through — time for the next-moment card. */
+  finished: boolean;
+  /** Play these parts in order — the page passes the full song or a
+   *  play-from-here tail (tap any row to start THERE, Apple Music style). */
+  onPlaySong: (ids: string[]) => void;
   onPlayPause: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -62,6 +66,7 @@ const FinalListenPage = memo(function FinalListenPage({
   getInteractions,
   listening,
   currentId,
+  finished,
   onPlaySong,
   onPlayPause,
   onNext,
@@ -70,6 +75,22 @@ const FinalListenPage = memo(function FinalListenPage({
   isViewer,
   onGoToIdeas,
 }: FinalListenPageProps) {
+  // The performance follows itself: as playback advances, the sounding row
+  // glides into view (guarded — scrollIntoView is absent in some envs).
+  useEffect(() => {
+    if (!listening || !currentId) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    try {
+      document
+        .querySelector(`[data-final-row="${currentId}"]`)
+        ?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+    } catch {
+      /* the row is still highlighted — the glide is a courtesy */
+    }
+  }, [currentId, listening]);
+
   if (cards.length === 0) {
     return (
       <div style={{ padding: "56px 24px", textAlign: "center" }}>
@@ -153,7 +174,7 @@ const FinalListenPage = memo(function FinalListenPage({
         ) : (
           <button
             type="button"
-            onClick={onPlaySong}
+            onClick={() => onPlaySong(cards.map((c) => c.id))}
             aria-label="Play the whole song, top to bottom"
             style={{
               width: "100%", minHeight: 52, borderRadius: 15, border: "none", cursor: "pointer",
@@ -169,7 +190,59 @@ const FinalListenPage = memo(function FinalListenPage({
         )}
       </div>
 
-      {/* The set list — numbered, sounding row lit, honest reorder. */}
+      {/* The finished moment — the song just played all the way through. The
+          next most-likely things, one tap each (never a dead stop). */}
+      {finished && !listening && (
+        <div
+          style={{
+            borderRadius: 16,
+            marginBottom: 14,
+            padding: "14px 16px",
+            background: `linear-gradient(150deg, #FFFFFF 0%, #F6F9F3 100%)`,
+            border: `1.5px solid ${GLORY.sage.dim}`,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) both",
+          }}
+        >
+          <p style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: "var(--cog-charcoal)" }}>
+            That&rsquo;s the whole song.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => onPlaySong(cards.map((c) => c.id))}
+              aria-label="Play the song again"
+              style={{
+                flex: 1, minHeight: 46, borderRadius: 12, border: "none", cursor: "pointer",
+                backgroundColor: "var(--cog-gold)", color: "#FFF",
+                fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 700,
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+              }}
+            >
+              <Repeat size={15} strokeWidth={2.2} />
+              Play it again
+            </button>
+            <button
+              type="button"
+              onClick={onGoToIdeas}
+              aria-label="Keep shaping in Ideas"
+              style={{
+                flex: 1, minHeight: 46, borderRadius: 12, cursor: "pointer",
+                border: "1px solid rgba(28,26,23,0.10)", backgroundColor: "rgba(255,255,255,0.8)",
+                color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 600,
+              }}
+            >
+              Keep shaping in Ideas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* The set list — numbered, sounding row lit, honest reorder. Tapping a
+          row PLAYS FROM THERE (tap the sounding row to pause) — in a listen
+          mode, hearing is what a tap means. */}
       <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         {cards.map((card, i) => {
           const interactions = getInteractions(card);
@@ -178,9 +251,19 @@ const FinalListenPage = memo(function FinalListenPage({
           const Icon = TYPE_ICON[card.type] ?? StickyNote;
           const color = getCreatorColor(card.contributor);
           const preview = (card.body || card.meta || "").split("\n")[0];
+          const tapRow = () => {
+            interactions.onSelect();
+            if (sounding) {
+              onPlayPause();
+              return;
+            }
+            // Play the song FROM this part to the end (Apple Music row tap).
+            onPlaySong(cards.slice(i).map((c) => c.id));
+          };
           return (
             <li
               key={card.id}
+              data-final-row={card.id}
               style={{
                 // The set list settles in top-to-bottom — same cascade grammar
                 // as the Ideas stream (reduced-motion neutralizes it upstream).
@@ -192,10 +275,12 @@ const FinalListenPage = memo(function FinalListenPage({
                 role="button"
                 tabIndex={0}
                 aria-pressed={selected}
-                aria-label={`Part ${i + 1}: ${card.section || card.title || card.type}${sounding ? ", sounding now" : ""}`}
-                onClick={interactions.onSelect}
+                aria-label={`Part ${i + 1}: ${card.section || card.title || card.type}${
+                  sounding ? ", sounding now — tap to pause" : ", tap to play from here"
+                }`}
+                onClick={tapRow}
                 onKeyDown={(e) => {
-                  if (e.key === " " || e.key === "Enter") { e.preventDefault(); interactions.onSelect(); }
+                  if (e.key === " " || e.key === "Enter") { e.preventDefault(); tapRow(); }
                 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 12,
@@ -230,11 +315,31 @@ const FinalListenPage = memo(function FinalListenPage({
                     <Icon size={13} strokeWidth={1.9} style={{ color: color.base, flexShrink: 0 }} />
                     {card.section || card.title || "Part"}
                   </p>
-                  {preview && (
+                  {/* READ-ALONG: while this part sounds, its full words open
+                      up in serif — you read the lyric as the song carries it.
+                      At rest, the quiet one-line preview. */}
+                  {sounding && card.body ? (
+                    <p
+                      style={{
+                        margin: "5px 0 0",
+                        fontSize: 13.5,
+                        fontFamily: "var(--font-display)",
+                        color: "var(--cog-charcoal)",
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-line",
+                        overflow: "hidden",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 8,
+                        WebkitBoxOrient: "vertical",
+                      }}
+                    >
+                      {card.body}
+                    </p>
+                  ) : preview ? (
                     <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {preview}
                     </p>
-                  )}
+                  ) : null}
                 </div>
                 {!isViewer && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>

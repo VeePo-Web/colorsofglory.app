@@ -54,6 +54,23 @@ describe("useListenPath — the F20 queue state machine", () => {
     expect(result.current.step).toBe(0);
   });
 
+  it("`finished` means played ALL the way through — not merely paused — and clears on replay", () => {
+    const { result } = setup();
+    act(() => { result.current.playAll(["a"]); });
+    expect(result.current.finished).toBe(false);
+    // Pausing is NOT finishing.
+    act(() => { result.current.playPause(); });
+    expect(result.current.finished).toBe(false);
+    // Resume and let it run out — now the song has been heard whole.
+    act(() => { result.current.playPause(); });
+    act(() => { vi.advanceTimersByTime(3600); });
+    expect(result.current.finished).toBe(true);
+    expect(result.current.playing).toBe(false);
+    // A replay clears the moment.
+    act(() => { result.current.playAll(["a"]); });
+    expect(result.current.finished).toBe(false);
+  });
+
   it("replaceCardId renames the live queue AND silently rewrites a saved path holding the old id", () => {
     const { result, saveListenPath } = setup({ savedQueue: ["temp-1", "b"] });
     act(() => { result.current.playAll(["temp-1", "b"]); result.current.playPause(); });
