@@ -24,6 +24,10 @@ import {
   UserPlus,
   Inbox,
   Maximize2,
+  PenLine,
+  Columns2,
+  CopyPlus,
+  ListMusic,
 } from "lucide-react";
 import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import { setNavDirection } from "@/lib/nav/navDirection";
@@ -2926,15 +2930,18 @@ const SongCanvasExperience = () => {
           actions.push({
             id: "suggest",
             label: "Suggest a line",
+            icon: <PenLine size={16} strokeWidth={1.9} />,
             onClick: () => setLineSuggest({ cardId: c.id, originalLine: c.body, sectionLabel: c.section }),
           });
         }
         // F21 — audition this idea against its same-section variant, or offer
-        // the paved path to CREATE the variant when none exists yet.
+        // the paved path to CREATE the variant when none exists yet (which
+        // opens the editor directly — do the thing, land in the next thing).
         if (!isViewer && compare.canCompare(c)) {
           actions.push({
             id: "compare",
             label: "Compare A vs B",
+            icon: <Columns2 size={16} strokeWidth={1.9} />,
             onClick: () => compare.open(c.id),
           });
         } else if (!isViewer && c.tree === "ideas" && !c.isDimmedReference) {
@@ -2942,6 +2949,7 @@ const SongCanvasExperience = () => {
             id: "variant",
             label: "Write another take to compare",
             tone: "muted",
+            icon: <CopyPlus size={16} strokeWidth={1.9} />,
             onClick: () => handleNewVariant(c.id),
           });
         }
@@ -2949,10 +2957,31 @@ const SongCanvasExperience = () => {
         actions.push({
           id: "path",
           label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to Listen Path",
-          onClick: () => listenPath.toggleCard(c.id),
+          icon: <ListMusic size={16} strokeWidth={1.9} />,
+          onClick: () => {
+            listenPath.toggleCard(c.id);
+            // In the feed there's no pill to witness the queue growing — say
+            // what happened, and offer the natural next thing in one tap.
+            if (!inPath) {
+              const count = listenPath.queue.length + 1;
+              toast(`Added to your listen path — stop #${count}`, {
+                duration: 5000,
+                action: {
+                  label: "Play it",
+                  onClick: () => {
+                    const lp = apisRef.current.listenPath;
+                    if (lp.queue.length > 0) lp.playAll(lp.queue);
+                  },
+                },
+              });
+            }
+          },
           active: inPath,
         });
-        if (c.tree === "ideas" && !c.isDimmedReference && !isViewer) {
+        // Map-idiom only: the merge selection bar lives on the whiteboard, and
+        // the feed's exclusivity effect clears selections on sight — offering
+        // this row there was a dead button.
+        if (canvasView === "map" && c.tree === "ideas" && !c.isDimmedReference && !isViewer) {
           const inMerge = merge.selection.includes(c.id);
           actions.push({
             id: "merge",
