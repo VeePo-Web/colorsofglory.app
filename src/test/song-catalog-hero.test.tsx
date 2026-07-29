@@ -39,12 +39,16 @@ const renderPage = () =>
   );
 
 describe("SongCatalogPage — world-class hero (content-locked, token-precise)", () => {
-  it("mounts cleanly and renders the hero copy verbatim — every word unchanged", () => {
+  it("mounts cleanly: hero copy verbatim, and a SOLO library earns a tabless header (libraryCalm)", () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Your songs" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Owned" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Invited" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archived" })).toBeInTheDocument();
+    // This harness is a solo writer (0 invited, 0 archived): the calm library
+    // shows NO tab row — three doors where two open onto empty rooms was the
+    // clutter this audit removed. Tabs return the moment either count does
+    // (see libraryCalm.test.ts for the gate itself).
+    expect(screen.queryByRole("button", { name: "Owned" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Invited" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archived" })).toBeNull();
     expect(screen.getByRole("button", { name: /New song/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Settings")).toBeInTheDocument();
   });

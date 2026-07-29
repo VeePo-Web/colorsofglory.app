@@ -22,6 +22,8 @@ import SongActionsSheet from "@/components/library/SongActionsSheet";
 import SelectionBar from "@/components/library/SelectionBar";
 import BatchAlbumSheet from "@/components/library/BatchAlbumSheet";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
+import { showLibraryTabs, showLibraryControls, showAlbumsShelf, continueMoment } from "@/lib/library/libraryCalm";
+import { loadMostRecentSession } from "@/lib/audio/practiceStorage";
 import { listAlbums, createAlbum, updateAlbum, deleteAlbum, reorderAlbums, type SongAlbum } from "@/lib/library/albums";
 import { loadPins, togglePin, MAX_PINS } from "@/lib/library/pins";
 import { canCreateSong } from "@/lib/pricing/pricingApi";
@@ -367,6 +369,21 @@ const SongCatalogPage = () => {
     Archived: songs.filter((s) => s.status === "archived").length,
   };
 
+  // ── The calm library: every surface earns its place (libraryCalm) ────────
+  const tabsVisible = showLibraryTabs(tabCounts);
+  const controlsVisible = showLibraryControls(tabCounts[activeTab]);
+  const albumsVisible = showAlbumsShelf(albums.length, ownedSongs.length);
+  // ONE continue moment: a saved practice session outranks the last-touched
+  // song; two stacked "pick up where you left off" cards was the loudest
+  // clutter on the page. Cheap localStorage read, refreshed per mount.
+  const hasPracticeSession = useMemo(() => loadMostRecentSession() != null, []);
+  const continueKind = continueMoment(hasPracticeSession, continueSong != null);
+  // If the tabs earned their exit while a non-Owned tab was active (last
+  // archived song restored, last invite left), land back on Owned.
+  useEffect(() => {
+    if (!tabsVisible && activeTab !== "Owned") setActiveTab("Owned");
+  }, [tabsVisible, activeTab]);
+
   // ── Batch select ────────────────────────────────────────────────────────
   const enterSelect = (seedId: string) => {
     setActionsSong(null);
@@ -557,6 +574,10 @@ const SongCatalogPage = () => {
             Your songs
           </h1>
 
+          {/* Tabs earn their place: a solo writer with nothing invited and
+              nothing archived gets a clean title, not three doors where two
+              open onto empty rooms. They return the moment either count does. */}
+          {tabsVisible && (
           <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.10)" }}>
             {(["Owned", "Invited", "Archived"] as Tab[]).map((tab) => (
               <button
@@ -594,13 +615,15 @@ const SongCatalogPage = () => {
               </button>
             ))}
           </div>
+          )}
+          {!tabsVisible && <div style={{ height: 8 }} aria-hidden="true" />}
         </div>
       </div>
 
       {/* ── LIBRARY ────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:flex lg:max-w-5xl lg:gap-8 lg:px-8">
         {/* Persistent album rail — tablet/desktop only; phones keep the shelf */}
-        {!selecting && activeTab === "Owned" && !loading && ownedSongs.length > 0 && (
+        {!selecting && activeTab === "Owned" && !loading && albumsVisible && ownedSongs.length > 0 && (
           <AlbumRail
             albums={albums}
             activeAlbumId={viewingUngrouped ? null : activeAlbumId}
@@ -655,7 +678,9 @@ const SongCatalogPage = () => {
               Done
             </button>
           </div>
-        ) : reorderingAlbum ? null : (
+        ) : reorderingAlbum || !controlsVisible ? null : (
+          /* Search/sort/view appear once the list outgrows a single glance —
+             over a handful of songs they were pure chrome. */
           <LibraryControls
             query={query}
             onQueryChange={setQuery}
@@ -679,11 +704,10 @@ const SongCatalogPage = () => {
           </p>
         )}
 
-        {/* Open app → one tap → drive: jump straight back into the last
-            practice session (song or album), exactly where it left off. */}
-        {!selecting && <PracticeResumeCard />}
-
-        {!selecting && continueSong && (
+        {/* ONE continue moment — practice session first (the more specific
+            intent), else the last-touched song, never both stacked. */}
+        {!selecting && continueKind === "practice" && <PracticeResumeCard />}
+        {!selecting && continueKind === "song" && continueSong && (
           <ContinueShelf
             song={continueSong}
             onOpen={() => { setNavDirection("up"); navigate(`/songs/${continueSong.id}/canvas`); }}
@@ -742,8 +766,11 @@ const SongCatalogPage = () => {
           !selecting &&
           activeTab === "Owned" &&
           !loading &&
+          albumsVisible &&
           ownedSongs.length > 0 && (
-            /* Horizontal shelf on phones/portrait tablets; the rail owns lg+ */
+            /* Horizontal shelf on phones/portrait tablets; the rail owns lg+.
+               Appears once albums exist or the library is big enough that
+               filing is a real need — never as premature homework. */
             <div className="lg:hidden">
               <AlbumsShelf
                 albums={albums}
