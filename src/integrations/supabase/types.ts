@@ -2357,6 +2357,7 @@ export type Database = {
     Functions: {
       _assert_admin: { Args: never; Returns: undefined }
       _assert_canvas_write: { Args: { _song_id: string }; Returns: undefined }
+      _assert_song_write: { Args: { _song_id: string }; Returns: string }
       accept_song_invite: {
         Args: { _token: string; _user_id: string }
         Returns: {
@@ -3069,6 +3070,10 @@ export type Database = {
           last_active_at: string
         }[]
       }
+      duplicate_song_section: {
+        Args: { _label?: string; _section_id: string; _song_id: string }
+        Returns: Json
+      }
       education_candidates: { Args: { _user_id: string }; Returns: Json }
       effective_song_limit: { Args: { _user_id: string }; Returns: number }
       effective_storage_limit: { Args: { _user_id: string }; Returns: number }
@@ -3410,6 +3415,10 @@ export type Database = {
       release_founder_code_redemption: {
         Args: { _code_id: string }
         Returns: undefined
+      }
+      reorder_song_sections: {
+        Args: { _ordered_ids: string[]; _song_id: string }
+        Returns: Json
       }
       reset_transcript_attempts: {
         Args: { _memo_id: string }
