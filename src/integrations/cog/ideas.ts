@@ -15,7 +15,6 @@ export type IdeaCard = {
   x: number | null;
   y: number | null;
   kind: string;
-  title: string | null;
   body: string | null;
   take_id: string | null;
   created_by: string | null;
@@ -45,13 +44,13 @@ export async function moveIdea(cardId: string, newPosition: number): Promise<num
 export async function listIdeas(songId: string): Promise<IdeaCard[]> {
   const { data, error } = await supabase
     .from("canvas_cards")
-    .select("id,song_id,position,x,y,kind,title,body,take_id,created_by,created_at")
+    .select("id,song_id,position,x,y,kind,body,take_id,created_by,created_at")
     .eq("song_id", songId)
     .is("archived_at", null)
     .order("position", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as IdeaCard[];
+  return (data ?? []) as unknown as IdeaCard[];
 }
 
 /** Optimistic local reorder so the list never waits on the network. */
