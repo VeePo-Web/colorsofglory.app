@@ -545,3 +545,43 @@ export async function saveSectionGuarded(
   }
   return res as GuardedSaveResult;
 }
+
+// ─── R15: arrangement (order & duplicate) ────────────────────────────────────
+
+export type ReorderResult =
+  | { status: "saved"; ordered_ids: string[]; updated_at: string }
+  /** Someone added or removed a section since you started dragging. Refetch, then retry. */
+  | { status: "stale"; current_ids: string[] };
+
+/**
+ * Save a new section order in ONE atomic step. Send the complete list of
+ * section ids in their new order — the server refuses (`stale`) if that list no
+ * longer matches the song, so a late drag can never scramble or drop a section.
+ * Never write positions through `saveSongSheet` for reordering.
+ */
+export async function reorderSections(songId: string, orderedIds: string[]): Promise<ReorderResult> {
+  const { data, error } = await (supabase as any).rpc("reorder_song_sections", {
+    _song_id: songId,
+    _ordered_ids: orderedIds,
+  });
+  if (error) throw toCogError(error);
+  return data as ReorderResult;
+}
+
+/**
+ * Duplicate a section (label + lyrics + chord anchors) directly after itself —
+ * the "second chorus" move. Returns the new section id and its position.
+ */
+export async function duplicateSection(
+  songId: string,
+  sectionId: string,
+  label?: string,
+): Promise<{ status: "created"; section_id: string; position: number; updated_at: string }> {
+  const { data, error } = await (supabase as any).rpc("duplicate_song_section", {
+    _song_id: songId,
+    _section_id: sectionId,
+    _label: label ?? null,
+  });
+  if (error) throw toCogError(error);
+  return data as { status: "created"; section_id: string; position: number; updated_at: string };
+}
