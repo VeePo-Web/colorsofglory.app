@@ -76,3 +76,42 @@ export async function getSongPlaybackUrls(
   if (!data) return { urls: {}, expires_in: 0, count: 0 };
   return data;
 }
+
+// ---------- Incremental room delta ----------
+
+export type SongRoomDelta = {
+  /** Server clock at read time — pass this back as `since` on the next call. */
+  server_time: string;
+  since: string;
+  cards: Record<string, unknown>[];
+  memos: Record<string, unknown>[];
+  takes: Record<string, unknown>[];
+  captures: Record<string, unknown>[];
+  activity: Record<string, unknown>[];
+  /** A page was hit — fall back to a full bootstrap to re-sync. */
+  truncated: boolean;
+};
+
+/**
+ * "What changed since <ts>" for an open room.
+ *
+ * The room currently answers every realtime event with a FULL board refetch
+ * (all cards + all memos + all captures, debounced 600ms). With three
+ * co-writers active that is a whole-song read every 600ms on every device.
+ * Call this instead: pass the previous response's `server_time`, apply the
+ * returned rows by id, and reserve `getSongRoomBootstrap` for mount,
+ * reconnect, and `truncated === true`.
+ */
+export async function getSongRoomDelta(
+  song_id: string,
+  since: string,
+  limit = 200,
+): Promise<SongRoomDelta> {
+  const { data, error } = await (supabase as any).rpc("song_room_delta", {
+    _song_id: song_id,
+    _since: since,
+    _limit: limit,
+  });
+  if (error) throw toCogError(error);
+  return data as SongRoomDelta;
+}
