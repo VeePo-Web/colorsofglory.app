@@ -789,6 +789,7 @@ export type Database = {
       idea_captures: {
         Row: {
           author_user_id: string
+          client_key: string | null
           created_at: string
           id: string
           lyric_snippet: string | null
@@ -803,6 +804,7 @@ export type Database = {
         }
         Insert: {
           author_user_id: string
+          client_key?: string | null
           created_at?: string
           id?: string
           lyric_snippet?: string | null
@@ -817,6 +819,7 @@ export type Database = {
         }
         Update: {
           author_user_id?: string
+          client_key?: string | null
           created_at?: string
           id?: string
           lyric_snippet?: string | null
@@ -3314,6 +3317,19 @@ export type Database = {
           _voice_memo_id: string
         }
         Returns: string
+      }
+      quick_capture_idempotent: {
+        Args: {
+          _client_key: string
+          _lyric_snippet?: string
+          _scripture_ref?: string
+          _section_id?: string
+          _song_id?: string
+          _tags?: string[]
+          _title?: string
+          _voice_memo_id?: string
+        }
+        Returns: Json
       }
       record_chargeback: { Args: { _event: Json }; Returns: number }
       record_invoice_paid: { Args: { _event: Json }; Returns: string }
