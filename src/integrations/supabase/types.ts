@@ -3405,6 +3405,10 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
       }
+      song_room_bootstrap: {
+        Args: { _card_limit?: number; _song_id: string }
+        Returns: Json
+      }
       stash_pending_code: {
         Args: { _code: string; _user_id: string }
         Returns: undefined
