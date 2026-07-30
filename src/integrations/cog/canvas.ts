@@ -30,6 +30,9 @@ export type CanvasCard = {
   tree_kind: "ideas" | "final";
   section_label: string | null;
   z_index: number;
+  /** Non-null = removed from the room but recoverable for 30 days. */
+  archived_at?: string | null;
+  archived_by?: string | null;
 };
 
 export type CommitTakeResult = { song_id: string; card_ids: string[] };
@@ -88,14 +91,49 @@ export async function listCanvasCards(song_id: string): Promise<CanvasCard[]> {
     .from("canvas_cards")
     .select("*")
     .eq("song_id", song_id)
+    .is("archived_at", null)
     .order("position", { ascending: true });
   if (error) throw toCogError(error);
   return (data ?? []) as CanvasCard[];
 }
 
+/**
+ * Remove a card from the room — RECOVERABLE.
+ *
+ * Nothing a writer puts into a song should ever be unrecoverable. This is a
+ * soft archive: the card leaves the feed, search, and section counts
+ * immediately, and stays restorable for 30 days (`restoreCanvasCard`).
+ * Pair it with an undo toast: archive → toast "Removed · Undo" → restore.
+ */
+export async function archiveCanvasCard(id: string): Promise<void> {
+  await rpc("archive_canvas_card", { _card_id: id });
+}
+
+/** Undo an archive. Safe to call on an already-live card. */
+export async function restoreCanvasCard(id: string): Promise<void> {
+  await rpc("restore_canvas_card", { _card_id: id });
+}
+
+export type ArchivedCard = Pick<
+  CanvasCard,
+  "id" | "song_id" | "kind" | "label" | "body" | "section_kind" | "section_label" | "tree_kind" | "take_id" | "created_by"
+> & { archived_at: string; archived_by: string | null };
+
+/** The song's "recently removed" drawer — last 30 days, newest first. */
+export async function listArchivedCanvasCards(
+  song_id: string,
+  limit = 50,
+): Promise<ArchivedCard[]> {
+  const data = await rpc<{ cards: ArchivedCard[] }>("list_archived_canvas_cards", {
+    _song_id: song_id,
+    _limit: limit,
+  });
+  return data?.cards ?? [];
+}
+
+/** @deprecated Destructive deletes are gone — this now archives (recoverable). */
 export async function deleteCanvasCard(id: string): Promise<void> {
-  const { error } = await db.from("canvas_cards").delete().eq("id", id);
-  if (error) throw toCogError(error);
+  await archiveCanvasCard(id);
 }
 
 export async function updateCanvasCard(

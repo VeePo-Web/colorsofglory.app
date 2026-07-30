@@ -129,6 +129,8 @@ export type Database = {
       }
       canvas_cards: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -153,6 +155,8 @@ export type Database = {
           z_index: number
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           body?: string
           client_key?: string | null
           created_at?: string
@@ -177,6 +181,8 @@ export type Database = {
           z_index?: number
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           body?: string
           client_key?: string | null
           created_at?: string
@@ -2687,6 +2693,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      archive_canvas_card: { Args: { _card_id: string }; Returns: Json }
       attribute_referral: {
         Args: {
           _code_value: string
@@ -2731,6 +2738,8 @@ export type Database = {
       canvas_link_cards: {
         Args: { _child_id: string; _parent_id: string }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -2764,6 +2773,8 @@ export type Database = {
       canvas_move_card: {
         Args: { _card_id: string; _x: number; _y: number; _z_index?: number }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -2797,6 +2808,8 @@ export type Database = {
       canvas_promote_to_final: {
         Args: { _card_id: string }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -2830,6 +2843,8 @@ export type Database = {
       canvas_set_section: {
         Args: { _card_id: string; _section_label: string; _tree_kind?: string }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -2863,6 +2878,8 @@ export type Database = {
       canvas_unlink_card: {
         Args: { _card_id: string }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -2909,6 +2926,8 @@ export type Database = {
           _y?: number
         }
         Returns: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
           client_key: string | null
           created_at: string
@@ -3126,6 +3145,10 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: boolean
       }
+      list_archived_canvas_cards: {
+        Args: { _limit?: number; _song_id: string }
+        Returns: Json
+      }
       list_my_songs: {
         Args: never
         Returns: {
@@ -3279,6 +3302,7 @@ export type Database = {
         Returns: boolean
       }
       plan_tier_key_for_user: { Args: { _user_id: string }; Returns: string }
+      purge_archived_canvas_cards: { Args: never; Returns: number }
       quick_capture: {
         Args: {
           _lyric_snippet: string
@@ -3356,6 +3380,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      restore_canvas_card: { Args: { _card_id: string }; Returns: Json }
       retry_payout: {
         Args: { _payout: string }
         Returns: {
