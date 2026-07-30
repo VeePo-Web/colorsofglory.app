@@ -140,6 +140,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
@@ -166,6 +168,8 @@ export type Database = {
           id?: string
           kind: string
           label?: string | null
+          moved_at?: string | null
+          moved_by?: string | null
           parent_card_id?: string | null
           position?: number
           section_kind?: string | null
@@ -192,6 +196,8 @@ export type Database = {
           id?: string
           kind?: string
           label?: string | null
+          moved_at?: string | null
+          moved_by?: string | null
           parent_card_id?: string | null
           position?: number
           section_kind?: string | null
@@ -3077,6 +3083,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
@@ -3098,41 +3106,92 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      canvas_move_card: {
-        Args: { _card_id: string; _x: number; _y: number; _z_index?: number }
-        Returns: {
-          archived_at: string | null
-          archived_by: string | null
-          body: string
-          client_key: string | null
-          created_at: string
-          created_by: string
-          end_ms: number | null
-          group_id: string | null
-          id: string
-          kind: string
-          label: string | null
-          parent_card_id: string | null
-          position: number
-          section_kind: string | null
-          section_label: string | null
-          song_id: string
-          source_capture_id: string | null
-          start_ms: number | null
-          take_id: string | null
-          tree_kind: string
-          updated_at: string
-          x: number | null
-          y: number | null
-          z_index: number
-        }
-        SetofOptions: {
-          from: "*"
-          to: "canvas_cards"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      canvas_move_card:
+        | {
+            Args: {
+              _card_id: string
+              _x: number
+              _y: number
+              _z_index?: number
+            }
+            Returns: {
+              archived_at: string | null
+              archived_by: string | null
+              body: string
+              client_key: string | null
+              created_at: string
+              created_by: string
+              end_ms: number | null
+              group_id: string | null
+              id: string
+              kind: string
+              label: string | null
+              moved_at: string | null
+              moved_by: string | null
+              parent_card_id: string | null
+              position: number
+              section_kind: string | null
+              section_label: string | null
+              song_id: string
+              source_capture_id: string | null
+              start_ms: number | null
+              take_id: string | null
+              tree_kind: string
+              updated_at: string
+              x: number | null
+              y: number | null
+              z_index: number
+            }
+            SetofOptions: {
+              from: "*"
+              to: "canvas_cards"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _card_id: string
+              _client_ts?: string
+              _x: number
+              _y: number
+              _z_index?: number
+            }
+            Returns: {
+              archived_at: string | null
+              archived_by: string | null
+              body: string
+              client_key: string | null
+              created_at: string
+              created_by: string
+              end_ms: number | null
+              group_id: string | null
+              id: string
+              kind: string
+              label: string | null
+              moved_at: string | null
+              moved_by: string | null
+              parent_card_id: string | null
+              position: number
+              section_kind: string | null
+              section_label: string | null
+              song_id: string
+              source_capture_id: string | null
+              start_ms: number | null
+              take_id: string | null
+              tree_kind: string
+              updated_at: string
+              x: number | null
+              y: number | null
+              z_index: number
+            }
+            SetofOptions: {
+              from: "*"
+              to: "canvas_cards"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       canvas_promote_to_final: {
         Args: { _card_id: string }
         Returns: {
@@ -3147,6 +3206,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
@@ -3182,6 +3243,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
@@ -3217,6 +3280,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
@@ -3265,6 +3330,8 @@ export type Database = {
           id: string
           kind: string
           label: string | null
+          moved_at: string | null
+          moved_by: string | null
           parent_card_id: string | null
           position: number
           section_kind: string | null
