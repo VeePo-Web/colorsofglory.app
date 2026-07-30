@@ -3432,6 +3432,10 @@ export type Database = {
         Args: { _code_id: string }
         Returns: undefined
       }
+      remove_song_member: {
+        Args: { _song_id: string; _user_id: string }
+        Returns: Json
+      }
       reorder_song_sections: {
         Args: { _ordered_ids: string[]; _song_id: string }
         Returns: Json
@@ -3525,6 +3529,7 @@ export type Database = {
         Args: { _invoice: string; _reason: string }
         Returns: number
       }
+      revoke_song_invite: { Args: { _invite_id: string }; Returns: Json }
       reward_hold_days: { Args: never; Returns: number }
       safe_leave_song: {
         Args: { _song_id: string; _user_id: string }
@@ -3608,6 +3613,14 @@ export type Database = {
         }
       }
       set_primary_take: { Args: { _take_id: string }; Returns: string }
+      set_song_member_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["song_member_role"]
+          _song_id: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
@@ -3645,6 +3658,7 @@ export type Database = {
         }[]
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
+      song_people_board: { Args: { _song_id: string }; Returns: Json }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
