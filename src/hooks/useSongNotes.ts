@@ -62,6 +62,11 @@ export function useAddNote(songId: string) {
         section_id: null,
         created_at: now,
         updated_at: now,
+        pinned: false,
+        resolved_at: null,
+        resolved_by_user_id: null,
+        archived_at: null,
+        archived_by_user_id: null,
       };
       qc.setQueryData<SongNote[]>(songNotesKey(songId), (old) => [optimistic, ...(old ?? [])]);
       return { previous };
