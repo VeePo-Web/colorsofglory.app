@@ -164,3 +164,66 @@ export async function setNotePinned(id: string, pinned: boolean): Promise<SongNo
   if (error) throw toCogError(error);
   return data as SongNote;
 }
+
+/* ------------------------------------------------------------------ *
+ * R45 — "Say it back"
+ *
+ * Feedback in a song room is a conversation, not a pile. Until now a
+ * collaborator could leave a note and the writer could only leave another
+ * note beside it, so a two-line exchange became four unrelated cards.
+ *
+ * Replies are deliberately ONE level deep. No threads inside threads,
+ * no @mentions, no formatting. A note and the answers to it. That's all.
+ * ------------------------------------------------------------------ */
+
+/** Post a reply under an existing note. Fails if the target is itself a reply. */
+export async function replyToNote(parentNoteId: string, body: string): Promise<SongNote> {
+  const { data, error } = await (supabase as any).rpc("reply_to_note", {
+    _parent_note_id: parentNoteId,
+    _body: body,
+  });
+  if (error) throw toCogError(error);
+  return (Array.isArray(data) ? data[0] : data) as SongNote;
+}
+
+/** Replies for one note, oldest first. */
+export async function listNoteReplies(parentNoteId: string): Promise<SongNote[]> {
+  const { data, error } = await (supabase as any).rpc("note_replies", {
+    _parent_note_id: parentNoteId,
+  });
+  if (error) throw toCogError(error);
+  return (data ?? []) as SongNote[];
+}
+
+export type NoteThread = { note: SongNote; replies: SongNote[] };
+
+/**
+ * Fold a flat note list into threads client-side. The board query already
+ * returns replies, so the room never needs a second round-trip per note.
+ */
+export function groupNoteThreads(notes: SongNote[]): NoteThread[] {
+  const roots: NoteThread[] = [];
+  const byId = new Map<string, NoteThread>();
+  for (const n of notes) {
+    if (!(n as any).parent_note_id) {
+      const t = { note: n, replies: [] as SongNote[] };
+      byId.set(n.id, t);
+      roots.push(t);
+    }
+  }
+  for (const n of notes) {
+    const pid = (n as any).parent_note_id as string | null;
+    if (pid) byId.get(pid)?.replies.push(n);
+  }
+  for (const t of roots) {
+    t.replies.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+  return roots;
+}
+
+/** "2 replies" / "1 reply" / null. Never a badge, never a count bubble. */
+export function replyLine(thread: NoteThread): string | null {
+  const n = thread.replies.length;
+  if (n === 0) return null;
+  return n === 1 ? "1 reply" : `${n} replies`;
+}

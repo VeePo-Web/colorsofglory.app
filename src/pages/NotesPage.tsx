@@ -36,6 +36,7 @@ function pendingAsNote(p: PendingNote, songId: string, uid: string | undefined):
     author_user_id: uid ?? "",
     body: p.body,
     section_id: null,
+    parent_note_id: null,
     created_at: p.createdAt,
     updated_at: p.createdAt,
     pinned: false,
