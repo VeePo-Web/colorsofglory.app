@@ -156,3 +156,57 @@ export async function retryTakeTranscript(take_id: string): Promise<void> {
   });
   if (error) throw toCogError(error);
 }
+
+// ---------- Voice board (R20) ----------
+
+export type VoiceBoardTake = {
+  id: string;
+  storage_path: string;
+  mime_type: string;
+  duration_ms: number | null;
+  byte_size: number;
+  waveform_peaks: number[] | null;
+  friendly_name: string | null;
+  name_is_custom: boolean;
+  is_primary: boolean;
+  is_archived: boolean;
+  transcript_status: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type VoiceBoardMemo = {
+  id: string;
+  song_id: string;
+  section_id: string | null;
+  author_user_id: string;
+  author_name: string;
+  author_avatar_color: string | null;
+  title: string | null;
+  status: string;
+  duration_ms: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  takes: VoiceBoardTake[];
+  take_count: number;
+  primary_take_id: string | null;
+  transcript_status: string | null;
+  transcript_preview: string | null;
+};
+
+export type VoiceBoard = { memos: VoiceBoardMemo[]; server_time: string };
+
+/**
+ * The whole voice side of a song in ONE request: every memo with its takes,
+ * primary take, author, and transcript state. Replaces the per-memo
+ * listTakes/getTranscript fan-out — render the board from this alone,
+ * then fetch signed URLs only for what the user actually plays.
+ */
+export async function getVoiceBoard(song_id: string): Promise<VoiceBoard> {
+  const { data, error } = await (supabase as any).rpc("song_voice_board", {
+    _song_id: song_id,
+  });
+  if (error) throw toCogError(error);
+  return data as VoiceBoard;
+}
