@@ -36,26 +36,26 @@ export async function setPrimaryTake(take_id: string): Promise<string> {
 }
 
 export async function archiveTake(take_id: string): Promise<void> {
-  const { error } = await supabase
-    .from("takes")
-    .update({ is_archived: true })
-    .eq("id", take_id);
+  const { error } = await (supabase as any).rpc("set_take_archived", {
+    _take_id: take_id,
+    _archived: true,
+  });
   if (error) throw toCogError(error);
 }
 
 export async function unarchiveTake(take_id: string): Promise<void> {
-  const { error } = await supabase
-    .from("takes")
-    .update({ is_archived: false })
-    .eq("id", take_id);
+  const { error } = await (supabase as any).rpc("set_take_archived", {
+    _take_id: take_id,
+    _archived: false,
+  });
   if (error) throw toCogError(error);
 }
 
 export async function renameTake(take_id: string, friendly_name: string): Promise<void> {
-  const { error } = await supabase
-    .from("takes")
-    .update({ friendly_name, name_is_custom: true })
-    .eq("id", take_id);
+  const { error } = await (supabase as any).rpc("rename_take", {
+    _take_id: take_id,
+    _friendly_name: friendly_name,
+  });
   if (error) throw toCogError(error);
 }
 
