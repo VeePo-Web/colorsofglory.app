@@ -66,7 +66,10 @@ export type SongSheet = {
 };
 
 // Loose handle for rows/filters the generated types don't fully model.
-const db = supabase as unknown as { from: (t: string) => any };
+const db = supabase as unknown as {
+  from: (t: string) => any;
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: any; error: any }>;
+};
 
 async function requireUserId(): Promise<string> {
   const { data } = await supabase.auth.getUser();
