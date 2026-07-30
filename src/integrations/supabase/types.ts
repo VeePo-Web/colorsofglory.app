@@ -3450,6 +3450,10 @@ export type Database = {
         }
       }
       restore_canvas_card: { Args: { _card_id: string }; Returns: Json }
+      restore_song_version: {
+        Args: { _song_id: string; _version_id: string }
+        Returns: Json
+      }
       retry_payout: {
         Args: { _payout: string }
         Returns: {
@@ -3554,6 +3558,22 @@ export type Database = {
         Returns: Json
       }
       song_section_summary: { Args: { _song_id: string }; Returns: Json }
+      song_version_timeline: {
+        Args: { _limit?: number; _song_id: string }
+        Returns: {
+          created_at: string
+          created_by_name: string
+          created_by_user_id: string
+          description: string
+          id: string
+          kind: Database["public"]["Enums"]["version_kind"]
+          label: string
+          line_count: number
+          parent_version_id: string
+          section_count: number
+          version_number: number
+        }[]
+      }
       stash_pending_code: {
         Args: { _code: string; _user_id: string }
         Returns: undefined
