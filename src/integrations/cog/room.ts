@@ -170,3 +170,63 @@ export async function getSongSectionSummary(song_id: string): Promise<SectionSum
   if (error) throw toCogError(error);
   return ((data as any)?.sections ?? []) as SectionSummaryRow[];
 }
+
+// ---------- The room remembers you (R9) ----------
+
+export type SongRoomState = {
+  user_id: string;
+  song_id: string;
+  last_view: string | null;
+  last_card_id: string | null;
+  last_take_id: string | null;
+  playback_ms: number;
+  filter_state: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SongRoomResume = {
+  state: SongRoomState | null;
+  last_seen_at: string | null;
+  unseen_count: number;
+  server_time: string;
+};
+
+/**
+ * Reopen the room exactly where this person left it, plus how much is new
+ * since their last visit. One call — safe to fire in parallel with bootstrap.
+ */
+export async function getSongRoomResume(song_id: string): Promise<SongRoomResume> {
+  const { data, error } = await (supabase as any).rpc("song_room_resume", {
+    _song_id: song_id,
+  });
+  if (error) throw toCogError(error);
+  return data as SongRoomResume;
+}
+
+/**
+ * Record the current place in the room. Fire-and-forget, debounced by the
+ * caller (suggested: 1s idle for view/card, 5s while audio plays, and on
+ * visibilitychange/pagehide). Every field is optional — omitted fields keep
+ * their stored value.
+ */
+export async function saveSongRoomState(
+  song_id: string,
+  patch: {
+    last_view?: string;
+    last_card_id?: string;
+    last_take_id?: string;
+    playback_ms?: number;
+    filter_state?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("save_song_room_state", {
+    _song_id: song_id,
+    _last_view: patch.last_view ?? null,
+    _last_card_id: patch.last_card_id ?? null,
+    _last_take_id: patch.last_take_id ?? null,
+    _playback_ms: patch.playback_ms ?? null,
+    _filter_state: patch.filter_state ?? null,
+  });
+  if (error) throw toCogError(error);
+}
