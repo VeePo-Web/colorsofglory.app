@@ -4163,6 +4163,7 @@ export type Database = {
           updated_by_user_id: string
         }[]
       }
+      song_next_move: { Args: { _song_id: string }; Returns: Json }
       song_notes_board: {
         Args: {
           _include_resolved?: boolean
