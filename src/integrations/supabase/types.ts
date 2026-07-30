@@ -3948,6 +3948,7 @@ export type Database = {
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
       song_people_board: { Args: { _song_id: string }; Returns: Json }
+      song_performance_view: { Args: { _song_id: string }; Returns: Json }
       song_recently_removed: {
         Args: { _limit?: number; _song_id: string }
         Returns: Json
