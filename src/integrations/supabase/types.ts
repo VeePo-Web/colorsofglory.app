@@ -4075,6 +4075,18 @@ export type Database = {
         }
         Returns: Json
       }
+      save_section_lyrics_merged: {
+        Args: {
+          _base: Json
+          _content: Json
+          _label?: string
+          _plain_text?: string
+          _position?: number
+          _section_id: string
+          _song_id: string
+        }
+        Returns: Json
+      }
       save_song_room_state: {
         Args: {
           _filter_state?: Json

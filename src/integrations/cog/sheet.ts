@@ -512,3 +512,65 @@ export async function duplicateSection(
   if (error) throw toCogError(error);
   return data as { status: "created"; section_id: string; position: number; updated_at: string };
 }
+
+// ─── R55: line-level merge — never show a conflict screen ────────────────────
+
+export type MergedSaveResult = {
+  status: "saved";
+  section_id: string;
+  updated_at: string;
+  /** The authoritative merged lines. Replace local state with these. */
+  lines: SheetLineDoc[];
+  plain_text: string;
+  /** How many of my lines landed as-is. */
+  merged_lines: number;
+  /** Lines where we both typed: theirs stayed, mine became a suggestion. */
+  kept_theirs: number;
+  suggestions_created: number;
+};
+
+/**
+ * Save one section by MERGING, not by blocking.
+ *
+ * Pass `baseLines` — exactly the lines this editor last received from the
+ * server (its snapshot before the person started typing). The server then:
+ *   • keeps every line only one of you touched (both edits survive, silently),
+ *   • keeps their line when you both edited the SAME line, and files your
+ *     version as an inline `lyric_suggestion` on that line id,
+ *   • keeps lines either of you added while the other was typing.
+ *
+ * There is no `conflict` status and no dialog. Replace local lines with
+ * `result.lines`. If `kept_theirs > 0`, show one quiet inline line on those
+ * rows ("your version is waiting here") — never a modal, never a toast stack.
+ *
+ * Prefer this over `saveSectionGuarded` for all typing in the room; the
+ * guarded save remains only for imports/replacements that must not merge.
+ */
+export async function saveSectionMerged(
+  songId: string,
+  section: SheetSectionDoc,
+  baseLines: SheetLineDoc[],
+  opts: { position?: number } = {},
+): Promise<MergedSaveResult> {
+  const { data, error } = await (supabase as any).rpc("save_section_lyrics_merged", {
+    _song_id: songId,
+    _section_id: section.id,
+    _base: encodeContent(baseLines),
+    _content: encodeContent(section.lines),
+    _plain_text: plainText(section.lines),
+    _label: section.label || null,
+    _position: opts.position ?? null,
+  });
+  if (error) throw toCogError(error);
+  const res = data as any;
+  return {
+    status: "saved",
+    section_id: res.section_id,
+    updated_at: res.updated_at,
+    lines: decodeContent(res.content),
+    plain_text: res.plain_text ?? "",
+    merged_lines: res.merged_lines ?? 0,
+    kept_theirs: res.kept_theirs ?? 0,
+    suggestions_created: res.suggestions_created ?? 0,
+  };
+}
