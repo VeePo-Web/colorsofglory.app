@@ -104,7 +104,63 @@ export async function updateNote(id: string, body: string): Promise<SongNote> {
  * is allowed to remove — the SERVER is the gate.
  */
 export async function removeNote(id: string, songId?: string): Promise<void> {
-  const { error } = await supabase.from("song_notes").delete().eq("id", id);
+  // R17: soft remove — the row is hidden, not erased, so "Undo" is real.
+  const { error } = await (supabase as any).rpc("archive_song_note", { _note_id: id });
   if (error) throw toCogError(error);
   if (songId) emitNoteActivity("note_removed", { song_id: songId, note_id: id });
+}
+
+/** Undo a removal (pairs with the "Removed · Undo" toast). */
+export async function restoreNote(id: string): Promise<SongNote> {
+  const { data, error } = await (supabase as any).rpc("restore_song_note", { _note_id: id });
+  if (error) throw toCogError(error);
+  return data as SongNote;
+}
+
+// ─── R17: the board (one request, authors included) ──────────────────────────
+
+export type NoteBoardEntry = SongNote & {
+  author_name: string | null;
+  author_avatar_color: string | null;
+};
+
+/**
+ * Every live note for a song in ONE call, with author name/colour attached and
+ * archived rows already excluded. Ordering is server-decided:
+ * pinned first, then open before done, then newest.
+ *
+ * `sectionId` omitted → song-level notes only (C5's pad).
+ * `sectionId` given  → that section's notes (D-group's meaning zone).
+ */
+export async function listNotesBoard(
+  songId: string,
+  opts: { includeResolved?: boolean; sectionId?: string | null } = {},
+): Promise<NoteBoardEntry[]> {
+  const { data, error } = await (supabase as any).rpc("song_notes_board", {
+    _song_id: songId,
+    _include_resolved: opts.includeResolved ?? true,
+    _section_id: opts.sectionId ?? null,
+  });
+  if (error) throw toCogError(error);
+  return (data ?? []) as NoteBoardEntry[];
+}
+
+/** Mark a note done / not done. Write-gated server-side. */
+export async function setNoteResolved(id: string, resolved: boolean): Promise<SongNote> {
+  const { data, error } = await (supabase as any).rpc("set_note_resolved", {
+    _note_id: id,
+    _resolved: resolved,
+  });
+  if (error) throw toCogError(error);
+  return data as SongNote;
+}
+
+/** Pin a note to the top of the pad (or unpin it). */
+export async function setNotePinned(id: string, pinned: boolean): Promise<SongNote> {
+  const { data, error } = await (supabase as any).rpc("set_note_pinned", {
+    _note_id: id,
+    _pinned: pinned,
+  });
+  if (error) throw toCogError(error);
+  return data as SongNote;
 }

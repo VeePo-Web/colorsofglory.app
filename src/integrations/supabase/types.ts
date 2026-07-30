@@ -1711,28 +1711,43 @@ export type Database = {
       }
       song_notes: {
         Row: {
+          archived_at: string | null
+          archived_by_user_id: string | null
           author_user_id: string
           body: string
           created_at: string
           id: string
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by_user_id?: string | null
           author_user_id: string
           body?: string
           created_at?: string
           id?: string
+          pinned?: boolean
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
           section_id?: string | null
           song_id: string
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by_user_id?: string | null
           author_user_id?: string
           body?: string
           created_at?: string
           id?: string
+          pinned?: boolean
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
           section_id?: string | null
           song_id?: string
           updated_at?: string
@@ -2742,6 +2757,7 @@ export type Database = {
         }
       }
       archive_canvas_card: { Args: { _card_id: string }; Returns: Json }
+      archive_song_note: { Args: { _note_id: string }; Returns: undefined }
       attribute_referral: {
         Args: {
           _code_value: string
@@ -3450,6 +3466,29 @@ export type Database = {
         }
       }
       restore_canvas_card: { Args: { _card_id: string }; Returns: Json }
+      restore_song_note: {
+        Args: { _note_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       restore_song_version: {
         Args: { _song_id: string; _version_id: string }
         Returns: Json
@@ -3522,6 +3561,52 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_note_pinned: {
+        Args: { _note_id: string; _pinned: boolean }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_note_resolved: {
+        Args: { _note_id: string; _resolved: boolean }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_primary_take: { Args: { _take_id: string }; Returns: string }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
@@ -3536,6 +3621,27 @@ export type Database = {
           section_position: number
           updated_at: string
           updated_by_user_id: string
+        }[]
+      }
+      song_notes_board: {
+        Args: {
+          _include_resolved?: boolean
+          _section_id?: string
+          _song_id: string
+        }
+        Returns: {
+          author_avatar_color: string
+          author_name: string
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          pinned: boolean
+          resolved_at: string
+          resolved_by_user_id: string
+          section_id: string
+          song_id: string
+          updated_at: string
         }[]
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
