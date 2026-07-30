@@ -2833,6 +2833,10 @@ export type Database = {
         Args: { _delta: number; _owner_user_id: string }
         Returns: undefined
       }
+      apply_transcript_to_section: {
+        Args: { _lines: string[]; _mode?: string; _section_id: string }
+        Returns: Json
+      }
       approve_payout: {
         Args: { _payout_id: string }
         Returns: {
@@ -3914,6 +3918,7 @@ export type Database = {
           used_bytes: number
         }[]
       }
+      take_transcript_lines: { Args: { _take_id: string }; Returns: Json }
       unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
         Args: {
