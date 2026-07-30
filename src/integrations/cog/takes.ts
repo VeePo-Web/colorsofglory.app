@@ -111,3 +111,48 @@ export async function getTakeSignedUrl(storage_path: string, expires_in_seconds 
   if (error) throw toCogError(error);
   return data.signedUrl;
 }
+// ---------- Pending background work (R12) ----------
+
+export type PendingWorkItem = {
+  take_id: string;
+  voice_memo_id: string;
+  friendly_name: string | null;
+  duration_ms: number | null;
+  status: "pending" | "processing" | "failed" | string;
+  error: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string | null;
+  last_attempt_at: string | null;
+  can_retry: boolean;
+  waveform_pending: boolean;
+  created_at: string;
+};
+
+export type PendingWork = { items: PendingWorkItem[]; server_time: string };
+
+/**
+ * Everything in this song that is still being worked on in the background —
+ * transcripts queued/running/failed, waveforms not yet computed. Use it to
+ * render truthful per-take states instead of a permanent shimmer.
+ * Poll sparingly (on mount, on realtime take events, on tab refocus).
+ */
+export async function getSongPendingWork(song_id: string): Promise<PendingWork> {
+  const { data, error } = await (supabase as any).rpc("song_pending_work", {
+    _song_id: song_id,
+  });
+  if (error) throw toCogError(error);
+  return data as PendingWork;
+}
+
+/**
+ * Requeue a failed transcript immediately, resetting the attempt counter.
+ * Requires edit rights on the song. The audio is never at risk — this only
+ * affects the derived transcript.
+ */
+export async function retryTakeTranscript(take_id: string): Promise<void> {
+  const { error } = await (supabase as any).rpc("retry_take_transcript", {
+    _take_id: take_id,
+  });
+  if (error) throw toCogError(error);
+}
