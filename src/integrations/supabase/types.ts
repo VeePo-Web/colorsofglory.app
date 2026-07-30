@@ -3145,6 +3145,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      choose_take: {
+        Args: { _set_aside_take_id?: string; _take_id: string }
+        Returns: Json
+      }
       claim_founder_code_redemption: {
         Args: { _code_id: string }
         Returns: boolean
@@ -3812,6 +3816,10 @@ export type Database = {
       }
       song_catalog_board: { Args: { _limit?: number }; Returns: Json }
       song_chords_board: { Args: { _song_id: string }; Returns: Json }
+      song_compare_takes: {
+        Args: { _section_id?: string; _song_id: string }
+        Returns: Json
+      }
       song_credits_board: { Args: { _song_id: string }; Returns: Json }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
