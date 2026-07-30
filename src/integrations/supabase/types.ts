@@ -3681,6 +3681,10 @@ export type Database = {
         Returns: Json
       }
       restore_canvas_card: { Args: { _card_id: string }; Returns: Json }
+      restore_song_item: {
+        Args: { _id: string; _kind: string; _song_id: string }
+        Returns: Json
+      }
       restore_song_note: {
         Args: { _note_id: string }
         Returns: {
@@ -3932,6 +3936,10 @@ export type Database = {
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
       song_people_board: { Args: { _song_id: string }; Returns: Json }
+      song_recently_removed: {
+        Args: { _limit?: number; _song_id: string }
+        Returns: Json
+      }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
