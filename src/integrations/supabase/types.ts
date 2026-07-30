@@ -3232,6 +3232,11 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      canvas_reading_order: { Args: { _song_id: string }; Returns: number }
+      canvas_reorder_card: {
+        Args: { _card_id: string; _new_position: number }
+        Returns: number
+      }
       canvas_set_section: {
         Args: { _card_id: string; _section_label: string; _tree_kind?: string }
         Returns: {
