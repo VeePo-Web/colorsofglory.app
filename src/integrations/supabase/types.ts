@@ -3468,6 +3468,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      retry_take_transcript: { Args: { _take_id: string }; Returns: Json }
       reverse_reward_for_invoice: {
         Args: { _invoice: string; _reason: string }
         Returns: number
@@ -3501,6 +3502,7 @@ export type Database = {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
       }
+      song_pending_work: { Args: { _song_id: string }; Returns: Json }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
