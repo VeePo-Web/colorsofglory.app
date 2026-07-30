@@ -55,7 +55,7 @@ export function resolveLegacyRoute(segment: string): RoomDestination {
 
 /** Canonical URL for a destination. Overlays never change the path. */
 export function roomPath(songId: string, dest: RoomDestination): string {
-  if (dest.overlay) return `/song/${songId}`;
+  if (dest.overlay !== undefined) return `/song/${songId}`;
   const base = dest.surface === "ideas" ? `/song/${songId}/ideas` : `/song/${songId}`;
   if (dest.sectionId) return `${base}#s-${dest.sectionId}`;
   if (dest.takeId) return `${base}#t-${dest.takeId}`;
