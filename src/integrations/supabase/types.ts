@@ -3274,6 +3274,10 @@ export type Database = {
           last_active_at: string
         }[]
       }
+      duplicate_song: {
+        Args: { _song_id: string; _title?: string }
+        Returns: Json
+      }
       duplicate_song_section: {
         Args: { _label?: string; _section_id: string; _song_id: string }
         Returns: Json
