@@ -2362,6 +2362,7 @@ export type Database = {
       takes: {
         Row: {
           byte_size: number
+          client_key: string | null
           created_at: string
           created_by: string
           duration_ms: number | null
@@ -2384,6 +2385,7 @@ export type Database = {
         }
         Insert: {
           byte_size?: number
+          client_key?: string | null
           created_at?: string
           created_by: string
           duration_ms?: number | null
@@ -2406,6 +2408,7 @@ export type Database = {
         }
         Update: {
           byte_size?: number
+          client_key?: string | null
           created_at?: string
           created_by?: string
           duration_ms?: number | null
@@ -3419,6 +3422,22 @@ export type Database = {
         }
         Returns: Json
       }
+      create_take_idempotent: {
+        Args: {
+          _byte_size?: number
+          _client_key: string
+          _duration_ms?: number
+          _make_primary?: boolean
+          _mime_type?: string
+          _section_id?: string
+          _song_id: string
+          _storage_path: string
+          _title?: string
+          _voice_memo_id?: string
+          _waveform_peaks?: Json
+        }
+        Returns: Json
+      }
       create_user_payout_batch: {
         Args: { _period_end: string; _period_start: string; _user: string }
         Returns: string
@@ -4391,6 +4410,13 @@ export type Database = {
         }[]
       }
       take_transcript_lines: { Args: { _take_id: string }; Returns: Json }
+      takes_landed: {
+        Args: { _client_keys: string[]; _song_id: string }
+        Returns: {
+          client_key: string
+          take_id: string
+        }[]
+      }
       unlock_songs_up_to_quota: { Args: { _user_id: string }; Returns: number }
       write_audit: {
         Args: {
