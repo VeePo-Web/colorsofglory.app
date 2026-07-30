@@ -38,6 +38,11 @@ function pendingAsNote(p: PendingNote, songId: string, uid: string | undefined):
     section_id: null,
     created_at: p.createdAt,
     updated_at: p.createdAt,
+    pinned: false,
+    resolved_at: null,
+    resolved_by_user_id: null,
+    archived_at: null,
+    archived_by_user_id: null,
   };
 }
 
