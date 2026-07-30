@@ -9,6 +9,13 @@ export type QuickCaptureInput = {
   tags?: string[];
   section_id?: string | null;
   voice_memo_id?: string | null;
+  /**
+   * Device-generated stable id for this idea (e.g. `crypto.randomUUID()`),
+   * created ONCE when the user commits the idea and reused for every retry.
+   * With it, saving is idempotent: a double tap, a flaky network retry, or an
+   * outbox replay after reconnect all resolve to the same single capture.
+   */
+  client_key?: string;
 };
 
 export type IdeaCapture = {
@@ -26,8 +33,26 @@ export type IdeaCapture = {
   promoted_card_id?: string | null;
 };
 
-/** Atomically save a quick-capture entry; bumps song last_activity_at when scoped to a song. */
+/**
+ * Atomically save a quick-capture entry; bumps song last_activity_at when
+ * scoped to a song. Pass `client_key` (strongly recommended) to make the save
+ * retry-safe — see `QuickCaptureInput.client_key`.
+ */
 export async function quickCapture(input: QuickCaptureInput): Promise<string> {
+  if (input.client_key) {
+    const { data, error } = await (supabase as any).rpc("quick_capture_idempotent", {
+      _client_key: input.client_key,
+      _song_id: input.song_id ?? null,
+      _title: input.title ?? "",
+      _lyric_snippet: input.lyric_snippet ?? "",
+      _scripture_ref: input.scripture_ref ?? "",
+      _tags: input.tags ?? [],
+      _section_id: input.section_id ?? null,
+      _voice_memo_id: input.voice_memo_id ?? null,
+    });
+    if (error) throw toCogError(error);
+    return (data as { id: string }).id;
+  }
   const { data, error } = await supabase.rpc("quick_capture", {
     _song_id: input.song_id ?? null,
     _title: input.title ?? "",
