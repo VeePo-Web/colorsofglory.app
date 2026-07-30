@@ -3486,6 +3486,18 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: string
       }
+      save_section_lyrics_guarded: {
+        Args: {
+          _content: Json
+          _expected_updated_at?: string
+          _label?: string
+          _plain_text: string
+          _position?: number
+          _section_id: string
+          _song_id: string
+        }
+        Returns: Json
+      }
       save_song_room_state: {
         Args: {
           _filter_state?: Json
@@ -3501,6 +3513,16 @@ export type Database = {
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
+      }
+      song_lyrics_heads: {
+        Args: { _song_id: string }
+        Returns: {
+          label: string
+          section_id: string
+          section_position: number
+          updated_at: string
+          updated_by_user_id: string
+        }[]
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
       song_role: {
