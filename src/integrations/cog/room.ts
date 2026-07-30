@@ -115,3 +115,58 @@ export async function getSongRoomDelta(
   if (error) throw toCogError(error);
   return data as SongRoomDelta;
 }
+
+// ---------- Find + section vocabulary ----------
+
+export type RoomSearchHit = {
+  id: string;
+  kind: string;
+  label: string | null;
+  body: string | null;
+  section_kind: string | null;
+  section_label: string | null;
+  tree_kind: string;
+  created_by: string | null;
+  take_id: string | null;
+  updated_at: string;
+  rank: number;
+};
+
+/**
+ * Find inside one song. Server-side so a long song stays findable without
+ * holding every card in memory. Matches title, body and section label;
+ * title-prefix matches rank highest. Terms under 2 chars return nothing —
+ * filter the already-loaded feed locally for 1-char input instead.
+ */
+export async function searchSongRoom(
+  song_id: string,
+  q: string,
+  limit = 40,
+): Promise<RoomSearchHit[]> {
+  const { data, error } = await (supabase as any).rpc("song_room_search", {
+    _song_id: song_id,
+    _q: q,
+    _limit: limit,
+  });
+  if (error) throw toCogError(error);
+  return ((data as any)?.results ?? []) as RoomSearchHit[];
+}
+
+export type SectionSummaryRow = {
+  section: string;
+  tree_kind: string;
+  card_count: number;
+  last_activity_at: string;
+};
+
+/**
+ * The section vocabulary this song actually uses, with counts — the source
+ * for section filter chips. Cheap enough to refresh alongside a delta.
+ */
+export async function getSongSectionSummary(song_id: string): Promise<SectionSummaryRow[]> {
+  const { data, error } = await (supabase as any).rpc("song_section_summary", {
+    _song_id: song_id,
+  });
+  if (error) throw toCogError(error);
+  return ((data as any)?.sections ?? []) as SectionSummaryRow[];
+}
