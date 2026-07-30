@@ -237,6 +237,51 @@ export type Database = {
           },
         ]
       }
+      card_reactions: {
+        Row: {
+          card_id: string
+          created_at: string
+          id: string
+          kind: string
+          note_text: string | null
+          song_id: string
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          note_text?: string | null
+          song_id: string
+          user_id?: string
+        }
+        Update: {
+          card_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          note_text?: string | null
+          song_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_reactions_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "canvas_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_reactions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chord_progressions: {
         Row: {
           chords: Json
