@@ -903,6 +903,69 @@ export type Database = {
           },
         ]
       }
+      lyric_suggestions: {
+        Row: {
+          author_user_id: string
+          created_at: string
+          id: string
+          line_id: string
+          note: string | null
+          original_text: string
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string
+          song_id: string
+          status: Database["public"]["Enums"]["suggestion_status"]
+          suggested_text: string
+          updated_at: string
+        }
+        Insert: {
+          author_user_id: string
+          created_at?: string
+          id?: string
+          line_id: string
+          note?: string | null
+          original_text?: string
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          section_id: string
+          song_id: string
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggested_text: string
+          updated_at?: string
+        }
+        Update: {
+          author_user_id?: string
+          created_at?: string
+          id?: string
+          line_id?: string
+          note?: string | null
+          original_text?: string
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          section_id?: string
+          song_id?: string
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggested_text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lyric_suggestions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "song_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lyric_suggestions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_queue: {
         Row: {
           attempts: number
@@ -3101,6 +3164,15 @@ export type Database = {
         Args: { _created_at: string; _duration_ms: number; _tz: string }
         Returns: string
       }
+      create_lyric_suggestion: {
+        Args: {
+          _line_id: string
+          _note?: string
+          _section_id: string
+          _suggested_text: string
+        }
+        Returns: string
+      }
       create_monthly_payout_drafts: { Args: never; Returns: Json }
       create_payout_batch: {
         Args: { _founder: string; _period_end: string; _period_start: string }
@@ -3524,6 +3596,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      resolve_lyric_suggestion: {
+        Args: { _action: string; _suggestion_id: string }
+        Returns: Json
+      }
       restore_canvas_card: { Args: { _card_id: string }; Returns: Json }
       restore_song_note: {
         Args: { _note_id: string }
@@ -3786,6 +3862,10 @@ export type Database = {
       }
       song_section_summary: { Args: { _song_id: string }; Returns: Json }
       song_sheet_bootstrap: { Args: { _song_id: string }; Returns: Json }
+      song_suggestions_board: {
+        Args: { _include_resolved?: boolean; _song_id: string }
+        Returns: Json
+      }
       song_version_timeline: {
         Args: { _limit?: number; _song_id: string }
         Returns: {
@@ -3901,6 +3981,7 @@ export type Database = {
       song_member_role: "owner" | "collaborator" | "viewer"
       song_status: "active" | "archived" | "deleted" | "locked"
       sub_plan: "free" | "starter" | "pro" | "founder_pro"
+      suggestion_status: "open" | "accepted" | "declined" | "withdrawn"
       transcription_status:
         | "pending"
         | "processing"
@@ -4107,6 +4188,7 @@ export const Constants = {
       song_member_role: ["owner", "collaborator", "viewer"],
       song_status: ["active", "archived", "deleted", "locked"],
       sub_plan: ["free", "starter", "pro", "founder_pro"],
+      suggestion_status: ["open", "accepted", "declined", "withdrawn"],
       transcription_status: [
         "pending",
         "processing",
