@@ -3361,6 +3361,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      capture_idea: {
+        Args: {
+          _body?: string
+          _client_key: string
+          _section_id?: string
+          _song_id: string
+          _take_id?: string
+        }
+        Returns: Json
+      }
       capture_inbox: { Args: { _song_id?: string }; Returns: Json }
       catalog_size: {
         Args: { _user_id: string }
