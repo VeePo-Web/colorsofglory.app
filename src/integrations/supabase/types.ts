@@ -788,6 +788,8 @@ export type Database = {
       }
       idea_captures: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           author_user_id: string
           client_key: string | null
           created_at: string
@@ -803,6 +805,8 @@ export type Database = {
           voice_memo_id: string | null
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           author_user_id: string
           client_key?: string | null
           created_at?: string
@@ -818,6 +822,8 @@ export type Database = {
           voice_memo_id?: string | null
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           author_user_id?: string
           client_key?: string | null
           created_at?: string
@@ -3022,6 +3028,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      capture_inbox: { Args: { _song_id?: string }; Returns: Json }
       catalog_size: {
         Args: { _user_id: string }
         Returns: {
@@ -3118,6 +3125,10 @@ export type Database = {
         }[]
       }
       expire_pending_invites: { Args: never; Returns: number }
+      file_capture_into_song: {
+        Args: { _capture_id: string; _section_id?: string; _song_id: string }
+        Returns: undefined
+      }
       first_invite_ever: { Args: { _user_id: string }; Returns: boolean }
       generate_referral_code: { Args: never; Returns: string }
       get_my_profile: {
@@ -3578,6 +3589,10 @@ export type Database = {
           _song_id: string
         }
         Returns: Json
+      }
+      set_capture_archived: {
+        Args: { _archived: boolean; _capture_id: string }
+        Returns: undefined
       }
       set_note_pinned: {
         Args: { _note_id: string; _pinned: boolean }
