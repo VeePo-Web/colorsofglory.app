@@ -3606,6 +3606,14 @@ export type Database = {
         }
         Returns: Json
       }
+      move_memo_to_section: {
+        Args: { _memo_id: string; _section_id?: string }
+        Returns: {
+          memo_id: string
+          section_id: string
+          section_label: string
+        }[]
+      }
       my_song_role: {
         Args: { _song_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
@@ -4052,6 +4060,17 @@ export type Database = {
       song_suggestions_board: {
         Args: { _include_resolved?: boolean; _song_id: string }
         Returns: Json
+      }
+      song_unfiled_memos: {
+        Args: { _song_id: string }
+        Returns: {
+          author_user_id: string
+          created_at: string
+          duration_ms: number
+          id: string
+          title: string
+          waveform_peaks: Json
+        }[]
       }
       song_version_timeline: {
         Args: { _limit?: number; _song_id: string }
