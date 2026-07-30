@@ -1999,6 +1999,59 @@ export type Database = {
           },
         ]
       }
+      song_share_links: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          expires_at: string | null
+          id: string
+          include_audio: boolean
+          label: string | null
+          last_viewed_at: string | null
+          revoked_at: string | null
+          song_id: string
+          token: string
+          updated_at: string
+          view_count: number
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          expires_at?: string | null
+          id?: string
+          include_audio?: boolean
+          label?: string | null
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          song_id: string
+          token: string
+          updated_at?: string
+          view_count?: number
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          expires_at?: string | null
+          id?: string
+          include_audio?: boolean
+          label?: string | null
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          song_id?: string
+          token?: string
+          updated_at?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_share_links_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_versions: {
         Row: {
           created_at: string
@@ -3186,6 +3239,15 @@ export type Database = {
         Args: { _founder: string; _period_end: string; _period_start: string }
         Returns: string
       }
+      create_song_share_link: {
+        Args: {
+          _expires_in_days?: number
+          _include_audio?: boolean
+          _label?: string
+          _song_id: string
+        }
+        Returns: Json
+      }
       create_user_payout_batch: {
         Args: { _period_end: string; _period_start: string; _user: string }
         Returns: string
@@ -3679,6 +3741,7 @@ export type Database = {
         Returns: number
       }
       revoke_song_invite: { Args: { _invite_id: string }; Returns: Json }
+      revoke_song_share_link: { Args: { _link_id: string }; Returns: Json }
       reward_hold_days: { Args: never; Returns: number }
       safe_leave_song: {
         Args: { _song_id: string; _user_id: string }
@@ -3884,6 +3947,8 @@ export type Database = {
         Returns: Json
       }
       song_section_summary: { Args: { _song_id: string }; Returns: Json }
+      song_share_links_board: { Args: { _song_id: string }; Returns: Json }
+      song_shared_view: { Args: { _token: string }; Returns: Json }
       song_sheet_bootstrap: { Args: { _song_id: string }; Returns: Json }
       song_suggestions_board: {
         Args: { _include_resolved?: boolean; _song_id: string }
