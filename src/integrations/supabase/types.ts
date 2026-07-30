@@ -3809,6 +3809,29 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: Json
       }
+      rename_song_section: {
+        Args: {
+          _kind?: Database["public"]["Enums"]["section_kind"]
+          _label: string
+          _section_id: string
+        }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          id: string
+          kind: Database["public"]["Enums"]["section_kind"]
+          label: string | null
+          position: number
+          song_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_sections"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       rename_take: {
         Args: { _friendly_name: string; _take_id: string }
         Returns: undefined
