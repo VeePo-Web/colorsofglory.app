@@ -4123,6 +4123,20 @@ export type Database = {
           trim_start_ms: number
         }[]
       }
+      song_anchors: { Args: { _song_id: string }; Returns: Json }
+      song_cast: {
+        Args: { _song_id: string }
+        Returns: {
+          avatar_url: string
+          color_index: number
+          display_name: string
+          initials: string
+          is_you: boolean
+          joined_at: string
+          role: string
+          user_id: string
+        }[]
+      }
       song_catalog_board: { Args: { _limit?: number }; Returns: Json }
       song_chords_board: { Args: { _song_id: string }; Returns: Json }
       song_compare_takes: {
