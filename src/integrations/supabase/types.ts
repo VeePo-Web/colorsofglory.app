@@ -1795,6 +1795,50 @@ export type Database = {
           },
         ]
       }
+      song_room_state: {
+        Row: {
+          created_at: string
+          filter_state: Json
+          last_card_id: string | null
+          last_take_id: string | null
+          last_view: string | null
+          playback_ms: number
+          song_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filter_state?: Json
+          last_card_id?: string | null
+          last_take_id?: string | null
+          last_view?: string | null
+          playback_ms?: number
+          song_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filter_state?: Json
+          last_card_id?: string | null
+          last_take_id?: string | null
+          last_view?: string | null
+          playback_ms?: number
+          song_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_room_state_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_sections: {
         Row: {
           created_at: string
@@ -3441,6 +3485,17 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: string
       }
+      save_song_room_state: {
+        Args: {
+          _filter_state?: Json
+          _last_card_id?: string
+          _last_take_id?: string
+          _last_view?: string
+          _playback_ms?: number
+          _song_id: string
+        }
+        Returns: undefined
+      }
       set_primary_take: { Args: { _take_id: string }; Returns: string }
       song_role: {
         Args: { _song_id: string; _user_id: string }
@@ -3454,6 +3509,7 @@ export type Database = {
         Args: { _limit?: number; _since: string; _song_id: string }
         Returns: Json
       }
+      song_room_resume: { Args: { _song_id: string }; Returns: Json }
       song_room_search: {
         Args: { _limit?: number; _q: string; _song_id: string }
         Returns: Json
