@@ -2347,6 +2347,8 @@ export type Database = {
           transcript_error: string | null
           transcript_json: Json | null
           transcript_status: string
+          trim_end_ms: number | null
+          trim_start_ms: number
           updated_at: string
           voice_memo_id: string
           waveform_peaks: Json | null
@@ -2367,6 +2369,8 @@ export type Database = {
           transcript_error?: string | null
           transcript_json?: Json | null
           transcript_status?: string
+          trim_end_ms?: number | null
+          trim_start_ms?: number
           updated_at?: string
           voice_memo_id: string
           waveform_peaks?: Json | null
@@ -2387,6 +2391,8 @@ export type Database = {
           transcript_error?: string | null
           transcript_json?: Json | null
           transcript_status?: string
+          trim_end_ms?: number | null
+          trim_start_ms?: number
           updated_at?: string
           voice_memo_id?: string
           waveform_peaks?: Json | null
@@ -3268,6 +3274,7 @@ export type Database = {
         }[]
       }
       clear_pending_code: { Args: { _user_id: string }; Returns: undefined }
+      clear_take_trim: { Args: { _take_id: string }; Returns: undefined }
       complete_onboarding: { Args: { _user_id: string }; Returns: string }
       compute_friendly_take_name: {
         Args: { _created_at: string; _duration_ms: number; _tz: string }
@@ -3938,6 +3945,15 @@ export type Database = {
       set_take_archived: {
         Args: { _archived: boolean; _take_id: string }
         Returns: undefined
+      }
+      set_take_trim: {
+        Args: { _end_ms?: number; _start_ms: number; _take_id: string }
+        Returns: {
+          duration_ms: number
+          take_id: string
+          trim_end_ms: number
+          trim_start_ms: number
+        }[]
       }
       song_catalog_board: { Args: { _limit?: number }; Returns: Json }
       song_chords_board: { Args: { _song_id: string }; Returns: Json }
