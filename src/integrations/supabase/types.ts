@@ -1632,6 +1632,38 @@ export type Database = {
           },
         ]
       }
+      song_listen_paths: {
+        Row: {
+          created_at: string
+          items: Json
+          song_id: string
+          updated_at: string
+          updated_by_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          items?: Json
+          song_id: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          items?: Json
+          song_id?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_listen_paths_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: true
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_lyrics: {
         Row: {
           content: Json
@@ -3576,6 +3608,10 @@ export type Database = {
         }
         Returns: string
       }
+      save_listen_path: {
+        Args: { _items: Json; _song_id: string }
+        Returns: Json
+      }
       save_section_lyrics_guarded: {
         Args: {
           _content: Json
@@ -3696,6 +3732,7 @@ export type Database = {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
       }
+      song_listen_path: { Args: { _song_id: string }; Returns: Json }
       song_lyrics_heads: {
         Args: { _song_id: string }
         Returns: {
