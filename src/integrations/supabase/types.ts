@@ -1682,6 +1682,7 @@ export type Database = {
       }
       song_members: {
         Row: {
+          credit_note: string | null
           id: string
           invited_by_user_id: string | null
           joined_at: string
@@ -1690,6 +1691,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          credit_note?: string | null
           id?: string
           invited_by_user_id?: string | null
           joined_at?: string
@@ -1698,6 +1700,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          credit_note?: string | null
           id?: string
           invited_by_user_id?: string | null
           joined_at?: string
@@ -3609,6 +3612,14 @@ export type Database = {
         Args: { _archived: boolean; _capture_id: string }
         Returns: undefined
       }
+      set_member_credit_note: {
+        Args: {
+          _credit_note: string
+          _member_user_id: string
+          _song_id: string
+        }
+        Returns: boolean
+      }
       set_note_pinned: {
         Args: { _note_id: string; _pinned: boolean }
         Returns: {
@@ -3679,6 +3690,7 @@ export type Database = {
       }
       song_catalog_board: { Args: { _limit?: number }; Returns: Json }
       song_chords_board: { Args: { _song_id: string }; Returns: Json }
+      song_credits_board: { Args: { _song_id: string }; Returns: Json }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
