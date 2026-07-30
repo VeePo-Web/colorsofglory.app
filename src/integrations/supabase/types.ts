@@ -4171,6 +4171,14 @@ export type Database = {
         Args: { _include_resolved?: boolean; _song_id: string }
         Returns: Json
       }
+      song_title_suggestions: {
+        Args: { _song_id: string }
+        Returns: {
+          source: string
+          suggestion: string
+          weight: number
+        }[]
+      }
       song_unfiled_memos: {
         Args: { _song_id: string }
         Returns: {
