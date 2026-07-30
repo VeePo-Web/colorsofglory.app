@@ -130,6 +130,7 @@ export type Database = {
       canvas_cards: {
         Row: {
           body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
@@ -153,6 +154,7 @@ export type Database = {
         }
         Insert: {
           body?: string
+          client_key?: string | null
           created_at?: string
           created_by: string
           end_ms?: number | null
@@ -176,6 +178,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          client_key?: string | null
           created_at?: string
           created_by?: string
           end_ms?: number | null
@@ -2729,6 +2732,7 @@ export type Database = {
         Args: { _child_id: string; _parent_id: string }
         Returns: {
           body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
@@ -2761,6 +2765,7 @@ export type Database = {
         Args: { _card_id: string; _x: number; _y: number; _z_index?: number }
         Returns: {
           body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
@@ -2793,6 +2798,7 @@ export type Database = {
         Args: { _card_id: string }
         Returns: {
           body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
@@ -2825,6 +2831,7 @@ export type Database = {
         Args: { _card_id: string; _section_label: string; _tree_kind?: string }
         Returns: {
           body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
@@ -2857,6 +2864,53 @@ export type Database = {
         Args: { _card_id: string }
         Returns: {
           body: string
+          client_key: string | null
+          created_at: string
+          created_by: string
+          end_ms: number | null
+          group_id: string | null
+          id: string
+          kind: string
+          label: string | null
+          parent_card_id: string | null
+          position: number
+          section_kind: string | null
+          section_label: string | null
+          song_id: string
+          source_capture_id: string | null
+          start_ms: number | null
+          take_id: string | null
+          tree_kind: string
+          updated_at: string
+          x: number | null
+          y: number | null
+          z_index: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canvas_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      canvas_upsert_card_idempotent: {
+        Args: {
+          _body: string
+          _client_key: string
+          _kind: string
+          _label?: string
+          _parent_card_id?: string
+          _section_kind?: string
+          _section_label?: string
+          _song_id: string
+          _take_id?: string
+          _tree_kind?: string
+          _x?: number
+          _y?: number
+        }
+        Returns: {
+          body: string
+          client_key: string | null
           created_at: string
           created_by: string
           end_ms: number | null
