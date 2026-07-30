@@ -474,3 +474,74 @@ export async function emitSheetEvent(songId: string, draft: SheetEventDraft): Pr
     /* never let event plumbing break the editor */
   }
 }
+
+// ─── R13: conflict-safe section saving ───────────────────────────────────────
+
+/**
+ * Per-section revision stamps. Cheap enough to poll or refetch on focus —
+ * compare `updated_at` against the stamp you last saved with to know a section
+ * went stale under the editor before the person hits save.
+ */
+export type SectionHead = {
+  section_id: string;
+  label: string | null;
+  section_position: number;
+  updated_at: string | null;
+  updated_by_user_id: string | null;
+};
+
+export async function getSectionHeads(songId: string): Promise<SectionHead[]> {
+  const { data, error } = await (supabase as any).rpc("song_lyrics_heads", { _song_id: songId });
+  if (error) throw toCogError(error);
+  return (data ?? []) as SectionHead[];
+}
+
+export type GuardedSaveResult =
+  | { status: "saved"; section_id: string; updated_at: string; updated_by_user_id: string }
+  | {
+      status: "conflict";
+      section_id: string;
+      updated_at: string;
+      updated_by_user_id: string | null;
+      /** Their current version, decoded — render side-by-side, never auto-merge. */
+      serverLines: SheetLineDoc[];
+      server_plain_text: string | null;
+    };
+
+/**
+ * Save ONE section's lines without ever silently clobbering a collaborator.
+ *
+ * Pass `expectedUpdatedAt` — the `updated_at` you last read/saved for that
+ * section. If someone else saved a newer version in the meantime, nothing is
+ * written and you get `status: "conflict"` plus their text. Show both versions
+ * and let the person choose ("Keep mine" re-saves with their newer stamp);
+ * do not auto-merge and do not drop the local draft.
+ */
+export async function saveSectionGuarded(
+  songId: string,
+  section: SheetSectionDoc,
+  opts: { expectedUpdatedAt?: string | null; position?: number } = {},
+): Promise<GuardedSaveResult> {
+  const { data, error } = await (supabase as any).rpc("save_section_lyrics_guarded", {
+    _song_id: songId,
+    _section_id: section.id,
+    _content: encodeContent(section.lines),
+    _plain_text: plainText(section.lines),
+    _expected_updated_at: opts.expectedUpdatedAt ?? null,
+    _label: section.label || null,
+    _position: opts.position ?? null,
+  });
+  if (error) throw toCogError(error);
+  const res = data as any;
+  if (res?.status === "conflict") {
+    return {
+      status: "conflict",
+      section_id: res.section_id,
+      updated_at: res.updated_at,
+      updated_by_user_id: res.updated_by_user_id ?? null,
+      serverLines: decodeContent(res.server_content),
+      server_plain_text: res.server_plain_text ?? null,
+    };
+  }
+  return res as GuardedSaveResult;
+}
