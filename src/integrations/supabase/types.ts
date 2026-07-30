@@ -3510,6 +3510,7 @@ export type Database = {
         Returns: undefined
       }
       set_primary_take: { Args: { _take_id: string }; Returns: string }
+      song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
