@@ -3296,6 +3296,7 @@ export type Database = {
         }
         Returns: string
       }
+      mark_all_songs_seen: { Args: never; Returns: number }
       mark_feature_used: { Args: { _feature: string }; Returns: undefined }
       mark_memo_failed: {
         Args: { _memo_id: string; _reason: string }
@@ -3676,6 +3677,7 @@ export type Database = {
         Args: { _archived: boolean; _take_id: string }
         Returns: undefined
       }
+      song_catalog_board: { Args: { _limit?: number }; Returns: Json }
       song_chords_board: { Args: { _song_id: string }; Returns: Json }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
