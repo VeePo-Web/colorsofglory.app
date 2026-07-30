@@ -3505,6 +3505,7 @@ export type Database = {
         Args: { _card_limit?: number; _song_id: string }
         Returns: Json
       }
+      song_room_capabilities: { Args: { _song_id: string }; Returns: Json }
       song_room_delta: {
         Args: { _limit?: number; _since: string; _song_id: string }
         Returns: Json
