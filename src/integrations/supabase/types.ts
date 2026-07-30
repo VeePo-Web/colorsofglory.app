@@ -3889,6 +3889,10 @@ export type Database = {
       }
       song_credits_board: { Args: { _song_id: string }; Returns: Json }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
+      song_feed: {
+        Args: { _before?: string; _limit?: number; _song_id: string }
+        Returns: Json
+      }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
