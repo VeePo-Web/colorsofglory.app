@@ -4203,6 +4203,7 @@ export type Database = {
         }[]
       }
       song_anchors: { Args: { _song_id: string }; Returns: Json }
+      song_arrival: { Args: { _song_id: string }; Returns: Json }
       song_cast: {
         Args: { _song_id: string }
         Returns: {
