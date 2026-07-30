@@ -164,3 +164,41 @@ export async function setCardSection(
 export async function promoteCardToFinal(card_id: string): Promise<CanvasCard> {
   return rpc<CanvasCard>("canvas_promote_to_final", { _card_id: card_id });
 }
+// ---------- Durable, duplicate-safe create ----------
+
+export {
+  queueCreateCard,
+  flushOutbox,
+  startOutbox,
+  subscribeOutbox,
+  getOutboxStatus,
+  newClientKey,
+} from "./outbox";
+export type { OutboxEntry, OutboxStatus, QueueCardInput } from "./outbox";
+
+/**
+ * Create a card exactly once, even across retries. Prefer this over
+ * `createCanvasCard` for anything born from a user gesture in the room:
+ * the write is journalled to disk first, so a dropped connection can never
+ * lose the idea, and the (song_id, client_key) uniqueness on the server
+ * means a retry returns the same card instead of a duplicate.
+ */
+export async function createCanvasCardIdempotent(
+  input: CreateCanvasCardInput & { client_key?: string; take_id?: string | null },
+): Promise<CanvasCard | null> {
+  const { queueCreateCard } = await import("./outbox");
+  return queueCreateCard({
+    song_id: input.song_id,
+    kind: input.kind,
+    body: input.body,
+    label: input.label ?? null,
+    section_kind: input.section_kind ?? null,
+    section_label: input.section_label ?? null,
+    tree_kind: input.tree_kind ?? "ideas",
+    x: input.x ?? null,
+    y: input.y ?? null,
+    parent_card_id: input.parent_card_id ?? null,
+    take_id: input.take_id ?? null,
+    client_key: input.client_key,
+  });
+}
