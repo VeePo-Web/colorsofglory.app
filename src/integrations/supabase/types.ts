@@ -3413,6 +3413,11 @@ export type Database = {
         Args: { _limit?: number; _since: string; _song_id: string }
         Returns: Json
       }
+      song_room_search: {
+        Args: { _limit?: number; _q: string; _song_id: string }
+        Returns: Json
+      }
+      song_section_summary: { Args: { _song_id: string }; Returns: Json }
       stash_pending_code: {
         Args: { _code: string; _user_id: string }
         Returns: undefined
