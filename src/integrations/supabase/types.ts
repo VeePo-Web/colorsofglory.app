@@ -1866,6 +1866,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          parent_note_id: string | null
           pinned: boolean
           resolved_at: string | null
           resolved_by_user_id: string | null
@@ -1880,6 +1881,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          parent_note_id?: string | null
           pinned?: boolean
           resolved_at?: string | null
           resolved_by_user_id?: string | null
@@ -1894,6 +1896,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          parent_note_id?: string | null
           pinned?: boolean
           resolved_at?: string | null
           resolved_by_user_id?: string | null
@@ -1902,6 +1905,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "song_notes_parent_note_id_fkey"
+            columns: ["parent_note_id"]
+            isOneToOne: false
+            referencedRelation: "song_notes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "song_notes_section_id_fkey"
             columns: ["section_id"]
@@ -3623,6 +3633,30 @@ export type Database = {
         Returns: number
       }
       next_song_version_number: { Args: { _song_id: string }; Returns: number }
+      note_replies: {
+        Args: { _parent_note_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          parent_note_id: string | null
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       on_auth_user_confirmed: {
         Args: { _phone: string; _user_id: string }
         Returns: undefined
@@ -3716,6 +3750,30 @@ export type Database = {
         Args: { _ordered_ids: string[]; _song_id: string }
         Returns: Json
       }
+      reply_to_note: {
+        Args: { _body: string; _parent_note_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          parent_note_id: string | null
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       reset_transcript_attempts: {
         Args: { _memo_id: string }
         Returns: undefined
@@ -3763,6 +3821,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          parent_note_id: string | null
           pinned: boolean
           resolved_at: string | null
           resolved_by_user_id: string | null
@@ -3895,6 +3954,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          parent_note_id: string | null
           pinned: boolean
           resolved_at: string | null
           resolved_by_user_id: string | null
@@ -3918,6 +3978,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          parent_note_id: string | null
           pinned: boolean
           resolved_at: string | null
           resolved_by_user_id: string | null
