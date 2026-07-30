@@ -11,7 +11,7 @@
  * incremental refreshes (realtime invalidation still targets their keys).
  */
 import { supabase } from "@/integrations/supabase/client";
-import { toCogError } from "./errors";
+import { call, toCogError } from "./errors";
 import type { CanvasCard } from "./canvas";
 
 export type RoomMember = {
@@ -49,4 +49,30 @@ export async function getSongRoomBootstrap(
   });
   if (error) throw toCogError(error);
   return data as SongRoomBootstrap;
+}
+
+// ---------- Batch playback URLs ----------
+
+export type SongPlaybackUrls = {
+  /** memo id / take id → signed URL (15 min TTL). */
+  urls: Record<string, string>;
+  expires_in: number;
+  count: number;
+};
+
+/**
+ * Sign every take/memo in a song in ONE request.
+ *
+ * The per-card path (`voice-memo-signed-url`) costs a cold edge invocation at
+ * the exact moment a thumb hits play. Prewarm the whole room with this on
+ * entry and seed `canvasAudio`'s url cache; every subsequent tap is local.
+ * Re-fetch every ~12 minutes (TTL is 15) while the room stays open.
+ */
+export async function getSongPlaybackUrls(
+  song_id: string,
+  memo_ids?: string[],
+): Promise<SongPlaybackUrls> {
+  const data = await call<SongPlaybackUrls>("song-playback-urls", { song_id, memo_ids });
+  if (!data) return { urls: {}, expires_in: 0, count: 0 };
+  return data;
 }
