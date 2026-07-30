@@ -61,6 +61,8 @@ export function useAddNote(songId: string) {
         body: body.trim(),
         section_id: null,
         parent_note_id: null,
+        take_id: null,
+        at_ms: null,
         created_at: now,
         updated_at: now,
         pinned: false,

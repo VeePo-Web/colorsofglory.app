@@ -37,6 +37,8 @@ function pendingAsNote(p: PendingNote, songId: string, uid: string | undefined):
     body: p.body,
     section_id: null,
     parent_note_id: null,
+    take_id: null,
+    at_ms: null,
     created_at: p.createdAt,
     updated_at: p.createdAt,
     pinned: false,

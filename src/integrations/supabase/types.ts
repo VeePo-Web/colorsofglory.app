@@ -1862,6 +1862,7 @@ export type Database = {
         Row: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -1872,11 +1873,13 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }
         Insert: {
           archived_at?: string | null
           archived_by_user_id?: string | null
+          at_ms?: number | null
           author_user_id: string
           body?: string
           created_at?: string
@@ -1887,11 +1890,13 @@ export type Database = {
           resolved_by_user_id?: string | null
           section_id?: string | null
           song_id: string
+          take_id?: string | null
           updated_at?: string
         }
         Update: {
           archived_at?: string | null
           archived_by_user_id?: string | null
+          at_ms?: number | null
           author_user_id?: string
           body?: string
           created_at?: string
@@ -1902,6 +1907,7 @@ export type Database = {
           resolved_by_user_id?: string | null
           section_id?: string | null
           song_id?: string
+          take_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1924,6 +1930,13 @@ export type Database = {
             columns: ["song_id"]
             isOneToOne: false
             referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_notes_take_id_fkey"
+            columns: ["take_id"]
+            isOneToOne: false
+            referencedRelation: "takes"
             referencedColumns: ["id"]
           },
         ]
@@ -2602,6 +2615,32 @@ export type Database = {
           role: Database["public"]["Enums"]["song_member_role"]
           song_id: string
         }[]
+      }
+      add_moment_note: {
+        Args: { _at_ms: number; _body: string; _take_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by_user_id: string | null
+          at_ms: number | null
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          parent_note_id: string | null
+          pinned: boolean
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          section_id: string | null
+          song_id: string
+          take_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_billing_events: {
         Args: { _limit?: number; _only_failed?: boolean }
@@ -3638,6 +3677,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -3648,6 +3688,7 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }[]
         SetofOptions: {
@@ -3755,6 +3796,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -3765,6 +3807,7 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -3817,6 +3860,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -3827,6 +3871,7 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -3950,6 +3995,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -3960,6 +4006,7 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -3974,6 +4021,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           archived_by_user_id: string | null
+          at_ms: number | null
           author_user_id: string
           body: string
           created_at: string
@@ -3984,6 +4032,7 @@ export type Database = {
           resolved_by_user_id: string | null
           section_id: string | null
           song_id: string
+          take_id: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -4160,6 +4209,17 @@ export type Database = {
           pct: number
           quota_bytes: number
           used_bytes: number
+        }[]
+      }
+      take_moment_notes: {
+        Args: { _take_id: string }
+        Returns: {
+          at_ms: number
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          resolved_at: string
         }[]
       }
       take_transcript_lines: { Args: { _take_id: string }; Returns: Json }
