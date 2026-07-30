@@ -26,6 +26,36 @@ of it is available and none of it is asked for. That is the fat to trim.
 > Collaboration UX is not features. It is *never being at a dead end, and never
 > being asked to choose.* One person, one room, one obvious next move.
 
+### 1.1 The five cross-cutting laws (from the reference research)
+
+Every collaboration surface in this app — room, canvas, feed — must satisfy all
+five. Treat them as review gates, not aspirations.
+
+1. **Identity is always visible, always the same colour.** One person = one
+   colour, bound identically across their presence avatar, their edit marks,
+   their note pins and their takes. Never a grey anonymous blob.
+   *In COG:* the creator colour system already exists (`creatorColors`) — extend
+   it to presence, note authorship and take lanes so the binding never breaks.
+2. **Every collaborative artifact is spatially anchored.** A comment is a pin at
+   a place (a line, a card, a millisecond in a take), never an entry in a
+   detached list. *In COG:* R46 moment-notes and R45 replies exist server-side
+   and are currently only reachable through a list — anchor them: a note on a
+   take renders as a gold pin on the waveform, tap = jump-and-play from there;
+   a note on a line renders as a soft underline on that line.
+3. **Optimistic always; the network is invisible.** Motion plays on tap, not on
+   response. Failure is a quiet toast and a rollback, never a blocking dialog.
+4. **Two clicks or fewer, and nothing destructive is instant.** Accept, reject,
+   resolve, restore — all reachable from the point of context, all reversible
+   (R34 already guarantees recoverability; the UI must promise it in words).
+5. **Never a dead end.** After *any* completed action the room proposes the next
+   one. This is exactly what `song_next_move` exists to power — so the strip
+   must re-evaluate after every mutation, not only on entry.
+
+**One deliberate divergence from the Temu reference:** we take its
+forward-momentum (always one next action, never a static done-screen) and
+explicitly reject its urgency layer — no countdowns, no social-proof pressure,
+no confetti. This room is a sanctuary. Momentum, not manipulation.
+
 ---
 
 ## 2. Stress test — what breaks today
@@ -148,6 +178,15 @@ These are removals. Do them.
   No cursor, no name label, no toast.
 - When another person's edit lands in the section you are reading, the changed
   line gets a 600ms gold wash and nothing else. No banner, no "reload".
+- **Anchor the notes (law 2).** Moment-notes (R46) become pins on the take's
+  waveform in the author's creator colour; tapping seeks and plays from that
+  millisecond. Line notes become a 2px underline under the line, tap opens the
+  thread popover in place. Delete any surface that shows notes as a bare list.
+- **Accept/reject in place (law 4).** A suggested line (R45/R19) renders inline
+  on the line it replaces — old struck through, new beneath it in the
+  suggester's colour, with ✓ / ✗ adjacent. No diff screen, no separate route.
+- **Ambient presence only (law 1).** Follow-mode, cursor trails and join/leave
+  toasts are out of scope and stay out — one 20px avatar is the whole signal.
 
 ---
 
@@ -162,6 +201,9 @@ These are removals. Do them.
 - [ ] Strip render costs zero blocking requests; room paints identically without it.
 - [ ] No red, no badges, no counters, no streaks anywhere in this feature.
 - [ ] Reduced-motion: no fade, no collapse — the strip just is, then isn't.
+- [ ] The strip re-evaluates after every mutation — no action ends in stillness.
+- [ ] Every note is reachable from the thing it is about, not only from a list.
+- [ ] One person renders in exactly one colour everywhere they appear.
 
 ---
 
