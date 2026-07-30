@@ -411,38 +411,53 @@ export type RestoreResult = {
  * surfaces the error; retrying just re-runs the whole safe sequence).
  */
 export async function restoreVersion(songId: string, versionId: string): Promise<RestoreResult> {
-  const target = await getVersion(versionId);
-  if (target.song_id !== songId) {
-    throw new CogError("SONG_NOT_FOUND", "That version belongs to a different song.");
-  }
-  const targetSnap = parseSnapshot(target.snapshot);
-  if (!targetSnap) {
-    throw new CogError("INVALID_INPUT", "This snapshot can't be read, so it can't be restored.");
-  }
-
-  const uid = await requireUserId();
-
-  // 1) Preserve the current state first — nothing can be lost after this line.
-  const currentSnap = await captureCurrentState(songId);
-  const head = await getHead(songId);
-  const preRestoreVersion = await createSnapshot(songId, {
-    kind: "auto",
-    label: `Before restoring v${target.version_number}`,
-    parentVersionId: head?.id ?? null,
-    snapshot: currentSnap,
+  // R16: one transaction, server-side. Preserve → apply → record, all or nothing.
+  const { data, error } = await (supabase as any).rpc("restore_song_version", {
+    _song_id: songId,
+    _version_id: versionId,
   });
-
-  // 2) Bring the song to the restored state.
-  await applySnapshot(songId, targetSnap, uid);
-
-  // 3) Record the restore, branched from the version it revived.
-  const restoredVersion = await createSnapshot(songId, {
-    kind: "restore_point",
-    label: target.label ? `Restored: ${target.label}` : `Restored from v${target.version_number}`,
-    parentVersionId: target.id,
-    snapshot: targetSnap,
-  });
-
+  if (error) throw asCogError(error);
+  const res = data as {
+    pre_restore_version_id: string;
+    restore_point_version_id: string;
+  };
+  const [preRestoreVersion, restoredVersion] = await Promise.all([
+    getVersion(res.pre_restore_version_id),
+    getVersion(res.restore_point_version_id),
+  ]);
   emitVersionActivity("version_restored", { song_id: songId, version_id: restoredVersion.id });
   return { preRestoreVersion, restoredVersion };
+}
+
+// ─── Timeline (lightweight) ──────────────────────────────────────────────────
+
+/** One row of the history screen — no snapshot blob, so the list opens instantly. */
+export type VersionTimelineEntry = {
+  id: string;
+  version_number: number;
+  kind: VersionKind;
+  label: string | null;
+  description: string | null;
+  parent_version_id: string | null;
+  created_by_user_id: string;
+  created_by_name: string | null;
+  created_at: string;
+  section_count: number;
+  line_count: number;
+};
+
+/**
+ * Version timeline without snapshots. Use this for /songs/:id/versions; only
+ * fetch the full version (getVersion) when the user previews or restores one.
+ */
+export async function listVersionTimeline(
+  songId: string,
+  limit = 100,
+): Promise<VersionTimelineEntry[]> {
+  const { data, error } = await (supabase as any).rpc("song_version_timeline", {
+    _song_id: songId,
+    _limit: limit,
+  });
+  if (error) throw asCogError(error);
+  return (data ?? []) as VersionTimelineEntry[];
 }
