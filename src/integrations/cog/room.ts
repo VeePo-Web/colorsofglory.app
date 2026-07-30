@@ -33,7 +33,73 @@ export type SongRoomBootstrap = {
   captures: Record<string, unknown>[];
   sections: Record<string, unknown>[];
   unseen_activity_count: number;
+  /** R50 — the five newest activity rows, so the feed strip paints instantly. */
+  feed_preview: RoomFeedPreviewRow[];
+  /** Invitations still waiting for an answer (R48). */
+  pending_invite_count: number;
+  /** Line suggestions still open (R19). */
+  open_suggestion_count: number;
+  /** Recordings not filed under a part yet (R44). */
+  unfiled_memo_count: number;
+  /** Reaction tallies for the room's cards (R39). */
+  reactions: RoomReactionTally[];
 };
+
+export type RoomFeedPreviewRow = {
+  id: string;
+  kind: string;
+  entity_type: string;
+  entity_id: string | null;
+  created_at: string;
+  is_you: boolean;
+  is_unseen: boolean;
+  actor: {
+    user_id: string;
+    name: string;
+    avatar_url: string | null;
+    avatar_color: string | null;
+  } | null;
+};
+
+export type RoomReactionTally = {
+  card_id: string;
+  kind: string;
+  count: number;
+  mine: boolean;
+};
+
+/** Reaction tallies keyed by card id — build once, read O(1) while rendering. */
+export function reactionIndex(
+  rows: RoomReactionTally[] | null | undefined,
+): Map<string, RoomReactionTally[]> {
+  const map = new Map<string, RoomReactionTally[]>();
+  for (const r of rows ?? []) {
+    const list = map.get(r.card_id);
+    if (list) list.push(r);
+    else map.set(r.card_id, [r]);
+  }
+  return map;
+}
+
+/**
+ * The one quiet line the room shows under the header when something is
+ * waiting. Returns null when nothing needs saying — silence is the default.
+ */
+export function roomWaitingLine(b: SongRoomBootstrap): string | null {
+  if (b.open_suggestion_count > 0)
+    return b.open_suggestion_count === 1
+      ? "One suggested line is waiting"
+      : `${b.open_suggestion_count} suggested lines are waiting`;
+  if (b.unfiled_memo_count > 0)
+    return b.unfiled_memo_count === 1
+      ? "One recording isn't filed yet"
+      : `${b.unfiled_memo_count} recordings aren't filed yet`;
+  if (b.pending_invite_count > 0)
+    return b.pending_invite_count === 1
+      ? "One invitation is still on the way"
+      : `${b.pending_invite_count} invitations are still on the way`;
+  return null;
+}
 
 /**
  * Fetch everything the room needs in one request.
