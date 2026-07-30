@@ -3466,6 +3466,16 @@ export type Database = {
       }
       mark_song_seen: { Args: { _song_id: string }; Returns: undefined }
       mature_holds: { Args: never; Returns: number }
+      merge_cards_into_section: {
+        Args: {
+          _archive_sources?: boolean
+          _card_ids: string[]
+          _kind?: Database["public"]["Enums"]["section_kind"]
+          _label?: string
+          _song_id: string
+        }
+        Returns: Json
+      }
       my_song_role: {
         Args: { _song_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
