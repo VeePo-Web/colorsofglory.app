@@ -3436,6 +3436,10 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: Json
       }
+      rename_take: {
+        Args: { _friendly_name: string; _take_id: string }
+        Returns: undefined
+      }
       reorder_song_sections: {
         Args: { _ordered_ids: string[]; _song_id: string }
         Returns: Json
@@ -3630,6 +3634,10 @@ export type Database = {
         }
         Returns: Json
       }
+      set_take_archived: {
+        Args: { _archived: boolean; _take_id: string }
+        Returns: undefined
+      }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
@@ -3704,6 +3712,7 @@ export type Database = {
           version_number: number
         }[]
       }
+      song_voice_board: { Args: { _song_id: string }; Returns: Json }
       stash_pending_code: {
         Args: { _code: string; _user_id: string }
         Returns: undefined
