@@ -3808,6 +3808,7 @@ export type Database = {
         Args: { _before?: string; _limit?: number; _song_id: string }
         Returns: Json
       }
+      song_hub_board: { Args: { _song_id: string }; Returns: Json }
       song_listen_path: { Args: { _song_id: string }; Returns: Json }
       song_lyrics_heads: {
         Args: { _song_id: string }
