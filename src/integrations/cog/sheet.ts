@@ -106,51 +106,27 @@ function plainText(lines: SheetLineDoc[]): string {
 // ─── Read ────────────────────────────────────────────────────────────────────
 
 export async function getSongSheet(songId: string): Promise<SongSheet> {
-  const [sectionsRes, lyricsRes, metaRes] = await Promise.all([
-    db
-      .from("song_sections")
-      .select("id, label, kind, position, updated_at")
-      .eq("song_id", songId)
-      .order("position", { ascending: true }),
-    db
-      .from("song_lyrics")
-      .select("section_id, content, plain_text, updated_at")
-      .eq("song_id", songId),
-    db
-      .from("chord_progressions")
-      .select("id, chords, updated_at")
-      .eq("song_id", songId)
-      .eq("label", SHEET_META_LABEL)
-      .maybeSingle(),
-  ]);
-  if (sectionsRes.error) throw toCogError(sectionsRes.error);
-  if (lyricsRes.error) throw toCogError(lyricsRes.error);
-  if (metaRes.error) throw toCogError(metaRes.error);
-
-  const meta = (metaRes.data?.chords ?? null) as SheetMetaV1 | null;
-  const sections = (sectionsRes.data ?? []) as Array<{
-    id: string;
-    label: string | null;
-    position: number;
-    updated_at: string | null;
-  }>;
-  const lyrics = (lyricsRes.data ?? []) as Array<{
-    section_id: string;
-    content: unknown;
-    updated_at: string | null;
-  }>;
-
-  let updatedAt: string | null = null;
-  const bump = (t?: string | null) => {
-    if (t && (!updatedAt || new Date(t) > new Date(updatedAt))) updatedAt = t;
+  // R19: one round trip instead of three.
+  const { data, error } = await db.rpc("song_sheet_bootstrap", { _song_id: songId });
+  if (error) throw toCogError(error);
+  const payload = (data ?? {}) as {
+    sections?: Array<{
+      id: string;
+      label: string | null;
+      position: number;
+      content: unknown;
+    }>;
+    meta?: SheetMetaV1 | null;
+    updated_at?: string | null;
   };
-  sections.forEach((s) => bump(s.updated_at));
-  lyrics.forEach((l) => bump(l.updated_at));
-  bump(metaRes.data?.updated_at ?? null);
+
+  const meta = (payload.meta ?? null) as SheetMetaV1 | null;
+  const sections = payload.sections ?? [];
+  const updatedAt = payload.updated_at ?? null;
 
   if (sections.length === 0) return { doc: null, updatedAt };
 
-  const lyricsBySection = new Map(lyrics.map((row) => [row.section_id, decodeContent(row.content)]));
+  const lyricsBySection = new Map(sections.map((row) => [row.id, decodeContent(row.content)]));
 
   const doc: SheetDoc = {
     ...createDoc({
