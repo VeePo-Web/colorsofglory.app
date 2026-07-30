@@ -2111,6 +2111,7 @@ export type Database = {
           cover_color: string | null
           created_at: string
           dedication: string | null
+          finished_at: string | null
           id: string
           is_locked: boolean
           key_signature: string | null
@@ -2128,6 +2129,7 @@ export type Database = {
           cover_color?: string | null
           created_at?: string
           dedication?: string | null
+          finished_at?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null
@@ -2145,6 +2147,7 @@ export type Database = {
           cover_color?: string | null
           created_at?: string
           dedication?: string | null
+          finished_at?: string | null
           id?: string
           is_locked?: boolean
           key_signature?: string | null
@@ -3314,6 +3317,7 @@ export type Database = {
         Args: { _capture_id: string; _section_id?: string; _song_id: string }
         Returns: undefined
       }
+      finish_song: { Args: { _song_id: string }; Returns: string }
       first_invite_ever: { Args: { _user_id: string }; Returns: boolean }
       generate_referral_code: { Args: never; Returns: string }
       get_my_profile: {
@@ -3647,6 +3651,7 @@ export type Database = {
         Args: { _friendly_name: string; _take_id: string }
         Returns: undefined
       }
+      reopen_song: { Args: { _song_id: string }; Returns: undefined }
       reorder_song_sections: {
         Args: { _ordered_ids: string[]; _song_id: string }
         Returns: Json
