@@ -183,58 +183,14 @@ export async function saveSongSheet(
   doc: SheetDoc,
   prev?: SheetDoc | null,
 ): Promise<{ savedAt: string }> {
-  const uid = await requireUserId();
-  const now = new Date().toISOString();
-
   const prevById = new Map((prev?.sections ?? []).map((s, i) => [s.id, sectionSignature(s, i)]));
   const changed = doc.sections
     .map((s, i) => ({ section: s, position: i }))
     .filter(({ section, position }) => prevById.get(section.id) !== sectionSignature(section, position));
 
-  if (changed.length > 0) {
-    const { error: secErr } = await db.from("song_sections").upsert(
-      changed.map(({ section, position }) => ({
-        id: section.id,
-        song_id: songId,
-        label: section.label || null,
-        kind: kindForLabel(section.label),
-        position,
-        created_by_user_id: uid,
-        updated_at: now,
-      })),
-      { onConflict: "id" },
-    );
-    if (secErr) throw toCogError(secErr);
-
-    const { error: lyrErr } = await db.from("song_lyrics").upsert(
-      changed.map(({ section }) => ({
-        song_id: songId,
-        section_id: section.id,
-        content: encodeContent(section.lines),
-        plain_text: plainText(section.lines),
-        updated_by_user_id: uid,
-        updated_at: now,
-      })),
-      { onConflict: "section_id" },
-    );
-    if (lyrErr) throw toCogError(lyrErr);
-  }
-
-  // Remove sections that left the doc (soft in product terms: the emitted
-  // section_removed event is the archive; version history reconstructs it).
   const keptIds = new Set(doc.sections.map((s) => s.id));
   const removedIds = (prev?.sections ?? []).map((s) => s.id).filter((id) => !keptIds.has(id));
-  if (removedIds.length > 0) {
-    await db.from("song_lyrics").delete().eq("song_id", songId).in("section_id", removedIds);
-    const { error: delErr } = await db
-      .from("song_sections")
-      .delete()
-      .eq("song_id", songId)
-      .in("id", removedIds);
-    if (delErr) throw toCogError(delErr);
-  }
 
-  // Sheet meta — one song-level progression row, updated in place.
   const meta: SheetMetaV1 = {
     v: 1,
     key: doc.key,
@@ -244,31 +200,23 @@ export async function saveSongSheet(
     bpm: doc.bpm,
     display: doc.display,
   };
-  const { data: metaRow, error: metaSelErr } = await db
-    .from("chord_progressions")
-    .select("id")
-    .eq("song_id", songId)
-    .eq("label", SHEET_META_LABEL)
-    .maybeSingle();
-  if (metaSelErr) throw toCogError(metaSelErr);
-  if (metaRow?.id) {
-    const { error } = await db
-      .from("chord_progressions")
-      .update({ chords: meta, updated_at: now })
-      .eq("id", metaRow.id);
-    if (error) throw toCogError(error);
-  } else {
-    const { error } = await db.from("chord_progressions").insert({
-      song_id: songId,
-      label: SHEET_META_LABEL,
-      section_id: null,
-      chords: meta,
-      created_by_user_id: uid,
-    });
-    if (error) throw toCogError(error);
-  }
+  // R19: one atomic RPC — sections, lyrics, removals and meta all-or-nothing.
+  const { data, error } = await db.rpc("save_song_sheet", {
+    _song_id: songId,
+    _sections: changed.map(({ section, position }) => ({
+      id: section.id,
+      label: section.label || null,
+      kind: kindForLabel(section.label),
+      position,
+      content: encodeContent(section.lines),
+      plain_text: plainText(section.lines),
+    })),
+    _removed_ids: removedIds,
+    _meta: meta,
+  });
+  if (error) throw toCogError(error);
 
-  return { savedAt: now };
+  return { savedAt: (data?.saved_at as string) ?? new Date().toISOString() };
 }
 
 // ─── Seed from captured content (the C2 → C3 handoff) ───────────────────────
