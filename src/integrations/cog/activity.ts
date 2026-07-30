@@ -97,3 +97,45 @@ export async function getRecapDigest(song_id: string, since?: string): Promise<R
   if (!data) throw new CogError("INTERNAL", "digest-recap returned no data");
   return data;
 }
+// ---------- Grouped feed (R11) ----------
+
+export type GroupedFeedEntry = {
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_avatar: string | null;
+  actor_color: string | null;
+  kind: string;
+  entity_type: string;
+  /** How many raw events collapsed into this line. 1 means no collapsing. */
+  item_count: number;
+  first_at: string;
+  last_at: string;
+  /** Up to 8 most recent entity ids in the group, for expand-on-tap. */
+  entity_ids: string[];
+  activity_ids: string[];
+  is_self: boolean;
+};
+
+export type GroupedFeed = {
+  entries: GroupedFeedEntry[];
+  server_time: string;
+};
+
+/**
+ * The feed as a person reads it, not as the database wrote it. Same actor +
+ * same kind inside a 10-minute window collapses to one entry with a count.
+ * Page backwards by passing the oldest `last_at` you have as `before`.
+ */
+export async function getGroupedFeed(
+  song_id: string,
+  before?: string,
+  limit = 30,
+): Promise<GroupedFeed> {
+  const { data, error } = await (supabase as any).rpc("song_feed_grouped", {
+    _song_id: song_id,
+    _before: before ?? null,
+    _limit: limit,
+  });
+  if (error) throw toCogError(error);
+  return data as GroupedFeed;
+}
