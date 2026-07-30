@@ -3084,6 +3084,10 @@ export type Database = {
         Args: { _amount_cents?: number; _kind?: string; _referred_user: string }
         Returns: Json
       }
+      delete_chord_progression: {
+        Args: { _progression_id: string }
+        Returns: boolean
+      }
       dormancy: {
         Args: { _user_id: string }
         Returns: {
@@ -3558,6 +3562,16 @@ export type Database = {
         Args: { _song_id: string; _user_id: string }
         Returns: string
       }
+      save_chord_progression: {
+        Args: {
+          _chords: Json
+          _label?: string
+          _progression_id?: string
+          _section_id?: string
+          _song_id: string
+        }
+        Returns: string
+      }
       save_section_lyrics_guarded: {
         Args: {
           _content: Json
@@ -3649,10 +3663,20 @@ export type Database = {
         }
         Returns: Json
       }
+      set_song_musical_meta: {
+        Args: {
+          _key_signature?: string
+          _song_id: string
+          _tempo_bpm?: number
+          _time_signature?: string
+        }
+        Returns: Json
+      }
       set_take_archived: {
         Args: { _archived: boolean; _take_id: string }
         Returns: undefined
       }
+      song_chords_board: { Args: { _song_id: string }; Returns: Json }
       song_export_payload: { Args: { _song_id: string }; Returns: Json }
       song_feed_grouped: {
         Args: { _before?: string; _limit?: number; _song_id: string }
