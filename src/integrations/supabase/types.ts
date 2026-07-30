@@ -3497,6 +3497,10 @@ export type Database = {
         Returns: undefined
       }
       set_primary_take: { Args: { _take_id: string }; Returns: string }
+      song_feed_grouped: {
+        Args: { _before?: string; _limit?: number; _song_id: string }
+        Returns: Json
+      }
       song_role: {
         Args: { _song_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["song_member_role"]
