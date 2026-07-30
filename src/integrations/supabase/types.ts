@@ -3950,6 +3950,10 @@ export type Database = {
         Args: { _limit?: number; _q: string; _song_id: string }
         Returns: Json
       }
+      song_search: {
+        Args: { _limit?: number; _q: string; _song_id: string }
+        Returns: Json
+      }
       song_section_summary: { Args: { _song_id: string }; Returns: Json }
       song_share_links_board: { Args: { _song_id: string }; Returns: Json }
       song_shared_view: { Args: { _token: string }; Returns: Json }
