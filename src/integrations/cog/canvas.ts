@@ -30,6 +30,9 @@ export type CanvasCard = {
   tree_kind: "ideas" | "final";
   section_label: string | null;
   z_index: number;
+  /** Non-null = removed from the room but recoverable for 30 days. */
+  archived_at?: string | null;
+  archived_by?: string | null;
 };
 
 export type CommitTakeResult = { song_id: string; card_ids: string[] };
