@@ -3566,6 +3566,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_song_sheet: {
+        Args: {
+          _meta: Json
+          _removed_ids: string[]
+          _sections: Json
+          _song_id: string
+        }
+        Returns: Json
+      }
       set_note_pinned: {
         Args: { _note_id: string; _pinned: boolean }
         Returns: {
@@ -3678,6 +3687,7 @@ export type Database = {
         Returns: Json
       }
       song_section_summary: { Args: { _song_id: string }; Returns: Json }
+      song_sheet_bootstrap: { Args: { _song_id: string }; Returns: Json }
       song_version_timeline: {
         Args: { _limit?: number; _song_id: string }
         Returns: {
