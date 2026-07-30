@@ -230,3 +230,35 @@ export async function saveSongRoomState(
   });
   if (error) throw toCogError(error);
 }
+
+// ---------- What this person may do here (R10) ----------
+
+export type RoomCapabilityKey =
+  | "write_lyrics" | "edit_board" | "capture_idea" | "record_audio" | "upload_audio"
+  | "comment" | "react" | "invite" | "manage_members" | "rename_song"
+  | "archive_song" | "archive_card" | "restore_card" | "export";
+
+export type RoomCapabilities = {
+  role: "owner" | "collaborator" | "viewer" | string;
+  is_owner: boolean;
+  is_locked: boolean;
+  storage_ok: boolean;
+  /** null when everything is permitted. Otherwise: view_only | song_locked | storage_full */
+  reason: "view_only" | "song_locked" | "storage_full" | null;
+  can: Record<RoomCapabilityKey, boolean>;
+  server_time: string;
+};
+
+/**
+ * The single source of truth for what the current person may do in this song.
+ * Fetch once on room mount (parallel with bootstrap/resume) and pass down —
+ * never derive permissions from role strings in components, and never let the
+ * UI discover a permission by failing a write.
+ */
+export async function getSongRoomCapabilities(song_id: string): Promise<RoomCapabilities> {
+  const { data, error } = await (supabase as any).rpc("song_room_capabilities", {
+    _song_id: song_id,
+  });
+  if (error) throw toCogError(error);
+  return data as RoomCapabilities;
+}
