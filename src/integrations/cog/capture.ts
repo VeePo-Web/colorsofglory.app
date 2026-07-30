@@ -71,6 +71,7 @@ export async function listCaptures(song_id: string): Promise<IdeaCapture[]> {
     .from("idea_captures")
     .select("*")
     .eq("song_id", song_id)
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
   if (error) throw toCogError(error);
   return (data ?? []) as IdeaCapture[];
@@ -84,15 +85,74 @@ export async function listMyUnfiledCaptures(): Promise<IdeaCapture[]> {
     .from("idea_captures")
     .select("*")
     .is("song_id", null)
+    .is("archived_at", null)
     .eq("author_user_id", uid)
     .order("created_at", { ascending: false });
   if (error) throw toCogError(error);
   return (data ?? []) as IdeaCapture[];
 }
 
+/**
+ * Archive an idea (soft). Nothing is destroyed — `restoreCapture` brings it
+ * back, and song-scoped archives are recorded in the song's activity feed.
+ */
 export async function deleteCapture(id: string): Promise<void> {
-  const { error } = await supabase.from("idea_captures").delete().eq("id", id);
+  const { error } = await (supabase as any).rpc("set_capture_archived", {
+    _capture_id: id,
+    _archived: true,
+  });
   if (error) throw toCogError(error);
+}
+
+export const archiveCapture = deleteCapture;
+
+export async function restoreCapture(id: string): Promise<void> {
+  const { error } = await (supabase as any).rpc("set_capture_archived", {
+    _capture_id: id,
+    _archived: false,
+  });
+  if (error) throw toCogError(error);
+}
+
+/** Move an unfiled idea into a song (and optionally a section). */
+export async function fileCaptureIntoSong(
+  capture_id: string,
+  song_id: string,
+  section_id?: string | null,
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("file_capture_into_song", {
+    _capture_id: capture_id,
+    _song_id: song_id,
+    _section_id: section_id ?? null,
+  });
+  if (error) throw toCogError(error);
+}
+
+// ---------- Idea inbox (R21) ----------
+
+export type InboxCapture = IdeaCapture & {
+  author_name: string;
+  memo_duration_ms: number | null;
+};
+
+export type CaptureInbox = {
+  unfiled: InboxCapture[];
+  song: InboxCapture[];
+  unfiled_count: number;
+  server_time: string;
+};
+
+/**
+ * One request for the whole idea inbox: my unfiled ideas plus (optionally)
+ * this song's ideas, each already carrying author name, attached memo length,
+ * and whether it has already become a canvas card (`promoted_card_id`).
+ */
+export async function getCaptureInbox(song_id?: string | null): Promise<CaptureInbox> {
+  const { data, error } = await (supabase as any).rpc("capture_inbox", {
+    _song_id: song_id ?? null,
+  });
+  if (error) throw toCogError(error);
+  return data as CaptureInbox;
 }
 
 export type PromoteCaptureInput = {
