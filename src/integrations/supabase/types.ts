@@ -3698,6 +3698,33 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      nudge_song_invite: {
+        Args: { _invite_id: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by_user_id: string | null
+          created_at: string
+          created_by_user_id: string
+          expires_at: string
+          id: string
+          invited_email: string | null
+          invited_phone: string | null
+          max_uses: number
+          message: string | null
+          role: Database["public"]["Enums"]["song_member_role"]
+          song_id: string
+          status: Database["public"]["Enums"]["invite_status"]
+          token: string
+          updated_at: string
+          use_count: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "song_invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       on_auth_user_confirmed: {
         Args: { _phone: string; _user_id: string }
         Returns: undefined
@@ -4132,6 +4159,21 @@ export type Database = {
           section_id: string
           song_id: string
           updated_at: string
+        }[]
+      }
+      song_pending_invites: {
+        Args: { _song_id: string }
+        Returns: {
+          created_at: string
+          created_by_user_id: string
+          expires_at: string
+          id: string
+          invited_email: string
+          invited_phone: string
+          is_expired: boolean
+          role: Database["public"]["Enums"]["song_member_role"]
+          token: string
+          waiting_days: number
         }[]
       }
       song_pending_work: { Args: { _song_id: string }; Returns: Json }
