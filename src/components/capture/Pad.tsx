@@ -168,7 +168,10 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
           {`Pad · ${keyLabel}`}
         </button>
 
-        {/* Key/flavor/volume — revealed on request, quiet otherwise */}
+        {/* Key/flavor/volume — revealed on request, and only while the pad is
+            actually RUNNING (the only time changing its key matters). At rest
+            the pad is one quiet pill, not a pill plus a cryptic glyph. */}
+        {running && (
         <button
           type="button"
           aria-expanded={expanded}
@@ -189,6 +192,7 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
         >
           {expanded ? "–" : "♯"}
         </button>
+        )}
       </div>
 
       {showHint && (
@@ -216,7 +220,7 @@ const Pad = ({ inheritedKey, className }: PadProps) => {
         </div>
       )}
 
-      {expanded && (
+      {expanded && running && (
         <div className="flex flex-col items-center gap-2" style={{ maxWidth: "100%" }}>
           <div
             data-no-swipe-nav

@@ -2088,6 +2088,48 @@ const SongCanvasExperience = () => {
     [cards, jumpToCard, hiddenCardIds, clusterFlagList],
   );
 
+  // THE ROOM ANNOUNCES AN ARRIVAL. When a co-writer's idea lands while you're
+  // in the room, a warm one-line narration offers the one natural next act:
+  // go hear/read it. Known-set diffing (not the hydrate merge) so the first
+  // fill reads as history — never a toast storm on open — and StrictMode's
+  // double-invoked updaters can't double-announce.
+  const knownServerCardsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const serverCards = cards.filter((c) => isServerCardId(c.id) && !c.isDimmedReference);
+    if (knownServerCardsRef.current === null) {
+      knownServerCardsRef.current = new Set(serverCards.map((c) => c.id));
+      return;
+    }
+    const known = knownServerCardsRef.current;
+    const arrivals = serverCards.filter((c) => !known.has(c.id));
+    serverCards.forEach((c) => known.add(c.id));
+    if (arrivals.length === 0) return;
+    const mine = profile?.user_id ?? null;
+    const fromOthers = arrivals.filter(
+      (c) => c.createdBy && c.createdBy !== mine && c.contributor && c.contributor !== currentUserName,
+    );
+    if (fromOthers.length === 0) return;
+    const first = fromOthers[0];
+    const label =
+      first.section ||
+      (first.type === "voice" || first.type === "hum"
+        ? "voice idea"
+        : first.type === "chord"
+        ? "chord idea"
+        : first.type === "note" || first.type === "scripture"
+        ? "note"
+        : "lyric idea");
+    toast(
+      fromOthers.length === 1
+        ? `${first.contributor} added a ${label}`
+        : `${first.contributor} + ${fromOthers.length - 1} more added ideas`,
+      {
+        duration: 6000,
+        action: { label: "See it", onClick: () => jumpToCardId(first.id) },
+      },
+    );
+  }, [cards, profile?.user_id, currentUserName, jumpToCardId]);
+
   // Presence as navigation: fly the canvas to this person's latest idea and
   // select it, so "who is in the room" becomes "where they are working".
   const jumpToCollaborator = useCallback(

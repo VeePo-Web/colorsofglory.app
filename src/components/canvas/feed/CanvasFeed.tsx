@@ -81,7 +81,7 @@ const CanvasFeed = memo(function CanvasFeed({
   const reducedMotion = usePrefersReducedMotion();
   const { vibrate } = useVibration();
   const finalTabRef = useRef<HTMLButtonElement>(null);
-  const swipe = useRef<{ x: number; y: number; id: number; locked: "h" | "v" | null } | null>(null);
+  const swipe = useRef<{ x: number; y: number; id: number; locked: "h" | "v" | null; track: boolean; lastX: number; lastT: number; vx: number } | null>(null);
 
   const groups = useMemo(() => ideasFeedGroups(cards), [cards]);
   const finalCards = useMemo(() => finalFeedCards(cards), [cards]);
@@ -118,21 +118,65 @@ const CanvasFeed = memo(function CanvasFeed({
     [getInteractions, reducedMotion, vibrate],
   );
 
-  // ── Pager swipe (direction-locked; buttons/sheets keep their own events) ──
+  // ── Pager swipe — the pages TRACK THE FINGER (cinematic continuity).
+  // Direction-locked as before, but a horizontal lock no longer flips the
+  // page instantly: the surface follows the thumb, commits on release past
+  // distance OR velocity, and glides back on a cancel. Only the direction
+  // that leads somewhere tracks (rightward on Ideas belongs to the cards'
+  // swipe-to-promote). Reduced motion keeps the old instant flip.
+  const [drag, setDrag] = useState<{ px: number; active: boolean }>({ px: 0, active: false });
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const dragRaf = useRef<number | null>(null);
+  const pendingPx = useRef(0);
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    swipe.current = { x: e.clientX, y: e.clientY, id: e.pointerId, locked: null };
+    swipe.current = { x: e.clientX, y: e.clientY, id: e.pointerId, locked: null, track: false, lastX: e.clientX, lastT: performance.now(), vx: 0 };
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const s = swipe.current;
-    if (!s || e.pointerId !== s.id || s.locked) return;
+    if (!s || e.pointerId !== s.id || s.locked === "v") return;
     const dx = e.clientX - s.x;
-    const dy = e.clientY - s.y;
-    if (Math.abs(dx) < SWIPE_MIN_PX && Math.abs(dy) < SWIPE_MIN_PX) return;
-    s.locked = Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO ? "h" : "v";
-    if (s.locked === "h") setPage(dx < 0 ? "final" : "ideas");
+    if (!s.locked) {
+      const dy = e.clientY - s.y;
+      if (Math.abs(dx) < SWIPE_MIN_PX && Math.abs(dy) < SWIPE_MIN_PX) return;
+      s.locked = Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO ? "h" : "v";
+      if (s.locked !== "h") return;
+      // Track only toward the OTHER page; reduced motion commits instantly.
+      s.track = (page === "ideas" && dx < 0) || (page === "final" && dx > 0);
+      if (s.track && reducedMotion) {
+        setPage(page === "ideas" ? "final" : "ideas");
+        s.track = false;
+        return;
+      }
+    }
+    if (!s.track) return;
+    const now = performance.now();
+    s.vx = (e.clientX - s.lastX) / Math.max(1, now - s.lastT);
+    s.lastX = e.clientX;
+    s.lastT = now;
+    const w = pagerRef.current?.clientWidth ?? window.innerWidth;
+    const toward = page === "ideas" ? Math.min(0, dx) : Math.max(0, dx);
+    pendingPx.current = Math.max(-w, Math.min(w, toward));
+    if (dragRaf.current == null) {
+      dragRaf.current = requestAnimationFrame(() => {
+        dragRaf.current = null;
+        setDrag({ px: pendingPx.current, active: true });
+      });
+    }
   };
   const onPointerEnd = () => {
+    const s = swipe.current;
     swipe.current = null;
+    if (dragRaf.current != null) {
+      cancelAnimationFrame(dragRaf.current);
+      dragRaf.current = null;
+    }
+    if (!s?.track) return;
+    const w = pagerRef.current?.clientWidth ?? window.innerWidth;
+    const px = pendingPx.current;
+    const commit = Math.abs(px) > w * 0.28 || Math.abs(s.vx) > 0.45;
+    pendingPx.current = 0;
+    setDrag({ px: 0, active: false });
+    if (commit && px !== 0) setPage(page === "ideas" ? "final" : "ideas");
   };
 
   const tabStyle = (active: boolean, tone: "gold" | "sage"): React.CSSProperties => ({
@@ -225,15 +269,16 @@ const CanvasFeed = memo(function CanvasFeed({
         </div>
       </div>
 
-      {/* The two full-screen pages, sliding as one continuous surface. */}
-      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+      {/* The two full-screen pages, sliding as one continuous surface that
+          follows the finger (pan-y leaves vertical scrolling to the lists). */}
+      <div ref={pagerRef} style={{ flex: 1, minHeight: 0, position: "relative", touchAction: "pan-y" }}>
         <div
           style={{
             display: "flex",
             width: "200%",
             height: "100%",
-            transform: page === "ideas" ? "translateX(0)" : "translateX(-50%)",
-            transition: reducedMotion ? "none" : `transform 380ms ${EASE}`,
+            transform: `translateX(calc(${page === "ideas" ? "0%" : "-50%"} + ${drag.px}px))`,
+            transition: drag.active || reducedMotion ? "none" : `transform 380ms ${EASE}`,
           }}
         >
           {/* ── IDEAS — the gold stream ── */}

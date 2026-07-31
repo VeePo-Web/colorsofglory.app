@@ -363,10 +363,12 @@ const FinalListenPage = memo(function FinalListenPage({
                     </p>
                   ) : null}
                 </div>
-                {!isViewer && (
+                {!isViewer && !listening && !paused && (
                   // Quiet chrome: borderless ghost chevrons — the honest,
                   // always-reachable reorder path without 2N bordered buttons
-                  // fighting the Play primary (targets stay 40px).
+                  // fighting the Play primary (targets stay 40px). They REST
+                  // while the song sounds: the playing queue is a snapshot,
+                  // and reordering under it visibly desynced the numbers.
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
