@@ -261,10 +261,13 @@ const InviteJoinPage = () => {
                 <span className="text-2xl">✓</span>
               </div>
               <p className="text-[1.375rem] font-bold mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--cog-charcoal)' }}>
-                Request sent!
+                Request saved
               </p>
+              {/* Honest: the request is recorded (invite_requests), but no
+                  owner-side surface reads it yet — never claim "they've been
+                  notified". Point at the path that actually works today. */}
               <p className="text-[0.9375rem]" style={{ color: 'var(--cog-warm-gray)' }}>
-                The song owner has been notified.
+                A quick text to whoever invited you works fastest — a fresh link takes them one tap.
               </p>
             </div>
           ) : (
