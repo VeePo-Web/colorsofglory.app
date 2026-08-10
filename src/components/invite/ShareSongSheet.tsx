@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Link2, Share2, X } from "lucide-react";
 import { generateInviteToken, updateOnboardingStep, type GeneratedInvite } from "@/lib/invite/inviteApi";
 import { copyTextToClipboard } from "@/lib/invite/clipboard";
+import { fetchPendingInvites } from "@/integrations/cog/pendingInvites";
 import { triggerReferralPrompt } from "@/components/referral/referralPromptState";
 import type { SongCollaborator } from "@/lib/invite/useSongCollaborators";
 
@@ -143,6 +144,23 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
       setError("Couldn't create the link. Check your connection and try again.");
     });
   }, [ensureInvite]);
+
+  // The invite nobody answered (R48): if the door has been standing open for
+  // days and no one has walked in, say so — quietly. Best-effort; any failure
+  // simply means silence.
+  const [waitingDays, setWaitingDays] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchPendingInvites(songId)
+      .then((rows) => {
+        if (!active || rows.length === 0) return;
+        const oldest = Math.max(...rows.map((r) => r.waiting_days));
+        if (oldest >= 3) setWaitingDays(oldest);
+      })
+      .catch(() => { /* silence — the line is a courtesy, never a requirement */ });
+    return () => { active = false; };
+  }, [songId]);
+  const nobodyArrivedYet = collaborators.length > 0 && collaborators.every((c) => c.isOwner);
 
   const readyInvite = inviteCache.current[role];
 
@@ -387,6 +405,13 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
             {error && (
               <p role="alert" style={{ fontSize: 13, color: "#B4543F", fontFamily: "var(--font-body)", marginTop: 10, textAlign: "center" }}>
                 {error}
+              </p>
+            )}
+
+            {/* The invite nobody answered — one calm line, only when true. */}
+            {waitingDays !== null && nobodyArrivedYet && !error && (
+              <p style={{ fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", marginTop: 12, textAlign: "center" }}>
+                Still waiting after {waitingDays} {waitingDays === 1 ? "day" : "days"} — links get buried. Sending it again never hurts.
               </p>
             )}
           </>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
@@ -22,34 +22,36 @@ const fieldStyle = (active: boolean): React.CSSProperties => ({
   borderRadius: 14,
   width: '100%',
   padding: '0 16px',
+  textAlign: 'center',
 });
 
 /**
- * Screen C — name collection.
- * Collects first + last name, saves to profile, then advances to team intro.
- * autocomplete attributes enable iOS Safari contact autofill (one-tap populate).
+ * Screen C — the one question between the code and the song.
+ * ONE field (iOS contact autofill completes it in a tap), then straight into
+ * the room. First/last split happens here, not on the writer.
  */
 const InviteNamePage = () => {
   const navigate = useNavigate();
   // While they type their name, fetch the song room so continue is instant.
   useIdlePrefetch(() => import("@/pages/SongCanvasPage"));
-  const lastRef = useRef<HTMLInputElement>(null);
 
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [name, setName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<'first' | 'last' | null>(null);
+  const [focused, setFocused] = useState(false);
 
-  const canContinue = firstName.trim().length > 0 && lastName.trim().length > 0;
+  const trimmed = name.trim();
+  const canContinue = trimmed.length >= 2;
 
   const handleContinue = async () => {
     if (!canContinue) return;
     setIsSaving(true);
     setError(null);
+    const [firstName, ...rest] = trimmed.split(/\s+/);
+    const lastName = rest.join(' ');
     try {
-      await saveName(firstName.trim(), lastName.trim());
-      saveInviteContext({ firstName: firstName.trim(), lastName: lastName.trim() });
+      await saveName(firstName, lastName);
+      saveInviteContext({ firstName, lastName });
       enterInvitedSong(navigate);
     } catch {
       setError("We could not save your name. Please try again.");
@@ -76,61 +78,28 @@ const InviteNamePage = () => {
         Your collaborators will see this in the song.
       </p>
 
-      {/* First name */}
-      <div className="mb-4">
-        <label
-          htmlFor="first-name"
-          className="block text-[0.875rem] font-medium mb-2"
-          style={{ color: 'var(--cog-warm-gray)' }}
-        >
-          First name
+      {/* THE one field */}
+      <div className="mb-8">
+        <label htmlFor="full-name" className="sr-only">
+          Your name
         </label>
         <input
-          id="first-name"
+          id="full-name"
           type="text"
-          autoComplete="given-name"
+          autoComplete="name"
           autoFocus
           autoCapitalize="words"
           autoCorrect="off"
           spellCheck={false}
-          enterKeyHint="next"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          onFocus={() => setFocusedField('first')}
-          onBlur={() => setFocusedField(null)}
-          onKeyDown={(e) => { if (e.key === 'Enter') lastRef.current?.focus(); }}
-          placeholder="First"
-          aria-required="true"
-          style={fieldStyle(focusedField === 'first' || !!firstName)}
-        />
-      </div>
-
-      {/* Last name */}
-      <div className="mb-8">
-        <label
-          htmlFor="last-name"
-          className="block text-[0.875rem] font-medium mb-2"
-          style={{ color: 'var(--cog-warm-gray)' }}
-        >
-          Last name
-        </label>
-        <input
-          id="last-name"
-          ref={lastRef}
-          type="text"
-          autoComplete="family-name"
-          autoCapitalize="words"
-          autoCorrect="off"
-          spellCheck={false}
           enterKeyHint="go"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          onFocus={() => setFocusedField('last')}
-          onBlur={() => setFocusedField(null)}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(e) => { if (e.key === 'Enter' && canContinue) handleContinue(); }}
-          placeholder="Last"
+          placeholder="First and last name"
           aria-required="true"
-          style={fieldStyle(focusedField === 'last' || !!lastName)}
+          style={fieldStyle(focused || !!name)}
         />
       </div>
 

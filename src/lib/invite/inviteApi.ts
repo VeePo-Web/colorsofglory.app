@@ -1,27 +1,21 @@
 /**
- * Invite API — REAL Supabase implementation.
- * Maps Claude's invite flow to Lovable's actual database schema.
+ * Invite API — the ONE data seam for the invite flow.
  *
- * Key schema facts (from src/integrations/supabase/types.ts):
- *   table:   song_invites   (not invite_tokens)
- *   roles:   "owner" | "collaborator" | "viewer"  (no "reviewer" or "contributor")
- *   status:  "pending" | "accepted" | "revoked" | "expired"
- *   use_count (not current_uses), created_by_user_id (not created_by)
- *   accept:  accept_song_invite(_token: string, _user_id: string)  →  array result
- *   profile: profiles.display_name (single field, not first_name + last_name)
- *            profiles.phone_e164   (e164 format)
- *            profiles.user_id      (PK linking to auth.users)
+ * Reads and accepts go through the deployed edge functions (`song-invite-preview`,
+ * `song-invite-accept`) — never direct table reads: RLS correctly hides songs,
+ * profiles, and the invite row itself from the very people this flow serves,
+ * and only the accept edge function closes the loop (activity event + the
+ * inviter's "someone stepped into your song" email).
  *
- * Role mapping (UI label → DB value):
- *   "Viewer"      → "viewer"
- *   "Contributor" → "collaborator"
- *   "Reviewer"    → "collaborator"  (DB has no reviewer — collapse for now)
+ * Link creation reuses the song's standing key per role before minting
+ * (see generateInviteToken). Role mapping: UI "contributor" ⇄ DB "collaborator";
+ * "viewer" ⇄ "viewer".
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { call, CogError } from '@/integrations/cog/errors';
 import { pendingInviteToken } from '@/lib/onboarding/onboardingStep';
-import type { InviteContext } from './inviteContext';
+import { getAvatarColor, getAvatarInitials, type InviteContext } from './inviteContext';
 import { InviteError, parseSupabaseError, type InviteErrorCode } from './inviteErrors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,19 +73,8 @@ export function uiRoleToDb(uiRole: string): DbRole {
   return 'collaborator';  // contributor + reviewer both → collaborator
 }
 
-/** Aurora palette colors assigned by user_id hash */
-const AVATAR_COLORS = ['#8070C4', '#4D8FD2', '#53AB8B', '#D4AE5C', '#C26A95'];
-function avatarColor(userId: string): string {
-  let h = 0;
-  for (let i = 0; i < userId.length; i++) h = userId.charCodeAt(i) + ((h << 5) - h);
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-function avatarInitials(displayName: string): string {
-  const parts = displayName.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return displayName.slice(0, 2).toUpperCase();
-}
+// Avatar color + initials come from the ONE shared implementation in
+// inviteContext — the same hue this person wears on every other surface.
 
 // ─── Edge-function error bridge ──────────────────────────────────────────────
 
@@ -185,8 +168,8 @@ export async function previewInvite(token: string): Promise<InvitePreview> {
     userId: m.user_id,
     firstName: m.first_name ?? 'Someone',
     lastName: '',
-    avatarColor: m.avatar_color ?? avatarColor(m.user_id),
-    avatarInitials: m.initials ?? avatarInitials(m.first_name ?? '·'),
+    avatarColor: m.avatar_color ?? getAvatarColor(m.user_id),
+    avatarInitials: m.initials ?? getAvatarInitials(m.first_name ?? '·', ''),
   }));
 
   return {
@@ -196,7 +179,7 @@ export async function previewInvite(token: string): Promise<InvitePreview> {
     songTitle: d.song_title ?? 'Untitled Song',
     inviterFirstName: d.inviter_first_name ?? inviterFirst ?? 'Someone',
     inviterLastName: inviterRest.join(' '),
-    inviterAvatarColor: d.inviter_avatar_color ?? avatarColor(inviterName),
+    inviterAvatarColor: d.inviter_avatar_color ?? getAvatarColor(inviterName),
     assignedRole: dbRoleToUi(d.role),
     lyricsSnippet: d.lyrics_snippet,
     collaborators,
