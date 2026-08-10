@@ -161,6 +161,28 @@ describe("pendingUploads — in-song take retain + retry", () => {
     });
   });
 
+  describe("flushPendingUpload — the in-flight guard", () => {
+    it("a concurrent flush of the same row uploads ONCE (mount sweep + online sweep + save path race)", async () => {
+      const pending = await enqueuePendingUpload({ ...baseParams, blob: makeBlob() });
+      mockAudioCache.get.mockResolvedValue(makeBlob());
+      // Park the upload so both flushes are genuinely concurrent.
+      let release: (v: string) => void = () => {};
+      mockUploadVoiceMemo.mockImplementation(
+        () => new Promise<string>((res) => { release = res; }),
+      );
+      const first = flushPendingUpload(pending.id);
+      const second = flushPendingUpload(pending.id); // racer — must bounce off
+      // Let the winning flush actually REACH the parked upload before releasing.
+      await vi.waitFor(() => expect(mockUploadVoiceMemo).toHaveBeenCalled());
+      release("memo-123");
+      const [a, b] = await Promise.all([first, second]);
+      expect(mockUploadVoiceMemo).toHaveBeenCalledTimes(1);
+      expect([a, b].sort()).toEqual([null, "memo-123"].sort());
+      // The guard releases: a LATER flush of a (re-queued) row is not blocked.
+      expect(readRawIndex().find((r) => r.id === pending.id)).toBeUndefined();
+    });
+  });
+
   describe("flushPendingUpload — edge cases", () => {
     it("sweeps the orphan row and uploads nothing when the cached blob is gone", async () => {
       const record = await enqueuePendingUpload({ ...baseParams, blob: makeBlob() });

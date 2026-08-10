@@ -142,6 +142,10 @@ export function useStackPlayer(
   useEffect(() => {
     releaseAll();
     freshStartRef.current = true;
+    // A fresh membership earns a fresh shot at the Web Audio engine — one
+    // transient decode failure used to pin this hook instance to the
+    // drift-prone element rung for its whole lifetime.
+    webAudioOk.current = true;
     setState({
       isPlaying: false,
       progress: 0,

@@ -67,6 +67,7 @@ import {
   remapPendingParents,
 } from "@/lib/voice/pendingUploads";
 import { saveFailedCapture, clearFailedCapture } from "@/lib/voice/failedCaptureStore";
+import { audioCache } from "@/lib/voice/audioCache";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import {
   initialBoard,
@@ -1389,6 +1390,42 @@ const SongCanvasExperience = () => {
     // Reopen the base's stack so the songwriter sees their layer land.
     if (parentMemoId) setStackBaseId(parentMemoId);
 
+    const addVoiceCard = (id: string, processing: boolean) => {
+      setCards((prev) => {
+        const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
+        const now = new Date().toISOString();
+        const newCard: CanvasCard = {
+          id, tree: "ideas", type: "voice",
+          title: name, body: "", meta: formatDuration(rec.durationMs),
+          section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
+          ...ideaColumnSlot(ideaIndex),
+          parentMemoId, durationMs: rec.durationMs,
+          isProcessing: processing,
+          createdBy: profile?.user_id ?? undefined,
+          createdAt: now, updatedAt: now, lastActivityAt: now,
+          reviewState: "none", contributionType: "melody",
+        };
+        return [newCard, ...prev];
+      });
+      // Bring the new memo card into view — it lands below the fold like any idea.
+      if (!parentMemoId) setFocusCardId(id);
+    };
+
+    // Demo rooms have no server: the take lives entirely on-device. Queuing it
+    // for upload made every visit replay a flush that can never succeed, each
+    // failure showing "we'll finish saving when you're back online" — forever.
+    if (isDemoRoom) {
+      const localId = crypto.randomUUID();
+      await audioCache.set(localId, rec.blob);
+      clearSalvageBackup();
+      if (parentMemoId && takeAlignOffsetRef.current > 0) {
+        setAlignmentOffset(localId, takeAlignOffsetRef.current);
+        takeAlignOffsetRef.current = 0;
+      }
+      addVoiceCard(localId, false);
+      return;
+    }
+
     // Local-first: the blob is cached to the device BEFORE any network call, so a
     // base take or a layered "record over this" can never be lost on a dropped
     // upload. The pending row's id keys both the card and the upload idempotency.
@@ -1417,33 +1454,19 @@ const SongCanvasExperience = () => {
     // tempo_bpm/key_signature — a confirmable suggestion, off the save path.
     maybeDetectSongTempoKey(rec.blob, songId);
 
-    setCards((prev) => {
-      const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
-      const now = new Date().toISOString();
-      const newCard: CanvasCard = {
-        id: pending.id, tree: "ideas", type: "voice",
-        title: name, body: "", meta: formatDuration(rec.durationMs),
-        section, contributor: currentUserName, status: "raw", accent: getCreatorColor(currentUserName).base,
-        ...ideaColumnSlot(ideaIndex),
-        parentMemoId, durationMs: rec.durationMs,
-        isProcessing: true,
-        createdBy: profile?.user_id ?? undefined,
-        createdAt: now, updatedAt: now, lastActivityAt: now,
-        reviewState: "none", contributionType: "melody",
-      };
-      return [newCard, ...prev];
-    });
-    // Bring the new memo card into view — it lands below the fold like any idea.
-    if (!parentMemoId) setFocusCardId(pending.id);
+    addVoiceCard(pending.id, true);
 
     await flushCanvasUpload(pending.id);
-  }, [pendingRecording, showSavedMoment, songId, currentUserName, profile?.user_id, flushCanvasUpload, clearSalvageBackup]);
+  }, [pendingRecording, showSavedMoment, songId, isDemoRoom, currentUserName, profile?.user_id, flushCanvasUpload, clearSalvageBackup]);
 
   // Recovery sweep: a canvas take whose upload was interrupted is still safe
   // in the cache. Replay on load AND on reconnect — the failure copy promises
   // "we'll finish saving when you're back online", and until the `online`
   // listener existed, that promise was a lie (recovery was mount-only).
   useEffect(() => {
+    // Demo rooms never sweep — there is no server to heal toward, and stale
+    // pre-fix demo rows would otherwise replay a doomed flush every visit.
+    if (isDemoRoom) return;
     let cancelled = false;
     const sweep = async () => {
       const orphans = await listPendingUploads(songId);
@@ -1459,7 +1482,7 @@ const SongCanvasExperience = () => {
       cancelled = true;
       window.removeEventListener("online", onOnline);
     };
-  }, [songId, flushCanvasUpload]);
+  }, [songId, isDemoRoom, flushCanvasUpload]);
 
   const openMicSettings = useCallback(() => {
     const ua = navigator.userAgent;
