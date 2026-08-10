@@ -937,10 +937,16 @@ const SongCanvasExperience = () => {
   // realtime event, so a collaborator's work appears without a reload.
   // Suggestions that arrived over the wire (carrier rows) — the server lane.
   const [serverSuggestions, setServerSuggestions] = useState<PendingLineSuggestion[]>([]);
+  // True once the board has heard from the server at least once this mount —
+  // the signal that lets an invite arrival trust "empty means empty".
+  const [boardHydrated, setBoardHydrated] = useState(false);
 
   const hydrateVoiceMemos = useCallback(async () => {
     const res = await hydrateBoard(songId);
     if (!res.memosOk && !res.cardsOk) return;
+    // First successful server answer — releases the invite-arrival hold on
+    // the empty-room guide (the board's emptiness is now truth, not a gap).
+    setBoardHydrated(true);
     if (res.cardsOk) {
       // Resolve proposer names through the roster where the payload lacks
       // one. Bail out when nothing changed — this runs on every debounced
@@ -1595,11 +1601,15 @@ const SongCanvasExperience = () => {
   // flag — so it guides a new song, returns if the room is ever cleared (never
   // a dead-end blank), and never overlays a song that already has ideas.
   // A fresh invite arrival is walking into SOMEONE ELSE'S song: hold the
-  // empty-room guide back until this session's local count reflects real
-  // hydration, so the owner's work never gets a "capture your first idea"
-  // flash painted over it.
+  // empty-room guide back until the first server hydration answers, so the
+  // owner's work never gets a "capture your first idea" flash painted over
+  // it — and once hydration confirms the room truly IS empty, the invited
+  // contributor gets the guide like anyone else.
   const showFirstRun =
-    !isViewer && !isInviteArrival && ideasCards.length === 0 && finalCards.length === 0;
+    !isViewer &&
+    !(isInviteArrival && !boardHydrated) &&
+    ideasCards.length === 0 &&
+    finalCards.length === 0;
 
   // Canvas tour beats — armed only once the board isn't empty, so they never
   // compete with the empty-room first-action guide. Declared in teaching order

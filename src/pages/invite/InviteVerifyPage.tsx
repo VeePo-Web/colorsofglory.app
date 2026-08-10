@@ -109,7 +109,12 @@ const InviteVerifyPage = () => {
       enterInvitedSong(navigate);
     } else {
       saveInviteContext({ isExistingUser: false });
-      navigate('/invite/name');
+      // replace: the consumed-OTP screen must never be a browser-back target
+      // (its code is spent and its context gets cleared — a dead surface).
+      // History stays [join, name] → [join, canvas]; back from the song lands
+      // on the join page, which shows the live "You're already in this song"
+      // card for a signed-in member.
+      navigate('/invite/name', { replace: true });
     }
   }, [e164, isVerifying, ctx, navigate, backToJoin]);
 

@@ -184,7 +184,14 @@ const InviteJoinPage = () => {
         setState({ type: 'error', code: err.code });
         return;
       }
-      setPhoneError(toFriendlyError(err));
+      // A transient ACCEPT failure (from the session-match branch) must not
+      // borrow the OTP path's "couldn't send the code" voice — no SMS was
+      // ever involved. Anything else here IS an OTP-send failure.
+      setPhoneError(
+        err instanceof InviteError
+          ? "Something went wrong — please try again in a moment."
+          : toFriendlyError(err),
+      );
       setState((prev) =>
         prev.type === 'submitting' || prev.type === 'input'
           ? { type: 'input', preview: prev.preview }

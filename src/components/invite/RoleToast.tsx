@@ -48,8 +48,10 @@ const RoleToast = ({ role, delay = 500, duration = 3200 }: RoleToastProps) => {
       className="fixed left-0 right-0 px-5"
       style={{
         // Above the canvas creation dock (bottom: safe-area + 88, z-42) —
-        // the welcome line must never paint over the create actions.
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 152px)',
+        // the welcome line must never paint over the create actions. Measured
+        // at runtime: the dock's top edge lands at ~152px, so 164 gives real
+        // breathing room instead of a pixel-flush fit.
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 164px)',
         zIndex: 41,
         transition: reduceMotion ? 'opacity 220ms ease' : 'transform 280ms cubic-bezier(0.22,1,0.36,1), opacity 220ms ease',
         transform: reduceMotion || phase === 'visible' ? 'translateY(0)' : 'translateY(20px)',

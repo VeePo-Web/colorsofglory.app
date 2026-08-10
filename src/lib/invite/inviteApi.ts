@@ -246,6 +246,17 @@ export async function acceptInvite(token: string): Promise<AcceptResult> {
   // through it again.
   pendingInviteToken.clear();
 
+  // The invited person onboards THROUGH the song itself: a later fresh
+  // sign-in must land them in the app with their joined song — never in the
+  // "start your first song" funnel. 'completed' is the honest step for
+  // someone who is already in, with a real song. (History: the old code
+  // stamped the OWNER milestone 'first_collaborator_invited' here — wrong
+  // side; stamping nothing left invitees at 'not_started', which routes
+  // every fresh sign-in into new-user onboarding.)
+  if (!result.already_member) {
+    updateOnboardingStep('completed').catch(() => {});
+  }
+
   // Fetch song title for the result (we are a member now).
   const { data: song } = await supabase
     .from('songs')

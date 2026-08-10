@@ -90,6 +90,12 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
         const active = document.activeElement;
+        // Focus escaped the dialog (e.g. the focused button unmounted on a
+        // state swap and focus fell to <body>)? Pull Tab back inside instead
+        // of letting it walk the canvas behind an aria-modal overlay.
+        if (!sheetRef.current.contains(active)) {
+          e.preventDefault(); first.focus(); return;
+        }
         if (e.shiftKey && (active === first || active === sheetRef.current)) {
           e.preventDefault(); last.focus();
         } else if (!e.shiftKey && active === last) {
@@ -100,6 +106,12 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // The sent-state swap unmounts whichever button was focused — re-anchor
+  // focus on the dialog so keyboard/VoiceOver users aren't dropped to <body>.
+  useEffect(() => {
+    if (sent) sheetRef.current?.focus();
+  }, [sent]);
 
   useEffect(() => () => {
     if (dismissTimer.current) clearTimeout(dismissTimer.current);
@@ -232,6 +244,12 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
         }}
       >
         <div style={{ width: 40, height: 4, borderRadius: 9999, backgroundColor: "var(--cog-border)", margin: "12px auto 14px" }} aria-hidden="true" />
+        {/* Persistent live region — mounted OUTSIDE the sent/compose branches
+            so the announcement survives the DOM swap (a region that mounts
+            WITH its text, or unmounts in the same batch, never announces). */}
+        <span aria-live="polite" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }}>
+          {sent ? "The door is open — invite link shared. Keep writing; you'll hear when they arrive." : copied ? "Invite link copied to clipboard" : ""}
+        </span>
         <button
           type="button"
           onClick={onClose}
@@ -246,8 +264,10 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
         </button>
 
         {sent ? (
-          /* ── The door is open — the calm sent-state, then back to writing ── */
-          <div style={{ textAlign: "center", padding: "18px 0 10px" }} aria-live="polite">
+          /* ── The door is open — the calm sent-state, then back to writing ──
+                (announced by the persistent live region above, which outlives
+                this branch swap) ── */
+          <div style={{ textAlign: "center", padding: "18px 0 10px" }}>
             <div
               style={{
                 width: 56, height: 56, margin: "0 auto 14px", borderRadius: "50%",
@@ -335,9 +355,6 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
                 ? <><Share2 size={18} strokeWidth={1.8} /> Send the link</>
                 : <><Copy size={18} strokeWidth={1.8} /> Copy invite link</>}
             </button>
-            <span aria-live="polite" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }}>
-              {copied ? "Invite link copied to clipboard" : ""}
-            </span>
 
             {/* The link itself — the quiet always-there fallback: tap to copy,
                 selectable for a manual long-press copy too. */}
