@@ -95,10 +95,16 @@ export function useStackPlayer(
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // ONE offset truth per layer. The measured guide latency lives in TWO
+  // stores (the device alignmentStore AND the server's layer_offset_ms) —
+  // they are the SAME measurement, so summing them double-shifted a layer by
+  // exactly its latency the moment both were readable. max() takes whichever
+  // side this session can see; memoKey reads the device store consistently
+  // from either card-id space.
   const headOffsetS = useCallback((id: string): number => {
-    const align = getAlignmentOffsetMs(id);
+    const align = getAlignmentOffsetMs(memoKey(id));
     const server = optsRef.current.serverOffsets?.[id] ?? 0;
-    return Math.max(0, (align + server) / 1000);
+    return Math.max(0, Math.max(align, server) / 1000);
   }, []);
 
   const stopSources = useCallback(() => {
@@ -345,7 +351,7 @@ export function useStackPlayer(
       // Fallback rung — the original element start (alignment via seek).
       if (freshStartRef.current) {
         elementsRef.current.forEach((el, id) => {
-          const offsetMs = getAlignmentOffsetMs(id) + (optsRef.current.serverOffsets?.[id] ?? 0);
+          const offsetMs = headOffsetS(id) * 1000;
           if (offsetMs > 0) el.currentTime = offsetMs / 1000;
         });
         freshStartRef.current = false;
@@ -419,10 +425,8 @@ export function useStackPlayer(
       const base = elementsRef.current.get(playIds[0]);
       const target = (base?.duration || 0) * pct;
       elementsRef.current.forEach((el, id) => {
-        // Same offset sum as the fresh start (alignment + server) — omitting
-        // serverOffsets here made every seek drift by the persisted offset.
-        const offsetMs = getAlignmentOffsetMs(id) + (optsRef.current.serverOffsets?.[id] ?? 0);
-        if (Number.isFinite(target)) el.currentTime = target + offsetMs / 1000;
+        // Same single-truth offset as the fresh start (headOffsetS).
+        if (Number.isFinite(target)) el.currentTime = target + headOffsetS(id);
       });
       freshStartRef.current = false;
       setState((s) => ({ ...s, progress: pct }));

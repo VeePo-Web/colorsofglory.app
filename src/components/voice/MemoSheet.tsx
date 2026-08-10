@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { X, Mic, RotateCcw, ChevronRight } from "lucide-react";
 import MemoStack, { type StackMemoView } from "./MemoStack";
 import { listTakes, type Take } from "@/integrations/cog/takes";
@@ -122,7 +122,6 @@ const MemoSheet = ({
         );
         if (children.length === 0) return; // keep the passed view (may be optimistic)
         const passed = new Map(layersRef.current.map((l) => [memoKey(l.id), l]));
-        const serverIds = new Set(children.map((r) => memoKey(r.id)));
         const fromServer = children.map((r) => ({
           ...(passed.get(memoKey(r.id)) ?? {
             id: r.id,
@@ -138,8 +137,10 @@ const MemoSheet = ({
           layerMuted: r.layerMuted,
           layerOffsetMs: r.layerOffsetMs,
         }));
-        const stillUploading = layersRef.current.filter((l) => !serverIds.has(memoKey(l.id)));
-        setFreshLayers([...fromServer, ...stillUploading]);
+        // Server rows ONLY — the optimistic union happens at render time
+        // against the LIVE prop (freezing prop items here duplicated a layer
+        // after its temp→memo rename while the sheet stayed open).
+        setFreshLayers(fromServer);
       })
       .catch(() => {
         /* the passed view stands */
@@ -152,7 +153,14 @@ const MemoSheet = ({
 
   const keeper = takes?.find((t) => t.is_primary) ?? null;
   const earlierCount = takes ? Math.max(0, takes.length - 1) : null;
-  const shownLayers = freshLayers ?? layers;
+  // Render-time UNION with the live prop: server truth wins where it exists;
+  // a still-uploading layer (temp id, not on the server yet) rides the prop
+  // and never vanishes — and a mid-open temp→memo rename can't duplicate.
+  const shownLayers = useMemo(() => {
+    if (!freshLayers) return layers;
+    const serverKeys = new Set(freshLayers.map((l) => memoKey(l.id)));
+    return [...freshLayers, ...layers.filter((l) => !serverKeys.has(memoKey(l.id)))];
+  }, [freshLayers, layers]);
 
   return (
     <>

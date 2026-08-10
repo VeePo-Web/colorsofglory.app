@@ -2197,90 +2197,54 @@ const SongCanvasExperience = () => {
     [cards, jumpToCard, hiddenCardIds, clusterFlagList],
   );
 
-  // THE ROOM ANNOUNCES AN ARRIVAL. When a co-writer's idea lands while you're
-  // in the room, a warm one-line narration offers the one natural next act:
-  // go hear/read it. Known-set diffing (not the hydrate merge) so the first
-  // fill reads as history — never a toast storm on open — and StrictMode's
-  // double-invoked updaters can't double-announce.
+  // THE ROOM ANNOUNCES AN ARRIVAL — the ONE announcer. (Two parallel arrival
+  // effects once fired for the same card: two toasts per arrival.) Known-set
+  // diffing so the first fill reads as history, a 3s warmup so hydration
+  // settles silently, isMine exclusion (ids first, names as fallback), and a
+  // LAYER arrival announces onto its BASE — a layer card renders nowhere, so
+  // deep-linking to it would select an invisible card.
   const knownServerCardsRef = useRef<Set<string> | null>(null);
+  const arrivalWarmupRef = useRef<number>(0);
   useEffect(() => {
     const serverCards = cards.filter((c) => isServerCardId(c.id) && !c.isDimmedReference);
     if (knownServerCardsRef.current === null) {
       knownServerCardsRef.current = new Set(serverCards.map((c) => c.id));
+      arrivalWarmupRef.current = Date.now() + 3000;
       return;
     }
     const known = knownServerCardsRef.current;
     const arrivals = serverCards.filter((c) => !known.has(c.id));
     serverCards.forEach((c) => known.add(c.id));
-    if (arrivals.length === 0) return;
-    const mine = profile?.user_id ?? null;
-    const fromOthers = arrivals.filter(
-      (c) => c.createdBy && c.createdBy !== mine && c.contributor && c.contributor !== currentUserName,
-    );
+    if (arrivals.length === 0 || Date.now() < arrivalWarmupRef.current) return;
+    const fromOthers = arrivals.filter((c) => (c.createdBy || c.contributor) && !isMine(c));
     if (fromOthers.length === 0) return;
     const first = fromOthers[0];
-    const label =
-      first.section ||
-      (first.type === "voice" || first.type === "hum"
-        ? "voice idea"
-        : first.type === "chord"
-        ? "chord idea"
-        : first.type === "note" || first.type === "scripture"
-        ? "note"
-        : "lyric idea");
+    const base = first.parentMemoId
+      ? cards.find((b) => !b.parentMemoId && memoKey(b.id) === memoKey(first.parentMemoId as string))
+      : null;
+    const label = first.parentMemoId
+      ? `a layer on ${base ? `"${base.title || base.section || "a take"}"` : "a take"}`
+      : `a ${
+          first.section ||
+          (first.type === "voice" || first.type === "hum"
+            ? "voice idea"
+            : first.type === "chord"
+            ? "chord idea"
+            : first.type === "note" || first.type === "scripture"
+            ? "note"
+            : "lyric idea")
+        }`;
+    const target = first.parentMemoId ? base : first;
     toast(
       fromOthers.length === 1
-        ? `${first.contributor} added a ${label}`
+        ? `${first.contributor} added ${label}`
         : `${first.contributor} + ${fromOthers.length - 1} more added ideas`,
       {
         duration: 6000,
-        action: { label: "See it", onClick: () => jumpToCardId(first.id) },
+        ...(target ? { action: { label: "See it", onClick: () => jumpToCardId(target.id) } } : {}),
       },
     );
-  }, [cards, profile?.user_id, currentUserName, jumpToCardId]);
-
-  // Calm remote-card arrival: a co-writer's new idea lands off-screen (ideas
-  // are placed low on the board), so without this it appears silently and the
-  // songwriter never notices. When a genuinely new card from someone else
-  // shows up in real time, offer a gentle "see it" toast that flies there.
-  // Seeded on first load + a short warmup so the initial hydration is silent.
-  const seenCardIdsRef = useRef<Set<string> | null>(null);
-  const arrivalWarmupRef = useRef<number>(0);
-  useEffect(() => {
-    if (seenCardIdsRef.current === null) {
-      seenCardIdsRef.current = new Set(cards.map((c) => c.id));
-      // Give hydration a beat to settle before any arrival is treated as "live".
-      arrivalWarmupRef.current = Date.now() + 3000;
-      return;
-    }
-    const seen = seenCardIdsRef.current;
-    const fresh = cards.filter(
-      (c) =>
-        !seen.has(c.id) &&
-        !c.parentMemoId &&
-        (c.createdBy || c.contributor) &&
-        // Exclude anything I authored — ids first, names as the fallback
-        // (merges credited "Me & Sarah" stay excluded).
-        !isMine(c),
-    );
-    for (const c of cards) seen.add(c.id);
-    if (fresh.length === 0 || Date.now() < arrivalWarmupRef.current) return;
-
-    if (fresh.length === 1) {
-      const c = fresh[0];
-      const first = c.contributor.split(" ")[0] || c.contributor;
-      toast(`${first} added an idea`, {
-        description: c.title,
-        action: { label: "See it", onClick: () => jumpToCard(c) },
-      });
-    } else {
-      const first = fresh[0];
-      toast(`${fresh.length} new ideas from your co-writers`, {
-        description: "Tap review to step through them.",
-        action: { label: "See", onClick: () => jumpToCard(first) },
-      });
-    }
-  }, [cards, isMine, jumpToCard]);
+  }, [cards, isMine, jumpToCardId]);
 
   // The recap digest, from the room's real cards: what other hands added,
   // latest first, each row a deep link to its card (COG Product 12).
@@ -2974,7 +2938,10 @@ const SongCanvasExperience = () => {
           spaces (local raw uuids + hydrated `db-voice-` mirrors) — every
           stack comparison resolves through memoKey. */}
       {stackBaseId && (() => {
-        const base = cards.find((c) => c.id === stackBaseId);
+        // memoKey resolve: after a layer-save the reopen id is a RAW memo id
+        // while a hydrated base's card id is db-voice-<uuid> — an exact match
+        // silently never reopened the sheet on the collaboration path.
+        const base = cards.find((c) => memoKey(c.id) === memoKey(stackBaseId));
         if (!base) return null;
         // memoKey both sides: a hydrated layer's parent is a raw uuid while
         // the base card may be a db-voice mirror (and vice versa).

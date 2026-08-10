@@ -117,9 +117,25 @@ export async function enqueuePendingUpload(
  * dead end. Returns the memo id on success, or null if the take is already gone
  * (e.g. the cache was cleared) — in which case the orphan row is swept.
  */
+// One flush per row at a time, session-wide: the mount sweep, the `online`
+// sweep, and the save path can all reach for the same id — an unguarded race
+// double-uploaded the take. In-memory on purpose: a reload clears it, so a
+// row stuck "uploading" by a crash still retries next session.
+const inFlight = new Set<string>();
+
 export async function flushPendingUpload(id: string): Promise<string | null> {
+  if (inFlight.has(id)) return null;
   const record = readIndex().find((r) => r.id === id);
   if (!record) return null;
+  inFlight.add(id);
+  try {
+    return await flushPendingUploadInner(id, record);
+  } finally {
+    inFlight.delete(id);
+  }
+}
+
+async function flushPendingUploadInner(id: string, record: PendingUpload): Promise<string | null> {
 
   // A layer recorded while its BASE was still uploading carries the base's
   // TEMP id as parentMemoId. Sending that to the server writes a garbage

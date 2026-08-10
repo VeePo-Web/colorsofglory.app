@@ -3,6 +3,7 @@ import { Play, Pause, Mic, Volume2, VolumeX } from "lucide-react";
 import { useStackPlayer } from "@/hooks/useStackPlayer";
 import { stackPlayOrder, type MemoStackGroup } from "@/lib/voice/stackModel";
 import { setLayerMix } from "@/integrations/cog/memos";
+import { memoKey } from "@/lib/canvas/features/canvasAudio";
 import { getCreatorColor, getCreatorInitials } from "@/lib/canvas/creatorColors";
 import { resolveWaveformBars } from "@/lib/canvas/waveformSeed";
 import { formatDuration } from "@/lib/voice/audioFormat";
@@ -79,7 +80,10 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
       id,
       window.setTimeout(() => {
         timers.delete(id);
-        void setLayerMix(id, { gain });
+        // memoKey: a hydrated layer's in-view id is db-voice-<uuid> — sent
+        // raw, the uuid PK update matched nothing and the room-shared mix
+        // silently never persisted.
+        void setLayerMix(memoKey(id), { gain });
       }, 600),
     );
   };
@@ -236,7 +240,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
               onClick={() => {
                 const nowMuted = !state.muted.has(layer.id);
                 toggleMute(layer.id);
-                void setLayerMix(layer.id, { muted: nowMuted });
+                void setLayerMix(memoKey(layer.id), { muted: nowMuted });
               }}
               aria-pressed={isMuted}
               aria-label={isMuted ? `Unmute ${layer.contributor}'s layer` : `Mute ${layer.contributor}'s layer`}
