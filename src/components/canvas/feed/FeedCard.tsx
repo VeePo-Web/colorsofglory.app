@@ -208,7 +208,8 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         </p>
       )}
 
-      {adornment}
+      {/* Receipts stay receipts — no amen/review adornments on used cards. */}
+      {!dimmed && adornment}
 
       {/* Selected action row — the same verbs as the map, feed-native frame. */}
       {selected && !dimmed && (

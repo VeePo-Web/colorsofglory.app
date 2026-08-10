@@ -88,9 +88,20 @@ const CanvasFeed = memo(function CanvasFeed({
   const hasIdeas = groups.some((g) => g.label !== USED_GROUP);
   // The entrance cascade: one running position across every group, so the
   // page settles top-to-bottom in one continuous fall (capped — deep cards
-  // arrive together rather than making the writer wait).
+  // arrive together rather than making the writer wait). Each card's delay
+  // is assigned ONCE, on first appearance, and held forever: an index-keyed
+  // delay changed on every prepend/reorder, and a changed animation-delay
+  // RESTARTS the CSS animation — recording one memo re-cascaded the whole
+  // feed. A later arrival animates in with no delay; its neighbours hold.
+  const entranceDelaysRef = useRef<Map<string, number>>(new Map());
   let entrancePos = 0;
-  const nextEntranceDelay = () => Math.min(entrancePos++ * 45, 360);
+  const nextEntranceDelay = (id: string) => {
+    const seen = entranceDelaysRef.current.get(id);
+    if (seen !== undefined) return seen;
+    const d = Math.min(entrancePos++ * 45, 360);
+    entranceDelaysRef.current.set(id, d);
+    return d;
+  };
 
   /** The cinematic promote: a ghost travels from the card to the Final tab,
    *  the tab pulses warm, THEN the real move runs. Reduced motion: instant. */
@@ -358,7 +369,7 @@ const CanvasFeed = memo(function CanvasFeed({
                         interactions={getInteractions(card)}
                         adornment={cardAdornment?.(card)}
                         onFlyToFinal={flyToFinal}
-                        entranceDelayMs={nextEntranceDelay()}
+                        entranceDelayMs={nextEntranceDelay(card.id)}
                       />
                     </SwipePromoteRow>
                   ))}

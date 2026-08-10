@@ -132,7 +132,9 @@ const FinalListenPage = memo(function FinalListenPage({
   }
 
   return (
-    <div style={{ padding: "16px 16px 220px" }}>
+    // Bottom padding clears the app tab bar only — the Final page has no
+    // creation dock, and the dock-sized 220px left a void under the set list.
+    <div style={{ padding: "16px 16px 140px" }}>
       {/* The song header — sage identity, one dominant gold action. */}
       <div
         style={{
