@@ -238,3 +238,36 @@ all** to **in the room in one tap**. That is the growth loop.*
 ---
 
 *Lane B · The Open Door · vision v1 — audit-grounded, subtraction-first.*
+
+---
+
+## 7 · POSTSCRIPT — THE HALLWAY AS SHIPPED (2026-08-10)
+
+Every phase above landed (`7d60b02` → `4ac2f29` → `f66908b` → `ba8cb79`), then
+survived a 13-agent adversarial self-review (7 regressions confirmed and
+fixed, 0 refuted) and a real-browser walkthrough. Two deviations from the
+plan, both **more** subtraction than promised:
+
+- **PeoplePage was deleted outright**, not rewritten — the runtime walkthrough
+  revealed `/songs/:id/people` already folds into the canvas People layer
+  (nav lane), which opens the same ShareSongSheet. The rewritten page was
+  unrouted dead code.
+- **The name screen became ONE field** ("First and last name", contact
+  autofill, the app splits) — the plan had kept two.
+
+One promise was completed beyond the plan: the R48 "invite nobody answered"
+line now surfaces in the sheet ("Still waiting after N days — links get
+buried. Sending it again never hurts.") — hidden until true, silent on failure.
+
+**The standing guardrail:** `scripts/verify-invite-hallway.mjs` drives both
+directions of the door in a real browser at 390×844 — 22 assertions, including
+a live round trip through the deployed `song-invite-preview` edge function —
+and exits non-zero on any break. Run it after touching anything in the invite
+lane. The hallway's alignment with the app-wide contract is recorded in
+`docs/flow/GOLDEN-PATH.md` (Lane B = "THE DOOR": *who? → what can they do? →
+"the door is open"*).
+
+**Final measurements (browser-verified):** owner 2 taps · signed-in friend
+1 tap · stranger 3 questions (phone · code · name) · 0 interstitials ·
+1 invite surface · 1 standing link per role · 1 gold · 1 error voice · both
+ends of the loop wired (arrival heard, silence named).

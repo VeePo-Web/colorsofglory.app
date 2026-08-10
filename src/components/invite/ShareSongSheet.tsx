@@ -380,7 +380,9 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
               type="button"
               onClick={readyInvite ? handleCopy : undefined}
               disabled={!readyInvite}
-              aria-label={readyInvite ? "Copy invite link" : "Creating your link"}
+              // Distinct from the hero's name — two controls answering to
+              // "Copy invite link" makes a screen-reader rotor ambiguous.
+              aria-label={readyInvite ? "Your invite link — tap to copy" : "Creating your link"}
               className="cog-press"
               style={{
                 width: "100%", marginTop: 12, borderRadius: 12, padding: "12px 12px", minHeight: 44,
