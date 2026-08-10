@@ -68,6 +68,7 @@ import {
 } from "@/lib/voice/pendingUploads";
 import { saveFailedCapture, clearFailedCapture } from "@/lib/voice/failedCaptureStore";
 import { audioCache } from "@/lib/voice/audioCache";
+import RoomWelcome, { hasSeenRoomWelcome } from "@/components/canvas/RoomWelcome";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import {
   initialBoard,
@@ -1639,13 +1640,19 @@ const SongCanvasExperience = () => {
   // (the one-tip lock presents them in this sequence): Features (the tab bar —
   // orient to every part of the song), then Ideas (the two-tree mental model),
   // then Invite. Ref + hook only; see docs/onboarding/first-run-tour-plan.md.
-  const featuresTour = useCoachMark("tour_features_seen", !isViewer && !showFirstRun);
+  // The hallway, taught once per device: the first song room ever opened
+  // shows ONE welcome card ("this is the song's room — ideas here, the song
+  // one swipe left") that dissolves into the feed. While it's up, the coach
+  // tour waits — one bold thing, never two tips.
+  const [roomWelcome, setRoomWelcome] = useState(() => !hasSeenRoomWelcome());
+
+  const featuresTour = useCoachMark("tour_features_seen", !isViewer && !showFirstRun && !roomWelcome);
   // MAP ONLY: the ideas beat anchors the map's zone tablist and its copy is
   // whiteboard grammar ("drag it across"). In the feed it claimed the
   // one-tip-at-a-time lock with a null anchor — rendering nothing and
   // starving the invite beat forever.
   const ideasTour = useCoachMark("tour_ideas_seen", !isViewer && !showFirstRun && canvasView === "map");
-  const inviteTour = useCoachMark("tour_invite_seen", !isViewer && !showFirstRun);
+  const inviteTour = useCoachMark("tour_invite_seen", !isViewer && !showFirstRun && !roomWelcome);
 
   // The Final tree is the song's ARRANGEMENT: top-to-bottom is the play order.
   // Number each Final card by its vertical position so it reads like a set list.
@@ -3258,6 +3265,12 @@ const SongCanvasExperience = () => {
           onKeep={() => setLineSuggest(null)}
           onDismiss={() => setLineSuggest(null)}
         />
+      )}
+
+      {/* The once-per-device hallway welcome — the room named, the one move
+          taught, then it dissolves forever. The tour waits behind it. */}
+      {roomWelcome && canvasView === "feed" && (
+        <RoomWelcome songTitle={songTitle} onDismiss={() => setRoomWelcome(false)} />
       )}
 
       {/* Coach marks yield to an active weave — one focused mode at a time. */}
