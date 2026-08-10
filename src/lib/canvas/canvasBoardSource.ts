@@ -231,7 +231,10 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
   const [memosRes, cardsRes] = await Promise.allSettled([
     supabase
       .from("voice_memos")
-      .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks")
+      // parent_memo_id IS the stacking spine — without it every hydrated
+      // layer arrived as a loose top-level sibling card (the "cluttered and
+      // confusing" feed) and stacks were invisible on any second device.
+      .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks, parent_memo_id")
       .eq("song_id", songId)
       .not("status", "in", '("failed","deleted")')
       // Newest first — an ascending window pinned the 60 OLDEST memos and a
@@ -259,6 +262,10 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
     // Reverse so slot fallbacks still lay out oldest-at-top.
     [...memosRes.value.data].reverse().forEach((row, i) => {
       const isProcessing = row.status === "uploading" || row.status === "uploaded";
+      // Stacking spine: RAW memo uuid, by contract — consumers compare via
+      // memoKey() so local raw-id bases and db-voice mirrors both match.
+      const parentMemoId =
+        (row as { parent_memo_id?: string | null }).parent_memo_id ?? undefined;
       out.push({
         id: `db-voice-${row.id}`,
         tree: "ideas",
@@ -273,7 +280,10 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
         // Deterministic from the author id (roster names refine later) — an
         // empty accent broke every `${accent}30` concatenation downstream.
         accent: getCreatorColor(row.author_user_id ?? row.id).base,
-        ...nextSlot("ideas"),
+        parentMemoId,
+        // Layers render inside their base's stack, never on the board —
+        // burning a column slot on one would gap the visible layout.
+        ...(parentMemoId ? { x: 0, y: 0 } : nextSlot("ideas")),
         durationMs: row.duration_ms ?? undefined,
         // Melody Lens: real peaks travel with the row; the pitch contour
         // resolves server-first (once Lovable's column lands) then the

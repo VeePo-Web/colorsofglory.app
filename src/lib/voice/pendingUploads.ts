@@ -1,5 +1,6 @@
 import { audioCache } from "./audioCache";
 import { uploadVoiceMemo } from "./voiceApi";
+import { getAlignmentOffsetMs } from "@/lib/audio/alignmentStore";
 
 /**
  * @deprecated LEGACY save path — superseded by the Capture Outbox.
@@ -151,6 +152,12 @@ export async function flushPendingUpload(id: string): Promise<string | null> {
       sectionLabel: record.sectionLabel,
       transcribe: record.transcribe,
       parentMemoId: record.parentMemoId,
+      // The measured guide-alignment offset (keyed by this pending id until
+      // the flush rekeys it) finally reaches the server's layer_offset_ms —
+      // without it, cross-device stacks always played misaligned at 0.
+      layerOffsetMs: record.parentMemoId
+        ? Math.max(0, Math.round(getAlignmentOffsetMs(id))) || undefined
+        : undefined,
       // id is the idempotency key: a retry that already reached the server
       // resolves to the same memo instead of duplicating it.
       idempotencyKey: id,

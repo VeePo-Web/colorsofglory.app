@@ -3,6 +3,7 @@ import { audioCache } from "@/lib/voice/audioCache";
 import { getSignedUrl } from "@/lib/voice/voiceApi";
 import { resolveMix, clampLayerGain } from "@/lib/voice/stackModel";
 import { getAlignmentOffsetMs } from "@/lib/audio/alignmentStore";
+import { memoKey } from "@/lib/canvas/features/canvasAudio";
 
 /**
  * useStackPlayer — synchronized playback of a layered voice-memo stack.
@@ -190,11 +191,17 @@ export function useStackPlayer(
     await Promise.all(
       playIds.map(async (id) => {
         try {
-          let blob = await audioCache.get(id);
+          // THE SEAM: hydrated cards are `db-voice-<uuid>` but the cache and
+          // the signed-URL fn speak raw memo ids — unresolved, a hydrated
+          // stack was completely SILENT (each miss swallowed by this catch).
+          // The mixer stays keyed by the ORIGINAL id.
+          const audioId = memoKey(id);
+          let blob = await audioCache.get(audioId);
           if (!blob) {
-            const url = await getSignedUrl(id);
+            const url = await getSignedUrl(audioId);
+            if (!url) throw new Error("no-playback-url");
             blob = await (await fetch(url)).blob();
-            await audioCache.set(id, blob).catch(() => {});
+            await audioCache.set(audioId, blob).catch(() => {});
           }
           // Web Audio first: decode onto the shared clock.
           if (Ctor && webAudioOk.current) {
@@ -236,7 +243,7 @@ export function useStackPlayer(
       for (const [id] of layersRef.current) {
         if (elementsRef.current.has(id)) continue;
         try {
-          const blob = await audioCache.get(id);
+          const blob = await audioCache.get(memoKey(id));
           if (!blob) continue;
           const url = URL.createObjectURL(blob);
           objectUrlsRef.current.push(url);
@@ -251,13 +258,18 @@ export function useStackPlayer(
       layersRef.current.clear();
     }
 
-    // Base element wiring on the fallback rung (progress + end).
-    const base = elementsRef.current.get(playIds[0]);
-    if (base) {
-      base.ontimeupdate = () => {
-        setState((s) => ({ ...s, progress: base.currentTime / (base.duration || 1) }));
+    // Transport wiring on the fallback rung (progress + end) — driven by the
+    // first element that actually LOADED, not strictly playIds[0]: if the base
+    // failed to resolve while layers succeeded, wiring only the base left
+    // progress frozen at 0 and isPlaying stuck true forever.
+    const driver =
+      elementsRef.current.get(playIds[0]) ??
+      playIds.map((id) => elementsRef.current.get(id)).find(Boolean);
+    if (driver) {
+      driver.ontimeupdate = () => {
+        setState((s) => ({ ...s, progress: driver.currentTime / (driver.duration || 1) }));
       };
-      base.onended = () => {
+      driver.onended = () => {
         freshStartRef.current = true;
         setState((s) => ({ ...s, isPlaying: false, progress: 0 }));
       };
@@ -407,7 +419,10 @@ export function useStackPlayer(
       const base = elementsRef.current.get(playIds[0]);
       const target = (base?.duration || 0) * pct;
       elementsRef.current.forEach((el, id) => {
-        if (Number.isFinite(target)) el.currentTime = target + getAlignmentOffsetMs(id) / 1000;
+        // Same offset sum as the fresh start (alignment + server) — omitting
+        // serverOffsets here made every seek drift by the persisted offset.
+        const offsetMs = getAlignmentOffsetMs(id) + (optsRef.current.serverOffsets?.[id] ?? 0);
+        if (Number.isFinite(target)) el.currentTime = target + offsetMs / 1000;
       });
       freshStartRef.current = false;
       setState((s) => ({ ...s, progress: pct }));

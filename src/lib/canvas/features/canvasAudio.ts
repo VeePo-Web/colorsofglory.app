@@ -34,6 +34,18 @@ export function memoIdForCard(cardId: string): string | null {
   return UUID_RE.test(cardId) ? cardId : null;
 }
 
+/**
+ * THE ID-SPACE SEAM, resolved in one place. Cards live in two id spaces —
+ * local/pending raw ids and hydrated `db-voice-<uuid>` mirrors — while the
+ * stacking pipeline (parent_memo_id, audio cache, signed URLs) speaks raw
+ * memo ids. Every stack comparison and lookup must go through this key:
+ * it strips the mirror prefix and passes every other id (temp uuids, demo
+ * ids) through untouched, so both spaces meet correctly.
+ */
+export function memoKey(id: string): string {
+  return memoIdForCard(id) ?? id;
+}
+
 const URL_TTL_MS = 4 * 60 * 1000;
 const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 

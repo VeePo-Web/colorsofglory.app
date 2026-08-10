@@ -66,6 +66,7 @@ import {
   listPendingUploads,
   remapPendingParents,
 } from "@/lib/voice/pendingUploads";
+import { saveFailedCapture, clearFailedCapture } from "@/lib/voice/failedCaptureStore";
 import { formatDuration } from "@/lib/voice/audioFormat";
 import {
   initialBoard,
@@ -150,6 +151,7 @@ import {
   stopCanvasAudio,
   applyPromoteToFinal,
   memoIdForCard,
+  memoKey,
   playMemoOnCanvas,
   pauseCanvasAudio,
   soloPlayAction,
@@ -575,13 +577,36 @@ const SongCanvasExperience = () => {
   // review exactly like a manual Stop, or the idea is silently lost and the
   // sheet freezes at "Recording…". (Guide + click cleanup runs in the
   // live→ended effect below, which fires however a take ends.)
+  // Durable-salvage backup: an auto-finalized take was pure React state until
+  // the user tapped Save — iOS killing the backgrounded tab lost the take AND
+  // its layer parentage. The blob now goes to the device store the moment the
+  // interruption fires; a normal Save clears the backup (targeted, never all).
+  const salvageBackupIdRef = useRef<string | null>(null);
   const handleAutoFinalize = useCallback((result: RecordingResult | null) => {
     if (result) {
       setPendingRecording(result);
       setRecordingFlow("reviewing");
+      if (result.reason !== "manual") {
+        void saveFailedCapture(result.blob, {
+          songId,
+          title: recordingParentIdRef.current ? "Interrupted layer" : "Interrupted take",
+          durationMs: result.durationMs,
+        })
+          .then((rec) => {
+            salvageBackupIdRef.current = rec.id;
+          })
+          .catch(() => {
+            /* review still holds the take in memory */
+          });
+      }
     } else {
       setRecordingFlow("idle");
     }
+  }, [songId]);
+  const clearSalvageBackup = useCallback(() => {
+    const id = salvageBackupIdRef.current;
+    salvageBackupIdRef.current = null;
+    if (id) void clearFailedCapture(id);
   }, []);
   const { state: recorderState, startRecording, stopRecording, cancelRecording } = useVoiceRecorder({
     onAutoFinalize: handleAutoFinalize,
@@ -1149,7 +1174,12 @@ const SongCanvasExperience = () => {
       // never depends on which bottom bar happens to be visible.
       if (metronome.running) metronome.stop();
       stopCanvasAudio();
-      recordingParentIdRef.current = parentId ?? null;
+      // THE SEAM FIX: normalize the base id ONCE at the choke point. A
+      // hydrated base's card id is `db-voice-<uuid>` — sent raw, the server's
+      // parent lookup failed SILENTLY and the layer persisted as a BASE
+      // (the stack link evaporated on reload / every other device). memoKey
+      // strips the mirror prefix; temp pending ids and demo ids pass through.
+      recordingParentIdRef.current = parentId ? memoKey(parentId) : null;
       setRecordingSection(parentId ? "Layer" : "Raw idea");
       setRecordingNote("");
       takeAlignOffsetRef.current = 0;
@@ -1207,7 +1237,10 @@ const SongCanvasExperience = () => {
       // round-trip estimate becomes the layer's alignment offset so base + layer
       // share one grid on playback instead of drifting by the latency.
       if (parentId) {
-        const guide = await playReferenceGuide(parentId);
+        // Same seam: the guide resolves audio by MEMO id (cache → signed URL);
+        // a raw `db-voice-` card id missed both and the guide never played
+        // for exactly the collaboration case the feature exists for.
+        const guide = await playReferenceGuide(memoKey(parentId));
         if (takeSeqRef.current !== seq) {
           guide?.stop();
           return;
@@ -1243,7 +1276,9 @@ const SongCanvasExperience = () => {
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
-  }, [cancelRecording, stopClick]);
+    // Discarding the review is a real choice — retire the salvage backup too.
+    clearSalvageBackup();
+  }, [cancelRecording, stopClick, clearSalvageBackup]);
 
   // Flush a queued canvas take (base OR layer) and reconcile its card. On success
   // the temp card id becomes the real memo id; on failure the card stays put with
@@ -1285,11 +1320,18 @@ const SongCanvasExperience = () => {
         for (const healedId of healed) void flushCanvasUploadRef.current(healedId);
       }
       setCanvasStatus("Saved to this song.");
-    } catch {
+    } catch (err) {
       setCards((prev) => prev.map((c) =>
         c.id === pendingId ? { ...c, isProcessing: false } : c,
       ));
-      setCanvasStatus("You can keep adding ideas. We'll finish saving when you're back online.");
+      // Honest per-cause copy: a layer held back behind its still-uploading
+      // base isn't an offline problem — saying "when you're back online" to
+      // an online device read as broken.
+      setCanvasStatus(
+        err instanceof Error && err.message === "parent-take-still-uploading"
+          ? "Your layer is safe — finishing the base take first."
+          : "You can keep adding ideas. We'll finish saving when you're back online.",
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listenPath.replaceCardId]);
@@ -1331,6 +1373,9 @@ const SongCanvasExperience = () => {
       transcribe,
       parentMemoId,
     });
+    // Durably queued from here on — the interruption backup retires (after
+    // the enqueue, so a thrown enqueue never leaves the take backup-less).
+    clearSalvageBackup();
 
     // A layer cut against the headphone guide carries its measured latency
     // offset so stack playback seats it on the base's grid (see alignmentStore).
@@ -1363,21 +1408,28 @@ const SongCanvasExperience = () => {
     if (!parentMemoId) setFocusCardId(pending.id);
 
     await flushCanvasUpload(pending.id);
-  }, [pendingRecording, showSavedMoment, songId, currentUserName, profile?.user_id, flushCanvasUpload]);
+  }, [pendingRecording, showSavedMoment, songId, currentUserName, profile?.user_id, flushCanvasUpload, clearSalvageBackup]);
 
-  // Recovery sweep: a canvas take whose upload was interrupted last session is
-  // still safe in the cache. Replay each on load — a reconnected device heals
-  // itself, the take reaches the song, and its card swaps to the real memo id.
+  // Recovery sweep: a canvas take whose upload was interrupted is still safe
+  // in the cache. Replay on load AND on reconnect — the failure copy promises
+  // "we'll finish saving when you're back online", and until the `online`
+  // listener existed, that promise was a lie (recovery was mount-only).
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const sweep = async () => {
       const orphans = await listPendingUploads(songId);
       for (const orphan of orphans) {
         if (cancelled) return;
         await flushCanvasUpload(orphan.id);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void sweep();
+    const onOnline = () => void sweep();
+    window.addEventListener("online", onOnline);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+    };
   }, [songId, flushCanvasUpload]);
 
   const openMicSettings = useCallback(() => {
@@ -1395,9 +1447,18 @@ const SongCanvasExperience = () => {
   // Layer switching is owned by SongTabBar + ?layer= deep links (the header
   // chip strip that duplicated it is gone).
 
-  // Layers live inside their base's stack, not loose on the board.
-  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !c.parentMemoId), [cards]);
-  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !c.parentMemoId), [cards]);
+  // Layers live inside their base's stack, not loose on the board — but ONLY
+  // while their base is actually present. A layer whose base left (server
+  // prune, review dismiss) would otherwise render NOWHERE; orphans promote to
+  // bases, mirroring the DB trigger's flatten rule. memoKey both sides: the
+  // parent is a raw uuid, the base card may be a db-voice mirror.
+  const presentMemoKeys = useMemo(() => new Set(cards.map((c) => memoKey(c.id))), [cards]);
+  const isLayerCard = useCallback(
+    (c: CanvasCard) => Boolean(c.parentMemoId && presentMemoKeys.has(memoKey(c.parentMemoId))),
+    [presentMemoKeys],
+  );
+  const ideasCards = useMemo(() => cards.filter((c) => c.tree === "ideas" && !isLayerCard(c)), [cards, isLayerCard]);
+  const finalCards = useMemo(() => cards.filter((c) => c.tree === "final" && !isLayerCard(c)), [cards, isLayerCard]);
 
   // ── Section clusters (Step 8) ──────────────────────────────────────────────
   // WHICH dense sections collapse is the store's flag (clusterFlags = interim
@@ -1538,10 +1599,15 @@ const SongCanvasExperience = () => {
 
   // Slot-swap reordering lives in useFinalArrangement (D2): arrangement.moveBy.
 
+  // Keyed by memoKey so a hydrated layer (raw-uuid parent) counts onto its
+  // base whether that base is a local raw-id card OR a db-voice mirror.
   const layerCountByBase = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const c of cards) {
-      if (c.parentMemoId) counts[c.parentMemoId] = (counts[c.parentMemoId] ?? 0) + 1;
+      if (c.parentMemoId) {
+        const k = memoKey(c.parentMemoId);
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
     }
     return counts;
   }, [cards]);
@@ -1646,7 +1712,7 @@ const SongCanvasExperience = () => {
           if (zone === "final") apisRef.current.arrangement.moveToFinal(id);
           else apisRef.current.arrangement.moveToIdeas(id);
         },
-        layerCount: layerCountByBase[card.id] ?? 0,
+        layerCount: layerCountByBase[memoKey(card.id)] ?? 0,
         onOpenStack:
           card.type === "voice" || card.type === "hum"
             ? () => {
@@ -2884,13 +2950,17 @@ const SongCanvasExperience = () => {
 
       {/* The Memo Sheet — ONE sheet for both relationships: tries (takes,
           one keeper — Section A) and layers (the stack that plays together —
-          Section B). Replaces StackSheet (retired). Card ids ARE memo ids
-          (temp ids swap to real memo ids on upload), so the sheet's takes +
-          server-truth reads are correct. */}
+          Section B). Replaces StackSheet (retired). Card ids come in TWO
+          spaces (local raw uuids + hydrated `db-voice-` mirrors) — every
+          stack comparison resolves through memoKey. */}
       {stackBaseId && (() => {
         const base = cards.find((c) => c.id === stackBaseId);
         if (!base) return null;
-        const stackLayers = cards.filter((c) => c.parentMemoId === stackBaseId);
+        // memoKey both sides: a hydrated layer's parent is a raw uuid while
+        // the base card may be a db-voice mirror (and vice versa).
+        const stackLayers = cards.filter(
+          (c) => c.parentMemoId && memoKey(c.parentMemoId) === memoKey(stackBaseId),
+        );
         return (
           <MemoSheet
             base={toStackView(base)}

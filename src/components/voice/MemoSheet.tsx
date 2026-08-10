@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Mic, RotateCcw, ChevronRight } from "lucide-react";
 import MemoStack, { type StackMemoView } from "./MemoStack";
 import { listTakes, type Take } from "@/integrations/cog/takes";
 import { listVoiceMemos } from "@/lib/voice/voiceApi";
+import { memoKey } from "@/lib/canvas/features/canvasAudio";
 
 /**
  * MemoSheet — the ONE sheet for a voice memo's two relationships
@@ -82,11 +83,20 @@ const MemoSheet = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // THE ID SEAM: the sheet's base may be a CARD id (`db-voice-<uuid>` for
+  // hydrated mirrors) while the server speaks raw memo uuids — every server
+  // read below must use the resolved memo id or it silently matches nothing.
+  const baseMemoId = memoKey(base.id);
+  // Latest passed layers without effect-identity churn (the prop is re-mapped
+  // every host render; as a dep it would refetch the song's memos per render).
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+
   // Section A data — the tries. Calm on failure: the section shows the
   // keeper it already knows and no count.
   useEffect(() => {
     let live = true;
-    listTakes(base.id, { include_archived: true })
+    listTakes(baseMemoId, { include_archived: true })
       .then((rows) => {
         if (live) setTakes(rows);
       })
@@ -96,35 +106,40 @@ const MemoSheet = ({
     return () => {
       live = false;
     };
-  }, [base.id]);
+  }, [baseMemoId]);
 
-  // Section B server truth — persisted parentage + shared mix.
+  // Section B server truth — persisted parentage + shared mix. UNION with the
+  // passed view, never replace: a just-recorded layer still uploading (temp
+  // id, not on the server yet) must not vanish from the sheet mid-flow.
   useEffect(() => {
     if (!songId) return;
     let live = true;
     listVoiceMemos(songId)
       .then((records) => {
         if (!live) return;
-        const children = records.filter((r) => r.parentMemoId === base.id);
-        if (children.length === 0) return; // keep the passed view (may be optimistic)
-        const passed = new Map(layers.map((l) => [l.id, l]));
-        setFreshLayers(
-          children.map((r) => ({
-            ...(passed.get(r.id) ?? {
-              id: r.id,
-              title: r.title,
-              contributor: r.created_by,
-              durationMs: r.duration_ms,
-              createdAt: r.created_at,
-              waveformPeaks: r.waveform_peaks,
-              pitchContour: r.pitch_contour,
-            }),
-            parentMemoId: base.id,
-            layerGain: r.layerGain,
-            layerMuted: r.layerMuted,
-            layerOffsetMs: r.layerOffsetMs,
-          })),
+        const children = records.filter(
+          (r) => r.parentMemoId && memoKey(r.parentMemoId) === baseMemoId,
         );
+        if (children.length === 0) return; // keep the passed view (may be optimistic)
+        const passed = new Map(layersRef.current.map((l) => [memoKey(l.id), l]));
+        const serverIds = new Set(children.map((r) => memoKey(r.id)));
+        const fromServer = children.map((r) => ({
+          ...(passed.get(memoKey(r.id)) ?? {
+            id: r.id,
+            title: r.title,
+            contributor: r.created_by,
+            durationMs: r.duration_ms,
+            createdAt: r.created_at,
+            waveformPeaks: r.waveform_peaks,
+            pitchContour: r.pitch_contour,
+          }),
+          parentMemoId: base.id,
+          layerGain: r.layerGain,
+          layerMuted: r.layerMuted,
+          layerOffsetMs: r.layerOffsetMs,
+        }));
+        const stillUploading = layersRef.current.filter((l) => !serverIds.has(memoKey(l.id)));
+        setFreshLayers([...fromServer, ...stillUploading]);
       })
       .catch(() => {
         /* the passed view stands */
@@ -133,7 +148,7 @@ const MemoSheet = ({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId, base.id]);
+  }, [songId, baseMemoId]);
 
   const keeper = takes?.find((t) => t.is_primary) ?? null;
   const earlierCount = takes ? Math.max(0, takes.length - 1) : null;

@@ -15,4 +15,4 @@ export {
   type CanvasFeatureMutations,
   type CanvasFeatureMeta,
 } from "./mutations";
-export { memoIdForCard, playMemoOnCanvas, pauseCanvasAudio, stopCanvasAudio, soloPlayAction } from "./canvasAudio";
+export { memoIdForCard, memoKey, playMemoOnCanvas, pauseCanvasAudio, stopCanvasAudio, soloPlayAction } from "./canvasAudio";

@@ -139,24 +139,41 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
           layer path failed the intuition test) but in the QUIET register:
           gold belongs to the one primary act per screen, and this pill is on
           every voice card. The stack sheet stays the mixing room. */}
-      {isVoice && !dimmed && interactions.onRecordOver && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
-          aria-label="Record a layer over this take"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 7,
-            minHeight: 44, padding: "0 14px", marginTop: 8,
-            borderRadius: 999, cursor: "pointer",
-            backgroundColor: "rgba(28,26,23,0.04)",
-            border: "1.5px solid rgba(28,26,23,0.12)",
-            color: "var(--cog-warm-gray)",
-            fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 600,
-          }}
-        >
-          <Mic size={14} strokeWidth={2.1} />
-          Layer over this
-        </button>
+      {isVoice && !dimmed && (interactions.onRecordOver || Boolean(interactions.layerCount)) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+          {interactions.onRecordOver && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
+              aria-label="Record a layer over this take"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                minHeight: 44, padding: "0 14px",
+                borderRadius: 999, cursor: "pointer",
+                backgroundColor: "rgba(28,26,23,0.04)",
+                border: "1.5px solid rgba(28,26,23,0.12)",
+                color: "var(--cog-warm-gray)",
+                fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              <Mic size={14} strokeWidth={2.1} />
+              Layer over this
+            </button>
+          )}
+          {/* State at rest, verbs on selection: a 3-layer stack and a bare
+              memo used to look identical until you selected them. */}
+          {Boolean(interactions.layerCount) && (
+            <span
+              aria-label={`${interactions.layerCount} ${interactions.layerCount === 1 ? "layer" : "layers"} on this take`}
+              style={{
+                fontFamily: "var(--font-body)", fontSize: 11.5, fontWeight: 700,
+                color: color.dark, whiteSpace: "nowrap",
+              }}
+            >
+              ≡ {interactions.layerCount} {interactions.layerCount === 1 ? "layer" : "layers"}
+            </span>
+          )}
+        </div>
       )}
 
       {/* Who wrote it — the colored dot carries identity; the name reads as

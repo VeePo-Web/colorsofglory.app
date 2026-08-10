@@ -136,6 +136,8 @@ export async function uploadVoiceMemo(params: {
   fileName?: string;
   /** Base memo this take layers over ("Record over this"). */
   parentMemoId?: string;
+  /** Measured base↔layer alignment offset (ms) — persisted for cross-device playback. */
+  layerOffsetMs?: number;
   /** Stable key per save attempt; prevents duplicate layers on double-tap. */
   idempotencyKey?: string;
   /** Real lyric section this memo attaches to (PV-05). */
@@ -152,6 +154,7 @@ export async function uploadVoiceMemo(params: {
     title: params.title,
     waveformPeaks: params.waveformPeaks ?? undefined,
     parentMemoId: params.parentMemoId,
+    layerOffsetMs: params.layerOffsetMs,
     idempotencyKey: params.idempotencyKey,
     fileName: params.fileName,
   });

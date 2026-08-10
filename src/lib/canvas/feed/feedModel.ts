@@ -1,5 +1,6 @@
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import { finalRunningOrder } from "@/lib/canvas/canvasGeometry";
+import { memoKey } from "@/lib/canvas/features/canvasAudio";
 
 /**
  * feedModel — the pure organize-brain of the Glory Feed (the canvas's
@@ -27,7 +28,12 @@ export interface FeedGroup {
   cards: CanvasBoardCard[];
 }
 
-const isLayer = (c: CanvasBoardCard) => Boolean(c.parentMemoId);
+// A card is a LAYER only while its base is present in the same list — an
+// orphaned layer (base pruned/dismissed) must surface as a base, never render
+// nowhere. memoKey both sides: parents are raw uuids, bases may be db-voice
+// mirrors. (The host pre-filters too; this keeps the model safe standalone.)
+const isLayer = (c: CanvasBoardCard, presentKeys: Set<string>) =>
+  Boolean(c.parentMemoId && presentKeys.has(memoKey(c.parentMemoId)));
 
 /** Newest first when both sides carry createdAt; otherwise keep source order. */
 function newestFirst(cards: CanvasBoardCard[]): CanvasBoardCard[] {
@@ -46,9 +52,10 @@ export function ideasFeedGroups(cards: CanvasBoardCard[]): FeedGroup[] {
   const sparks: CanvasBoardCard[] = [];
   const used: CanvasBoardCard[] = [];
   const sections = new Map<string, CanvasBoardCard[]>();
+  const presentKeys = new Set(cards.map((c) => memoKey(c.id)));
 
   for (const c of cards) {
-    if (c.tree !== "ideas" || isLayer(c)) continue;
+    if (c.tree !== "ideas" || isLayer(c, presentKeys)) continue;
     if (c.isDimmedReference) {
       used.push(c);
       continue;
@@ -76,14 +83,16 @@ export function ideasFeedGroups(cards: CanvasBoardCard[]): FeedGroup[] {
  * wrapped parts). Layers excluded.
  */
 export function finalFeedCards(cards: CanvasBoardCard[]): CanvasBoardCard[] {
+  const presentKeys = new Set(cards.map((c) => memoKey(c.id)));
   return cards
-    .filter((c) => c.tree === "final" && !isLayer(c))
+    .filter((c) => c.tree === "final" && !isLayer(c, presentKeys))
     .sort(finalRunningOrder);
 }
 
 /** Count of live (undimmed, non-layer) ideas — drives the Ideas tab badge. */
 export function liveIdeaCount(cards: CanvasBoardCard[]): number {
-  return cards.filter((c) => c.tree === "ideas" && !isLayer(c) && !c.isDimmedReference).length;
+  const presentKeys = new Set(cards.map((c) => memoKey(c.id)));
+  return cards.filter((c) => c.tree === "ideas" && !isLayer(c, presentKeys) && !c.isDimmedReference).length;
 }
 
 // ── View preference (feed is the phone default; the map stays one tap away) ──

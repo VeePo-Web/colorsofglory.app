@@ -87,6 +87,10 @@ export interface CreateUploadUrlInput {
   title?: string;
   /** Base memo this take layers over ("Record over this"). */
   parentMemoId?: string;
+  /** Measured base↔layer alignment (guide start-skew + latency), ms. The
+   *  server column exists and playback reads it — without sending it,
+   *  cross-device stacks always aligned at 0. */
+  layerOffsetMs?: number;
   /** Stable per-attempt key so a double-tapped save never creates two memos. */
   idempotencyKey?: string;
   /** Original file name when importing existing audio. */
@@ -111,6 +115,7 @@ export async function createUploadUrl(input: CreateUploadUrlInput): Promise<Crea
     duration_ms: input.durationMs,
     title: input.title,
     parent_memo_id: input.parentMemoId,
+    layer_offset_ms: input.layerOffsetMs,
     idempotency_key: input.idempotencyKey,
     file_name: input.fileName,
   });
@@ -321,6 +326,8 @@ export async function uploadVoiceMemo(opts: {
   waveformPeaks?: number[];
   /** Base memo this take layers over ("Record over this", F16). */
   parentMemoId?: string;
+  /** Measured base↔layer alignment offset (ms) for the server's column. */
+  layerOffsetMs?: number;
   /** Stable per-attempt key so a retried take never double-creates a memo. */
   idempotencyKey?: string;
   /** Original file name when importing existing audio. */
@@ -337,6 +344,7 @@ export async function uploadVoiceMemo(opts: {
     durationMs: opts.durationMs,
     title: opts.title,
     parentMemoId: opts.parentMemoId,
+    layerOffsetMs: opts.layerOffsetMs,
     idempotencyKey: opts.idempotencyKey,
     fileName: opts.fileName,
   });
