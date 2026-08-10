@@ -21,6 +21,8 @@ import AlbumEditSheet from "@/components/library/AlbumEditSheet";
 import SongActionsSheet from "@/components/library/SongActionsSheet";
 import SelectionBar from "@/components/library/SelectionBar";
 import BatchAlbumSheet from "@/components/library/BatchAlbumSheet";
+import NewSongRail from "@/components/library/NewSongRail";
+import { saveDedicationDurable } from "@/lib/songs/dedication";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { showLibraryTabs, showLibraryControls, showAlbumsShelf, continueMoment } from "@/lib/library/libraryCalm";
 import { loadMostRecentSession } from "@/lib/audio/practiceStorage";
@@ -80,7 +82,6 @@ const SongCatalogPage = () => {
   const [songs, setSongs] = useState<SongRow[]>(songsQuery.data ?? []);
   const loading = songsQuery.isLoading;
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
 
   // Library organization — view prefs persist so the catalog reopens the way
@@ -479,23 +480,22 @@ const SongCatalogPage = () => {
     setIsCheckingCreate(true);
     try {
       const allowed = await canCreateSong();
-      if (allowed) {
-        setNewTitle("");
-        setDialogOpen(true);
-      } else navigate("/upgrade?source=song_gate_free");
+      if (allowed) setDialogOpen(true);
+      else navigate("/upgrade?source=song_gate_free");
     } catch {
-      setNewTitle("");
       setDialogOpen(true);
     } finally {
       setIsCheckingCreate(false);
     }
   };
 
-  const submitCreate = async () => {
-    const title = newTitle.trim() || "New song";
+  const submitCreate = async ({ title, dedication }: { title: string; dedication: string | null }) => {
     setCreating(true);
     try {
       const { song } = await createSong({ title });
+      // The "for…" line — unfailing, offline-first; the song quietly
+      // remembers who it's for from its very first moment.
+      if (dedication) saveDedicationDurable(song.id, dedication);
       // Writing a new song while inside an album → it joins that body of work.
       if (activeAlbum) {
         setAlbums(updateAlbum(activeAlbum.id, { songIds: [...activeAlbum.songIds, song.id] }));
@@ -1000,47 +1000,16 @@ const SongCatalogPage = () => {
         />
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle style={{ fontFamily: "var(--font-display)" }}>Name this song</DialogTitle>
-            <DialogDescription>
-              {activeAlbum
-                ? `It'll join ${activeAlbum.name}. You can rename it any time.`
-                : "You can rename it any time. Skip and we'll call it “New song”."}
-            </DialogDescription>
-          </DialogHeader>
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitCreate();
-            }}
-            placeholder="e.g. Grace in the waiting"
-            className="w-full rounded-xl border px-4 py-3 text-[1rem] outline-none"
-            style={{ borderColor: "var(--cog-border)", color: "var(--cog-charcoal)" }}
-          />
-          <DialogFooter>
-            <button
-              onClick={() => setDialogOpen(false)}
-              className="rounded-xl px-4 py-2 text-[0.9375rem]"
-              style={{ color: "var(--cog-warm-gray)" }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submitCreate}
-              disabled={creating}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-[0.9375rem] font-semibold text-white disabled:opacity-60"
-              style={{ backgroundColor: "var(--cog-gold)" }}
-            >
-              <Mic size={15} />
-              {creating ? "Creating…" : "Start brainstorm"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Starting a song, in the Golden Path's rail grammar: name it → who is
+          it for? → arrive at the spark surface. Nothing exists until the last
+          act, so closing this loses nothing. */}
+      <NewSongRail
+        open={dialogOpen}
+        albumName={activeAlbum?.name ?? null}
+        creating={creating}
+        onCreate={(payload) => void submitCreate(payload)}
+        onClose={() => setDialogOpen(false)}
+      />
 
       {/* Rename — the title changes, the room and everything in it stays */}
       <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
