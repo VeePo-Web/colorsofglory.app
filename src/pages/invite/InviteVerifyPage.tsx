@@ -7,6 +7,7 @@ import GoldButton from "@/components/cog/GoldButton";
 import OTPInput from "@/components/cog/OTPInput";
 import OnboardingShell from "@/components/cog/OnboardingShell";
 import { loadInviteContext, saveInviteContext } from "@/lib/invite/inviteContext";
+import { enterInvitedSong } from "@/lib/invite/enterSong";
 import { acceptInvite } from "@/lib/invite/inviteApi";
 import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
 
@@ -33,8 +34,12 @@ function toFriendlyError(err: unknown): string {
 const InviteVerifyPage = () => {
   const navigate = useNavigate();
   const ctx = loadInviteContext();
-  // While the code arrives, fetch the name step so verify → name is instant.
-  useIdlePrefetch(() => import("@/pages/invite/InviteNamePage"));
+  // While the code arrives, fetch what's next so it lands instantly: the name
+  // step (new users) and the song room itself (returning users skip the name).
+  useIdlePrefetch(
+    () => import("@/pages/invite/InviteNamePage"),
+    () => import("@/pages/SongCanvasPage"),
+  );
 
   const e164 = sessionStorage.getItem('cog:phone-e164') ?? '';
   const displayPhone = sessionStorage.getItem('cog:phone-display') ?? 'your number';
@@ -91,14 +96,21 @@ const InviteVerifyPage = () => {
       return;
     }
 
-    saveInviteContext({ isExistingUser: false });
     // Subtle "you're in" beat — flash the cells gold, then continue. Reduced-
     // motion users skip the pause; the form stays locked through it.
     setSuccess(true);
     const reduce = typeof window !== 'undefined' && !!window.matchMedia &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     await new Promise((r) => setTimeout(r, reduce ? 0 : 500));
-    navigate('/invite/name');
+    // A person the app already knows keeps the name their collaborators know
+    // them by — only a genuinely new user is asked "What's your name?".
+    // Either way, the next stop is the song itself.
+    if (ctx?.isExistingUser) {
+      enterInvitedSong(navigate);
+    } else {
+      saveInviteContext({ isExistingUser: false });
+      navigate('/invite/name');
+    }
   }, [e164, isVerifying, ctx, navigate, backToJoin]);
 
   // Lowest-friction path: auto-read the SMS code (Android Chrome), fill, submit.
@@ -137,15 +149,15 @@ const InviteVerifyPage = () => {
       {/* Invite-specific headline */}
       <h1
         className="text-[2.4rem] font-bold text-center mb-2 leading-[1.05]"
-        style={{ fontFamily: 'var(--font-display)', color: '#1A1A1A' }}
+        style={{ fontFamily: 'var(--font-display)', color: 'var(--cog-charcoal)' }}
       >
         One step from{'\n'}the song
       </h1>
-      <p className="text-[1rem] text-center mb-2" style={{ color: '#666' }}>
+      <p className="text-[1rem] text-center mb-2" style={{ color: 'var(--cog-warm-gray)' }}>
         We sent a 6-digit code to{' '}
-        <span style={{ color: '#1A1A1A', fontWeight: 500 }}>+1 {displayPhone}</span>
+        <span style={{ color: 'var(--cog-charcoal)', fontWeight: 500 }}>+1 {displayPhone}</span>
       </p>
-      <p className="text-[0.875rem] text-center mb-8" style={{ color: '#B5935A' }}>
+      <p className="text-[0.875rem] text-center mb-8" style={{ color: 'var(--cog-gold)' }}>
         to join {songTitle}
       </p>
 
@@ -164,14 +176,14 @@ const InviteVerifyPage = () => {
 
       <p
         className="text-[0.8125rem] text-center mb-6 transition-colors"
-        style={{ color: resent ? '#7A8B5A' : '#999' }}
+        style={{ color: resent ? '#7A8B5A' : 'var(--cog-warm-gray)' }}
         aria-live="polite"
       >
         {resent ? 'New code sent — check your messages.' : 'Codes usually arrive within a few seconds.'}
       </p>
 
       {error && (
-        <p className="text-sm text-center mb-5" style={{ color: '#E05440' }} role="alert" aria-live="polite">
+        <p className="text-sm text-center mb-5" style={{ color: '#B4543F' }} role="alert" aria-live="polite">
           {error}
         </p>
       )}
@@ -190,14 +202,14 @@ const InviteVerifyPage = () => {
           onClick={handleResend}
           disabled={countdown > 0 || isResending}
           className="transition-opacity hover:opacity-70 disabled:opacity-40 underline"
-          style={{ color: '#B5935A', fontFamily: 'var(--font-body)' }}
+          style={{ color: 'var(--cog-gold)', fontFamily: 'var(--font-body)' }}
         >
           {countdown > 0 ? `Resend code (${countdown}s)` : 'Resend code'}
         </button>
         <button
           onClick={() => navigate(backToJoin)}
           className="transition-opacity hover:opacity-70"
-          style={{ color: '#999', fontFamily: 'var(--font-body)' }}
+          style={{ color: 'var(--cog-warm-gray)', fontFamily: 'var(--font-body)' }}
         >
           Change number
         </button>

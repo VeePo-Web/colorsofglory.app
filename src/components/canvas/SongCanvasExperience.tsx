@@ -296,7 +296,7 @@ const SongCanvasExperience = () => {
   const songId = id ?? "1";
   const songTitle = useSongTitle(songId);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Real permissions come from E1's capability system (server role — a URL
   // can't grant edit). `?role=viewer` remains honored as a RESTRICT-only hint
   // (invite previews land with it), never as a grant. The showcase demo room
@@ -307,8 +307,19 @@ const SongCanvasExperience = () => {
   const canReview = isDemoRoom || caps.isOwner;
   // Fresh arrival from an accepted invite (?invite=1) — show the one-time
   // "you joined as [role]" welcome toast so they know where they stand.
-  const isInviteArrival = searchParams.get("invite") === "1";
+  // The flag is captured once, then CONSUMED from the URL, so a reload or a
+  // revisit of the same address never replays the welcome. `role` stays — it
+  // remains the restrict-only viewer hint above.
+  const [isInviteArrival] = useState(() => searchParams.get("invite") === "1");
   const invitedRole = (searchParams.get("role") ?? "contributor") as InviteRole;
+  useEffect(() => {
+    if (!isInviteArrival) return;
+    const next = new URLSearchParams(window.location.search);
+    if (!next.has("invite")) return;
+    next.delete("invite");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // First-run tour refs — the canvas hooks live below, after showFirstRun is
   // known, so they can wait for the empty-room first-action guide to finish.
@@ -452,8 +463,11 @@ const SongCanvasExperience = () => {
   const [showAddPart, setShowAddPart] = useState(false);
   // Which zone the viewport is showing — drives the Ideas ⇄ Final quick-nav.
   const [viewZone, setViewZone] = useState<"ideas" | "final">("ideas");
-  // Real room roster — the same source the People surface reads.
-  const songMembers = useSongCollaborators(songId);
+  // Real room roster — the same source the People surface reads. The refresh
+  // key is bumped by the presence-arrival effect below, so a co-writer walking
+  // in pulls their roster row (name, role, avatar) without a remount.
+  const [rosterRefresh, setRosterRefresh] = useState(0);
+  const songMembers = useSongCollaborators(songId, rosterRefresh);
 
   // ── Identity resolver — the end of the literal "You" ─────────────────────
   // Server rows carry user IDS (createdBy); display names + colors resolve
@@ -1580,7 +1594,12 @@ const SongCanvasExperience = () => {
   // First-run guide is driven by an ACTUALLY empty board, not a one-time visit
   // flag — so it guides a new song, returns if the room is ever cleared (never
   // a dead-end blank), and never overlays a song that already has ideas.
-  const showFirstRun = !isViewer && ideasCards.length === 0 && finalCards.length === 0;
+  // A fresh invite arrival is walking into SOMEONE ELSE'S song: hold the
+  // empty-room guide back until this session's local count reflects real
+  // hydration, so the owner's work never gets a "capture your first idea"
+  // flash painted over it.
+  const showFirstRun =
+    !isViewer && !isInviteArrival && ideasCards.length === 0 && finalCards.length === 0;
 
   // Canvas tour beats — armed only once the board isn't empty, so they never
   // compete with the empty-room first-action guide. Declared in teaching order
@@ -1867,7 +1886,14 @@ const SongCanvasExperience = () => {
     () => livePresence.filter((m) => !m.isSelf).length,
     [livePresence],
   );
-  // Names present right now → the invite sheet's "here now" dots.
+  // Who is present right now → the invite sheet's "here now" dots. Matched by
+  // userId (presence identity already carries it) — names drift and collide;
+  // ids don't. The name set remains as a fallback for roster rows whose
+  // membership id hasn't resolved yet.
+  const presentUserIds = useMemo(
+    () => new Set(livePresence.map((m) => m.userId)),
+    [livePresence],
+  );
   const presentNames = useMemo(
     () => new Set(livePresence.map((m) => m.name.trim().toLowerCase())),
     [livePresence],
@@ -1884,12 +1910,17 @@ const SongCanvasExperience = () => {
       if (livePresence.length > 0) knownPresenceRef.current = currentIds;
       return;
     }
+    let someoneArrived = false;
     for (const m of currentOthers) {
       if (!knownPresenceRef.current.has(m.userId)) {
+        someoneArrived = true;
         const first = m.name.split(" ")[0] || m.name;
         toast(`${first} joined the room`, { description: "They're here with you now." });
       }
     }
+    // A new arrival may be a brand-new member — pull the roster so their
+    // name resolves everywhere (header stack, share sheet, card credits).
+    if (someoneArrived) setRosterRefresh((n) => n + 1);
     knownPresenceRef.current = currentIds;
   }, [livePresence]);
 
@@ -2207,30 +2238,6 @@ const SongCanvasExperience = () => {
       },
     );
   }, [cards, profile?.user_id, currentUserName, jumpToCardId]);
-
-  // Presence as navigation: fly the canvas to this person's latest idea and
-  // select it, so "who is in the room" becomes "where they are working".
-  const jumpToCollaborator = useCallback(
-    (person: { firstName: string; lastName: string }) => {
-      const fullName = `${person.firstName} ${person.lastName}`.trim();
-      // Cards are prepended on add, so the first match is the latest idea.
-      // Layers live inside stacks — only board-positioned cards are targets.
-      const target = cards.find(
-        (c) =>
-          !c.parentMemoId &&
-          (c.contributor === fullName || c.contributor === person.firstName),
-      );
-      setShowShareSheet(false);
-      if (!target) {
-        toast(`${person.firstName} hasn't added an idea here yet`, {
-          description: "Their work will appear on the canvas as they contribute.",
-        });
-        return;
-      }
-      jumpToCard(target);
-    },
-    [cards, jumpToCard],
-  );
 
   // Calm remote-card arrival: a co-writer's new idea lands off-screen (ideas
   // are placed low on the board), so without this it appears silently and the
@@ -3036,14 +3043,23 @@ const SongCanvasExperience = () => {
       {/* Fresh-from-invite welcome: "You joined as [role]" — once, on arrival. */}
       {isInviteArrival && <RoleToast role={invitedRole} />}
 
-      {/* Copy-link invite sheet — one tap from the room's presence stack */}
+      {/* The ONE invite surface — one tap from the room's presence stack.
+          The fallback scrim means the tap always answers instantly, even on a
+          cold slow-network chunk load. */}
       {showShareSheet && (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 799, backgroundColor: "rgba(26,26,23,0.35)" }}
+              aria-hidden="true"
+            />
+          }
+        >
           <ShareSongSheet
             songId={songId}
             songTitle={songTitle}
             collaborators={sheetRoster}
-            onJumpTo={jumpToCollaborator}
+            presentUserIds={presentUserIds}
             presentNames={presentNames}
             onClose={() => setShowShareSheet(false)}
           />

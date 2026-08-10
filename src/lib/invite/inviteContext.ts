@@ -31,8 +31,11 @@ export interface InviteContext {
   lyricsSnippet: string | null;
   collaborators: InviteCollaborator[];
   collaboratorCount: number;
-  maxUses: number | null;
-  currentUses: number;
+  /** Uses left on the link (server-computed). Optional legacy fields retained
+   *  so older stored contexts still parse. */
+  usesRemaining?: number | null;
+  maxUses?: number | null;
+  currentUses?: number;
 
   // Set during the flow
   verifiedPhone: string | null;  // e164 after OTP

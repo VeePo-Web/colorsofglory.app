@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { sendPhoneOtp, AuthError, useCurrentAccount } from "@/integrations/cog/auth";
+import { sendPhoneOtp, getSessionUser, AuthError, useCurrentAccount } from "@/integrations/cog/auth";
 import CogBrand from "@/components/cog/CogBrand";
 import GoldButton from "@/components/cog/GoldButton";
 import BlurredLyricsPreview from "@/components/invite/BlurredLyricsPreview";
@@ -8,9 +8,15 @@ import CollaboratorAvatarStack from "@/components/invite/CollaboratorAvatarStack
 import InviteErrorCard from "@/components/invite/InviteErrorCard";
 import { previewInvite, checkPhoneRegistered, acceptInvite, type InvitePreview } from "@/lib/invite/inviteApi";
 import { saveInviteContext, loadInviteContext, formatCollaboratorNames } from "@/lib/invite/inviteContext";
+import { enterInvitedSong } from "@/lib/invite/enterSong";
 import { InviteError, parseSupabaseError, type InviteErrorCode } from "@/lib/invite/inviteErrors";
 import { requestNewInvite } from "@/integrations/cog/songs";
 import { useIdlePrefetch } from "@/lib/onboarding/prefetchNext";
+
+/** Last 10 digits — compares an e164 against a session's stored phone. */
+function last10(s: string): string {
+  return s.replace(/\D/g, '').slice(-10);
+}
 
 // ─── Phone formatting ─────────────────────────────────────────────────────────
 
@@ -48,14 +54,14 @@ function toFriendlyError(err: unknown): string {
 
 const InviteSkeleton = () => (
   <div className="animate-pulse space-y-4 w-full">
-    <div className="h-6 w-40 rounded-full mx-auto" style={{ backgroundColor: 'rgba(181,147,90,0.12)' }} />
+    <div className="h-6 w-40 rounded-full mx-auto" style={{ backgroundColor: 'rgba(184,149,58,0.12)' }} />
     <div className="h-4 w-56 rounded-full mx-auto" style={{ backgroundColor: 'rgba(0,0,0,0.05)' }} />
     <div
       className="w-full rounded-2xl"
       style={{ height: 120, backgroundColor: 'rgba(0,0,0,0.04)' }}
     />
     <div className="h-16 w-full rounded-2xl" style={{ backgroundColor: 'rgba(0,0,0,0.04)' }} />
-    <div className="h-14 w-full rounded-full" style={{ backgroundColor: 'rgba(181,147,90,0.12)' }} />
+    <div className="h-14 w-full rounded-full" style={{ backgroundColor: 'rgba(184,149,58,0.12)' }} />
   </div>
 );
 
@@ -70,10 +76,12 @@ type PageState =
 const InviteJoinPage = () => {
   const { token = 'demo' } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  // While they read the invite card, fetch the next screens so joining is instant.
+  // While they read the invite card, fetch what comes next so joining is
+  // instant: the verify screen (phone paths) and the song room itself
+  // (one-tap and session-match paths land straight on the canvas).
   useIdlePrefetch(
     () => import("@/pages/invite/InviteVerifyPage"),
-    () => import("@/pages/invite/InviteWelcomeBackPage"),
+    () => import("@/pages/SongCanvasPage"),
   );
 
   const [state, setState] = useState<PageState>({ type: 'loading' });
@@ -92,38 +100,40 @@ const InviteJoinPage = () => {
 
   const isValid = digits.length === DIGITS_MAX;
 
-  // Load invite on mount
+  // Load invite on mount — and on demand, so the error card's Retry is a real
+  // action, not a dead gold button on a flaky connection.
+  const loadPreview = useCallback(async (isCancelled?: () => boolean) => {
+    try {
+      const preview = await previewInvite(token);
+      if (isCancelled?.()) return;
+      saveInviteContext({
+        token,
+        songId: preview.songId,
+        songTitle: preview.songTitle,
+        inviterFirstName: preview.inviterFirstName,
+        inviterLastName: preview.inviterLastName,
+        inviterAvatarColor: preview.inviterAvatarColor,
+        assignedRole: preview.assignedRole,
+        lyricsSnippet: preview.lyricsSnippet,
+        collaborators: preview.collaborators,
+        collaboratorCount: preview.collaboratorCount,
+        usesRemaining: preview.usesRemaining,
+      });
+      setState({ type: 'input', preview });
+    } catch (err) {
+      if (isCancelled?.()) return;
+      const code = err instanceof InviteError
+        ? err.code
+        : parseSupabaseError(err);
+      setState({ type: 'error', code });
+    }
+  }, [token]);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const preview = await previewInvite(token);
-        if (cancelled) return;
-        saveInviteContext({
-          token,
-          songId: preview.songId,
-          songTitle: preview.songTitle,
-          inviterFirstName: preview.inviterFirstName,
-          inviterLastName: preview.inviterLastName,
-          inviterAvatarColor: preview.inviterAvatarColor,
-          assignedRole: preview.assignedRole,
-          lyricsSnippet: preview.lyricsSnippet,
-          collaborators: preview.collaborators,
-          collaboratorCount: preview.collaboratorCount,
-          maxUses: preview.maxUses,
-          currentUses: preview.currentUses,
-        });
-        setState({ type: 'input', preview });
-      } catch (err) {
-        if (cancelled) return;
-        const code = err instanceof InviteError
-          ? err.code
-          : parseSupabaseError(err);
-        setState({ type: 'error', code });
-      }
-    })();
+    void loadPreview(() => cancelled);
     return () => { cancelled = true; };
-  }, [token]);
+  }, [loadPreview]);
 
   // Debounced existing-user check
   useEffect(() => {
@@ -143,17 +153,24 @@ const InviteJoinPage = () => {
     const e164 = toE164(digits);
     saveInviteContext({ verifiedPhone: e164, isExistingUser: !!existingName, existingFirstName: existingName });
 
-    // Existing user — skip OTP, go to welcome-back screen
-    if (existingName) {
-      navigate('/invite/welcome');
-      return;
-    }
-
     const preview = state.preview;
     setState({ type: 'submitting', preview });
     setPhoneError(null);
 
     try {
+      // A person the app already knows, on a device where their session is
+      // still alive and matches this number → no code, no extra screen:
+      // accept and walk them straight into the room.
+      if (existingName) {
+        const user = await getSessionUser();
+        if (user && last10(user.phone ?? '') === last10(e164)) {
+          await acceptInvite(token);
+          saveInviteContext({ isExistingUser: true });
+          enterInvitedSong(navigate);
+          return;
+        }
+      }
+
       // Route through the auth SDK so the invite OTP path gets the same
       // toll-fraud / SMS-pumping rails (geo allowlist + per-phone/IP velocity
       // caps + global daily ceiling) as the main phone login — never a raw,
@@ -163,6 +180,10 @@ const InviteJoinPage = () => {
       sessionStorage.setItem('cog:phone-display', formatDisplay(digits));
       navigate('/invite/verify');
     } catch (err) {
+      if (err instanceof InviteError && err.code !== 'ACCEPT_FAILED' && err.code !== 'NETWORK_ERROR') {
+        setState({ type: 'error', code: err.code });
+        return;
+      }
       setPhoneError(toFriendlyError(err));
       setState((prev) =>
         prev.type === 'submitting' || prev.type === 'input'
@@ -180,10 +201,16 @@ const InviteJoinPage = () => {
     try {
       await acceptInvite(token);
       saveInviteContext({ isExistingUser: true, existingFirstName: signedInFirstName });
-      navigate('/invite/team');
-    } catch {
-      // One-tap accept failed — fall back to the phone path.
+      enterInvitedSong(navigate);
+    } catch (err) {
       setJoining(false);
+      // A dead link is a dead link — say so honestly instead of routing the
+      // signed-in person into a phone form that ends the same way.
+      if (err instanceof InviteError && err.code !== 'ACCEPT_FAILED' && err.code !== 'NETWORK_ERROR') {
+        setState({ type: 'error', code: err.code });
+        return;
+      }
+      // Transient failure — fall back to the phone path.
       setUseDifferentNumber(true);
     }
   };
@@ -206,7 +233,7 @@ const InviteJoinPage = () => {
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (state.type === 'loading' || accountLoading) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6' }}>
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6', minHeight: '100dvh' }}>
         <div className="flex flex-col flex-1 px-6 pt-20 mx-auto w-full" style={{ maxWidth: 430 }}>
           <div className="flex justify-center mb-10">
             <CogBrand variant="stacked" size="md" />
@@ -220,7 +247,7 @@ const InviteJoinPage = () => {
   // ── Error ────────────────────────────────────────────────────────────────────
   if (state.type === 'error') {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6' }}>
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#FAFAF6', minHeight: '100dvh' }}>
         <div className="flex flex-col flex-1 px-6 pt-20 mx-auto w-full" style={{ maxWidth: 430 }}>
           <div className="flex justify-center mb-10">
             <CogBrand variant="stacked" size="md" />
@@ -229,20 +256,21 @@ const InviteJoinPage = () => {
             <div className="text-center">
               <div
                 className="mx-auto mb-5 flex items-center justify-center rounded-full"
-                style={{ width: 56, height: 56, backgroundColor: 'rgba(181,147,90,0.12)', border: '1.5px solid rgba(181,147,90,0.30)' }}
+                style={{ width: 56, height: 56, backgroundColor: 'rgba(184,149,58,0.12)', border: '1.5px solid rgba(184,149,58,0.30)' }}
               >
                 <span className="text-2xl">✓</span>
               </div>
-              <p className="text-[1.375rem] font-bold mb-2" style={{ fontFamily: 'var(--font-display)', color: '#1A1A1A' }}>
+              <p className="text-[1.375rem] font-bold mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--cog-charcoal)' }}>
                 Request sent!
               </p>
-              <p className="text-[0.9375rem]" style={{ color: '#666' }}>
+              <p className="text-[0.9375rem]" style={{ color: 'var(--cog-warm-gray)' }}>
                 The song owner has been notified.
               </p>
             </div>
           ) : (
             <InviteErrorCard
               code={state.code}
+              onRetry={() => { setState({ type: 'loading' }); void loadPreview(); }}
               onRequestNew={handleRequestNew}
               onOpenSong={() => {
                 // "Open the song" for an already-member re-tapping their invite
@@ -273,12 +301,12 @@ const InviteJoinPage = () => {
   return (
     <div
       className="relative min-h-screen flex flex-col"
-      style={{ backgroundColor: '#FAFAF6' }}
+      style={{ backgroundColor: '#FAFAF6', minHeight: '100dvh' }}
     >
       {/* Subtle right-corner amber glow */}
       <div
         className="pointer-events-none fixed inset-0"
-        style={{ background: 'radial-gradient(ellipse 55% 40% at 90% 90%, rgba(181,147,90,0.10) 0%, transparent 65%)' }}
+        style={{ background: 'radial-gradient(ellipse 55% 40% at 90% 90%, rgba(184,149,58,0.10) 0%, transparent 65%)' }}
       />
 
       <div
@@ -295,27 +323,27 @@ const InviteJoinPage = () => {
           className="rounded-2xl p-5 mb-6"
           style={{
             backgroundColor: '#FFFFFF',
-            border: '1.5px solid rgba(181,147,90,0.30)',
+            border: '1.5px solid rgba(184,149,58,0.30)',
             boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
           }}
         >
           {/* Song title + inviter */}
           <p
             className="text-[1.3125rem] font-bold mb-1 leading-snug"
-            style={{ fontFamily: 'var(--font-display)', color: '#1A1A1A' }}
+            style={{ fontFamily: 'var(--font-display)', color: 'var(--cog-charcoal)' }}
           >
             {preview.songTitle}
           </p>
-          <p className="text-[0.875rem] mb-4" style={{ color: '#666' }}>
+          <p className="text-[0.875rem] mb-4" style={{ color: 'var(--cog-warm-gray)' }}>
             {preview.inviterFirstName} invited you to collaborate
           </p>
 
-          {/* Genuine scarcity — shown ONLY when the invite is actually limited
-              (real maxUses data, never a fake countdown). Reads as "exclusive",
-              calm not pushy — faith-sanctuary tone. */}
-          {preview.maxUses !== null && preview.maxUses - preview.currentUses > 0 && (
-            <p className="text-[0.8125rem] font-medium mb-4" style={{ color: '#B5935A' }}>
-              {preview.maxUses - preview.currentUses} of {preview.maxUses} spots left
+          {/* Genuine scarcity — only when the link is ACTUALLY nearly full
+              (server-computed uses, never a fake countdown). Calm, not pushy —
+              faith-sanctuary tone. */}
+          {preview.usesRemaining !== null && preview.usesRemaining > 0 && preview.usesRemaining <= 3 && (
+            <p className="text-[0.8125rem] font-medium mb-4" style={{ color: 'var(--cog-gold)' }}>
+              {preview.usesRemaining} {preview.usesRemaining === 1 ? 'spot' : 'spots'} left on this link
             </p>
           )}
 
@@ -329,7 +357,7 @@ const InviteJoinPage = () => {
                 maxVisible={4}
                 stagger
               />
-              <p className="text-[0.8125rem] leading-snug" style={{ color: '#666' }}>
+              <p className="text-[0.8125rem] leading-snug" style={{ color: 'var(--cog-warm-gray)' }}>
                 {formatCollaboratorNames(preview.collaborators.map((c) => c.firstName))}{' '}
                 {preview.collaborators.length === 1 ? 'is' : 'are'} already writing this song.
               </p>
@@ -340,7 +368,7 @@ const InviteJoinPage = () => {
           {preview.lyricsSnippet && (
             <div className="mb-2">
               <BlurredLyricsPreview snippet={preview.lyricsSnippet} maxLines={3} />
-              <p className="text-[0.75rem] mt-1.5 italic" style={{ color: '#999' }}>
+              <p className="text-[0.75rem] mt-1.5 italic" style={{ color: 'var(--cog-warm-gray)' }}>
                 Join to read and contribute ↗
               </p>
             </div>
@@ -356,11 +384,11 @@ const InviteJoinPage = () => {
             <button
               onClick={() => setUseDifferentNumber(true)}
               className="text-[0.8125rem] text-center w-full py-4 transition-opacity hover:opacity-70 underline"
-              style={{ color: '#999', fontFamily: 'var(--font-body)' }}
+              style={{ color: 'var(--cog-warm-gray)', fontFamily: 'var(--font-body)' }}
             >
               Use a different number
             </button>
-            <p className="text-[0.75rem] text-center" style={{ color: '#999' }}>
+            <p className="text-[0.75rem] text-center" style={{ color: 'var(--cog-warm-gray)' }}>
               Invited songs don't use your free song.
             </p>
           </>
@@ -369,7 +397,7 @@ const InviteJoinPage = () => {
         {/* Divider */}
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.08)' }} />
-          <span className="text-[0.8125rem]" style={{ color: '#999', whiteSpace: 'nowrap' }}>
+          <span className="text-[0.8125rem]" style={{ color: 'var(--cog-warm-gray)', whiteSpace: 'nowrap' }}>
             Enter your number to join
           </span>
           <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.08)' }} />
@@ -382,21 +410,20 @@ const InviteJoinPage = () => {
             height: 64,
             backgroundColor: '#FFFFFF',
             border: phoneError
-              ? '1.5px solid #E05440'
+              ? '1.5px solid #B4543F'
               : isValid
-              ? '1.5px solid #B5935A'
+              ? '1.5px solid var(--cog-gold)'
               : '1.5px solid rgba(0,0,0,0.12)',
-            boxShadow: isValid && !phoneError ? '0 0 0 3px rgba(181,147,90,0.10)' : '0 1px 4px rgba(0,0,0,0.05)',
+            boxShadow: isValid && !phoneError ? '0 0 0 3px rgba(184,149,58,0.10)' : '0 1px 4px rgba(0,0,0,0.05)',
           }}
         >
           <span className="text-xl leading-none" aria-hidden="true">🇺🇸</span>
-          <span className="text-base font-medium flex-shrink-0" style={{ color: '#666' }}>+1</span>
+          <span className="text-base font-medium flex-shrink-0" style={{ color: 'var(--cog-warm-gray)' }}>+1</span>
           <div className="self-stretch my-3" style={{ width: 1, backgroundColor: 'rgba(0,0,0,0.10)' }} />
           <input
             type="tel"
             inputMode="numeric"
             autoComplete="tel-national"
-            autoFocus
             enterKeyHint="go"
             value={formatDisplay(digits)}
             onChange={(e) => {
@@ -407,19 +434,19 @@ const InviteJoinPage = () => {
             placeholder="(555) 555-5555"
             aria-label="Phone number"
             className="flex-1 bg-transparent outline-none text-base"
-            style={{ color: '#1A1A1A', fontFamily: 'var(--font-body)', caretColor: '#B5935A' }}
+            style={{ color: 'var(--cog-charcoal)', fontFamily: 'var(--font-body)', caretColor: 'var(--cog-gold)' }}
           />
         </div>
 
         {/* Phone error */}
         {phoneError && (
-          <p className="text-[0.8125rem] mb-2" style={{ color: '#E05440' }} role="alert" aria-live="polite">
+          <p className="text-[0.8125rem] mb-2" style={{ color: '#B4543F' }} role="alert" aria-live="polite">
             {phoneError}
           </p>
         )}
 
         {/* Microcopy */}
-        <p className="text-[0.8125rem] text-center mb-5" style={{ color: '#999' }}>
+        <p className="text-[0.8125rem] text-center mb-5" style={{ color: 'var(--cog-warm-gray)' }}>
           We'll send a code. No password needed.
         </p>
 
@@ -434,7 +461,7 @@ const InviteJoinPage = () => {
         </GoldButton>
 
         {/* Trust line */}
-        <p className="text-[0.75rem] text-center mt-3" style={{ color: '#999' }}>
+        <p className="text-[0.75rem] text-center mt-3" style={{ color: 'var(--cog-warm-gray)' }}>
           Invited songs don't use your free song.
         </p>
         </>
@@ -442,13 +469,13 @@ const InviteJoinPage = () => {
 
         {/* T&C — real links, opened in a new tab so the join flow (invite
             context + typed phone) is never lost mid-decision. */}
-        <p className="text-[0.6875rem] text-center mt-auto pt-8" style={{ color: '#CCC' }}>
+        <p className="text-[0.6875rem] text-center mt-auto pt-8" style={{ color: 'var(--cog-muted)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           By continuing you agree to our{' '}
-          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: '#B3A78F' }}>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--cog-warm-gray)' }}>
             Terms
           </a>{' '}
           &{' '}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: '#B3A78F' }}>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--cog-warm-gray)' }}>
             Privacy Policy
           </a>
         </p>

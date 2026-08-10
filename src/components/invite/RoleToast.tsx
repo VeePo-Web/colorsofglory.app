@@ -29,6 +29,9 @@ interface RoleToastProps {
  */
 const RoleToast = ({ role, delay = 500, duration = 3200 }: RoleToastProps) => {
   const [phase, setPhase] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const reduceMotion =
+    typeof window !== 'undefined' && !!window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('entering'), delay);
@@ -42,11 +45,14 @@ const RoleToast = ({ role, delay = 500, duration = 3200 }: RoleToastProps) => {
 
   return (
     <div
-      className="fixed left-0 right-0 px-5 z-50"
+      className="fixed left-0 right-0 px-5"
       style={{
-        bottom: 96, // above SongTabBar
-        transition: 'transform 280ms cubic-bezier(0.22,1,0.36,1), opacity 220ms ease',
-        transform: phase === 'entering' || phase === 'leaving' ? 'translateY(20px)' : 'translateY(0)',
+        // Above the canvas creation dock (bottom: safe-area + 88, z-42) —
+        // the welcome line must never paint over the create actions.
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 152px)',
+        zIndex: 41,
+        transition: reduceMotion ? 'opacity 220ms ease' : 'transform 280ms cubic-bezier(0.22,1,0.36,1), opacity 220ms ease',
+        transform: reduceMotion || phase === 'visible' ? 'translateY(0)' : 'translateY(20px)',
         opacity: phase === 'visible' ? 1 : 0,
         pointerEvents: 'none',
       }}
@@ -72,7 +78,7 @@ const RoleToast = ({ role, delay = 500, duration = 3200 }: RoleToastProps) => {
           {ROLE_LABEL[role]}
         </span>
         {/* Description */}
-        <p className="text-[0.875rem]" style={{ color: '#666', fontFamily: 'var(--font-body)' }}>
+        <p className="text-[0.875rem]" style={{ color: 'var(--cog-warm-gray)', fontFamily: 'var(--font-body)' }}>
           {ROLE_COPY[role]}
         </p>
       </div>

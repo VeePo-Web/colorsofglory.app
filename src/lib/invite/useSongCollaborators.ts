@@ -17,8 +17,13 @@ export interface SongCollaborator {
  * surface and the canvas share sheet read, so "in this room" always means the
  * same people everywhere. Resolves calmly: on any backend error the previous
  * (or empty) list stands and the room remains usable.
+ *
+ * Freshness: refetches when the window regains focus and whenever the caller
+ * bumps `refreshKey` (the canvas passes its live-presence count, so a
+ * co-writer walking in pulls their roster row immediately — the owner never
+ * needs a remount to see who just joined).
  */
-export function useSongCollaborators(songId: string): SongCollaborator[] {
+export function useSongCollaborators(songId: string, refreshKey?: number): SongCollaborator[] {
   const [collaborators, setCollaborators] = useState<SongCollaborator[]>([]);
 
   useEffect(() => {
@@ -56,10 +61,15 @@ export function useSongCollaborators(songId: string): SongCollaborator[] {
     };
 
     void load();
+
+    // A returning tab re-reads the room — the cheapest honest freshness.
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
     return () => {
       active = false;
+      window.removeEventListener("focus", onFocus);
     };
-  }, [songId]);
+  }, [songId, refreshKey]);
 
   return collaborators;
 }

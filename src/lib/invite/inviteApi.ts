@@ -19,8 +19,10 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { call, CogError } from '@/integrations/cog/errors';
+import { pendingInviteToken } from '@/lib/onboarding/onboardingStep';
 import type { InviteContext } from './inviteContext';
-import { InviteError, parseSupabaseError } from './inviteErrors';
+import { InviteError, parseSupabaseError, type InviteErrorCode } from './inviteErrors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,8 +41,8 @@ export interface InvitePreview {
   lyricsSnippet: string | null;
   collaborators: InviteContext['collaborators'];
   collaboratorCount: number;
-  maxUses: number | null;
-  currentUses: number;
+  /** Uses left on the link, from the server. Null when the server didn't say. */
+  usesRemaining: number | null;
 }
 
 export interface PhoneCheckResult {
@@ -91,88 +93,115 @@ function avatarInitials(displayName: string): string {
   return displayName.slice(0, 2).toUpperCase();
 }
 
+// ─── Edge-function error bridge ──────────────────────────────────────────────
+
+/**
+ * Map a failed edge-function call (CogError) onto the invite flow's own error
+ * language. `fallback` is the code for anything non-semantic (a 500, a shape
+ * surprise): ACCEPT_FAILED renders as a calm "Something went wrong · Try
+ * again", which is the honest affordance for a transient server error too.
+ */
+function toInviteError(err: unknown, fallback: InviteErrorCode = 'ACCEPT_FAILED'): InviteError {
+  if (err instanceof InviteError) return err;
+  if (err instanceof CogError) {
+    switch (err.code) {
+      case 'INVITE_NOT_FOUND': return new InviteError('INVITE_NOT_FOUND');
+      case 'INVITE_EXPIRED': return new InviteError('INVITE_EXPIRED');
+      case 'INVITE_ALREADY_USED':
+      case 'INVITE_EXHAUSTED': return new InviteError('INVITE_EXHAUSTED');
+      case 'UNAUTHENTICATED': return new InviteError('UNAUTHENTICATED');
+      case 'OFFLINE': return new InviteError('NETWORK_ERROR');
+      case 'INVALID_INPUT': return new InviteError('INVITE_NOT_FOUND');
+    }
+    if (err.code === 'INVITE_REVOKED') return new InviteError('INVITE_REVOKED');
+  }
+  return new InviteError(parseSupabaseError(err) === 'ACCEPT_FAILED' ? fallback : parseSupabaseError(err));
+}
+
 // ─── previewInvite ────────────────────────────────────────────────────────────
+
+/** Shape of the song-invite-preview edge function's `data` payload. */
+type EdgePreviewData = {
+  song_id: string;
+  song_title: string | null;
+  lyrics_snippet: string | null;
+  inviter_name: string | null;
+  inviter_first_name: string | null;
+  inviter_avatar_color: string | null;
+  role: string;
+  collaborator_count: number;
+  collaborators: Array<{
+    user_id: string;
+    role: string;
+    first_name: string | null;
+    avatar_color: string | null;
+    initials: string | null;
+  }>;
+  expires_at: string;
+  uses_remaining: number | null;
+};
 
 /**
  * Preview an invite by token — safe before authentication.
- * Queries song_invites → songs → profiles → song_members.
+ *
+ * Goes through the `song-invite-preview` edge function (service role), because
+ * RLS correctly hides songs/profiles/members from anon AND hides the invite row
+ * itself from a signed-in non-member — the exact person this screen exists for.
+ * The direct-table read this replaced could never show the song's name to the
+ * people being invited into it.
  */
 export async function previewInvite(token: string): Promise<InvitePreview> {
-  // 1. Fetch the invite record
-  const { data: invite, error: inviteErr } = await supabase
-    .from('song_invites')
-    .select('id, token, song_id, role, status, max_uses, use_count, created_by_user_id')
-    .eq('token', token)
-    .maybeSingle();
+  let d: EdgePreviewData;
+  try {
+    d = await call<EdgePreviewData>('song-invite-preview', { token });
+  } catch (err) {
+    throw toInviteError(err, 'NETWORK_ERROR');
+  }
 
-  if (inviteErr || !invite) throw new InviteError('INVITE_NOT_FOUND');
-  if (invite.status === 'revoked') throw new InviteError('INVITE_REVOKED');
-  if (invite.status === 'expired') throw new InviteError('INVITE_REVOKED');
-  if (invite.use_count >= invite.max_uses) throw new InviteError('INVITE_EXHAUSTED');
-
-  // Check if current user is already a member
+  // Already in this song? Guide them in instead of re-joining. (A member can
+  // read their own membership row under RLS; anon simply skips this.)
   const { data: { user } } = await supabase.auth.getUser();
   if (user) {
     const { data: existing } = await supabase
       .from('song_members')
       .select('id')
-      .eq('song_id', invite.song_id)
+      .eq('song_id', d.song_id)
       .eq('user_id', user.id)
       .maybeSingle();
     if (existing) throw new InviteError('INVITE_ALREADY_MEMBER');
   }
 
-  // 2. Fetch song
-  const { data: song } = await supabase
-    .from('songs')
-    .select('id, title')
-    .eq('id', invite.song_id)
-    .single();
+  // The preview function deliberately keeps answering for a fully-used link so
+  // already-accepted people can be guided in (handled above) — for everyone
+  // else, a link with nothing left is honestly "at its limit".
+  if (d.uses_remaining !== null && d.uses_remaining <= 0) {
+    throw new InviteError('INVITE_EXHAUSTED');
+  }
 
-  // 3. Fetch inviter profile
-  const { data: inviterProfile } = await supabase
-    .from('profiles')
-    .select('display_name, avatar_url')
-    .eq('user_id', invite.created_by_user_id)
-    .maybeSingle();
+  const inviterName = (d.inviter_name ?? d.inviter_first_name ?? 'Someone').trim();
+  const [inviterFirst, ...inviterRest] = inviterName.split(/\s+/);
 
-  const inviterName = inviterProfile?.display_name ?? 'Someone';
-  const [inviterFirst, ...inviterRest] = inviterName.split(' ');
-  const inviterColor = avatarColor(invite.created_by_user_id);
-
-  // 4. Fetch existing collaborators (max 5)
-  const { data: members } = await supabase
-    .from('song_members')
-    .select('user_id, role, profiles!inner(display_name, avatar_url)')
-    .eq('song_id', invite.song_id)
-    .limit(5);
-
-  const collaborators: InviteContext['collaborators'] = (members ?? []).map((m) => {
-    const profile = (m as { profiles?: { display_name?: string } }).profiles;
-    const name = profile?.display_name ?? 'Unknown';
-    return {
-      userId: m.user_id,
-      firstName: name.split(' ')[0] ?? name,
-      lastName: name.split(' ').slice(1).join(' '),
-      avatarColor: avatarColor(m.user_id),
-      avatarInitials: avatarInitials(name),
-    };
-  });
+  const collaborators: InviteContext['collaborators'] = (d.collaborators ?? []).map((m) => ({
+    userId: m.user_id,
+    firstName: m.first_name ?? 'Someone',
+    lastName: '',
+    avatarColor: m.avatar_color ?? avatarColor(m.user_id),
+    avatarInitials: m.initials ?? avatarInitials(m.first_name ?? '·'),
+  }));
 
   return {
     status: 'valid',
     token,
-    songId: song?.id ?? invite.song_id,
-    songTitle: song?.title ?? 'Untitled Song',
-    inviterFirstName: inviterFirst ?? inviterName,
+    songId: d.song_id,
+    songTitle: d.song_title ?? 'Untitled Song',
+    inviterFirstName: d.inviter_first_name ?? inviterFirst ?? 'Someone',
     inviterLastName: inviterRest.join(' '),
-    inviterAvatarColor: inviterColor,
-    assignedRole: dbRoleToUi(invite.role),
-    lyricsSnippet: null,  // Lovable schema has no lyrics_snippet on songs — fetch separately if needed
+    inviterAvatarColor: d.inviter_avatar_color ?? avatarColor(inviterName),
+    assignedRole: dbRoleToUi(d.role),
+    lyricsSnippet: d.lyrics_snippet,
     collaborators,
-    collaboratorCount: members?.length ?? 0,
-    maxUses: invite.max_uses,
-    currentUses: invite.use_count,
+    collaboratorCount: d.collaborator_count ?? collaborators.length,
+    usesRemaining: d.uses_remaining,
   };
 }
 
@@ -194,34 +223,35 @@ export async function checkPhoneRegistered(e164: string): Promise<PhoneCheckResu
 // ─── acceptInvite ─────────────────────────────────────────────────────────────
 
 /**
- * Accept an invite — calls Lovable's accept_song_invite RPC.
- * Signature: accept_song_invite(_token: string, _user_id: string)
- * Returns an ARRAY: { already_member, code, role, song_id }[]
+ * Accept an invite — through the `song-invite-accept` edge function, never the
+ * raw RPC. The edge function is the version of this act that closes the loop:
+ * it writes the `invite_accepted` activity event and sends the inviter their
+ * "someone stepped into your song" email — and it returns failures as real
+ * error codes instead of the RPC's in-band rows, so a dead link can never
+ * masquerade as success.
  */
 export async function acceptInvite(token: string): Promise<AcceptResult> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new InviteError('UNAUTHENTICATED');
+  let result: { song_id: string; role: string; already_member: boolean };
+  try {
+    result = await call<{ song_id: string; role: string; already_member: boolean }>(
+      'song-invite-accept',
+      { token },
+    );
+  } catch (err) {
+    throw toInviteError(err);
+  }
+  if (!result?.song_id) throw new InviteError('ACCEPT_FAILED');
 
-  const { data, error } = await supabase.rpc('accept_song_invite', {
-    _token: token,
-    _user_id: user.id,
-  });
+  // The invite is consumed — a later re-auth in this tab must not detour
+  // through it again.
+  pendingInviteToken.clear();
 
-  if (error) throw new InviteError(parseSupabaseError(error));
-
-  // RPC returns an array — take the first element
-  const result = Array.isArray(data) ? data[0] : data;
-  if (!result) throw new InviteError('ACCEPT_FAILED');
-
-  // Fetch song title for the result
+  // Fetch song title for the result (we are a member now).
   const { data: song } = await supabase
     .from('songs')
     .select('title')
     .eq('id', result.song_id)
     .maybeSingle();
-
-  // Update onboarding step if first collaborator invite interaction
-  updateOnboardingStep('first_collaborator_invited').catch(() => {});
 
   return {
     status: result.already_member ? 'already_member' : 'success',
@@ -253,9 +283,23 @@ export async function saveName(firstName: string, lastName: string): Promise<voi
 
 // ─── generateInviteToken ──────────────────────────────────────────────────────
 
+/** The link for a token, on THIS environment — preview/staging links must
+ *  never quietly exit into production. */
+function inviteUrlFor(token: string): string {
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://colorsofglory.app';
+  return `${origin}/join/${token}`;
+}
+
 /**
- * Generate an invite token — inserts into song_invites.
- * No RPC exists, so we INSERT directly.
+ * The song's standing invite link — ONE key per song per role.
+ *
+ * Reuses the newest still-valid link the owner already made before minting a
+ * new one, so re-opening the share sheet hands out the same door key instead
+ * of silently accumulating live, unlisted tokens. Falls through to minting
+ * when none exists (or the reuse lookup fails for any reason).
  */
 export async function generateInviteToken(
   songId: string,
@@ -266,6 +310,31 @@ export async function generateInviteToken(
   if (!user) throw new InviteError('UNAUTHENTICATED');
 
   const dbRole = uiRoleToDb(uiRole);
+
+  try {
+    const { data: existing } = await supabase
+      .from('song_invites')
+      .select('id, token, max_uses, use_count, expires_at')
+      .eq('song_id', songId)
+      .eq('role', dbRole)
+      .eq('created_by_user_id', user.id)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing && (existing.use_count ?? 0) < (existing.max_uses ?? 0)) {
+      return {
+        tokenId: existing.id,
+        token: existing.token,
+        inviteUrl: inviteUrlFor(existing.token),
+        assignedRole: uiRole,
+        maxUses: existing.max_uses,
+      };
+    }
+  } catch {
+    // Reuse is an optimization, never a blocker — mint a fresh link below.
+  }
 
   // Generate a URL-safe random token
   const tokenBytes = new Uint8Array(18);
@@ -291,95 +360,10 @@ export async function generateInviteToken(
   return {
     tokenId: data.id,
     token,
-    inviteUrl: `https://colorsofglory.app/join/${token}`,
+    inviteUrl: inviteUrlFor(token),
     assignedRole: uiRole,
     maxUses,
   };
-}
-
-// ─── sendInvite ───────────────────────────────────────────────────────────────
-
-export type InviteChannel = 'sms' | 'email';
-
-export interface SendInviteResult {
-  tokenId: string;
-  token: string;
-  inviteUrl: string;
-  channel: InviteChannel;
-  /** false → backend delivery unavailable; caller should fall back to copy/share. */
-  delivered: boolean;
-}
-
-/** Loose contact classifier: anything with "@" is an email, else treated as a phone. */
-export function classifyContact(contact: string): InviteChannel {
-  return contact.includes('@') ? 'email' : 'sms';
-}
-
-/**
- * Send an invite directly to a person (the growth loop).
- *
- * Creates a single-use invite row, then asks the backend to deliver it. Delivery
- * itself (Twilio SMS / transactional email) is a Lovable edge function — this is
- * the frontend half of the contract. If the function isn't deployed yet, we
- * degrade gracefully: the invite row still exists, `delivered: false` is returned,
- * and the caller shows the copy/share link instead. No idea (or invite) is lost.
- *
- * Backend contract — edge function `send-invite`:
- *   body: { token, invite_url, channel: 'sms'|'email', to, song_id }
- *   returns: { delivered: boolean }   (sends via Twilio for sms / email provider)
- */
-export async function sendInvite(
-  songId: string,
-  uiRole: string,
-  contact: string,
-): Promise<SendInviteResult> {
-  const channel = classifyContact(contact);
-  const to = channel === 'email' ? contact.trim().toLowerCase() : contact.replace(/\D/g, '');
-
-  // Directed invites are single-use.
-  const invite = await generateInviteToken(songId, uiRole, 1);
-
-  try {
-    const { data, error } = await supabase.functions.invoke('send-invite', {
-      body: {
-        token: invite.token,
-        invite_url: invite.inviteUrl,
-        channel,
-        to,
-        song_id: songId,
-      },
-    });
-    if (error) throw error;
-    const delivered = (data as { delivered?: boolean } | null)?.delivered ?? true;
-    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered };
-  } catch {
-    // Backend send not available yet — caller falls back to copy/share link.
-    return { tokenId: invite.tokenId, token: invite.token, inviteUrl: invite.inviteUrl, channel, delivered: false };
-  }
-}
-
-// ─── revokeInviteToken ────────────────────────────────────────────────────────
-
-export async function revokeInviteToken(tokenId: string): Promise<void> {
-  const { error } = await supabase
-    .from('song_invites')
-    .update({ status: 'revoked', updated_at: new Date().toISOString() })
-    .eq('id', tokenId);
-
-  if (error) throw new Error(`Failed to revoke invite: ${error.message}`);
-}
-
-// ─── requestNewInvite ─────────────────────────────────────────────────────────
-
-/**
- * Request a new invite when a link is expired/full.
- * No table for this in Lovable's schema — currently a no-op that can be wired
- * to a notification system later.
- */
-export async function requestNewInvite(token: string, phone?: string): Promise<void> {
-  // Lovable schema has no invite_requests table yet.
-  // Log intent for now — owner sees this via activity feed when wired.
-  console.info('[invite] Request new invite for token:', token, 'phone:', phone);
 }
 
 // ─── Onboarding step updater ──────────────────────────────────────────────────

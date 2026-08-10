@@ -38,14 +38,14 @@ const fieldStyle = (active: boolean): React.CSSProperties => ({
   padding: "0 16px",
   borderRadius: 14,
   backgroundColor: "#FFFFFF",
-  border: active ? "1.5px solid #B5935A" : "1.5px solid rgba(0,0,0,0.10)",
-  boxShadow: active ? "0 0 0 3px rgba(181,147,90,0.10)" : "0 1px 3px rgba(0,0,0,0.04)",
-  color: "#1A1A1A",
+  border: active ? "1.5px solid var(--cog-gold)" : "1.5px solid rgba(0,0,0,0.10)",
+  boxShadow: active ? "0 0 0 3px rgba(184,149,58,0.10)" : "0 1px 3px rgba(0,0,0,0.04)",
+  color: "var(--cog-charcoal)",
   fontFamily: "var(--font-body)",
   fontSize: "1rem",
   outline: "none",
   transition: "border 150ms, box-shadow 150ms",
-  caretColor: "#B5935A",
+  caretColor: "var(--cog-gold)",
 });
 
 const JoinEntryPage = () => {
@@ -72,7 +72,7 @@ const JoinEntryPage = () => {
         <button
           onClick={() => navigate("/onboarding/intent")}
           className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70 active:scale-95"
-          style={{ color: "#999", minHeight: 44 }}
+          style={{ color: "var(--cog-warm-gray)", minHeight: 44 }}
         >
           <ArrowLeft size={16} strokeWidth={2} />
           Back
@@ -87,11 +87,11 @@ const JoinEntryPage = () => {
       {/* Headline */}
       <h1
         className="text-[2.4rem] font-bold text-center mb-2 leading-[1.05]"
-        style={{ fontFamily: "var(--font-display)", color: "#1A1A1A" }}
+        style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
       >
         Join a song
       </h1>
-      <p className="text-[1rem] text-center mb-10" style={{ color: "#666" }}>
+      <p className="text-[1rem] text-center mb-10" style={{ color: "var(--cog-warm-gray)" }}>
         Paste the invite link a friend sent you, or enter the code.
       </p>
 
@@ -100,7 +100,7 @@ const JoinEntryPage = () => {
         <label
           htmlFor="invite-code"
           className="block text-[0.875rem] font-medium mb-2"
-          style={{ color: "#666" }}
+          style={{ color: "var(--cog-warm-gray)" }}
         >
           Invite link or code
         </label>
@@ -132,7 +132,7 @@ const JoinEntryPage = () => {
         <p
           id="invite-error"
           className="text-sm text-center mb-4"
-          style={{ color: "#E05440" }}
+          style={{ color: "#B4543F" }}
           role="alert"
           aria-live="polite"
         >
@@ -146,7 +146,7 @@ const JoinEntryPage = () => {
         </GoldButton>
       </div>
 
-      <p className="text-[0.8125rem] text-center mt-4" style={{ color: "#999" }}>
+      <p className="text-[0.8125rem] text-center mt-4" style={{ color: "var(--cog-warm-gray)" }}>
         Invited songs don't use your free song.
       </p>
     </OnboardingShell>

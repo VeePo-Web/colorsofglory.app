@@ -42,7 +42,10 @@ const GoldButton = ({
         ${className}
       `}
       style={{
-        height: 56,
+        // minHeight (not height): dynamic labels — "Join {songTitle} →" — may
+        // wrap at 390px, and the pill must grow instead of overflowing.
+        minHeight: 56,
+        padding: "8px 20px",
         // Locked brand gold token (CLAUDE.md §2) — was a near-miss #B5935A.
         backgroundColor: "var(--cog-gold)",
         fontFamily: "var(--font-body)",

@@ -1,6 +1,7 @@
 export type InviteErrorCode =
   | 'INVITE_NOT_FOUND'
   | 'INVITE_REVOKED'
+  | 'INVITE_EXPIRED'
   | 'INVITE_EXHAUSTED'
   | 'INVITE_ALREADY_MEMBER'
   | 'ACCEPT_FAILED'
@@ -30,6 +31,13 @@ export const INVITE_ERROR_META: Record<InviteErrorCode, InviteErrorMeta> = {
     ctaAction: 'request_new',
     showInviterName: true,
   },
+  INVITE_EXPIRED: {
+    headline: "This invite link has expired.",
+    body: "Ask for a fresh link — it takes one tap.",
+    ctaLabel: "Request a new invite",
+    ctaAction: 'request_new',
+    showInviterName: false,
+  },
   INVITE_EXHAUSTED: {
     headline: "This link has reached its limit.",
     body: "Ask for a personal invite link.",
@@ -46,7 +54,7 @@ export const INVITE_ERROR_META: Record<InviteErrorCode, InviteErrorMeta> = {
   },
   ACCEPT_FAILED: {
     headline: "Something went wrong.",
-    body: "We couldn't add you to the song. Please try again.",
+    body: "Please try again in a moment.",
     ctaLabel: "Try again",
     ctaAction: 'retry',
     showInviterName: false,
@@ -78,7 +86,9 @@ export function parseSupabaseError(err: unknown): InviteErrorCode {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('INVITE_NOT_FOUND')) return 'INVITE_NOT_FOUND';
   if (msg.includes('INVITE_REVOKED')) return 'INVITE_REVOKED';
+  if (msg.includes('INVITE_EXPIRED')) return 'INVITE_EXPIRED';
   if (msg.includes('INVITE_EXHAUSTED')) return 'INVITE_EXHAUSTED';
+  if (msg.includes('INVITE_ALREADY_USED')) return 'INVITE_EXHAUSTED';
   if (msg.includes('INVITE_ALREADY_MEMBER')) return 'INVITE_ALREADY_MEMBER';
   if (msg.includes('UNAUTHENTICATED')) return 'UNAUTHENTICATED';
   if (msg.includes('network') || msg.includes('fetch') || msg.includes('Failed to fetch'))

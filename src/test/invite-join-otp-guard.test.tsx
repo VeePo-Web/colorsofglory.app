@@ -54,8 +54,7 @@ const PREVIEW = {
   lyricsSnippet: null,
   collaborators: [],
   collaboratorCount: 0,
-  maxUses: 5,
-  currentUses: 1,
+  usesRemaining: 4,
 };
 
 describe("InviteJoinPage — OTP toll-fraud guard", () => {

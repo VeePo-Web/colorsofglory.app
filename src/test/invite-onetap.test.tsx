@@ -18,6 +18,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 vi.mock("@/integrations/cog/auth", () => ({
   useCurrentAccount: () => account,
+  getSessionUser: vi.fn().mockResolvedValue(null),
   sendPhoneOtp: (e164: string) => sendPhoneOtp(e164),
   AuthError: class AuthError extends Error { code: string; constructor(c: string, m: string) { super(m); this.code = c; } },
 }));
@@ -28,16 +29,17 @@ vi.mock("@/lib/invite/inviteApi", () => ({
   acceptInvite: (t: string) => acceptInvite(t),
 }));
 
-vi.mock("@/lib/invite/inviteContext", () => ({ saveInviteContext: vi.fn() }));
 vi.mock("@/integrations/cog/songs", () => ({ requestNewInvite: vi.fn() }));
 
+// inviteContext is intentionally REAL (sessionStorage-backed) so the final
+// navigation exercises enterInvitedSong's true landing URL.
 import InviteJoinPage from "@/pages/invite/InviteJoinPage";
 
 const PREVIEW = {
   status: "valid", token: "tok-1", songId: "song-1", songTitle: "Grace in the Waiting",
   inviterFirstName: "Kevin", inviterLastName: "Lee", inviterAvatarColor: "#8070C4",
   assignedRole: "contributor", lyricsSnippet: null, collaborators: [], collaboratorCount: 0,
-  maxUses: 5, currentUses: 1,
+  usesRemaining: 4,
 };
 
 describe("InviteJoinPage — signed-in one-tap join", () => {
@@ -49,13 +51,17 @@ describe("InviteJoinPage — signed-in one-tap join", () => {
     account = { loading: false, user: { id: "u1" }, profile: { display_name: "Sarah Lee" } };
   });
 
-  it("offers a one-tap 'Join as <name>' for a signed-in invitee and accepts immediately", async () => {
+  it("offers a one-tap 'Join as <name>' for a signed-in invitee and lands INSIDE the song", async () => {
     render(<InviteJoinPage />);
     const joinBtn = await screen.findByRole("button", { name: /join as sarah/i });
     expect(screen.queryByLabelText("Phone number")).not.toBeInTheDocument();
     fireEvent.click(joinBtn);
     await waitFor(() => expect(acceptInvite).toHaveBeenCalledWith("tok-1"));
-    expect(navigate).toHaveBeenCalledWith("/invite/team");
+    // No interstitials: straight into the song room, invite toast armed.
+    expect(navigate).toHaveBeenCalledWith(
+      "/songs/song-1/canvas?invite=1&role=contributor",
+      { replace: true },
+    );
   });
 
   it("lets a signed-in user fall back to a different number", async () => {

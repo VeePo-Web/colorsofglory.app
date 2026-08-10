@@ -24,10 +24,8 @@ const InviteTokenRedirect = () => {
 
 const JoinEntryPage = lazy(() => import("@/pages/invite/JoinEntryPage"));
 const InviteJoinPage = lazy(() => import("@/pages/invite/InviteJoinPage"));
-const InviteWelcomePage = lazy(() => import("@/pages/invite/InviteWelcomeBackPage"));
 const InviteVerifyPage = lazy(() => import("@/pages/invite/InviteVerifyPage"));
 const InviteNamePage = lazy(() => import("@/pages/invite/InviteNamePage"));
-const InviteTeamPage = lazy(() => import("@/pages/invite/InviteTeamIntroPage"));
 const CirclePage = lazy(() => import("@/pages/CirclePage"));
 
 export const authRoutes = (
@@ -46,13 +44,13 @@ export const authRoutes = (
     {/* Legacy invite link → redirect into the real frictionless join flow */}
     <Route path="/invite/:token" element={<InviteTokenRedirect />} />
 
-    {/* Frictionless invite join flow: colorsofglory.app/join/:token */}
+    {/* Frictionless invite join flow: colorsofglory.app/join/:token.
+        Three questions at most (phone · code · name), zero interstitials —
+        every path ends INSIDE the song room via enterInvitedSong. */}
     <Route path="/join" element={<JoinEntryPage />} />
     <Route path="/join/:token" element={<InviteJoinPage />} />
-    <Route path="/invite/welcome" element={<InviteWelcomePage />} />
     <Route path="/invite/verify" element={<InviteVerifyPage />} />
     <Route path="/invite/name" element={<InviteNamePage />} />
-    <Route path="/invite/team" element={<InviteTeamPage />} />
 
     {/* Circle — the swipe-right return surface (absorbs the old /home).
         Library ← Capture → Circle: your work alive, with your people. */}

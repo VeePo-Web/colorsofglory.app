@@ -14,6 +14,9 @@ interface CollaboratorAvatarStackProps {
   maxVisible?: number;  // clips beyond this, shows "+N" remainder
   stagger?: boolean;    // entrance animation
   className?: string;
+  /** Cutout ring color — match the HOST surface so circles read as clean
+   *  cutouts, not faint halos. Defaults to the near-cream family shade. */
+  ringColor?: string;
 }
 
 /**
@@ -27,12 +30,17 @@ const CollaboratorAvatarStack = ({
   maxVisible = 3,
   stagger = false,
   className = '',
+  ringColor = '#FAFAF6',
 }: CollaboratorAvatarStackProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Trigger stagger animation after mount
+  // Trigger stagger animation after mount — skipped for reduced-motion users.
   useEffect(() => {
     if (!stagger || !containerRef.current) return;
+    if (
+      typeof window !== 'undefined' && !!window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) return;
     const circles = containerRef.current.querySelectorAll<HTMLElement>('[data-avatar]');
     circles.forEach((el, i) => {
       el.style.animation = `none`;
@@ -71,7 +79,7 @@ const CollaboratorAvatarStack = ({
             width: size,
             height: size,
             backgroundColor: c.avatarColor,
-            border: `${border}px solid #FAFAF6`,
+            border: `${border}px solid ${ringColor}`,
             fontSize,
             marginLeft: i === 0 ? 0 : -overlap,
             zIndex: visible.length - i + 1,
@@ -91,9 +99,9 @@ const CollaboratorAvatarStack = ({
             width: size,
             height: size,
             backgroundColor: 'rgba(0,0,0,0.07)',
-            border: `${border}px solid #FAFAF6`,
+            border: `${border}px solid ${ringColor}`,
             fontSize: Math.round(fontSize * 0.85),
-            color: '#666',
+            color: 'var(--cog-warm-gray)',
             marginLeft: -overlap,
             position: 'relative',
             zIndex: 1,
