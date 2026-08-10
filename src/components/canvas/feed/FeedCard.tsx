@@ -126,14 +126,28 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         }}
       />
 
-      <Face
-        card={card}
-        color={color}
-        tone={tone}
-        selected={selected}
-        playing={playing}
-        onPlay={interactions.onPlay}
-      />
+      {/* Used ideas collapse to a quiet one-line receipt — a full face at 60%
+          opacity was the feed's loudest clutter while carrying no next act
+          beyond "Bring back". The idea itself lives on in the Final tree. */}
+      {dimmed ? (
+        <p
+          style={{
+            margin: 0, fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700,
+            color: "var(--cog-warm-gray)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}
+        >
+          {card.section || card.title || "Idea"}
+        </p>
+      ) : (
+        <Face
+          card={card}
+          color={color}
+          tone={tone}
+          selected={selected}
+          playing={playing}
+          onPlay={interactions.onPlay}
+        />
+      )}
 
       {/* One-tap layering — always visible on audio cards (a gesture-hidden
           layer path failed the intuition test) but in the QUIET register:
@@ -176,18 +190,20 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         </div>
       )}
 
-      {/* Who wrote it — the colored dot carries identity; the name reads as
-          quiet metadata, never a second headline. */}
+      {/* WHO — legible in under a second at arm's length (the user's law:
+          "each card is so clear who it's from"): the creator's dot AND name
+          in their color. Small enough to stay metadata, colored enough to
+          read without hunting. */}
       {!dimmed && card.contributor && (
         <p
-          style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8, fontSize: 10.5, fontWeight: 500, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8, fontSize: 11.5, fontWeight: 700, color: color.dark, fontFamily: "var(--font-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: color.base, flexShrink: 0 }} />
           {card.contributor}
         </p>
       )}
       {dimmed && (
-        <p style={{ fontSize: 10, color: color.dark, marginTop: 8, fontWeight: 600 }}>
+        <p style={{ fontSize: 10, color: color.dark, marginTop: 6, fontWeight: 600 }}>
           ↳ Already part of the song
         </p>
       )}

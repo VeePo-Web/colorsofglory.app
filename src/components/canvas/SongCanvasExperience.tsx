@@ -280,6 +280,15 @@ const SongCanvasSemanticSummary = () => (
 const isLayerId = (v: string | null): v is LayerId =>
   ["room", "lyrics", "voice", "chords", "notes", "ideas", "people"].includes(v ?? "");
 
+// ─── The essence trim ─────────────────────────────────────────────────────────
+// The frontend is pared to the song's essence: see your ideas, hear them,
+// layer over them, put them in the song. Studio tools (metronome/pad chips,
+// the recap history icon) and the card ⋯ power menu are DORMANT, not deleted —
+// flip these to restore each surface exactly as thorough as it was. The
+// recorder keeps its own MetronomeStrip; the recap keeps its auto-gate.
+const SHOW_STUDIO_TOOLS = false;
+const SHOW_CARD_POWER_MENU = false;
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const SongCanvasExperience = () => {
@@ -1745,7 +1754,10 @@ const SongCanvasExperience = () => {
             : undefined,
         mergeSelected: mergeSelection.includes(card.id),
         onEdit: !isViewer && !card.isDimmedReference ? () => setEditCardId(card.id) : undefined,
-        onMore: () => setMoreCardId(card.id),
+        // Essence trim: the ⋯ power menu (suggest-a-line, compare, listen
+        // path) sleeps with the map — the feed's selected card offers exactly
+        // its two moves (Edit/Layers · → Final).
+        onMore: SHOW_CARD_POWER_MENU || canvasView === "map" ? () => setMoreCardId(card.id) : undefined,
         finalOrder: card.tree === "final" ? finalOrder[card.id] : undefined,
         onRestore: !isViewer && card.isDimmedReference ? () => handleRestoreCard(card.id) : undefined,
         // "Now sounding" ring: the active listen-path step, the compare
@@ -2558,11 +2570,11 @@ const SongCanvasExperience = () => {
           >
             {canvasStatus}
           </p>
-          {/* F14 one-tap metronome — consumes C4's engine via useCanvasMetronome */}
-          <CanvasMetronomeToggle metronome={metronome} />
-          {/* Pad — the metronome's sibling: a soft tonal bed in the song's key
-              to hum over. Click keeps you in time; Pad keeps you in key. */}
-          <Pad inheritedKey={songKeySignature} />
+          {/* Studio tools — dormant under the essence trim (the recorder's
+              own MetronomeStrip still serves tempo where it matters). */}
+          {SHOW_STUDIO_TOOLS && <CanvasMetronomeToggle metronome={metronome} />}
+          {SHOW_STUDIO_TOOLS && <Pad inheritedKey={songKeySignature} />}
+          {SHOW_STUDIO_TOOLS && (
           <button
             type="button"
             onClick={() => setShowRecap(true)}
@@ -2572,6 +2584,7 @@ const SongCanvasExperience = () => {
           >
             <History size={16} strokeWidth={1.9} />
           </button>
+          )}
           {canReview && !isViewer && reviewQueueItems.length > 0 && (
             <button
               type="button"
