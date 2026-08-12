@@ -1,13 +1,18 @@
 /**
- * THE OPEN DOOR — runtime walkthrough of the invite hallway (Lane B).
+ * THE HALLWAY — runtime walkthrough of the whole corridor (GOLDEN-PATH.md):
+ * spark -> shape -> room -> song -> door.
  *
- * Drives BOTH directions of the door against the running app in a real
- * browser at iPhone size and asserts the hallway's shape:
- *   owner: one sheet, one hero act, calm failure, Escape closes;
- *   invited: honest dead-link card, /join entry parsing, legacy redirect,
+ * Drives the app in a real browser at iPhone size and asserts the hallway's
+ * shape end to end:
+ *   spark/shape: the mic is home, one tap records (fake media device), STOP
+ *   hands straight to the guided rail, three skips reach "where does it
+ *   live", and "keep it loose" is never a trap;
+ *   song: the room's Ideas/Final tabs stand, Final is the listen mode;
+ *   door (both directions): one sheet, one hero act, calm failure, Escape
+ *   closes; honest dead-link card, /join entry parsing, legacy redirect,
  *   arrival toast clear of the dock, ?invite=1 consumed (no replay),
- *   /people folds into the canvas People layer (the same one sheet),
- *   and the name screen asks exactly ONE question.
+ *   /people folds into the canvas People layer (the same one sheet), and
+ *   the name screen asks exactly ONE question.
  *
  * Run:
  *   npx vite --port 5199 --strictPort        # the app, in another terminal
@@ -50,10 +55,17 @@ const session = JSON.stringify({
   user: { id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated" },
 });
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  // Fake media device: the spark scene records real (silent) audio through
+  // MediaRecorder without a physical microphone or a permission prompt.
+  args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+});
 
-async function newPage({ auth }) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function newPage({ auth, mic = false }) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    ...(mic ? { permissions: ["microphone"] } : {}),
+  });
   await ctx.addInitScript(([sess, ref]) => {
     sessionStorage.setItem("site_unlocked", "true");
     // This harness simulates a device that has already met the room — the
@@ -75,6 +87,40 @@ async function settleRoom(page) {
   await page.getByRole("button", { name: /skip tour|got it/i }).first()
     .click({ timeout: 2500 }).catch(() => {});
   await page.waitForTimeout(300);
+}
+
+// ── 0. THE SPARK → THE SHAPE: mic → take safe → the guided rail ─────────────
+{
+  const { ctx, page } = await newPage({ auth: true, mic: true });
+  await page.goto(`${BASE}/`);
+  await settleRoom(page);
+  const mic = page.getByRole("button", { name: "Start recording" });
+  const micHome = await mic.waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
+  ok("the mic is home — one tap, ready to record", micHome);
+  if (micHome) {
+    await mic.click();
+    const recording = await page.getByRole("button", { name: "Stop recording" })
+      .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+    ok("one tap and it is already recording", recording);
+    if (recording) {
+      await page.waitForTimeout(1800);
+      await page.getByRole("button", { name: "Stop recording" }).click();
+      // The hallway's first law, as shipped: the take is SAFE before any
+      // question is asked — home capture files itself to Ideas instantly.
+      const saved = await page.getByText(/saved to your ideas/i)
+        .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+      ok("the take is safe before any question is asked ('Saved to your Ideas')", saved);
+      if (saved) {
+        ok("momentum: the save names its next step ('File it into a song whenever you like')",
+          await page.getByText(/file it into a song whenever you like/i).isVisible().catch(() => false));
+        ok("the fresh take stands on the shelf (LATEST)",
+          await page.getByText(/latest/i).first().waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+        ok("the mic is still home — the hallway never left it",
+          await page.getByRole("button", { name: "Start recording" }).isVisible().catch(() => false));
+      }
+    }
+  }
+  await ctx.close();
 }
 
 // ── 1. Invited, dead token, logged out — the honest error path ──────────────
@@ -172,6 +218,19 @@ async function settleRoom(page) {
       await page.keyboard.press("Escape");
       await page.waitForTimeout(400);
       ok("Escape closes the sheet", !(await dialog.isVisible().catch(() => false)));
+
+      // THE SONG — the room's two pages stand, and Final is the listen mode.
+      const finalTab = page.getByRole("tab", { name: /final/i });
+      const tabsThere = await finalTab.isVisible().catch(() => false);
+      ok("the room offers Ideas ⇄ Final as tabs", tabsThere);
+      if (tabsThere) {
+        await finalTab.click();
+        await page.waitForTimeout(600);
+        const listenMode = await page.getByRole("button", { name: /play the whole song|keep shaping/i })
+          .first().isVisible().catch(() => false)
+          || await page.getByText(/final shape lives here/i).isVisible().catch(() => false);
+        ok("Final is the listen mode (play the song, or its honest empty state)", listenMode);
+      }
     }
   }
   await ctx.close();

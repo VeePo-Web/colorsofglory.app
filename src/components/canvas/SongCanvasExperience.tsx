@@ -2699,6 +2699,15 @@ const SongCanvasExperience = () => {
             onPrev={listenPath.prev}
             onReorderFinal={arrangement.moveBy}
             isViewer={isViewer}
+            // GOLDEN-PATH seam E2 ⇢ F1: when the whole song has just played
+            // and the writer is still ALONE in the room, the finished card
+            // offers the door. Once anyone else is in, the moment has passed
+            // and the card stays clean.
+            onInviteFromFinal={
+              !isViewer && !songMembers.some((m) => !m.isOwner)
+                ? () => setShowShareSheet(true)
+                : undefined
+            }
             // The whiteboard is retired for now — no map entry. The map stays
             // reachable only via the stored view preference (dev/test hatch),
             // and its own "Feed" pill leads back here.

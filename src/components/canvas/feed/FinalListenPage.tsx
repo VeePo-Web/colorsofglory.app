@@ -60,6 +60,11 @@ export interface FinalListenPageProps {
   onReorder: (id: string, delta: number) => void;
   isViewer: boolean;
   onGoToIdeas: () => void;
+  /** The GOLDEN-PATH dotted seam (E2 ⇢ F1): "someone should hear this" — the
+   *  finished-song moment opens the door. The HOST decides when the moment is
+   *  real (writer can invite AND is still alone in the room) by passing this;
+   *  absent = the finished card stays exactly as it was. */
+  onInvite?: () => void;
 }
 
 const FinalListenPage = memo(function FinalListenPage({
@@ -77,6 +82,7 @@ const FinalListenPage = memo(function FinalListenPage({
   onReorder,
   isViewer,
   onGoToIdeas,
+  onInvite,
 }: FinalListenPageProps) {
   // The performance follows itself: as playback advances, the sounding row
   // glides into view (guarded — scrollIntoView is absent in some envs).
@@ -253,6 +259,24 @@ const FinalListenPage = memo(function FinalListenPage({
               Keep shaping in Ideas
             </button>
           </div>
+          {/* The hallway's next room: the song just played all the way
+              through and it's still only you in here — the one moment
+              "someone should hear this" is true. Quiet register: the gold
+              verb above stays the card's one bold thing. */}
+          {onInvite && (
+            <button
+              type="button"
+              onClick={onInvite}
+              aria-label="Someone should hear this — invite them into the song"
+              style={{
+                width: "100%", minHeight: 44, borderRadius: 12, cursor: "pointer",
+                border: "none", backgroundColor: "transparent",
+                color: "var(--cog-gold)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 700,
+              }}
+            >
+              Someone should hear this — invite them in
+            </button>
+          )}
         </div>
       )}
 

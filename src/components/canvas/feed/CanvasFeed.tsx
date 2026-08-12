@@ -50,6 +50,8 @@ export interface CanvasFeedProps {
   onPrev: () => void;
   onReorderFinal: (id: string, delta: number) => void;
   isViewer: boolean;
+  /** Finished-song "someone should hear this" seam — host-gated, see FinalListenPage. */
+  onInviteFromFinal?: () => void;
 }
 
 const CanvasFeed = memo(function CanvasFeed({
@@ -69,6 +71,7 @@ const CanvasFeed = memo(function CanvasFeed({
   onPrev,
   onReorderFinal,
   isViewer,
+  onInviteFromFinal,
 }: CanvasFeedProps) {
   const [page, setPage] = useState<FeedPage>("ideas");
   // A moment asked for the Final page (the promote toast's "Hear it") —
@@ -398,6 +401,7 @@ const CanvasFeed = memo(function CanvasFeed({
               onReorder={onReorderFinal}
               isViewer={isViewer}
               onGoToIdeas={() => setPage("ideas")}
+              onInvite={onInviteFromFinal}
             />
           </section>
         </div>

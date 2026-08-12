@@ -81,6 +81,18 @@ describe("FinalListenPage — the song as a performance", () => {
     expect(screen.queryByText(/that.s the whole song/i)).toBeNull();
   });
 
+  it("the finished moment opens the door when the host says the writer is alone (GOLDEN-PATH E2 ⇢ F1)", () => {
+    const onInvite = vi.fn();
+    setup({ finished: true, onInvite });
+    fireEvent.click(screen.getByRole("button", { name: /someone should hear this/i }));
+    expect(onInvite).toHaveBeenCalledTimes(1);
+  });
+
+  it("the invite line stays absent when the host withholds it (co-writers present, or a viewer)", () => {
+    setup({ finished: true });
+    expect(screen.queryByRole("button", { name: /someone should hear this/i })).toBeNull();
+  });
+
   it("while finished, the finished card owns the ONE gold play — the header yields", () => {
     setup({ finished: true });
     expect(screen.queryByRole("button", { name: /play the whole song/i })).toBeNull();
