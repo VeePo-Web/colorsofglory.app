@@ -75,7 +75,9 @@ export async function saveMemoDurable(params: SaveMemoParams): Promise<SaveMemoR
   // F13 rides the same off-path moment: read the tempo + key the songwriter
   // just played and pre-fill the song's EMPTY tempo_bpm/key_signature (a
   // confirmable suggestion, never an overwrite; silent when unsure).
-  maybeDetectSongTempoKey(params.blob, params.songId);
+  // BASES ONLY: a harmony layer sung a third above can clear the key floor
+  // with a DIFFERENT key and argue against the base's correct one.
+  if (!params.parentMemoId) maybeDetectSongTempoKey(params.blob, params.songId);
 
   const optimistic: VoiceMemoRecord = {
     id: outboxId,

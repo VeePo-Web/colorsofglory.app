@@ -90,13 +90,26 @@ const HEADPHONE_LABEL = /headphone|headset|earbud|earphone|airpod|buds/i;
  * populated once the user has granted mic permission at least once; before
  * that (and on iOS Safari always) we learn nothing and stay conservative.
  */
+/** Bluetooth hands-free profiles are phone-call routes, not monitors. */
+const HANDS_FREE_LABEL = /hands-free/i;
+
 async function inferRouteFromDevices(): Promise<OutputRoute> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const outputs = devices.filter((d) => d.kind === "audiooutput" && d.label);
     if (outputs.length === 0) return "unknown";
-    if (outputs.some((d) => HEADPHONE_LABEL.test(d.label))) return "confirmed-headphones";
-    return "assumed-speaker";
+    // The DEFAULT route decides — PRESENCE is not proof. A paired-but-idle
+    // Bluetooth headset in the device list used to "confirm" headphones while
+    // sound actually left the speaker: that misclassification bakes the click
+    // and the record-over guide straight into the take. When no default-route
+    // signal exists, the honest answer is "unknown" (a false downgrade only
+    // mutes a click; a false confirmation ruins a recording).
+    const preferred =
+      outputs.find((d) => d.deviceId === "default") ??
+      outputs.find((d) => d.deviceId === "communications");
+    if (!preferred) return "unknown";
+    if (HANDS_FREE_LABEL.test(preferred.label)) return "unknown";
+    return HEADPHONE_LABEL.test(preferred.label) ? "confirmed-headphones" : "assumed-speaker";
   } catch {
     return "unknown";
   }
@@ -107,7 +120,7 @@ async function inferRouteFromDevices(): Promise<OutputRoute> {
  * confirmation. The user's explicit confirmation wins over an ambiguous
  * platform reading, but a positive platform detection also confirms.
  */
-export async function reevaluateOutputRoute(): Promise<void> {
+export async function reevaluateOutputRoute(opts?: { fromDeviceChange?: boolean }): Promise<void> {
   const detected = await inferRouteFromDevices();
   if (detected === "confirmed-headphones") {
     emit({ outputRoute: "confirmed-headphones" });
@@ -115,10 +128,21 @@ export async function reevaluateOutputRoute(): Promise<void> {
   }
   if (state.monitorPreference) {
     // Platform can't see headphones but the user said they're wearing them.
-    // Exception: a positive "speaker" reading AFTER a devicechange means the
+    // Exception 1: a positive "speaker" reading AFTER a devicechange means the
     // headphones the user confirmed were just unplugged — believe the device.
-    emit({ outputRoute: detected === "assumed-speaker" ? "assumed-speaker" : "confirmed-headphones" });
-    if (detected === "assumed-speaker") setMonitorPreference(false);
+    // Exception 2 (iOS fail-safe): iOS Safari never enumerates outputs, so an
+    // unplug arrives as devicechange + "unknown". While the mic is ARMED,
+    // that combination must downgrade — keeping the confirmation would leave
+    // the guide/click audible on the SPEAKER, bleeding into the take. (The
+    // module's own priority: a false downgrade only mutes a click.)
+    const iosUnplugWhileArmed =
+      opts?.fromDeviceChange === true && detected === "unknown" && state.recordingArmed;
+    if (detected === "assumed-speaker" || iosUnplugWhileArmed) {
+      emit({ outputRoute: detected === "assumed-speaker" ? "assumed-speaker" : "unknown" });
+      setMonitorPreference(false);
+      return;
+    }
+    emit({ outputRoute: "confirmed-headphones" });
     return;
   }
   emit({ outputRoute: detected });
@@ -132,7 +156,7 @@ export function ensureOutputWatch(): void {
   navigator.mediaDevices.addEventListener("devicechange", () => {
     // Unplugging mid-record must silence the click INSTANTLY — the metronome
     // engine is subscribed and mutes already-scheduled clicks on this emit.
-    void reevaluateOutputRoute();
+    void reevaluateOutputRoute({ fromDeviceChange: true });
   });
   void reevaluateOutputRoute();
 }

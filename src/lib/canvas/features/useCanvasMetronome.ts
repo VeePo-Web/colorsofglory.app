@@ -36,12 +36,18 @@ export function useCanvasMetronome(songId: string): CanvasMetronomeApi {
   const [beat, setBeat] = useState(-1);
   const beatsPerBar = 4;
 
-  // Seed from the song's saved tempo.
+  // Seed from the song's saved tempo. Retune a RUNNING engine too — updating
+  // only the label left an already-ticking click at its old speed while the
+  // display claimed the new one (the seed can land after a fast toggle, and
+  // F13's detection can fill the tempo mid-session).
   useEffect(() => {
     let live = true;
     getSong(songId)
       .then((song) => {
-        if (live && song?.tempo_bpm) setBpmState(song.tempo_bpm);
+        if (live && song?.tempo_bpm) {
+          setBpmState(song.tempo_bpm);
+          engineRef.current?.setBpm(song.tempo_bpm);
+        }
       })
       .catch(() => {
         /* canvas stays usable without the song detail */

@@ -1,5 +1,6 @@
 import { audioCache } from "./audioCache";
 import { uploadVoiceMemo } from "./voiceApi";
+import { maybeDetectSongTempoKey } from "@/lib/audio/tempoKeyRunner";
 
 export interface SeedIdeaRecord {
   id: string;
@@ -113,6 +114,10 @@ export async function claimSeedIdea(params: {
       updateRecord(params.seedId, { status: "local-only" });
       throw err;
     }
+    // F13 for the FLAGSHIP flow: a global capture (no song yet) skips
+    // detection by design — the moment the seed graduates INTO a song is
+    // when the song exists to fill. Off the save path, fire-and-forget.
+    maybeDetectSongTempoKey(blob, params.songId);
   }
 
   updateRecord(params.seedId, { status: "claimed" });

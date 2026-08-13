@@ -175,8 +175,12 @@ const ReviewSheet = ({
   // words → part → chords → home). Dismissing drops to the full editor —
   // for this take only; the next capture gets the guide again.
   const [guided, setGuided] = useState(true);
+  const commitRef = useRef(false);
   useEffect(() => {
-    if (open) setGuided(true);
+    if (open) {
+      setGuided(true);
+      commitRef.current = false;
+    }
   }, [open]);
 
   // Song-less captures only: the writer's own songs for the rail's inline
@@ -284,7 +288,10 @@ const ReviewSheet = ({
         }
       }
 
-      const row = await pollTranscriptUntilReady(takeId, { intervalMs: 1200, timeoutMs: 45_000 });
+      // A transient poll error (one flaky fetch mid-poll) must degrade to the
+      // same never-dead-end path as a timeout — a bare await left the sheet
+      // wedged on "Listening back to your take…" forever.
+      const row = await pollTranscriptUntilReady(takeId, { intervalMs: 1200, timeoutMs: 45_000 }).catch(() => null);
       if (cancelled) return;
 
       const hasClientContent = liveSeed.length > 0 || seedBlocks.length > 0;
@@ -531,8 +538,16 @@ const ReviewSheet = ({
     // caller passes nothing (or a click event — hence the typeof guard).
     const target = typeof targetSongId === "string" ? targetSongId : songId;
     if (!takeId || !target) return;
+    // Same-tick reentry guard: the `committing` STATE lands a render late, so
+    // a double-tap fired two commits — and the edge fn blind-inserts (no
+    // server dedupe yet, filed with the backend lane): every block landed
+    // twice on the canvas. The ref closes the gap; a FAILURE reopens it so
+    // retry stays possible.
+    if (commitRef.current) return;
+    commitRef.current = true;
     const usable = blocks.filter((b) => b.text.trim().length > 0 || b.kind === "section");
     if (usable.length === 0) {
+      commitRef.current = false;
       toast.message("Nothing to save yet", { description: "Add a part below, or wait for the transcript." });
       return;
     }
@@ -583,6 +598,7 @@ const ReviewSheet = ({
       } else {
         toast.error("Could not save to canvas", { description: raw.slice(0, 140) || "Please try again." });
       }
+      commitRef.current = false; // failure → retry stays possible
     } finally {
       setCommitting(false);
     }

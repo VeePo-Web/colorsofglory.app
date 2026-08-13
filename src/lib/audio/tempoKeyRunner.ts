@@ -21,7 +21,7 @@ import {
   TEMPO_CONFIDENCE_FLOOR,
   type TempoKeyResult,
 } from "./tempoKey";
-import { writeDetection } from "./detectedTempoKeyStore";
+import { readDetection, writeDetection } from "./detectedTempoKeyStore";
 import { fillSongMusicIfEmpty } from "@/integrations/cog/songs";
 
 /** Detection must never hold resources forever on a pathological decode. */
@@ -48,8 +48,18 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
  * function is incapable of blocking or failing a save (it never throws and
  * returns immediately).
  */
+/**
+ * Decode-cost ceiling: MAX_ANALYZE_SECONDS caps the ANALYSIS but
+ * decodeAudioData inflates the WHOLE blob to raw PCM first — a 30-minute
+ * imported rehearsal MP3 would balloon to hundreds of MB on a phone (iOS tab
+ * jank/OOM) for 29 unanalyzable minutes. Compressed containers can't be
+ * safely byte-sliced, so a size gate is the correct guard: 20MB is far
+ * beyond any 60s-analyzable demo at capture bitrates.
+ */
+const MAX_DECODE_BYTES = 20_000_000;
+
 export function maybeDetectSongTempoKey(blob: Blob, songId: string | null | undefined): void {
-  if (!songId || !blob || blob.size === 0) return;
+  if (!songId || !blob || blob.size === 0 || blob.size > MAX_DECODE_BYTES) return;
   void (async () => {
     try {
       const result: TempoKeyResult | null = await withTimeout(
@@ -82,13 +92,22 @@ export function maybeDetectSongTempoKey(blob: Blob, songId: string | null | unde
         /* fill is best-effort; the suggestion still reaches the picker */
       }
 
+      // Merge the PRIOR record's filled provenance: take 2 of the same song
+      // re-detects the same values but "fills" nothing (the fields are no
+      // longer NULL after take 1) — an unconditional overwrite made the
+      // picker read take 1's fill as already-confirmed, silently killing the
+      // "Sounds like G major — tap to confirm" moment in the most normal
+      // flow there is (recording takes back-to-back).
+      const prior = readDetection(songId);
       writeDetection(songId, {
         bpm: tempo?.bpm,
         tonic: key?.tonic,
         mode: key?.mode,
         keySignature,
-        filledBpm,
-        filledKey,
+        filledBpm:
+          filledBpm || (prior?.filledBpm === true && prior.bpm === tempo?.bpm),
+        filledKey:
+          filledKey || (prior?.filledKey === true && prior.keySignature === keySignature),
         at: Date.now(),
       });
     } catch {

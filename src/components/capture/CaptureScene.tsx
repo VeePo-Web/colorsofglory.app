@@ -12,7 +12,7 @@ import {
   saveFailedCapture,
   listFailedCaptures,
   getFailedCaptureFile,
-  clearAllFailedCaptures,
+  clearFailedCapture,
 } from "@/lib/voice/failedCaptureStore";
 import { audioCache } from "@/lib/voice/audioCache";
 import { saveSeedIdea, listSeedIdeas } from "@/lib/voice/seedIdeaApi";
@@ -256,8 +256,21 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
 
   // Failed-upload safety net: if the network drops mid-upload we KEEP the
   // recorded file in memory so a precious idea is never lost — the songwriter
-  // can retry instead of re-recording.
-  const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number } | null>(null);
+  // can retry instead of re-recording. `recordId` ties this take to its
+  // durable failed-capture row so success retires THAT row only —
+  // clearAllFailedCaptures() on success was deleting every OTHER song's
+  // salvaged takes (audio loss).
+  const [failedTake, setFailedTake] = useState<{ file: File; durationMs: number; recordId: string | null } | null>(null);
+  const failedRecordIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    failedRecordIdRef.current = failedTake?.recordId ?? null;
+  }, [failedTake]);
+  // Success of THIS capture retires THIS take's durable backup — never the store.
+  const retireFailedRecord = useCallback(() => {
+    const id = failedRecordIdRef.current;
+    failedRecordIdRef.current = null;
+    if (id) void clearFailedCapture(id);
+  }, []);
 
   // Queued-take reassurance: the take is already DURABLE (blob in IndexedDB,
   // retry job in localStorage via the Capture Outbox) and auto-retries on
@@ -293,8 +306,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       setStatus("ready");
       setFailedTake(null);
       setQueuedTake(null);
-      // A recovered take just saved — retire any durable failed-capture record.
-      void clearAllFailedCaptures();
+      // A recovered take just saved — retire ITS durable record, only its own.
+      retireFailedRecord();
       setReview({
         open: true,
         takeId,
@@ -475,7 +488,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           });
           setStatus("ready");
           setFailedTake(null);
-          void clearAllFailedCaptures();
+          retireFailedRecord();
           // Tick the "Unfiled" pill up immediately — the idea visibly landed.
           refreshSeedCount();
           toast.success("Saved to your Ideas", {
@@ -519,7 +532,8 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           setStatus("skipped");
           setFailedTake(null);
           setQueuedTake({ outboxId, durationMs: fileDurationMs });
-          void clearAllFailedCaptures();
+          // Durably queued in the outbox — this take's backup can retire.
+          retireFailedRecord();
           return;
         }
 
@@ -527,13 +541,18 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
       } catch (err) {
         setStatus("skipped");
         // Keep the recording so the idea survives a flaky network — never discard.
-        setFailedTake({ file, durationMs: fileDurationMs });
+        setFailedTake({ file, durationMs: fileDurationMs, recordId: null });
         // AND persist it durably, so it survives a reload too (not just React
-        // state) — a captured idea must never be lost.
+        // state) — a captured idea must never be lost. Remember the row's id so
+        // a later success retires exactly this backup.
         void saveFailedCapture(file, {
           songId: songId ?? null,
           title: songTitle ? `${songTitle} — capture` : "Capture",
           durationMs: fileDurationMs,
+        }).then((rec) => {
+          setFailedTake((prev) => (prev && prev.file === file ? { ...prev, recordId: rec.id } : prev));
+        }).catch(() => {
+          /* in-memory retry still stands */
         });
         const msg = err instanceof Error ? err.message : "Unknown error";
         toast.error("Couldn't save that take — your recording is safe.", { description: msg.slice(0, 120) });
@@ -555,15 +574,18 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const rows = listFailedCaptures();
+      // Only THIS surface's takes: a row saved for song X must never replay
+      // into song Y (or into the global shelf) — the store keys each row by
+      // the song it was captured for.
+      const rows = listFailedCaptures().filter((r) => (r.songId ?? null) === (songId ?? null));
       if (cancelled || rows.length === 0) return;
       const file = await getFailedCaptureFile(rows[0].id);
       if (cancelled || !file) return;
-      setFailedTake({ file, durationMs: rows[0].durationMs });
+      setFailedTake({ file, durationMs: rows[0].durationMs, recordId: rows[0].id });
       setStatus("skipped");
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [songId]);
 
   // Auto-saved takes (interruption / ceiling / page hidden) flow through the
   // same upload path as a manual stop, so the idea lands in review either way.
@@ -601,10 +623,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     autoFinalizeRef.current = handleAutoFinalize;
   }, [handleAutoFinalize]);
 
+  // Take sequence: a canceled/unmounted count-in must NOT open the mic when
+  // its awaited click resolves (the transport RESOLVES on stop by design —
+  // callers re-check their own cancel state; the canvas already does).
+  const captureSeqRef = useRef(0);
+  useEffect(() => () => { captureSeqRef.current += 1; }, []);
+
   const handleMicTap = useCallback(async () => {
     if (saving) return;
 
     if (phase === "recording") {
+      captureSeqRef.current += 1; // abandon any start still awaiting count-in
       const result = await recorder.stopRecording();
       stopLive();
       stopMetro();
@@ -632,9 +661,17 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     liveStructureRef.current = null;
     live.stop();
     live.reset();
+    const seq = captureSeqRef.current;
     if (clickOn && metroBpm) {
       metro.prime();
       await metro.countIn(metroBpm, 4);
+      // The count-in resolved — but a stop-tap or an unmount may have landed
+      // while it played. Opening the mic now would record a GHOST take.
+      if (seq !== captureSeqRef.current) {
+        stopMetro();
+        setStatus("idle");
+        return;
+      }
     }
     const started = await recorder.startRecording();
     if (!started) {
@@ -719,8 +756,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   }, []);
 
   const handleReviewClose = useCallback(() => {
+    // Close WITHOUT commit keeps the pending stash: "Finish shaping it later"
+    // and a backdrop-tap are postponements, not discards — clearing here
+    // destroyed the words/chords the rail had just collected. The stash is
+    // durable (localStorage per song-key) and clears only on a real commit.
     setReview((r) => ({ ...r, open: false }));
-    setPendingBlocks([]);
     setManualMarkers([]);
     liveStructureRef.current = null;
     setStatus("idle");

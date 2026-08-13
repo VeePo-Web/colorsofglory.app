@@ -20,10 +20,16 @@ function parseChords(body: string): { chords: string[]; rest: string } {
   const rest: string[] = [];
   for (const t of tokens) (CHORD_RE.test(t) ? chords : rest).push(t);
   return {
-    chords: chords.slice(0, 8),
+    // The FULL progression — the face decides how many chips fit and says
+    // "+N" for the overflow (a silent slice(0,8) made the card lie about
+    // a 12-chord progression).
+    chords,
     rest: [...restPre, rest.join(" ")].filter(Boolean).join(" · "),
   };
 }
+
+/** How many chips the face shows before folding the tail into a "+N" chip. */
+const MAX_CHIPS = 8;
 
 /**
  * ChordCard — the face for a chord/arrangement idea. The progression reads as
@@ -33,8 +39,15 @@ function parseChords(body: string): { chords: string[]; rest: string } {
 const ChordCard = memo(({ card, tone }: CardFaceProps) => {
   const { chords, rest } = useMemo(() => parseChords(card.body || ""), [card.body]);
 
+  const shown = chords.slice(0, MAX_CHIPS);
+  const overflow = chords.length - shown.length;
   const rows: string[][] = [];
-  for (let i = 0; i < chords.length; i += 4) rows.push(chords.slice(i, i + 4));
+  for (let i = 0; i < shown.length; i += 4) rows.push(shown.slice(i, i + 4));
+
+  // Dual-key suppression: when meta already carries the key ("G · 74 BPM"),
+  // the parsed "Key G" tag repeated the same fact chip-by-chip beside it.
+  const keyInMeta = /\bkey\b|^[A-G][#b♯♭]?\b/i.test(card.meta ?? "");
+  const restShown = keyInMeta && rest.startsWith("Key ") ? rest.replace(/^Key [^·]*·?\s*/, "") : rest;
 
   return (
     <>
@@ -56,7 +69,7 @@ const ChordCard = memo(({ card, tone }: CardFaceProps) => {
       </div>
 
       {/* Chord chips (or the raw body if no chords parsed) */}
-      {chords.length > 0 ? (
+      {shown.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 }} aria-label={`Chord progression: ${chords.join(", ")}`}>
           {rows.map((row, ri) => (
             <div key={ri} style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -76,6 +89,20 @@ const ChordCard = memo(({ card, tone }: CardFaceProps) => {
                   {chord}
                 </span>
               ))}
+              {/* The honest tail — the card never pretends 8 chips ARE the
+                  whole progression. */}
+              {ri === rows.length - 1 && overflow > 0 && (
+                <span
+                  style={{
+                    fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)",
+                    padding: "3px 8px", borderRadius: 9999,
+                    backgroundColor: "rgba(0,0,0,0.05)",
+                    color: "var(--cog-warm-gray)", letterSpacing: "0.02em",
+                  }}
+                >
+                  +{overflow}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -92,9 +119,9 @@ const ChordCard = memo(({ card, tone }: CardFaceProps) => {
             ♪ {card.meta}
           </span>
         )}
-        {rest && (
+        {restShown && (
           <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, backgroundColor: "rgba(0,0,0,0.05)", color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {rest}
+            {restShown}
           </span>
         )}
       </div>
