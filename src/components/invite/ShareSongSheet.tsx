@@ -3,6 +3,7 @@ import { Check, Copy, Link2, Share2, X } from "lucide-react";
 import { generateInviteToken, updateOnboardingStep, type GeneratedInvite } from "@/lib/invite/inviteApi";
 import { copyTextToClipboard } from "@/lib/invite/clipboard";
 import { fetchPendingInvites } from "@/integrations/cog/pendingInvites";
+import AddYourPeople from "./AddYourPeople";
 import { triggerReferralPrompt } from "@/components/referral/referralPromptState";
 import type { SongCollaborator } from "@/lib/invite/useSongCollaborators";
 
@@ -22,6 +23,11 @@ interface ShareSongSheetProps {
   onClose: () => void;
   /** userIds live in the room right now (green "here now" dot) — the reliable identity. */
   presentUserIds?: Set<string>;
+  /** Owner only (RLS enforces the write; this gates the UI): shows "Your
+   *  people" — one-tap adds for co-writers from the owner's other songs. */
+  canAddPeople?: boolean;
+  /** The signed-in user's id — required for the Your-people lookups. */
+  currentUserId?: string | null;
   /** Lowercased display names live right now — fallback while a roster row's id resolves. */
   presentNames?: Set<string>;
 }
@@ -40,7 +46,7 @@ interface ShareSongSheetProps {
  * After the act completes, the sheet says the one true thing — "The door is
  * open. Keep writing — you'll hear when they arrive." — and leaves.
  */
-const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUserIds, presentNames }: ShareSongSheetProps) => {
+const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUserIds, presentNames, canAddPeople = false, currentUserId = null }: ShareSongSheetProps) => {
   const isHereNow = (c: SongCollaborator) => {
     if (presentUserIds?.has(c.userId)) return true;
     if (!presentNames || presentNames.size === 0) return false;
@@ -417,6 +423,12 @@ const ShareSongSheet = ({ songId, songTitle, collaborators, onClose, presentUser
               </p>
             )}
           </>
+        )}
+
+        {/* Your people — the band, one tap each (owner only, never in the
+            sent-state's calm). The link above stays the hero for strangers. */}
+        {!sent && canAddPeople && (
+          <AddYourPeople songId={songId} songTitle={songTitle} myUserId={currentUserId} />
         )}
 
         {/* Who's already in the room — quiet context, not controls */}

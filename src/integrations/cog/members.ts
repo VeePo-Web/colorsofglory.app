@@ -120,6 +120,31 @@ export async function removeMember(songId: string, userId: string): Promise<void
   if (error) throw toCogError(error);
 }
 
+/**
+ * Owner only (RLS: "Owners manage membership" INSERT policy) — add a known
+ * co-writer straight into this song, no invite token. THE BAND SHELF's
+ * "add your people" lever: for people already writing with you elsewhere,
+ * one tap opens this song on their shelf too. Duplicate-safe via upsert.
+ *
+ * Filed with Lovable: an `add_members_to_song` RPC that also writes the
+ * invite-accepted activity/notification loop this direct insert skips.
+ */
+export async function addMember(songId: string, userId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("song_members")
+    .upsert(
+      {
+        song_id: songId,
+        user_id: userId,
+        role: "collaborator",
+        invited_by_user_id: user?.id ?? null,
+      },
+      { onConflict: "song_id,user_id", ignoreDuplicates: true },
+    );
+  if (error) throw toCogError(error);
+}
+
 /** Owner only. Cancel an invite that hasn't been accepted yet. */
 export async function revokeInvite(inviteId: string): Promise<void> {
   const { error } = await supabase.rpc("revoke_song_invite", { _invite_id: inviteId });

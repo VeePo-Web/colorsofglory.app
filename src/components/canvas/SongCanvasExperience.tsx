@@ -3077,6 +3077,8 @@ const SongCanvasExperience = () => {
             collaborators={sheetRoster}
             presentUserIds={presentUserIds}
             presentNames={presentNames}
+            canAddPeople={!isDemoRoom && caps.isOwner}
+            currentUserId={profile?.user_id ?? null}
             onClose={() => setShowShareSheet(false)}
           />
         </Suspense>

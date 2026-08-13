@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks, Pencil, Trash2, LogOut } from "lucide-react";
+import { X, Check, ArrowRight, Archive, ArchiveRestore, Plus, Disc3, FileText, Mic, Pin, PinOff, ListChecks, Pencil, Trash2, LogOut, FileUp } from "lucide-react";
 import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
@@ -13,6 +13,9 @@ interface SongActionsSheetProps {
   onOpen: () => void;
   /** Route straight into another lane's surface for this song. */
   onQuickRoute: (surface: "canvas" | "sheet" | "voice") => void;
+  /** THE BAND SHELF's Drive gesture: pick audio files → they land in this
+   *  song as named voice memos, retry-safe, without opening the room. */
+  onAddMemos?: () => void;
   pinned: boolean;
   onTogglePin: () => void;
   /** Enter Apple-Photos batch select, pre-seeded with this song. */
@@ -42,6 +45,7 @@ const SongActionsSheet = ({
   onNewAlbum,
   onOpen,
   onQuickRoute,
+  onAddMemos,
   pinned,
   onTogglePin,
   onSelectMode,
@@ -205,6 +209,20 @@ const SongActionsSheet = ({
                 </span>
               </button>
             ))}
+
+          {/* Drop files on the song — every member can add to the band's
+              songs; the outbox keeps each file safe even offline. */}
+          {!archived && onAddMemos && (
+            <button onClick={onAddMemos} className={rowClass} style={{ minHeight: 48 }}>
+              <FileUp size={16} strokeWidth={1.9} style={{ color: "var(--cog-gold)" }} />
+              <span
+                className="flex-1 text-[0.9375rem]"
+                style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+              >
+                Add voice memos from files
+              </span>
+            </button>
+          )}
 
           {/* Albums — instant placement, Apple "Add to Playlist" pattern */}
           {isOwner && !archived && (

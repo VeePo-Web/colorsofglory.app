@@ -3,6 +3,7 @@ import { Upload } from "lucide-react";
 import { isAudioFile, ACCEPTED_AUDIO_EXTENSIONS } from "@/lib/voice/audioFormat";
 
 interface UploadDropZoneProps {
+  /** Called once per accepted file — pick five voice memos, five calls. */
   onFile: (file: File) => void;
   isPro?: boolean;
   disabled?: boolean;
@@ -10,8 +11,11 @@ interface UploadDropZoneProps {
 
 /**
  * UploadDropZone — desktop drag-and-drop target + mobile file picker trigger.
- * Accepts: mp3, m4a, wav, webm, ogg, aac
- * On mobile: <input type="file" accept="audio/*"> opens iOS Files (incl. Voice Memos) or Android picker.
+ * Accepts: mp3, m4a, wav, webm, ogg, aac — MULTIPLE at once (THE BAND SHELF:
+ * "upload all their voice memos and drafts"). Each accepted file fires onFile
+ * individually, so every file rides its own retry-safe outbox job.
+ * On mobile: <input type="file" accept="audio/*" multiple> opens iOS Files
+ * (incl. Voice Memos) or the Android picker.
  */
 const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -29,34 +33,33 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
     e.preventDefault();
     setIsDragOver(false);
     if (disabled) return;
-
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    validateAndSubmit(file);
+    validateAndSubmit([...e.dataTransfer.files]);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    validateAndSubmit(file);
-    e.target.value = ""; // reset so same file can be re-uploaded
+    validateAndSubmit([...(e.target.files ?? [])]);
+    e.target.value = ""; // reset so the same files can be re-picked
   };
 
-  const validateAndSubmit = (file: File) => {
+  // Accept what's good, name what was skipped — a batch never fails wholesale
+  // because one file was wrong.
+  const validateAndSubmit = (files: File[]) => {
     setError(null);
-
-    if (!isAudioFile(file)) {
-      setError("That file type isn't supported. Try MP3, M4A, WAV, or WebM.");
-      return;
-    }
+    if (files.length === 0) return;
 
     const maxBytes = isPro ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      setError(`File too large. Max size is ${isPro ? "200MB" : "20MB"}.`);
-      return;
+    let wrongType = 0;
+    let tooBig = 0;
+    for (const file of files) {
+      if (!isAudioFile(file)) { wrongType += 1; continue; }
+      if (file.size > maxBytes) { tooBig += 1; continue; }
+      onFile(file);
     }
 
-    onFile(file);
+    const problems: string[] = [];
+    if (wrongType > 0) problems.push(`${wrongType} ${wrongType === 1 ? "file isn't" : "files aren't"} audio (try MP3, M4A, WAV, or WebM)`);
+    if (tooBig > 0) problems.push(`${tooBig} over the ${isPro ? "200MB" : "20MB"} limit`);
+    if (problems.length > 0) setError(`Skipped ${problems.join(" and ")}.`);
   };
 
   return (
@@ -65,6 +68,7 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept={`audio/*,${ACCEPTED_AUDIO_EXTENSIONS}`}
         onChange={handleInputChange}
         style={{ display: "none" }}
@@ -75,7 +79,7 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}
-        aria-label="Upload audio file — tap to browse or drag a file here"
+        aria-label="Upload audio files — tap to browse or drag files here"
         onClick={() => !disabled && inputRef.current?.click()}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -110,10 +114,10 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
         </div>
         <div>
           <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "#1A1A1A" }}>
-            Upload audio file
+            Upload audio files
           </p>
           <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "#999" }}>
-            MP3, M4A, WAV · iOS Voice Memos via Files app
+            MP3, M4A, WAV · pick several at once · iOS Voice Memos via Files app
           </p>
         </div>
       </div>

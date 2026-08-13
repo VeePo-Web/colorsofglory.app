@@ -23,6 +23,12 @@ import SelectionBar from "@/components/library/SelectionBar";
 import BatchAlbumSheet from "@/components/library/BatchAlbumSheet";
 import NewSongRail from "@/components/library/NewSongRail";
 import { saveDedicationDurable } from "@/lib/songs/dedication";
+import PeopleFilterRow from "@/components/library/PeopleFilterRow";
+import { useBandPeople } from "@/lib/library/useBandPeople";
+import { songMatchesPeople, shouldShowPeopleRow, peopleFilterLabel } from "@/lib/library/bandIndex";
+import { useCurrentAccount } from "@/integrations/cog/auth";
+import { saveMemoDurable } from "@/lib/voice/saveMemo";
+import { getAudioFileDuration, isAudioFile } from "@/lib/voice/audioFormat";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { showLibraryTabs, showLibraryControls, showAlbumsShelf, continueMoment } from "@/lib/library/libraryCalm";
 import { loadMostRecentSession } from "@/lib/audio/practiceStorage";
@@ -107,6 +113,66 @@ const SongCatalogPage = () => {
   const [batchAlbumOpen, setBatchAlbumOpen] = useState(false);
   const [reorderingAlbum, setReorderingAlbum] = useState(false);
 
+  // ── THE BAND SHELF — people as the library's first filter ────────────────
+  // The band emerges from memberships (no backend band entity exists): two
+  // RLS-proven batched queries index who is in which of my songs. Multi-
+  // select is AND — "the songs Craig and Parker wrote together".
+  const { user: accountUser } = useCurrentAccount();
+  const activeSongIds = useMemo(
+    () => songs.filter((s) => s.status !== "archived").map((s) => s.id),
+    [songs],
+  );
+  const { band } = useBandPeople(activeSongIds, accountUser?.id ?? null);
+  const [peopleFilter, setPeopleFilter] = useState<string[]>([]);
+  const bandFilterActive = peopleFilter.length > 0;
+  const selectedPeople = useMemo(
+    () => band.people.filter((p) => peopleFilter.includes(p.userId)),
+    [band.people, peopleFilter],
+  );
+  // People can leave songs between visits — never keep filtering by a ghost.
+  useEffect(() => {
+    if (peopleFilter.length === 0 || band.people.length === 0) return;
+    const known = new Set(band.people.map((p) => p.userId));
+    if (peopleFilter.some((id) => !known.has(id))) {
+      setPeopleFilter((prev) => prev.filter((id) => known.has(id)));
+    }
+  }, [band.people, peopleFilter]);
+
+  // ── Add voice memos into a song straight from the shelf (Drive gesture) ──
+  const memoFileInputRef = useRef<HTMLInputElement>(null);
+  const memoTargetRef = useRef<SongRow | null>(null);
+  const handleAddMemoFiles = async (fileList: FileList | null) => {
+    const target = memoTargetRef.current;
+    const files = [...(fileList ?? [])].filter((f) => isAudioFile(f));
+    if (!target || files.length === 0) return;
+    let saved = 0;
+    for (const file of files) {
+      try {
+        const durationMs = await getAudioFileDuration(file).catch(() => 0);
+        await saveMemoDurable({
+          blob: file,
+          songId: target.id,
+          title: file.name.replace(/\.[^.]+$/, "") || "Imported memo",
+          mimeType: file.type || "audio/mpeg",
+          durationMs,
+          sectionLabel: "Raw idea",
+          fileName: file.name,
+          createdBy: accountUser?.id ?? undefined,
+        });
+        saved += 1;
+      } catch {
+        /* the outbox retains what it accepted; count only real enqueues */
+      }
+    }
+    if (saved > 0) {
+      toast(
+        `${saved} ${saved === 1 ? "memo" : "memos"} saving to “${target.title}” — safe on this device, even offline.`,
+      );
+    } else {
+      toast.error("Those files couldn't be read — try MP3, M4A, WAV, or WebM.");
+    }
+  };
+
   const updatePrefs = (changes: Partial<LibraryPrefs>) =>
     setPrefs((prev) => {
       const next = { ...prev, ...changes };
@@ -171,6 +237,24 @@ const SongCatalogPage = () => {
   }, [albums]);
 
   const visibleSongs = useMemo(() => {
+    // The band view: while people are selected, the Owned/Invited split stops
+    // mattering — the shelf is ONE list of every active song those people
+    // share (a band's drive is never split by who created the folder).
+    if (bandFilterActive) {
+      let list = songs.filter(
+        (s) => s.status !== "archived" && songMatchesPeople(s.id, peopleFilter, band.membersBySong),
+      );
+      const q = query.trim().toLowerCase();
+      if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
+      const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
+      const born = (s: SongRow) => new Date(s.created_at ?? 0).getTime() || 0;
+      const sorted = [...list];
+      if (prefs.sort === "alpha") sorted.sort((a, b) => a.title.localeCompare(b.title));
+      else if (prefs.sort === "ideas") sorted.sort((a, b) => b.voice_memo_count - a.voice_memo_count);
+      else if (prefs.sort === "created") sorted.sort((a, b) => born(b) - born(a));
+      else sorted.sort((a, b) => time(b) - time(a));
+      return sorted;
+    }
     let list = songs.filter((s) => {
       if (activeTab === "Owned") return s.my_role === "owner" && s.status !== "archived";
       if (activeTab === "Invited") return s.my_role !== "owner" && s.status !== "archived";
@@ -208,7 +292,7 @@ const SongCatalogPage = () => {
       ];
     }
     return sorted;
-  }, [songs, activeTab, activeAlbum, viewingUngrouped, groupedIds, query, prefs.sort, pinnedIds]);
+  }, [songs, activeTab, activeAlbum, viewingUngrouped, groupedIds, query, prefs.sort, pinnedIds, bandFilterActive, peopleFilter, band.membersBySong]);
 
   // Rooms a captured idea can move into — the songwriter's own active rooms.
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
@@ -226,12 +310,12 @@ const SongCatalogPage = () => {
   // "Pick up where you left off" — PV11: prioritize the last active song for
   // returning users. Hidden while searching, album-focused, or trivially small.
   const continueSong = useMemo(() => {
-    if (activeTab !== "Owned" || query.trim() || activeAlbumId) return null;
+    if (activeTab !== "Owned" || query.trim() || activeAlbumId || bandFilterActive) return null;
     if (ownedSongs.length < 2) return null;
     const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
     return [...ownedSongs].sort((a, b) => time(b) - time(a))[0] ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songs, activeTab, query, activeAlbumId]);
+  }, [songs, activeTab, query, activeAlbumId, bandFilterActive]);
 
   const handleAlbumSave = (name: string, songIds: string[]) => {
     if (albumSheet.album) {
@@ -643,7 +727,7 @@ const SongCatalogPage = () => {
       {/* ── LIBRARY ────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:flex lg:max-w-5xl lg:gap-8 lg:px-8">
         {/* Persistent album rail — tablet/desktop only; phones keep the shelf */}
-        {!selecting && activeTab === "Owned" && !loading && albumsVisible && ownedSongs.length > 0 && (
+        {!selecting && !bandFilterActive && activeTab === "Owned" && !loading && albumsVisible && ownedSongs.length > 0 && (
           <AlbumRail
             albums={albums}
             activeAlbumId={viewingUngrouped ? null : activeAlbumId}
@@ -712,9 +796,43 @@ const SongCatalogPage = () => {
           />
         )}
 
+        {/* ── THE BAND SHELF — your people as the first filter ──────────────
+            Tap a face → their songs. Tap two → the songs they share (AND).
+            Calm-gated: appears only once the library holds other people, and
+            never inside albums, batch-select, or the Archived tab. */}
+        {!selecting && !reorderingAlbum && !activeAlbum && !viewingUngrouped &&
+          activeTab !== "Archived" && shouldShowPeopleRow(band.people) && (
+          <PeopleFilterRow
+            people={band.people}
+            selected={peopleFilter}
+            onToggle={(userId) =>
+              setPeopleFilter((prev) =>
+                prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+              )
+            }
+            onClear={() => setPeopleFilter([])}
+          />
+        )}
+
+        {/* The band view's honest header: whose songs, and how many. One list
+            across owned + invited — a band's drive is never split by who
+            created the folder. */}
+        {!selecting && bandFilterActive && (
+          <p
+            aria-live="polite"
+            className="-mt-1 mb-3 px-1 text-[0.8125rem] font-semibold"
+            style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+          >
+            Songs with {peopleFilterLabel(selectedPeople)}
+            <span style={{ color: "var(--cog-warm-gray)", fontWeight: 500 }}>
+              {" "}· {visibleSongs.length} {visibleSongs.length === 1 ? "song" : "songs"}
+            </span>
+          </p>
+        )}
+
         {/* Live match count while searching — the tabs already carry the browse
             counts; this line answers "how many did my search find?" */}
-        {!selecting && !reorderingAlbum && query.trim() !== "" && visibleSongs.length > 0 && (
+        {!selecting && !reorderingAlbum && !bandFilterActive && query.trim() !== "" && visibleSongs.length > 0 && (
           <p
             aria-live="polite"
             className="-mt-2 mb-3 px-1 text-[0.75rem] font-medium"
@@ -736,7 +854,7 @@ const SongCatalogPage = () => {
 
         {/* Inside an album: the Apple Music playlist header keeps the title,
             cover and counts on screen and gives a one-tap way back. */}
-        {!selecting && activeTab === "Owned" && activeAlbum ? (
+        {!selecting && !bandFilterActive && activeTab === "Owned" && activeAlbum ? (
           <AlbumDetailHeader
             album={activeAlbum}
             songs={ownedSongs.filter((s) => activeAlbum.songIds.includes(s.id))}
@@ -766,7 +884,7 @@ const SongCatalogPage = () => {
             reordering={reorderingAlbum}
             onToggleReorder={() => setReorderingAlbum((v) => !v)}
           />
-        ) : !selecting && activeTab === "Owned" && viewingUngrouped ? (
+        ) : !selecting && !bandFilterActive && activeTab === "Owned" && viewingUngrouped ? (
           /* Ungrouped smart group — songs not yet filed into any album */
           <div className="mb-4">
             <button
@@ -791,6 +909,7 @@ const SongCatalogPage = () => {
           </div>
         ) : (
           !selecting &&
+          !bandFilterActive &&
           activeTab === "Owned" &&
           !loading &&
           albumsVisible &&
@@ -815,7 +934,7 @@ const SongCatalogPage = () => {
         )}
 
         {/* Search also reaches album names — "worship" finds the Worship EP */}
-        {!selecting && !activeAlbum && activeTab === "Owned" && albumMatches.length > 0 && (
+        {!selecting && !bandFilterActive && !activeAlbum && activeTab === "Owned" && albumMatches.length > 0 && (
           <div className="mb-4">
             <p
               className="mb-2 px-1 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
@@ -869,7 +988,9 @@ const SongCatalogPage = () => {
           query={query}
           loading={loading}
           emptyCopy={
-            viewingUngrouped
+            bandFilterActive
+              ? `No songs with ${peopleFilterLabel(selectedPeople)} yet — open a song's room and add them through the door.`
+              : viewingUngrouped
               ? "Every song is filed into an album."
               : activeAlbum && activeTab === "Owned"
               ? "This album is empty. Tap “Add songs” above to fill it."
@@ -951,6 +1072,22 @@ const SongCatalogPage = () => {
         />
       )}
 
+      {/* Hidden multi-select audio input — the "drop files on the song"
+          gesture from the actions sheet. Value reset so the same files can
+          be picked again. */}
+      <input
+        ref={memoFileInputRef}
+        type="file"
+        accept="audio/*,.mp3,.m4a,.wav,.webm,.ogg,.aac"
+        multiple
+        onChange={(e) => {
+          void handleAddMemoFiles(e.target.files);
+          e.target.value = "";
+        }}
+        style={{ display: "none" }}
+        aria-hidden="true"
+      />
+
       </div>{/* /swipe + entrance layer */}
 
       <BottomNav active="songs" />
@@ -987,6 +1124,11 @@ const SongCatalogPage = () => {
             setActionsSong(null);
             setNavDirection("up");
             navigate(`/songs/${songId}/${surface}`);
+          }}
+          onAddMemos={() => {
+            memoTargetRef.current = actionsSong;
+            setActionsSong(null);
+            memoFileInputRef.current?.click();
           }}
           pinned={pinnedIds.has(actionsSong.id)}
           onTogglePin={() => handleTogglePin(actionsSong.id)}
