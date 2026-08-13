@@ -299,6 +299,35 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
         contributionType: "melody",
       });
     });
+
+    // F12 lands in the room: the words a take carries become the card's body,
+    // so a voice card answers "what's on it" at a glance. Best-effort and
+    // AFTER the cards exist — transcripts are a bonus, never a gate (a failed
+    // or RLS-blocked read leaves bodies empty, nothing else changes).
+    try {
+      const memoIds = memosRes.value.data.map((r) => r.id);
+      if (memoIds.length > 0) {
+        const { data: transcripts } = await supabase
+          .from("voice_memo_transcripts")
+          .select("memo_id, text, status")
+          .in("memo_id", memoIds)
+          .eq("status", "ready");
+        if (transcripts && transcripts.length > 0) {
+          const textByMemo = new Map(
+            transcripts
+              .filter((t) => typeof t.text === "string" && t.text.trim().length > 0)
+              .map((t) => [t.memo_id as string, (t.text as string).trim().slice(0, 600)]),
+          );
+          for (const card of out) {
+            if (!card.id.startsWith("db-voice-")) continue;
+            const text = textByMemo.get(card.id.slice("db-voice-".length));
+            if (text) card.body = text;
+          }
+        }
+      }
+    } catch {
+      /* words are a courtesy; the take itself is already on the board */
+    }
   }
 
   if (cardsRes.status === "fulfilled") {

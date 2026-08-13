@@ -15,7 +15,7 @@ import type { CardFaceProps } from "./cardFace";
  * eight bars ride the hummed tune (real, at a glance), real peaks come next,
  * and the id-seeded fake survives only for legacy rows. Presentational only.
  */
-const HumCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
+const HumCard = memo(({ card, tone, selected, playing, onPlay }: CardFaceProps) => {
   const wave = useMemo(
     () =>
       resolveWaveformBars({
@@ -69,6 +69,26 @@ const HumCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
           ))}
         </div>
       </div>
+
+      {/* The words (or honest "[humming]") the take carries — F12 at a
+          glance, same quiet serif treatment as VoiceMemoCard. */}
+      {card.body && (
+        <p
+          style={{
+            margin: "6px 0 0",
+            fontSize: 12.5,
+            fontFamily: "var(--font-display)",
+            color: "var(--cog-warm-gray)",
+            lineHeight: 1.55,
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitLineClamp: selected ? 6 : 2,
+            WebkitBoxOrient: "vertical",
+          }}
+        >
+          {card.body}
+        </p>
+      )}
     </>
   );
 });

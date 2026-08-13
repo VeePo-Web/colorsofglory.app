@@ -18,7 +18,7 @@ import type { CardFaceProps } from "./cardFace";
  * rows so a card is never blank. Duration + section as quiet metadata.
  * Playback lives in the stack sheet / Listen Path (D2). Presentational only.
  */
-const VoiceMemoCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
+const VoiceMemoCard = memo(({ card, tone, selected, playing, onPlay }: CardFaceProps) => {
   const wave = useMemo(
     () =>
       resolveWaveformBars({
@@ -78,6 +78,27 @@ const VoiceMemoCard = memo(({ card, tone, playing, onPlay }: CardFaceProps) => {
           ))}
         </div>
       </div>
+
+      {/* THE WORDS THE TAKE CARRIES (F12): the transcript, quiet serif under
+          the waveform — a voice card answers "what's on it" without playing.
+          Two lines at rest, room to read when selected. */}
+      {card.body && (
+        <p
+          style={{
+            margin: "2px 0 0",
+            fontSize: 12.5,
+            fontFamily: "var(--font-display)",
+            color: "var(--cog-warm-gray)",
+            lineHeight: 1.55,
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitLineClamp: selected ? 6 : 2,
+            WebkitBoxOrient: "vertical",
+          }}
+        >
+          {card.body}
+        </p>
+      )}
     </>
   );
 });
