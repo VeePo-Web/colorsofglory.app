@@ -22,6 +22,9 @@ interface SongGridCardProps {
   /** THE BAND SHELF's Drive signal: the OTHER people in this song, as tiny
    *  faces. Absent/empty → the plain "N people / Just you" text stands. */
   people?: MiniFace[];
+  /** Activity truth (the Drive standard): who touched the song last +
+   *  whether there's anything you haven't seen. Absent → plain date. */
+  pulse?: { unseen: number; line: string | null; sentence: string | null };
 }
 
 /**
@@ -38,6 +41,7 @@ const SongGridCard = ({
   selecting = false,
   selected = false,
   people,
+  pulse,
 }: SongGridCardProps) => {
   // The song's quiet "for …" — display-only here (the card is a button; the
   // workspace header is the edit surface). Invisible when unset, and omitted
@@ -144,9 +148,27 @@ const SongGridCard = ({
             {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
           </span>
         )}
-        <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
-          {relativeDate(song.last_activity_at)}
-        </p>
+        {pulse?.line ? (
+          <p
+            className="flex items-center gap-1 text-[0.6875rem]"
+            style={{ color: pulse.unseen > 0 ? "var(--cog-warm-gray)" : "var(--cog-muted)" }}
+            title={pulse.sentence ?? undefined}
+          >
+            {pulse.unseen > 0 && (
+              <span
+                aria-label={`${pulse.unseen} new since you were here`}
+                role="img"
+                className="rounded-full"
+                style={{ width: 7, height: 7, backgroundColor: "var(--cog-gold)", flexShrink: 0 }}
+              />
+            )}
+            {pulse.line}
+          </p>
+        ) : (
+          <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+            {relativeDate(song.last_activity_at)}
+          </p>
+        )}
       </div>
     )}
   </button>

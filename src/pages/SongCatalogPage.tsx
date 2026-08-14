@@ -25,6 +25,7 @@ import NewSongRail from "@/components/library/NewSongRail";
 import { saveDedicationDurable } from "@/lib/songs/dedication";
 import PeopleFilterRow from "@/components/library/PeopleFilterRow";
 import { useBandPeople } from "@/lib/library/useBandPeople";
+import { useCatalogPulse } from "@/lib/library/useCatalogPulse";
 import { songMatchesPeople, shouldShowPeopleRow, peopleFilterLabel } from "@/lib/library/bandIndex";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
@@ -123,6 +124,11 @@ const SongCatalogPage = () => {
     [songs],
   );
   const { band } = useBandPeople(activeSongIds, accountUser?.id ?? null);
+  // The Drive activity layer: who touched each song last + the unseen dot.
+  // Server-computed off last_seen_at (the room's recap flow maintains it, so
+  // dots clear themselves once you walk in). Best-effort — plain dates stand
+  // when the board can't answer.
+  const { bySong: pulseBySong } = useCatalogPulse(activeSongIds.length > 0);
   const [peopleFilter, setPeopleFilter] = useState<string[]>([]);
   const bandFilterActive = peopleFilter.length > 0;
   const selectedPeople = useMemo(
@@ -182,6 +188,13 @@ const SongCatalogPage = () => {
       }
     }
     if (saved > 0) {
+      // The Drive immediacy: the folder's count moves the moment you drop
+      // files on it (the outbox guarantees the eventual truth matches).
+      setSongs((prev) =>
+        prev.map((x) =>
+          x.id === target.id ? { ...x, voice_memo_count: x.voice_memo_count + saved } : x,
+        ),
+      );
       toast(
         `${saved} ${saved === 1 ? "memo" : "memos"} saving to “${target.title}” — safe on this device, even offline.`,
       );
@@ -1024,6 +1037,7 @@ const SongCatalogPage = () => {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           peopleFor={peopleForSong}
+          pulseFor={(song) => pulseBySong.get(song.id)}
         />
         )}
         </div>

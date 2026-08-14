@@ -36,6 +36,8 @@ interface LibrarySongListProps {
   /** THE BAND SHELF: resolves a song to the other people in it (tiny faces
    *  on grid cards — the Drive "shared" signal). */
   peopleFor?: (song: SongRow) => MiniFace[];
+  /** Activity truth per song ("Sarah · 2h" + unseen dot). */
+  pulseFor?: (song: SongRow) => { unseen: number; line: string | null; sentence: string | null } | undefined;
 }
 
 /**
@@ -95,6 +97,7 @@ const LibrarySongList = ({
   selectedIds,
   onToggleSelect,
   peopleFor,
+  pulseFor,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -313,6 +316,7 @@ const LibrarySongList = ({
       selecting={selecting}
       selected={selectedIds?.has(song.id)}
       people={peopleFor?.(song)}
+      pulse={pulseFor?.(song)}
     />
   );
 
