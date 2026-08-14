@@ -5,6 +5,7 @@ import { songStatusChip } from "@/lib/library/songStatus";
 import { useDedication } from "@/lib/songs/dedication";
 import { useLongPress } from "./useLongPress";
 import StatusChip from "./StatusChip";
+import MiniFaceStack, { type MiniFace } from "./MiniFaceStack";
 
 interface SongGridCardProps {
   song: SongRow;
@@ -18,6 +19,9 @@ interface SongGridCardProps {
   /** Batch-select mode active (Apple Photos): tap toggles instead of opens. */
   selecting?: boolean;
   selected?: boolean;
+  /** THE BAND SHELF's Drive signal: the OTHER people in this song, as tiny
+   *  faces. Absent/empty → the plain "N people / Just you" text stands. */
+  people?: MiniFace[];
 }
 
 /**
@@ -33,6 +37,7 @@ const SongGridCard = ({
   pinned = false,
   selecting = false,
   selected = false,
+  people,
 }: SongGridCardProps) => {
   // The song's quiet "for …" — display-only here (the card is a button; the
   // workspace header is the edit surface). Invisible when unset, and omitted
@@ -132,9 +137,13 @@ const SongGridCard = ({
 
     {!compact && (
       <div className="flex w-full items-end justify-between mt-3">
-        <span className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
-          {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
-        </span>
+        {people && people.length > 0 ? (
+          <MiniFaceStack people={people} />
+        ) : (
+          <span className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
+            {song.collaborator_count > 1 ? `${song.collaborator_count} people` : "Just you"}
+          </span>
+        )}
         <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>
           {relativeDate(song.last_activity_at)}
         </p>

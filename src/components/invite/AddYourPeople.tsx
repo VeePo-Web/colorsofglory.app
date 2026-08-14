@@ -26,6 +26,33 @@ const AddYourPeople = ({ songId, songTitle, myUserId }: AddYourPeopleProps) => {
 
   if (people.length === 0) return null;
 
+  const remaining = people.filter((p) => !added.has(p.userId));
+
+  // The band, one tap: add EVERYONE still outside. Sequential (the calm,
+  // debuggable order), one honest toast at the end with what really landed.
+  const handleAddEveryone = async () => {
+    if (busy.size > 0 || remaining.length === 0) return;
+    setBusy(new Set(remaining.map((p) => p.userId)));
+    let landed = 0;
+    for (const person of remaining) {
+      try {
+        await addMember(songId, person.userId);
+        landed += 1;
+        setAdded((prev) => new Set(prev).add(person.userId));
+      } catch {
+        /* partial honesty below */
+      }
+    }
+    setBusy(new Set());
+    if (landed === remaining.length) {
+      toast(`Your ${landed === 1 ? "person is" : "people are"} in — “${songTitle}” is on ${landed === 1 ? "their" : "everyone's"} shelf now.`);
+    } else if (landed > 0) {
+      toast(`${landed} of ${remaining.length} added — try the rest again in a moment.`);
+    } else {
+      toast.error("Couldn't add them — check your connection and try again.");
+    }
+  };
+
   const handleAdd = async (userId: string, firstName: string) => {
     if (busy.has(userId) || added.has(userId)) return;
     setBusy((prev) => new Set(prev).add(userId));
@@ -66,6 +93,23 @@ const AddYourPeople = ({ songId, songTitle, myUserId }: AddYourPeopleProps) => {
       <p style={{ fontSize: 12, color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", margin: "0 0 8px" }}>
         Already writing with you elsewhere — one tap opens this song for them too.
       </p>
+      {remaining.length >= 2 && (
+        <button
+          type="button"
+          onClick={() => void handleAddEveryone()}
+          disabled={busy.size > 0}
+          aria-label={`Add all ${remaining.length} of your people to this song`}
+          className="cog-press"
+          style={{
+            width: "100%", minHeight: 44, marginBottom: 6, borderRadius: 12, cursor: "pointer",
+            border: "1.5px dashed var(--cog-gold)", backgroundColor: "var(--cog-gold-glow)",
+            color: "var(--cog-gold)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 700,
+            opacity: busy.size > 0 ? 0.6 : 1,
+          }}
+        >
+          {busy.size > 0 ? "Adding your people…" : `Add everyone (${remaining.length})`}
+        </button>
+      )}
       {people.map((person) => {
         const isAdded = added.has(person.userId);
         const isBusy = busy.has(person.userId);

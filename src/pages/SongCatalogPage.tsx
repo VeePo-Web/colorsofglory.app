@@ -129,6 +129,23 @@ const SongCatalogPage = () => {
     () => band.people.filter((p) => peopleFilter.includes(p.userId)),
     [band.people, peopleFilter],
   );
+  // Faces on the shelf's cards — resolve a song to its OTHER people
+  // (bandIndex already excludes me from `people`).
+  const peopleById = useMemo(
+    () => new Map(band.people.map((p) => [p.userId, p])),
+    [band.people],
+  );
+  const peopleForSong = (song: SongRow) => {
+    const ids = band.membersBySong.get(song.id);
+    if (!ids) return [];
+    const out: { userId: string; name: string; avatarColor: string; initials: string }[] = [];
+    for (const id of ids) {
+      const person = peopleById.get(id);
+      if (person) out.push(person);
+    }
+    return out;
+  };
+
   // People can leave songs between visits — never keep filtering by a ghost.
   useEffect(() => {
     if (peopleFilter.length === 0 || band.people.length === 0) return;
@@ -1006,6 +1023,7 @@ const SongCatalogPage = () => {
           selecting={selecting}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          peopleFor={peopleForSong}
         />
         )}
         </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { LibraryDensity, LibrarySort, LibraryView } from "@/lib/library/libraryPrefs";
 import SongGridCard from "./SongGridCard";
+import type { MiniFace } from "./MiniFaceStack";
 import SongListRow from "./SongListRow";
 import LibrarySkeleton from "./LibrarySkeleton";
 import AlphaScrubber from "./AlphaScrubber";
@@ -32,6 +33,9 @@ interface LibrarySongListProps {
   selecting?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (song: SongRow) => void;
+  /** THE BAND SHELF: resolves a song to the other people in it (tiny faces
+   *  on grid cards — the Drive "shared" signal). */
+  peopleFor?: (song: SongRow) => MiniFace[];
 }
 
 /**
@@ -90,6 +94,7 @@ const LibrarySongList = ({
   selecting = false,
   selectedIds,
   onToggleSelect,
+  peopleFor,
 }: LibrarySongListProps) => {
   const pinch = usePinchDensity(density, onDensityChange);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -307,6 +312,7 @@ const LibrarySongList = ({
       pinned={pinnedIds?.has(song.id)}
       selecting={selecting}
       selected={selectedIds?.has(song.id)}
+      people={peopleFor?.(song)}
     />
   );
 
