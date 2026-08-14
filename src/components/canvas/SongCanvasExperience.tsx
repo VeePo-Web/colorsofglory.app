@@ -690,6 +690,10 @@ const SongCanvasExperience = () => {
   // guard also swallows double-taps (a second tap during a 2.7s count-in must
   // not spawn a second count-in).
   const takeSeqRef = useRef(0);
+  // Unmount abandons any start still awaiting its count-in — the transport
+  // RESOLVES (never rejects) on teardown, so without this bump the awaited
+  // click would open the mic on a page that no longer exists (ghost take).
+  useEffect(() => () => { takeSeqRef.current += 1; }, []);
   const takeStartInFlightRef = useRef(false);
   // True while the count-in bar plays, BEFORE the mic opens — the sheet shows
   // an honest "count-in" state instead of pretending to record.
@@ -973,6 +977,12 @@ const SongCanvasExperience = () => {
         return same ? prev : next;
       });
     }
+    // For the deleted-memo prune below: what the server still HAS, and what
+    // this device still intends to upload (both read before the merge).
+    const serverMemoKeys = new Set(
+      res.cards.filter((c) => c.id.startsWith("db-voice-")).map((c) => memoKey(c.id)),
+    );
+    const pendingIds = new Set((await listPendingUploads(songId)).map((p) => p.id));
     setCards((prev) => {
       const fresh = new Map(res.cards.map((c) => [c.id, c]));
       // A memo we uploaded THIS session keeps its raw-uuid card; skip the
@@ -1029,6 +1039,27 @@ const SongCanvasExperience = () => {
             continue;
           }
         }
+        // A LOCAL raw-id voice card whose memo was deleted on the server
+        // (e.g. from the voice page) used to linger here forever — only db-*
+        // mirrors were pruned. Prune it too, carefully: never in demo rooms
+        // (no server truth), never while pending/uploading, and only past a
+        // 5-minute grace so a hydrate racing a fresh upload can't eat a
+        // just-recorded take.
+        if (
+          res.memosOk &&
+          !isDemoRoom &&
+          (c.type === "voice" || c.type === "hum") &&
+          !isServerCardId(c.id) &&
+          memoIdForCard(c.id) !== null &&
+          !serverMemoKeys.has(memoKey(c.id)) &&
+          !pendingIds.has(c.id) &&
+          !c.isProcessing &&
+          c.createdAt &&
+          Date.parse(c.createdAt) < Date.now() - 5 * 60_000
+        ) {
+          changed = true;
+          continue;
+        }
         next.push(c);
       }
       // "Not this one" must stay decided: rows the owner dismissed on this
@@ -1047,7 +1078,7 @@ const SongCanvasExperience = () => {
       if (additions.length > 0) changed = true;
       return changed ? [...next, ...additions] : prev;
     });
-  }, [songId, isDirty]);
+  }, [songId, isDirty, isDemoRoom]);
 
   // Mount hydration + live room channel. Realtime events DEBOUNCE into one
   // trailing hydrate (a burst of co-writer edits used to trigger a full board
@@ -1453,7 +1484,9 @@ const SongCanvasExperience = () => {
 
     // F13: read the tempo + key off the take and pre-fill the song's EMPTY
     // tempo_bpm/key_signature — a confirmable suggestion, off the save path.
-    maybeDetectSongTempoKey(rec.blob, songId);
+    // BASES ONLY: a harmony layer sung a third above the base can clear the
+    // key floor with a DIFFERENT key and argue against the correct one.
+    if (!parentMemoId) maybeDetectSongTempoKey(rec.blob, songId);
 
     addVoiceCard(pending.id, true);
 
@@ -2205,10 +2238,17 @@ const SongCanvasExperience = () => {
         }),
       );
       // Server rows: the words travel to every device in the room.
+      // canvas_cards has NO meta column — the Key/BPM line the edit sheet
+      // collects used to vanish on every other device (a persistence lie).
+      // It now rides INSIDE the body as a "♪ …" line, which ChordCard's
+      // parser lifts back out as metadata (never a stray chip) and the edit
+      // sheet splits back into its field.
       const sid = serverCardId(cardId);
       if (sid) {
+        const metaLine = draft.meta?.trim();
+        const serverBody = metaLine ? `${draft.body.trim()}\n♪ ${metaLine}`.trim() : draft.body;
         syncServer(async () => {
-          await updateCanvasCard(sid, { label: draft.title, body: draft.body });
+          await updateCanvasCard(sid, { label: draft.title, body: serverBody });
           if (sectionChanged) await setCardSection(sid, draft.section);
         }, cardId);
       }

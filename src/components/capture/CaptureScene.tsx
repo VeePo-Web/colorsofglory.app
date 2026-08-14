@@ -1199,6 +1199,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           takeId={review.takeId}
           songId={review.songId}
           songTitle={review.songTitle}
+          songKey={padInheritedKey}
           storagePath={review.storagePath}
           durationMs={review.durationMs}
           pendingBlocks={pendingBlocks}

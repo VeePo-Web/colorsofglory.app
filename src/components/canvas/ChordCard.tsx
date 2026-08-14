@@ -2,15 +2,27 @@ import { memo, useMemo } from "react";
 import { Music } from "lucide-react";
 import type { CardFaceProps } from "./cardFace";
 
-const CHORD_RE = /^[A-G][#b]?(?:m|maj|min|sus|dim|aug|add|M)?\d{0,2}(?:\/[A-G][#b]?)?$/;
+// Quality may follow the number too (C7sus4, F#m7b5, Dadd9/F#) — the old
+// pattern rejected them into the truncated rest tag.
+const CHORD_RE = /^[A-G][#b]?(?:(?:m|maj|min|sus|dim|aug|add|M)?\d{0,2}){1,3}(?:[#b]\d{1,2})?(?:\/[A-G][#b]?)?$/;
 
 /** Pull chord tokens out of a free-text body ("Key: G · 74 BPM · C G Am F").
- *  The key phrase is lifted out FIRST so its letter can't masquerade as the
- *  opening chord, and "·"/em-dash separators never survive as garbage tags. */
+ *  "♪ …" metadata lines and the key phrase are lifted out FIRST so their
+ *  letters can't masquerade as chords, and "·"/em-dash separators never
+ *  survive as garbage tags. */
 function parseChords(body: string): { chords: string[]; rest: string } {
   let working = body;
   const restPre: string[] = [];
-  const keyMatch = /\bkey[:\s]+([A-G][#b♯♭]?\s*(?:major|minor|m)?)\b/i.exec(working);
+  // "♪ G · 74 BPM" lines are the cross-device vehicle for the edit sheet's
+  // Key & BPM field (canvas_cards has no meta column) — metadata wholesale,
+  // never tokenized.
+  working = working.replace(/^\s*♪\s*(.+)$/gm, (_, line: string) => {
+    restPre.push(line.trim());
+    return " ";
+  });
+  // "Key: G" / "Key G" / "Key of G" — the app's own placeholder wording
+  // ("Key of G") used to leak a stray G chip.
+  const keyMatch = /\bkey[:\s]+(?:of\s+)?([A-G][#b♯♭]?\s*(?:major|minor|m)?)\b/i.exec(working);
   if (keyMatch) {
     restPre.push(`Key ${keyMatch[1].trim()}`);
     working = working.replace(keyMatch[0], " ");

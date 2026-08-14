@@ -42,6 +42,9 @@ interface GuidedShapeRailProps {
   /** Section kinds the take already holds (spoken "verse", added chips) —
    *  their chips show as done, and tapping one just advances (no duplicate). */
   heardSections?: string[];
+  /** The song's saved (or F13-detected) key signature — the chords card
+   *  pre-selects its chip so the rail never asks what it already knows. */
+  initialKey?: string | null;
   /** Song-less captures only: the writer's own songs, offered inline on the
    *  home card so filing is one tap — no second sheet over a sheet. */
   homeSongs?: Array<{ id: string; title: string }>;
@@ -108,6 +111,7 @@ const GuidedShapeRail = ({
   committing = false,
   hasWords = false,
   heardSections = [],
+  initialKey = null,
   homeSongs = [],
   onCommitToSong,
   onAddLyrics,
@@ -122,7 +126,12 @@ const GuidedShapeRail = ({
   const [chords, setChords] = useState("");
   // Tap-to-build harmony: pick the key, then the key's own chords are chips —
   // clicking assembles the progression (typing stays as the free fallback).
-  const [songKey, setSongKey] = useState<string | null>(null);
+  // The song's OWN key (saved or F13-detected) arrives pre-selected: the rail
+  // already knows the home the song sings in — it never asks as if it didn't.
+  const [songKey, setSongKey] = useState<string | null>(() => {
+    const tonic = /^([A-G][#b]?)/.exec((initialKey ?? "").trim())?.[1];
+    return tonic && (KEY_CHIPS as readonly string[]).includes(tonic) ? tonic : null;
+  });
   const [prog, setProg] = useState<string[]>([]);
   const reduce =
     typeof window !== "undefined" &&
@@ -138,9 +147,11 @@ const GuidedShapeRail = ({
     next();
   };
   const addChords = () => {
-    // Chips first (the one-tap path), typed text as the free fallback —
-    // either way the key rides along so the chart knows its home.
-    const line = prog.length > 0 ? prog.join("  ") : chords.trim();
+    // Chips AND typed text COMBINE (tap G · C, type "Asus4" — one line):
+    // either-or made mixing a tapped progression with a color chord
+    // impossible. The key rides along so the chart knows its home.
+    const typed = chords.trim().split(/\s+/).filter(Boolean);
+    const line = [...prog, ...typed].join("  ");
     if (line) onAddChords(songKey ? `Key: ${songKey} · ${line}` : line);
     setChords("");
     setProg([]);
@@ -406,25 +417,25 @@ const GuidedShapeRail = ({
                 ))}
               </div>
             )}
-            {/* Typed fallback for anything beyond the chips (sus, slash, 7ths). */}
-            {prog.length === 0 && (
-              <input
-                value={chords}
-                onChange={(e) => setChords(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && chords.trim()) {
-                    e.preventDefault();
-                    addChords();
-                  }
-                }}
-                placeholder="or type them — C  G  Am7  F/C"
-                aria-label="Chords for this idea"
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
-                style={{ ...fieldStyle, fontFamily: "var(--font-body)" }}
-              />
-            )}
+            {/* Typed lane for anything beyond the chips (sus, slash, 7ths) —
+                ALWAYS visible: tapped chips and a typed "Asus4" combine into
+                one progression (the either-or gate made mixing impossible). */}
+            <input
+              value={chords}
+              onChange={(e) => setChords(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (chords.trim() || prog.length > 0)) {
+                  e.preventDefault();
+                  addChords();
+                }
+              }}
+              placeholder={prog.length > 0 ? "add extras — Asus4  F/C" : "or type them — C  G  Am7  F/C"}
+              aria-label="Chords for this idea"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ ...fieldStyle, fontFamily: "var(--font-body)" }}
+            />
             {actions({ canAdd: prog.length > 0 || chords.trim().length > 0, onAdd: addChords, addLabel: "Add chords" })}
           </div>
         )}

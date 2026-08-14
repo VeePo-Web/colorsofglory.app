@@ -29,12 +29,23 @@ interface CardEditSheetProps {
   onClose: () => void;
 }
 
+/** Split a body that carries a "♪ …" metadata line (the cross-device vehicle
+ *  for the Key & BPM field — canvas_cards has no meta column) back into its
+ *  two halves, so the sheet round-trips what another device saved. */
+function splitMetaLine(body: string, meta: string | undefined): { body: string; meta: string } {
+  if (meta?.trim()) return { body, meta };
+  const m = /^\s*♪\s*(.+)$/m.exec(body);
+  if (!m) return { body, meta: meta ?? "" };
+  return { body: body.replace(m[0], "").trim(), meta: m[1].trim() };
+}
+
 const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheetProps) => {
   const [visible, setVisible] = useState(false);
   const [title, setTitle] = useState(initial.title);
-  const [body, setBody] = useState(initial.body);
+  const split = splitMetaLine(initial.body, initial.meta);
+  const [body, setBody] = useState(split.body);
   const [section, setSection] = useState(initial.section);
-  const [meta, setMeta] = useState(initial.meta ?? "");
+  const [meta, setMeta] = useState(split.meta);
   const titleRef = useRef<HTMLInputElement>(null);
   const didSave = useRef(false);
 
@@ -70,9 +81,12 @@ const CardEditSheet = ({ initial, kind, accent, onSave, onClose }: CardEditSheet
   const dismiss = () => {
     if (didSave.current) { onClose(); return; }
     didSave.current = true;
+    // Compare against the SPLIT baseline — the ♪-line lift changes the
+    // in-sheet representation, not the content; opening and closing an
+    // untouched card must never fire a write.
     const changed =
-      title !== initial.title || body !== initial.body ||
-      section !== initial.section || meta !== (initial.meta ?? "");
+      title !== initial.title || body !== split.body ||
+      section !== initial.section || meta !== split.meta;
     if (changed) onSave(buildDraft());
     onClose();
   };

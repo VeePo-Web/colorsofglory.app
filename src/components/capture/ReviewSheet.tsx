@@ -56,6 +56,8 @@ interface ReviewSheetProps {
   takeId: string | null;
   songId: string | null;
   songTitle?: string;
+  /** The song's saved (or detected) key — the rail's chords card pre-selects it. */
+  songKey?: string | null;
   storagePath?: string | null;
   durationMs: number;
   pendingBlocks: PendingBlock[];
@@ -152,6 +154,7 @@ const ReviewSheet = ({
   takeId,
   songId,
   songTitle,
+  songKey = null,
   storagePath,
   durationMs,
   pendingBlocks,
@@ -670,6 +673,7 @@ const ReviewSheet = ({
               heardSections={blocks
                 .map((b) => b.section_kind)
                 .filter((k): k is string => Boolean(k))}
+              initialKey={songKey}
               homeSongs={songId ? [] : homeSongs}
               onCommitToSong={(id) => void handleCommit(id)}
               onAddLyrics={(text) => addFilledBlock("lyrics", text)}
