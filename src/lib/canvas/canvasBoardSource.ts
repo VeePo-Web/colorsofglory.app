@@ -234,7 +234,9 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
       // parent_memo_id IS the stacking spine — without it every hydrated
       // layer arrived as a loose top-level sibling card (the "cluttered and
       // confusing" feed) and stacks were invisible on any second device.
-      .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks, parent_memo_id")
+      // layer_gain/muted/offset carry the ROOM-SHARED mix to every device's
+      // ears (they used to land in the UI only).
+      .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks, parent_memo_id, layer_gain, layer_muted, layer_offset_ms")
       .eq("song_id", songId)
       .not("status", "in", '("failed","deleted")')
       // Newest first — an ascending window pinned the 60 OLDEST memos and a
@@ -266,6 +268,7 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
       // memoKey() so local raw-id bases and db-voice mirrors both match.
       const parentMemoId =
         (row as { parent_memo_id?: string | null }).parent_memo_id ?? undefined;
+      const mixRow = row as { layer_gain?: number | null; layer_muted?: boolean | null; layer_offset_ms?: number | null };
       out.push({
         id: `db-voice-${row.id}`,
         tree: "ideas",
@@ -281,6 +284,9 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
         // empty accent broke every `${accent}30` concatenation downstream.
         accent: getCreatorColor(row.author_user_id ?? row.id).base,
         parentMemoId,
+        layerGain: typeof mixRow.layer_gain === "number" ? mixRow.layer_gain : undefined,
+        layerMuted: mixRow.layer_muted === true ? true : undefined,
+        layerOffsetMs: typeof mixRow.layer_offset_ms === "number" && mixRow.layer_offset_ms > 0 ? mixRow.layer_offset_ms : undefined,
         // Layers render inside their base's stack, never on the board —
         // burning a column slot on one would gap the visible layout.
         ...(parentMemoId ? { x: 0, y: 0 } : nextSlot("ideas")),

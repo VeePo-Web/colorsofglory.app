@@ -128,6 +128,11 @@ export interface CanvasBoardCard {
   waveformPeaks?: number[] | null;
   /** Melody Lens relative pitch contour (server column or device store). */
   pitchContour?: number[] | null;
+  /** Persisted room-shared quick-mix for LAYER cards (voice_memos.layer_*).
+   *  Carried so the stack sheet's engine seeds hear what the room set. */
+  layerGain?: number;
+  layerMuted?: boolean;
+  layerOffsetMs?: number;
   /** Owner has reviewed this contributor idea (kept it in Ideas). Clears it from the review queue. */
   reviewed?: boolean;
   isDimmedReference?: boolean;

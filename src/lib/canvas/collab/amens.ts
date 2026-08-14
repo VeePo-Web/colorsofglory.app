@@ -1,6 +1,7 @@
 import type { ActivityEvent } from "@/integrations/cog/activity";
 import type { CardReactionKind, CardReactionRow } from "@/integrations/cog/reactions";
 import { getCreatorColor } from "@/lib/canvas/creatorColors";
+import { memoKey } from "@/lib/canvas/features/canvasAudio";
 
 /**
  * Amens — pure logic for the canvas encouragement layer.
@@ -38,7 +39,10 @@ export type AmenSummary = {
   latestAt: string;
 };
 
-const key = (cardId: string, kind: string) => `${cardId}|${kind}`;
+// memoKey: one card, two id spaces (raw memo uuid on the recorder's device,
+// db-voice-<uuid> everywhere else) — every queue/row comparison must meet in
+// the normalized space or an amen never crosses devices.
+const key = (cardId: string, kind: string) => `${memoKey(cardId)}|${kind}`;
 
 /**
  * The rows this device believes exist right now: server rows, minus my rows
@@ -91,10 +95,17 @@ export function applyToggle(
     // Re-amen before the remove flushed — cancel the removal, row returns.
     return { ...state, unsynced: state.unsynced.filter((o) => o !== pendingRemove) };
   }
-  const onServer = state.rows.some(
-    (r) => r.user_id === myId && r.card_id === cardId && r.kind === kind,
+  const serverRow = state.rows.find(
+    (r) => r.user_id === myId && memoKey(r.card_id) === memoKey(cardId) && r.kind === kind,
   );
-  const op: AmenOp = { op: onServer ? "remove" : "add", card_id: cardId, kind, created_at: now };
+  // A remove must carry the SERVER ROW'S OWN id form — deleting by the
+  // normalized id would miss a row stored in the other space.
+  const op: AmenOp = {
+    op: serverRow ? "remove" : "add",
+    card_id: serverRow ? serverRow.card_id : cardId,
+    kind,
+    created_at: now,
+  };
   return { ...state, unsynced: [...state.unsynced, op] };
 }
 
@@ -171,10 +182,15 @@ export function amenSummaries(
     b.created_at.localeCompare(a.created_at),
   );
   for (const r of rows) {
-    let s = out.get(r.card_id);
+    // memoKey: rows written before normalization landed carry EITHER id
+    // space (raw memo uuid on the recorder's device, db-voice-<uuid>
+    // elsewhere) — group them under one key so every amen ever said counts
+    // on every device.
+    const cardKey = memoKey(r.card_id);
+    let s = out.get(cardKey);
     if (!s) {
       s = { count: 0, mine: new Set(), contributors: [], latestAt: r.created_at };
-      out.set(r.card_id, s);
+      out.set(cardKey, s);
     }
     s.count += 1;
     if (r.created_at > s.latestAt) s.latestAt = r.created_at;

@@ -194,6 +194,11 @@ const toStackView = (c: CanvasCard): StackMemoView => ({
   section: c.section,
   waveformPeaks: c.waveformPeaks,
   pitchContour: c.pitchContour,
+  // The room-shared mix — dropping these made a collaborator's gain/mute/
+  // alignment land in the UI while playback ignored all three.
+  layerGain: c.layerGain,
+  layerMuted: c.layerMuted,
+  layerOffsetMs: c.layerOffsetMs,
 });
 
 type RecordingFlow = "idle" | "recording" | "reviewing";
@@ -767,6 +772,12 @@ const SongCanvasExperience = () => {
       promoteToFinal: (sourceId, finalCopy) => {
         // Idempotent by finalCopy.id — a double-tap can't plant a duplicate
         // Final card (see applyPromoteToFinal).
+        // One voice, honestly released: the source dims to a receipt (no
+        // player) — audio that kept sounding behind it was uncontrollable.
+        if (soloPlayIdRef.current === sourceId) {
+          stopCanvasAudio();
+          setSoloPlayId(null);
+        }
         setCards((prev) => applyPromoteToFinal(prev, sourceId, finalCopy));
         setSelectedId(null);
         setIsDragOver(false);
@@ -1222,11 +1233,23 @@ const SongCanvasExperience = () => {
 
   // ── Voice recording handlers ──────────────────────────────────────────────────
   const handleStartRecording = useCallback(async (parentId?: string) => {
-    // The in-flight guard swallows double-taps: a second tap during the
-    // count-in or the permission prompt must not spawn a second sequence.
-    if (isViewer || takeStartInFlightRef.current) return;
+    // The in-flight guard swallows double-taps DURING arming — but it
+    // releases while the take is still LIVE. A second start reachable from
+    // the stack sheet's "Record a layer" (openable in the arming window)
+    // would corrupt recordingParentIdRef mid-take: guard the whole life of
+    // the recording, not just its birth.
+    if (
+      isViewer ||
+      takeStartInFlightRef.current ||
+      recordingFlow !== "idle" ||
+      recorderStateRef.current.phase === "recording" ||
+      recorderStateRef.current.phase === "stopping"
+    ) return;
     takeStartInFlightRef.current = true;
     const seq = ++takeSeqRef.current;
+    // One bottom surface: a recording owns the room — the stack sheet (the
+    // only surface that can re-enter recording) steps aside.
+    setStackBaseId(null);
     try {
       // Never-bleed invariant: nothing on the speaker may bake into the take.
       // The beat can be restarted after the take; losing a click is recoverable,
@@ -1317,7 +1340,7 @@ const SongCanvasExperience = () => {
       takeStartInFlightRef.current = false;
       setCountingIn(false);
     }
-  }, [isViewer, startRecording, cancelRecording, metronome, countInOn, songBpm, beatsPerBar, primeClick, clickCountIn, startClick, stopClick]);
+  }, [isViewer, recordingFlow, startRecording, cancelRecording, metronome, countInOn, songBpm, beatsPerBar, primeClick, clickCountIn, startClick, stopClick]);
 
   const handleStopRecording = useCallback(async () => {
     takeSeqRef.current += 1; // abandon any start still awaiting count-in / mic
@@ -1367,6 +1390,12 @@ const SongCanvasExperience = () => {
             // only render inside their base's stack — vanishes entirely.
             : memoId && c.parentMemoId === pendingId
             ? { ...c, parentMemoId: memoId }
+            // A Final COPY promoted during the upload window follows too —
+            // stranded at `${pendingId}-final`, it played silence forever.
+            : memoId && c.id === `${pendingId}-final`
+            ? { ...c, id: `${memoId}-final`, sourceCardId: memoId }
+            : memoId && c.sourceCardId === pendingId
+            ? { ...c, sourceCardId: memoId }
             : c,
         ));
       if (memoId) {
@@ -1773,6 +1802,10 @@ const SongCanvasExperience = () => {
   const handlePlayCard = useCallback((cardId: string) => {
     const memoId = memoIdForCard(cardId);
     if (!memoId) return; // no backing audio (local/legacy) → no-op
+    // NEVER-BLEED, sealed at the second entrance: with count-in off there's
+    // no scrim during mic arming, so a play tapped in that window would sound
+    // through the speaker straight into the take.
+    if (takeStartInFlightRef.current || getAudioSession().recordingArmed || recordingFlow !== "idle") return;
     if (soloPlayAction(cardId, soloPlayIdRef.current) === "stop") {
       pauseCanvasAudio();
       setSoloPlayId(null);
@@ -1788,13 +1821,17 @@ const SongCanvasExperience = () => {
       onEnded: () => setSoloPlayId((cur) => (cur === cardId ? null : cur)),
       onError: () => setSoloPlayId((cur) => (cur === cardId ? null : cur)),
     });
-  }, []);
+  }, [recordingFlow]);
   const handlePlayCardRef = useRef(handlePlayCard);
   handlePlayCardRef.current = handlePlayCard;
   // A sequenced player OR an arming recording takes the voice — drop the stale
-  // solo indicator (recording's stopCanvasAudio already silenced the audio).
+  // solo indicator AND structurally silence the shared voice (idempotent; a
+  // play that slipped in during arming must never ride into the take).
   useEffect(() => {
-    if (listenPlaying || comparePlayingId || recordingFlow === "recording") setSoloPlayId(null);
+    if (listenPlaying || comparePlayingId || recordingFlow === "recording") {
+      if (recordingFlow === "recording") stopCanvasAudio();
+      setSoloPlayId(null);
+    }
   }, [listenPlaying, comparePlayingId, recordingFlow]);
   // Leaving the room silences the audition (canvasAudio is app-global).
   useEffect(() => () => { stopCanvasAudio(); }, []);
@@ -2470,7 +2507,10 @@ const SongCanvasExperience = () => {
       // ONE hoisted element (module scope) — a fresh <span> per call defeated
       // the memo of every card wearing a dot, on every stage render.
       const dot = canReview && !isViewer && pendingReviewIds.has(card.id) ? REVIEW_DOT : null;
-      const amenSummary = amenSummaryByCard.get(card.id) ?? null;
+      // memoKey: amens on a voice card must meet across id spaces — the
+      // recorder's device keeps the raw memo uuid while everyone else holds
+      // db-voice-<uuid>. Un-normalized, an amen NEVER crossed devices.
+      const amenSummary = amenSummaryByCard.get(memoKey(card.id)) ?? null;
       const isSelectedCard = selectedId === card.id;
       // Null for untouched, unselected cards — their memo stays intact.
       if (!dot && !amenSummary && !isSelectedCard) return null;
@@ -2481,7 +2521,7 @@ const SongCanvasExperience = () => {
             summary={amenSummary}
             selected={isSelectedCard}
             cardTitle={card.title || "this idea"}
-            onToggle={(kind) => toggleAmen(card.id, kind)}
+            onToggle={(kind) => toggleAmen(memoKey(card.id), kind)}
           />
         </>
       );
@@ -3134,7 +3174,17 @@ const SongCanvasExperience = () => {
             onDismiss={handleDismissReview}
             onAcceptLine={handleAcceptLine}
             onKeepLine={handleKeepLine}
-            onSee={(cardId) => { setShowReviewQueue(false); jumpToCardId(cardId); }}
+            onSee={(cardId) => {
+              // Resolve FIRST, close second: the card can be pruned between
+              // render and tap (its writer deleted the memo) — closing then
+              // silently doing nothing read as a broken button.
+              if (!cards.some((c) => c.id === cardId)) {
+                toast("That idea was just removed by its writer");
+                return;
+              }
+              setShowReviewQueue(false);
+              jumpToCardId(cardId);
+            }}
             onClose={() => setShowReviewQueue(false)}
           />
         </Suspense>

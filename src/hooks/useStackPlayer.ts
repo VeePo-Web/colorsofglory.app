@@ -138,25 +138,79 @@ export function useStackPlayer(
     pausedPosRef.current = 0;
   }, [stopSources]);
 
-  // Reset whenever the stack's membership changes; release on unmount.
+  // Ids the USER touched this session (by memoKey, so a rename can't forget
+  // them) — persisted seeds must never overwrite a hand the writer just set.
+  const touchedRef = useRef<Set<string>>(new Set());
+  // Late resume after a mid-listen membership change (assigned below, after
+  // prepare/playPause exist).
+  const resumeRef = useRef<() => void>(() => {});
+
+  // Membership changes DIFF, never nuke. A wholesale reset used to (a) wipe
+  // the writer's just-set mix and hard-stop audio when their own upload flush
+  // renamed the temp id, and (b) cut a listening session to silence the
+  // moment a co-writer's layer arrived. Surviving ids (matched via memoKey)
+  // carry the mixer across; new ids seed from the persisted room mix; and if
+  // the ear was mid-song, playback resumes from the same position.
+  const prevIdsRef = useRef<string[]>([]);
   useEffect(() => {
+    const prev = prevIdsRef.current;
+    prevIdsRef.current = playIds;
+    const s = stateRef.current;
+    const wasPlaying = s.isPlaying;
+    // Where the ear was, BEFORE teardown (web-audio clock or element time).
+    let resumePos = 0;
+    if (wasPlaying) {
+      if (ctxRef.current && layersRef.current.size > 0) {
+        resumePos = Math.max(0, ctxRef.current.currentTime - startedAtRef.current);
+      } else {
+        const el = elementsRef.current.get(prev[0]) ?? [...elementsRef.current.values()][0];
+        resumePos = el ? Math.max(0, el.currentTime) : 0;
+      }
+    }
     releaseAll();
     freshStartRef.current = true;
     // A fresh membership earns a fresh shot at the Web Audio engine — one
     // transient decode failure used to pin this hook instance to the
     // drift-prone element rung for its whole lifetime.
     webAudioOk.current = true;
+
+    const prevByKey = new Map(prev.map((id) => [memoKey(id), id]));
+    const muted = new Set<string>();
+    const gains: Record<string, number> = {};
+    let soloId: string | null = null;
+    for (const id of playIds) {
+      const old = prevByKey.get(memoKey(id));
+      if (old !== undefined) {
+        if (s.muted.has(old)) muted.add(id);
+        if (s.gains[old] !== undefined) gains[id] = s.gains[old];
+        if (s.soloId === old) soloId = id;
+      } else {
+        if (optsRef.current.initialMuted?.includes(id)) muted.add(id);
+        const g = optsRef.current.initialGains?.[id];
+        if (g !== undefined) gains[id] = g;
+      }
+    }
     setState({
       isPlaying: false,
       progress: 0,
       loading: false,
-      muted: optsRef.current.initialMuted?.length
-        ? new Set(optsRef.current.initialMuted)
-        : EMPTY_MUTED,
-      soloId: null,
-      gains: optsRef.current.initialGains ?? {},
+      muted: muted.size ? muted : EMPTY_MUTED,
+      soloId,
+      gains,
     });
-    return releaseAll;
+
+    let resumeTimer = 0;
+    if (wasPlaying && playIds.length > 0) {
+      pausedPosRef.current = resumePos;
+      freshStartRef.current = false;
+      // After the state commit (stateRef must read isPlaying:false), pick the
+      // song back up where the ear left it.
+      resumeTimer = window.setTimeout(() => resumeRef.current(), 60);
+    }
+    return () => {
+      if (resumeTimer) window.clearTimeout(resumeTimer);
+      releaseAll();
+    };
   }, [idsKey, releaseAll]);
 
   /** Total stack length in seconds (the longest layer incl. its head offset). */
@@ -280,6 +334,10 @@ export function useStackPlayer(
         setState((s) => ({ ...s, progress: driver.currentTime / (driver.duration || 1) }));
       };
       driver.onended = () => {
+        // The transport says stopped — so EVERYTHING stops. A layer that
+        // outlasts the driver kept sounding behind a "stopped" UI, and the
+        // next Play restarted the driver on top of it.
+        elementsRef.current.forEach((el) => el.pause());
         freshStartRef.current = true;
         setState((s) => ({ ...s, isPlaying: false, progress: 0 }));
       };
@@ -300,7 +358,10 @@ export function useStackPlayer(
       const s = stateRef.current;
       const mix = resolveMix(playIds, s.gains, s.muted, s.soloId);
       layersRef.current.forEach((l, id) => {
-        const offsetIntoBuffer = l.headOffsetS + fromS;
+        // Offset read at SCHEDULE time, not decode time — a server
+        // layer_offset_ms arriving after prepare (the room-mix refresh) must
+        // shape the very next play, not the next sheet open.
+        const offsetIntoBuffer = headOffsetS(id) + fromS;
         if (offsetIntoBuffer >= l.buffer.duration) return; // layer already over
         const source = ctx.createBufferSource();
         source.buffer = l.buffer;
@@ -329,7 +390,7 @@ export function useStackPlayer(
       };
       progressRaf.current = requestAnimationFrame(tick);
     },
-    [playIds, stackDuration, stopSources],
+    [playIds, stackDuration, stopSources, headOffsetS],
   );
 
   /** Toggle group playback. MUST be called from a user gesture (iOS). */
@@ -380,6 +441,7 @@ export function useStackPlayer(
 
   const toggleMute = useCallback(
     (id: string) => {
+      touchedRef.current.add(memoKey(id)); // the writer's hand beats the seed
       setState((s) => {
         const muted = new Set(s.muted);
         if (muted.has(id)) muted.delete(id);
@@ -405,6 +467,7 @@ export function useStackPlayer(
   /** Live per-layer volume — ramped, never interrupts playback. */
   const setGain = useCallback(
     (id: string, gain: number) => {
+      touchedRef.current.add(memoKey(id)); // the writer's hand beats the seed
       setState((s) => {
         const gains = { ...s.gains, [id]: clampLayerGain(gain) };
         applyMix(s.muted, s.soloId, gains);
@@ -413,6 +476,38 @@ export function useStackPlayer(
     },
     [applyMix],
   );
+
+  // THE ROOM MIX REACHES THE EARS: persisted gain/mute seeds used to be
+  // write-only past mount — a collaborator's mix landed in the UI (the slider
+  // showed 0.3) while playback lied at 1.0. When seeds change under the SAME
+  // membership (the sheet's server refresh), merge them for every id the
+  // writer hasn't personally touched this session.
+  const seedsKey = JSON.stringify([opts.initialGains ?? null, opts.initialMuted ?? null]);
+  useEffect(() => {
+    setState((s) => {
+      let changed = false;
+      const gains = { ...s.gains };
+      const muted = new Set(s.muted);
+      for (const id of playIds) {
+        if (touchedRef.current.has(memoKey(id))) continue;
+        const g = optsRef.current.initialGains?.[id];
+        if (g !== undefined && gains[id] !== g) {
+          gains[id] = g;
+          changed = true;
+        }
+        const m = optsRef.current.initialMuted?.includes(id) ?? false;
+        if (m !== muted.has(id)) {
+          if (m) muted.add(id);
+          else muted.delete(id);
+          changed = true;
+        }
+      }
+      if (!changed) return s;
+      applyMix(muted, s.soloId, gains);
+      return { ...s, gains, muted };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedsKey, applyMix]);
 
   const seek = useCallback(
     (pct: number) => {
@@ -437,6 +532,15 @@ export function useStackPlayer(
     },
     [playIds, scheduleWebAudio, stackDuration, stopSources],
   );
+
+  // The mid-listen resume (membership changed while playing): re-resolve the
+  // new membership's audio, then pick up from the held position. Assigned
+  // here so the membership effect (defined earlier) can reach forward.
+  resumeRef.current = () => {
+    void prepare().then(() => {
+      if (!stateRef.current.isPlaying) playPause();
+    });
+  };
 
   return { state, prepare, playPause, stop, toggleMute, toggleSolo, setGain, seek };
 }

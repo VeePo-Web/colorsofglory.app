@@ -143,6 +143,9 @@ const CanvasFeed = memo(function CanvasFeed({
   const dragRaf = useRef<number | null>(null);
   const pendingPx = useRef(0);
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    // First pointer owns the gesture: a second finger resting on the feed
+    // used to overwrite the drag mid-track and wedge the pager between pages.
+    if (swipe.current) return;
     swipe.current = { x: e.clientX, y: e.clientY, id: e.pointerId, locked: null, track: false, lastX: e.clientX, lastT: performance.now(), vx: 0 };
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
@@ -177,19 +180,24 @@ const CanvasFeed = memo(function CanvasFeed({
       });
     }
   };
-  const onPointerEnd = () => {
+  const onPointerEnd = (e: PointerEvent<HTMLDivElement>) => {
     const s = swipe.current;
+    // Only the OWNING pointer's lift ends the gesture — a second finger's
+    // lift used to reset the drag under the first finger's feet.
+    if (s && e.pointerId !== s.id) return;
     swipe.current = null;
     if (dragRaf.current != null) {
       cancelAnimationFrame(dragRaf.current);
       dragRaf.current = null;
     }
+    // ALWAYS settle the surface — the early !track return used to leave the
+    // pager wedged mid-slide showing half of each page.
+    const px = pendingPx.current;
+    pendingPx.current = 0;
+    if (drag.active) setDrag({ px: 0, active: false });
     if (!s?.track) return;
     const w = pagerRef.current?.clientWidth ?? window.innerWidth;
-    const px = pendingPx.current;
     const commit = Math.abs(px) > w * 0.28 || Math.abs(s.vx) > 0.45;
-    pendingPx.current = 0;
-    setDrag({ px: 0, active: false });
     if (commit && px !== 0) setPage(page === "ideas" ? "final" : "ideas");
   };
 

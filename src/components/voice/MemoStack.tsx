@@ -52,6 +52,12 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
   const playIds = stackPlayOrder(group);
   // Seed the mixer from the PERSISTED mix — the balance the room last set —
   // and hand the engine the record-latency offsets so layers line up.
+  // Keyed on the mix CONTENT, not just membership: the sheet's server
+  // refresh can land new gain/mute/offset values under the same ids, and an
+  // ids-only key made the room mix write-only past mount.
+  const seedsKey = [base, ...layers]
+    .map((l) => `${l.id}:${l.layerGain ?? ""}:${l.layerMuted ? 1 : 0}:${l.layerOffsetMs ?? 0}`)
+    .join("|");
   const seeds = useMemo(() => {
     const initialGains: Record<string, number> = {};
     const initialMuted: string[] = [];
@@ -63,7 +69,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
     }
     return { initialGains, initialMuted, serverOffsets };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playIds.join("|")]);
+  }, [seedsKey]);
   const { state, prepare, playPause, toggleMute, toggleSolo, setGain } = useStackPlayer(
     playIds,
     seeds,
