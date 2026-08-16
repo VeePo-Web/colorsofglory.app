@@ -3,6 +3,7 @@ import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import { relativeDate, coverColor } from "@/lib/library/format";
 import { songStatusChip } from "@/lib/library/songStatus";
 import { useDedication } from "@/lib/songs/dedication";
+import { songDragProps } from "@/lib/library/songDrag";
 import { useLongPress } from "./useLongPress";
 import StatusChip from "./StatusChip";
 import MiniFaceStack, { type MiniFace } from "./MiniFaceStack";
@@ -54,6 +55,10 @@ const SongGridCard = ({
   <button
     onClick={onClick}
     {...longPress}
+    // C5: on a fine pointer the card can be dragged onto an album (plain
+    // props, not a hook — the conditional spread is safe). Never while
+    // batch-selecting: one gesture per mode.
+    {...(selecting ? {} : songDragProps(song.id))}
     aria-label={
       selecting
         ? `${selected ? "Deselect" : "Select"} ${song.title}`

@@ -1,9 +1,11 @@
+import { useState, type DragEvent } from "react";
 import { Pencil, Disc3, Layers } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import type { AlbumPulse } from "@/lib/library/albumBadges";
 import { albumColor } from "@/lib/library/albumColors";
 import { coverColor } from "@/lib/library/format";
+import { dragHasSong, readDraggedSong } from "@/lib/library/songDrag";
 import MiniFaceStack, { type MiniFace } from "./MiniFaceStack";
 import { useShelfReorder } from "./useShelfReorder";
 
@@ -22,6 +24,8 @@ interface AlbumsShelfProps {
   facesFor?: (album: SongAlbum) => MiniFace[];
   /** What's new inside — freshest "Sarah · 2h" + total unseen (albumPulse). */
   pulseFor?: (album: SongAlbum) => AlbumPulse | null;
+  /** C5: a dragged song dropped on a cover files into that album (additive). */
+  onDropSong?: (albumId: string, songId: string) => void;
 }
 
 const FALLBACKS = [
@@ -91,12 +95,17 @@ const AlbumsShelf = ({
   onSelectUngrouped,
   facesFor,
   pulseFor,
+  onDropSong,
 }: AlbumsShelfProps) => {
   const songById = new Map(songs.map((s) => [s.id, s]));
   const reorder = useShelfReorder(
     albums.map((a) => a.id),
     onReorder,
   );
+  // C5: which cover a dragged song is hovering. Distinct from the shelf's
+  // own hold-and-slide reorder (pointer events on the tiles) — a song drag
+  // arrives via HTML5 drag events, so the two gestures never collide.
+  const [dropOverId, setDropOverId] = useState<string | null>(null);
 
   return (
     <div className="mb-4">
@@ -151,6 +160,31 @@ const AlbumsShelf = ({
           const faces = facesFor?.(album) ?? [];
           const pulse = pulseFor?.(album) ?? null;
           const countText = `${albumSongs.length} ${albumSongs.length === 1 ? "song" : "songs"}`;
+          const dropOver = dropOverId === album.id;
+          const dropProps = onDropSong
+            ? {
+                onDragOver: (e: DragEvent<HTMLButtonElement>) => {
+                  if (dragHasSong(e)) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                  }
+                },
+                onDragEnter: (e: DragEvent<HTMLButtonElement>) => {
+                  if (dragHasSong(e)) setDropOverId(album.id);
+                },
+                onDragLeave: (e: DragEvent<HTMLButtonElement>) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDropOverId((id) => (id === album.id ? null : id));
+                  }
+                },
+                onDrop: (e: DragEvent<HTMLButtonElement>) => {
+                  e.preventDefault();
+                  setDropOverId(null);
+                  const songId = readDraggedSong(e);
+                  if (songId) onDropSong(album.id, songId);
+                },
+              }
+            : {};
 
           return (
             <div
@@ -162,6 +196,7 @@ const AlbumsShelf = ({
             >
               <button
                 onClick={() => onSelect(selected ? null : album.id)}
+                {...dropProps}
                 aria-pressed={selected}
                 aria-label={[
                   selected ? "Show all songs" : `Show album ${album.name}`,
@@ -176,9 +211,10 @@ const AlbumsShelf = ({
                 <div
                   className="relative rounded-2xl transition-shadow duration-200"
                   style={{
-                    boxShadow: selected
-                      ? "0 0 0 2px var(--cog-gold), 0 10px 24px -12px rgba(184,149,58,0.45)"
-                      : "0 2px 8px rgba(28,26,23,0.06)",
+                    boxShadow:
+                      selected || dropOver
+                        ? "0 0 0 2px var(--cog-gold), 0 10px 24px -12px rgba(184,149,58,0.45)"
+                        : "0 2px 8px rgba(28,26,23,0.06)",
                   }}
                 >
                   <AlbumCover

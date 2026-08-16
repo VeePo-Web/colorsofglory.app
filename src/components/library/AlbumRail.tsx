@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 import { Disc3, Layers, Music } from "lucide-react";
 import type { SongAlbum } from "@/lib/library/albums";
 import type { AlbumPulse } from "@/lib/library/albumBadges";
 import { albumColor } from "@/lib/library/albumColors";
+import { dragHasSong, readDraggedSong } from "@/lib/library/songDrag";
 
 interface AlbumRailProps {
   albums: SongAlbum[];
@@ -14,6 +15,8 @@ interface AlbumRailProps {
   onSelectAlbum: (id: string) => void;
   /** What's new inside each album — drives the rail's gold dot. */
   pulseFor?: (album: SongAlbum) => AlbumPulse | null;
+  /** C5: a dragged song dropped on an album row files into it (additive). */
+  onDropSong?: (albumId: string, songId: string) => void;
 }
 
 /**
@@ -34,9 +37,14 @@ const AlbumRail = ({
   onSelectUngrouped,
   onSelectAlbum,
   pulseFor,
+  onDropSong,
 }: AlbumRailProps) => {
   const rowBase =
     "flex w-full items-center gap-2.5 rounded-xl px-3 text-left transition-colors duration-150";
+
+  // C5: which album row a dragged song is hovering (one state at rail level —
+  // Row is re-created per render, so it can never own state of its own).
+  const [dropOverId, setDropOverId] = useState<string | null>(null);
 
   const Row = ({
     active,
@@ -46,6 +54,8 @@ const AlbumRail = ({
     count,
     iconColor,
     unseen = 0,
+    dropOver = false,
+    dropProps = {},
   }: {
     active: boolean;
     onClick: () => void;
@@ -56,14 +66,19 @@ const AlbumRail = ({
     iconColor?: string;
     /** Anything new inside → the quiet gold dot after the count. */
     unseen?: number;
+    /** A dragged song is over this row — light the catch. */
+    dropOver?: boolean;
+    dropProps?: Record<string, unknown>;
   }) => (
     <button
       onClick={onClick}
+      {...dropProps}
       aria-current={active ? "true" : undefined}
       className={`${rowBase} ${active ? "" : "hover:bg-[var(--cog-cream)]"}`}
       style={{
         minHeight: 40,
-        backgroundColor: active ? "var(--cog-gold-pale)" : "transparent",
+        backgroundColor: active || dropOver ? "var(--cog-gold-pale)" : "transparent",
+        boxShadow: dropOver ? "0 0 0 2px var(--cog-gold)" : undefined,
       }}
     >
       <span style={{ color: active ? "var(--cog-gold)" : iconColor ?? "var(--cog-warm-gray)" }}>
@@ -136,6 +151,35 @@ const AlbumRail = ({
             count={album.songIds.length}
             iconColor={albumColor(album.color)?.swatch}
             unseen={pulseFor?.(album)?.unseen ?? 0}
+            dropOver={dropOverId === album.id}
+            dropProps={
+              onDropSong
+                ? {
+                    onDragOver: (e: DragEvent<HTMLButtonElement>) => {
+                      if (dragHasSong(e)) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "copy";
+                      }
+                    },
+                    onDragEnter: (e: DragEvent<HTMLButtonElement>) => {
+                      if (dragHasSong(e)) setDropOverId(album.id);
+                    },
+                    onDragLeave: (e: DragEvent<HTMLButtonElement>) => {
+                      // Crossing into a child fires leave+enter — only clear
+                      // when the pointer truly left this row.
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDropOverId((id) => (id === album.id ? null : id));
+                      }
+                    },
+                    onDrop: (e: DragEvent<HTMLButtonElement>) => {
+                      e.preventDefault();
+                      setDropOverId(null);
+                      const songId = readDraggedSong(e);
+                      if (songId) onDropSong(album.id, songId);
+                    },
+                  }
+                : {}
+            }
           />
         ))}
       </div>

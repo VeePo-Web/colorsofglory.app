@@ -458,6 +458,32 @@ const SongCatalogPage = () => {
     setAlbums(updateAlbum(albumId, { songIds }));
   };
 
+  // C5 — Drive's physical filing: a song dragged onto an album cover/row
+  // (fine pointer only) files into it. Additive (a song can sit on two
+  // albums), reversible, and calm when it's already there.
+  const handleDropSongOnAlbum = (albumId: string, songId: string) => {
+    const album = albums.find((a) => a.id === albumId);
+    if (!album) return;
+    const title = songs.find((s) => s.id === songId)?.title;
+    if (album.songIds.includes(songId)) {
+      toast(`${title ? `“${title}” is` : "It's"} already in ${album.name}`);
+      return;
+    }
+    setAlbums(updateAlbum(albumId, { songIds: [...album.songIds, songId] }));
+    toast(`Added${title ? ` “${title}”` : ""} to ${album.name}`, {
+      duration: 6000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const cur = listAlbums().find((a) => a.id === albumId);
+          if (cur) {
+            setAlbums(updateAlbum(albumId, { songIds: cur.songIds.filter((id) => id !== songId) }));
+          }
+        },
+      },
+    });
+  };
+
   // Remove a song from the album you're inside — it stays in your library,
   // it just leaves this body of work. Reversible; never archives the song.
   const removeSongFromAlbum = (albumId: string, song: SongRow) => {
@@ -857,6 +883,7 @@ const SongCatalogPage = () => {
               setReorderingAlbum(false);
             }}
             pulseFor={pulseForAlbum}
+            onDropSong={handleDropSongOnAlbum}
           />
         )}
 
@@ -1076,6 +1103,7 @@ const SongCatalogPage = () => {
                 onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
                 facesFor={facesForAlbum}
                 pulseFor={pulseForAlbum}
+                onDropSong={handleDropSongOnAlbum}
               />
             </div>
           )
