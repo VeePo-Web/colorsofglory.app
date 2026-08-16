@@ -1,8 +1,10 @@
-import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check, Repeat } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Pencil, Disc3, Plus, ArrowUpDown, Check, Repeat } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { albumColor } from "@/lib/library/albumColors";
 import { coverColor } from "@/lib/library/format";
+import Breadcrumb from "./Breadcrumb";
 
 interface AlbumDetailHeaderProps {
   album: SongAlbum;
@@ -10,6 +12,8 @@ interface AlbumDetailHeaderProps {
   onExit: () => void;
   onEdit: () => void;
   onAddSongs: () => void;
+  /** Rename in place — the name changes where the name lives (C4). */
+  onRename?: (name: string) => void;
   /** Loop the whole album in the car. Shown only when a song has an idea to play. */
   onPractice?: () => void;
   /** Tracklist arrange-mode toggle (shown only when 2+ songs). */
@@ -37,6 +41,7 @@ const AlbumDetailHeader = ({
   onExit,
   onEdit,
   onAddSongs,
+  onRename,
   onPractice,
   reordering = false,
   onToggleReorder,
@@ -48,23 +53,32 @@ const AlbumDetailHeader = ({
   // red one" identity inside the album as on the shelf.
   const chosen = albumColor(album.color);
 
+  // Rename where the name lives (C4): tap the title → it becomes an input in
+  // the same serif at the same size. Enter/blur keeps it; Escape lets it go;
+  // an emptied name quietly keeps the old one (a room is never nameless).
+  const [editingName, setEditingName] = useState(false);
+  const [draft, setDraft] = useState(album.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editingName) nameInputRef.current?.select();
+  }, [editingName]);
+  const commitName = () => {
+    setEditingName(false);
+    const next = draft.trim();
+    if (next && next !== album.name) onRename?.(next);
+    else setDraft(album.name);
+  };
+
   return (
     <div className="mb-4">
-      {/* Back to all songs · Reorder toggle (Apple "Edit" affordance) */}
-      <div className="mb-3 flex items-center justify-between">
-        <button
-          onClick={onExit}
-          className="flex items-center gap-1 transition-transform duration-150 active:scale-95"
-          style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
-          aria-label="Back to all songs"
-        >
-          <ChevronLeft size={18} strokeWidth={2.2} />
-          <span className="text-[0.875rem] font-semibold">All songs</span>
-        </button>
+      {/* The breadcrumb — you always know where you are, and home is one tap.
+          Reorder toggle keeps the right edge (Apple "Edit" affordance). */}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <Breadcrumb root="All songs" onRoot={onExit} current={album.name} />
         {songs.length > 1 && onToggleReorder && (
           <button
             onClick={onToggleReorder}
-            className="flex items-center gap-1.5 transition-transform duration-150 active:scale-95"
+            className="flex shrink-0 items-center gap-1.5 transition-transform duration-150 active:scale-95"
             style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
             aria-pressed={reordering}
           >
@@ -106,12 +120,35 @@ const AlbumDetailHeader = ({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h2
-            className="truncate text-[1.375rem] font-bold leading-tight"
-            style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
-          >
-            {album.name}
-          </h2>
+          {editingName && onRename ? (
+            <input
+              ref={nameInputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitName();
+                if (e.key === "Escape") {
+                  setDraft(album.name);
+                  setEditingName(false);
+                }
+              }}
+              aria-label="Album name"
+              className="w-full rounded-lg bg-transparent text-[1.375rem] font-bold leading-tight outline-none focus-visible:ring-2 focus-visible:ring-[var(--cog-border-gold)]"
+              style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", padding: 0 }}
+            />
+          ) : (
+            <h2 className="min-w-0 truncate text-[1.375rem] font-bold leading-tight">
+              <button
+                onClick={onRename ? () => { setDraft(album.name); setEditingName(true); } : undefined}
+                aria-label={onRename ? `Album name: ${album.name} — tap to rename` : album.name}
+                className="max-w-full truncate rounded-lg text-left transition-colors duration-150"
+                style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)", minHeight: 32 }}
+              >
+                {album.name}
+              </button>
+            </h2>
+          )}
           <p className="mt-0.5 text-[0.8125rem]" style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}>
             {songs.length} {songs.length === 1 ? "song" : "songs"}
             {ideas > 0 && ` · ${ideas} ${ideas === 1 ? "idea" : "ideas"}`}

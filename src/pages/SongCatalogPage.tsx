@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Settings, Mic, Sparkles, Disc3, ChevronLeft } from "lucide-react";
+import { Plus, Settings, Sparkles, Disc3 } from "lucide-react";
 import { toast } from "sonner";
 import CogBrand from "@/components/cog/CogBrand";
 import BottomNav from "@/components/cog/BottomNav";
@@ -12,6 +12,7 @@ import LibraryControls from "@/components/library/LibraryControls";
 import LibrarySongList from "@/components/library/LibrarySongList";
 import AlbumsShelf from "@/components/library/AlbumsShelf";
 import AlbumDetailHeader from "@/components/library/AlbumDetailHeader";
+import Breadcrumb from "@/components/library/Breadcrumb";
 import AlbumRail from "@/components/library/AlbumRail";
 import AlbumSongOrderList from "@/components/library/AlbumSongOrderList";
 import ContinueShelf from "@/components/library/ContinueShelf";
@@ -978,6 +979,7 @@ const SongCatalogPage = () => {
             }}
             onEdit={() => setAlbumSheet({ open: true, album: activeAlbum })}
             onAddSongs={() => setAlbumSheet({ open: true, album: activeAlbum })}
+            onRename={(name) => setAlbums(updateAlbum(activeAlbum.id, { name }))}
             onPractice={() => {
               // Resolve songs in the album's own tracklist order, tagged with
               // titles so the player never re-fetches the song list.
@@ -1038,15 +1040,9 @@ const SongCatalogPage = () => {
         ) : !selecting && !bandFilterActive && activeTab === "Owned" && viewingUngrouped ? (
           /* Ungrouped smart group — songs not yet filed into any album */
           <div className="mb-4">
-            <button
-              onClick={() => setActiveAlbumId(null)}
-              className="mb-2 flex items-center gap-1 transition-transform duration-150 active:scale-95"
-              style={{ color: "var(--cog-gold)", fontFamily: "var(--font-body)", minHeight: 44 }}
-              aria-label="Back to all songs"
-            >
-              <ChevronLeft size={18} strokeWidth={2.2} />
-              <span className="text-[0.875rem] font-semibold">All songs</span>
-            </button>
+            <div className="mb-2">
+              <Breadcrumb root="All songs" onRoot={() => setActiveAlbumId(null)} current="Ungrouped" />
+            </div>
             <h2
               className="text-[1.375rem] font-bold leading-tight"
               style={{ fontFamily: "var(--font-display)", color: "var(--cog-charcoal)" }}
