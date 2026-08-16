@@ -16,11 +16,13 @@
  *  the whole list fits a screen and your eye is faster than a filter. */
 export const CONTROLS_THRESHOLD = 8;
 
-/** Tabs exist to separate real bodies of songs. A solo writer with nothing
- *  invited and nothing archived gets a clean title, not three doors where
- *  two open onto empty rooms. The tabs return the moment either count does. */
-export function showLibraryTabs(counts: { Invited: number; Archived: number }): boolean {
-  return counts.Invited > 0 || counts.Archived > 0;
+/** ONE shelf (C6): active songs live together whoever made them — Drive
+ *  would never ask "who created this folder?" before showing you your music.
+ *  Provenance ("Shared with me") is a quiet lens beside the faces, not a
+ *  door. The only remaining tab split is Archived — a genuinely different
+ *  state of song — and it appears only once something is actually archived. */
+export function showLibraryTabs(archivedCount: number): boolean {
+  return archivedCount > 0;
 }
 
 /** Search/sort/view appear when the active list outgrows a single glance. */

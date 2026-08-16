@@ -8,10 +8,9 @@ import {
 } from "./libraryCalm";
 
 describe("libraryCalm — every library surface earns its place", () => {
-  it("a solo writer sees no tabs; they return the moment invited or archived songs exist", () => {
-    expect(showLibraryTabs({ Invited: 0, Archived: 0 })).toBe(false);
-    expect(showLibraryTabs({ Invited: 1, Archived: 0 })).toBe(true);
-    expect(showLibraryTabs({ Invited: 0, Archived: 1 })).toBe(true);
+  it("ONE shelf: tabs exist only for Archived — provenance is a lens, never a door (C6)", () => {
+    expect(showLibraryTabs(0)).toBe(false);
+    expect(showLibraryTabs(1)).toBe(true);
   });
 
   it("search/sort/view appear only once the active list outgrows a glance", () => {

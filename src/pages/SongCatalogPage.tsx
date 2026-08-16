@@ -62,11 +62,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-type Tab = "Owned" | "Invited" | "Archived";
+// ONE shelf (C6): active songs live together whoever made them. The only
+// remaining door is Archived — a different state of song, not a different
+// owner. Provenance is the quiet "Shared with me" lens beside the faces.
+type Tab = "Songs" | "Archived";
 
 const EMPTY_COPY: Record<Tab, string> = {
-  Owned: "No songs yet. Tap New to start one.",
-  Invited: "No invited songs yet. Songs shared with you will appear here.",
+  Songs: "No songs yet. Tap New to start one.",
   Archived: "Archived songs stay safe and readable here.",
 };
 
@@ -87,7 +89,7 @@ const SongCatalogPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const songsQuery = useSongs();
-  const [activeTab, setActiveTab] = useState<Tab>("Owned");
+  const [activeTab, setActiveTab] = useState<Tab>("Songs");
   const [isCheckingCreate, setIsCheckingCreate] = useState(false);
   // Local working copy seeded from the query (synchronously from cache on a
   // warm remount → no empty flash); mutated optimistically for archive /
@@ -140,6 +142,9 @@ const SongCatalogPage = () => {
   // when the board can't answer.
   const { bySong: pulseBySong } = useCatalogPulse(activeSongIds.length > 0);
   const [peopleFilter, setPeopleFilter] = useState<string[]>([]);
+  // C6 — the provenance lens: narrow the one shelf to songs someone shared
+  // with me. A lens, never a door: same room, the light changes.
+  const [sharedLens, setSharedLens] = useState(false);
   const bandFilterActive = peopleFilter.length > 0;
   const selectedPeople = useMemo(
     () => band.people.filter((p) => peopleFilter.includes(p.userId)),
@@ -315,6 +320,7 @@ const SongCatalogPage = () => {
   // filter never applies where its chips can't be seen.
   useEffect(() => {
     setPeopleFilter([]);
+    setSharedLens(false);
   }, [activeAlbumId]);
   const activeAlbumPeople = useMemo(
     () =>
@@ -332,14 +338,14 @@ const SongCatalogPage = () => {
   }, [albums]);
 
   const visibleSongs = useMemo(() => {
-    // The band view: while people are selected, the Owned/Invited split stops
-    // mattering — the shelf is ONE list of every active song those people
-    // share (a band's drive is never split by who created the folder).
-    // Inside an album the lens scopes to the room instead (below).
+    // The band view: people selected → the shelf is the songs those people
+    // share. Composes with the provenance lens (both narrow). Inside an
+    // album the lens scopes to the room instead (below).
     if (bandFilterActive && !activeAlbum) {
       let list = songs.filter(
         (s) => s.status !== "archived" && songMatchesPeople(s.id, peopleFilter, band.membersBySong),
       );
+      if (sharedLens) list = list.filter((s) => s.my_role !== "owner");
       const q = query.trim().toLowerCase();
       if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
       const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
@@ -351,14 +357,17 @@ const SongCatalogPage = () => {
       else sorted.sort((a, b) => time(b) - time(a));
       return sorted;
     }
-    let list = songs.filter((s) => {
-      if (activeTab === "Owned") return s.my_role === "owner" && s.status !== "archived";
-      if (activeTab === "Invited") return s.my_role !== "owner" && s.status !== "archived";
-      return s.status === "archived";
-    });
-    if (activeTab === "Owned" && viewingUngrouped) {
+    // The one shelf: active songs whoever made them; Archived is the only
+    // other room. The provenance lens narrows without changing rooms.
+    let list = songs.filter((s) =>
+      activeTab === "Songs" ? s.status !== "archived" : s.status === "archived",
+    );
+    if (activeTab === "Songs" && sharedLens && !activeAlbum) {
+      list = list.filter((s) => s.my_role !== "owner");
+    }
+    if (activeTab === "Songs" && viewingUngrouped) {
       list = list.filter((s) => !groupedIds.has(s.id));
-    } else if (activeTab === "Owned" && activeAlbum) {
+    } else if (activeTab === "Songs" && activeAlbum) {
       const inAlbum = new Set(activeAlbum.songIds);
       list = list.filter((s) => inAlbum.has(s.id));
       // The in-album lens: "which songs on this EP has Craig touched" — the
@@ -373,7 +382,7 @@ const SongCatalogPage = () => {
     // Inside an album, the songwriter's own arrangement IS the order — an
     // album (a body of songs being written together, like an EP in progress)
     // keeps its tracklist order, not "most recently edited".
-    if (activeTab === "Owned" && activeAlbum && !q) {
+    if (activeTab === "Songs" && activeAlbum && !q) {
       const rank = new Map(activeAlbum.songIds.map((id, i) => [id, i]));
       return [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
     }
@@ -385,20 +394,24 @@ const SongCatalogPage = () => {
     else if (prefs.sort === "ideas") sorted.sort((a, b) => b.voice_memo_count - a.voice_memo_count);
     else if (prefs.sort === "created") sorted.sort((a, b) => born(b) - born(a));
     else sorted.sort((a, b) => time(b) - time(a));
-    // Pinned songs hold the top of Owned whatever the sort (Apple Notes).
-    if (activeTab === "Owned" && !activeAlbum && pinnedIds.size > 0) {
+    // Pinned songs hold the top of the shelf whatever the sort (Apple Notes).
+    if (activeTab === "Songs" && !activeAlbum && pinnedIds.size > 0) {
       return [
         ...sorted.filter((s) => pinnedIds.has(s.id)),
         ...sorted.filter((s) => !pinnedIds.has(s.id)),
       ];
     }
     return sorted;
-  }, [songs, activeTab, activeAlbum, viewingUngrouped, groupedIds, query, prefs.sort, pinnedIds, bandFilterActive, peopleFilter, band.membersBySong]);
+  }, [songs, activeTab, activeAlbum, viewingUngrouped, groupedIds, query, prefs.sort, pinnedIds, bandFilterActive, peopleFilter, band.membersBySong, sharedLens]);
 
-  // Rooms a captured idea can move into — the songwriter's own active rooms.
+  // The one shelf's working set — every active song, whoever made it (C6).
+  // Ownership matters only where it truly does: capture filing goes into
+  // your OWN rooms (fileableSongs stays owned).
+  const activeSongsList = songs.filter((s) => s.status !== "archived");
   const ownedSongs = songs.filter((s) => s.my_role === "owner" && s.status !== "archived");
   const fileableSongs = ownedSongs.map((s) => ({ id: s.id, title: s.title }));
-  const ungroupedCount = ownedSongs.filter((s) => !groupedIds.has(s.id)).length;
+  const ungroupedCount = activeSongsList.filter((s) => !groupedIds.has(s.id)).length;
+  const sharedCount = activeSongsList.filter((s) => s.my_role !== "owner").length;
 
   // Search reaches album names too (Apple Music scoped search) — surfaced as
   // tappable chips above the song results when the query matches.
@@ -411,12 +424,12 @@ const SongCatalogPage = () => {
   // "Pick up where you left off" — PV11: prioritize the last active song for
   // returning users. Hidden while searching, album-focused, or trivially small.
   const continueSong = useMemo(() => {
-    if (activeTab !== "Owned" || query.trim() || activeAlbumId || bandFilterActive) return null;
-    if (ownedSongs.length < 2) return null;
+    if (activeTab !== "Songs" || query.trim() || activeAlbumId || bandFilterActive || sharedLens) return null;
+    if (activeSongsList.length < 2) return null;
     const time = (s: SongRow) => new Date(s.last_activity_at ?? s.created_at ?? 0).getTime() || 0;
-    return [...ownedSongs].sort((a, b) => time(b) - time(a))[0] ?? null;
+    return [...activeSongsList].sort((a, b) => time(b) - time(a))[0] ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songs, activeTab, query, activeAlbumId, bandFilterActive]);
+  }, [songs, activeTab, query, activeAlbumId, bandFilterActive, sharedLens]);
 
   const handleAlbumSave = (name: string, songIds: string[], color: string | null) => {
     if (albumSheet.album) {
@@ -583,13 +596,12 @@ const SongCatalogPage = () => {
   };
 
   const tabCounts: Record<Tab, number> = {
-    Owned: ownedSongs.length,
-    Invited: songs.filter((s) => s.my_role !== "owner" && s.status !== "archived").length,
+    Songs: activeSongsList.length,
     Archived: songs.filter((s) => s.status === "archived").length,
   };
 
   // ── The calm library: every surface earns its place (libraryCalm) ────────
-  const tabsVisible = showLibraryTabs(tabCounts);
+  const tabsVisible = showLibraryTabs(tabCounts.Archived);
   // `|| query`: if archiving results mid-search drops the count below the
   // threshold, the search field must NOT unmount while its filter is still
   // applied — a stranded query with no clear affordance is a trap.
@@ -600,10 +612,10 @@ const SongCatalogPage = () => {
   // clutter on the page. Cheap localStorage read, refreshed per mount.
   const hasPracticeSession = useMemo(() => loadMostRecentSession() != null, []);
   const continueKind = continueMoment(hasPracticeSession, continueSong != null);
-  // If the tabs earned their exit while a non-Owned tab was active (last
-  // archived song restored, last invite left), land back on Owned.
+  // If the tabs earned their exit while Archived was active (the last
+  // archived song was restored), land back on the one shelf.
   useEffect(() => {
-    if (!tabsVisible && activeTab !== "Owned") setActiveTab("Owned");
+    if (!tabsVisible && activeTab !== "Songs") setActiveTab("Songs");
   }, [tabsVisible, activeTab]);
 
   // ── Batch select ────────────────────────────────────────────────────────
@@ -814,12 +826,12 @@ const SongCatalogPage = () => {
             Your songs
           </h1>
 
-          {/* Tabs earn their place: a solo writer with nothing invited and
-              nothing archived gets a clean title, not three doors where two
-              open onto empty rooms. They return the moment either count does. */}
+          {/* ONE shelf + Archived (C6): the tabs exist only once something is
+              actually archived — provenance ("Shared with me") is a lens
+              beside the faces, never a door up here. */}
           {tabsVisible && (
           <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.10)" }}>
-            {(["Owned", "Invited", "Archived"] as Tab[]).map((tab) => (
+            {(["Songs", "Archived"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => {
@@ -827,6 +839,7 @@ const SongCatalogPage = () => {
                   setActiveAlbumId(null);
                   setReorderingAlbum(false);
                   setPeopleFilter([]);
+                  setSharedLens(false);
                   // Switching tabs starts the new list from the top (Apple).
                   if (tab !== activeTab) window.scrollTo({ top: 0 });
                 }}
@@ -864,7 +877,7 @@ const SongCatalogPage = () => {
       {/* ── LIBRARY ────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-4 pb-44 md:max-w-3xl md:px-6 lg:flex lg:max-w-5xl lg:gap-8 lg:px-8">
         {/* Persistent album rail — tablet/desktop only; phones keep the shelf */}
-        {!selecting && !bandFilterActive && activeTab === "Owned" && !loading && albumsVisible && ownedSongs.length > 0 && (
+        {!selecting && !bandFilterActive && !sharedLens && activeTab === "Songs" && !loading && albumsVisible && activeSongsList.length > 0 && (
           <AlbumRail
             albums={albums}
             activeAlbumId={viewingUngrouped ? null : activeAlbumId}
@@ -890,8 +903,8 @@ const SongCatalogPage = () => {
         <div className="min-w-0 lg:flex-1">
         <SeedIdeasShelf songs={fileableSongs} />
 
-        {/* PV11 empty Owned state — an invitation, not controls over nothing */}
-        {activeTab === "Owned" && !loading && ownedSongs.length === 0 ? (
+        {/* PV11 empty state — an invitation, not controls over nothing */}
+        {activeTab === "Songs" && !loading && activeSongsList.length === 0 ? (
           <EmptyLibraryHero onStart={handleCreateSong} checking={isCheckingCreate} />
         ) : (
         <>
@@ -948,8 +961,28 @@ const SongCatalogPage = () => {
                 prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
               )
             }
-            onClear={() => setPeopleFilter([])}
+            onClear={() => {
+              setPeopleFilter([]);
+              setSharedLens(false);
+            }}
+            sharedCount={sharedCount}
+            sharedActive={sharedLens}
+            onToggleShared={() => setSharedLens((v) => !v)}
           />
+        )}
+
+        {/* The provenance lens's honest header — same room, narrowed. */}
+        {!selecting && sharedLens && !bandFilterActive && !activeAlbum && (
+          <p
+            aria-live="polite"
+            className="-mt-1 mb-3 px-1 text-[0.8125rem] font-semibold"
+            style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+          >
+            Shared with you
+            <span style={{ color: "var(--cog-warm-gray)", fontWeight: 500 }}>
+              {" "}· {visibleSongs.length} {visibleSongs.length === 1 ? "song" : "songs"}
+            </span>
+          </p>
         )}
 
         {/* The band view's honest header: whose songs, and how many. One list
@@ -971,7 +1004,7 @@ const SongCatalogPage = () => {
 
         {/* Live match count while searching — the tabs already carry the browse
             counts; this line answers "how many did my search find?" */}
-        {!selecting && !reorderingAlbum && !bandFilterActive && query.trim() !== "" && visibleSongs.length > 0 && (
+        {!selecting && !reorderingAlbum && !bandFilterActive && !sharedLens && query.trim() !== "" && visibleSongs.length > 0 && (
           <p
             aria-live="polite"
             className="-mt-2 mb-3 px-1 text-[0.75rem] font-medium"
@@ -995,11 +1028,11 @@ const SongCatalogPage = () => {
             cover and counts on screen and gives a one-tap way back — and
             STAYS while the in-album person-lens filters (the walls never
             move; the light changes). */}
-        {!selecting && activeTab === "Owned" && activeAlbum ? (
+        {!selecting && activeTab === "Songs" && activeAlbum ? (
           <>
           <AlbumDetailHeader
             album={activeAlbum}
-            songs={ownedSongs.filter((s) => activeAlbum.songIds.includes(s.id))}
+            songs={activeSongsList.filter((s) => activeAlbum.songIds.includes(s.id))}
             onExit={() => {
               setActiveAlbumId(null);
               setReorderingAlbum(false);
@@ -1010,7 +1043,7 @@ const SongCatalogPage = () => {
             onPractice={() => {
               // Resolve songs in the album's own tracklist order, tagged with
               // titles so the player never re-fetches the song list.
-              const byId = new Map(ownedSongs.map((s) => [s.id, s.title]));
+              const byId = new Map(activeSongsList.map((s) => [s.id, s.title]));
               const songs = activeAlbum.songIds
                 .filter((id) => byId.has(id))
                 .map((id) => ({ id, title: byId.get(id) ?? "Untitled Song" }));
@@ -1064,7 +1097,7 @@ const SongCatalogPage = () => {
             </p>
           )}
           </>
-        ) : !selecting && !bandFilterActive && activeTab === "Owned" && viewingUngrouped ? (
+        ) : !selecting && !bandFilterActive && activeTab === "Songs" && viewingUngrouped ? (
           /* Ungrouped smart group — songs not yet filed into any album */
           <div className="mb-4">
             <div className="mb-2">
@@ -1084,17 +1117,17 @@ const SongCatalogPage = () => {
         ) : (
           !selecting &&
           !bandFilterActive &&
-          activeTab === "Owned" &&
+          !sharedLens &&
+          activeTab === "Songs" &&
           !loading &&
           albumsVisible &&
-          ownedSongs.length > 0 && (
+          activeSongsList.length > 0 && (
             /* Horizontal shelf on phones/portrait tablets; the rail owns lg+.
-               Appears once albums exist or the library is big enough that
-               filing is a real need — never as premature homework. */
+               Appears once albums exist — never as premature homework. */
             <div className="lg:hidden">
               <AlbumsShelf
                 albums={albums}
-                songs={ownedSongs}
+                songs={activeSongsList}
                 activeAlbumId={activeAlbumId}
                 ungroupedCount={ungroupedCount}
                 onSelect={setActiveAlbumId}
@@ -1110,7 +1143,7 @@ const SongCatalogPage = () => {
         )}
 
         {/* Search also reaches album names — "worship" finds the Worship EP */}
-        {!selecting && !bandFilterActive && !activeAlbum && activeTab === "Owned" && albumMatches.length > 0 && (
+        {!selecting && !bandFilterActive && !sharedLens && !activeAlbum && activeTab === "Songs" && albumMatches.length > 0 && (
           <div className="mb-4">
             <p
               className="mb-2 px-1 text-[0.6875rem] font-bold uppercase tracking-[0.12em]"
@@ -1168,9 +1201,11 @@ const SongCatalogPage = () => {
               ? `No songs with ${peopleFilterLabel(selectedPeople)} on this album yet.`
               : bandFilterActive
               ? `No songs with ${peopleFilterLabel(selectedPeople)} yet — open a song's room and add them through the door.`
+              : sharedLens
+              ? "No songs shared with you match — tap Everyone to see the whole shelf."
               : viewingUngrouped
               ? "Every song is filed into an album."
-              : activeAlbum && activeTab === "Owned"
+              : activeAlbum && activeTab === "Songs"
               ? "This album is empty. Tap “Add songs” above to fill it."
               : EMPTY_COPY[activeTab]
           }

@@ -42,13 +42,13 @@ describe("SongCatalogPage — world-class hero (content-locked, token-precise)",
   it("mounts cleanly: hero copy verbatim, and a SOLO library earns a tabless header (libraryCalm)", () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Your songs" })).toBeInTheDocument();
-    // This harness is a solo writer (0 invited, 0 archived): the calm library
-    // shows NO tab row — three doors where two open onto empty rooms was the
-    // clutter this audit removed. Tabs return the moment either count does
-    // (see libraryCalm.test.ts for the gate itself).
-    expect(screen.queryByRole("button", { name: "Owned" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Invited" })).toBeNull();
+    // ONE shelf (C6): active songs live together whoever made them, and the
+    // tab row exists only once something is archived. This harness has
+    // nothing archived → no tabs at all. Provenance ("Shared with me") is a
+    // lens beside the faces, never a door up here.
+    expect(screen.queryByRole("button", { name: "Songs" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archived" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Invited" })).toBeNull();
     // The ONE creation door (C1): a single "New" FAB whose accessible name
     // tells the whole truth — it makes songs AND albums. The retired doors
     // ("New song" FAB, browse-surface "New album" tiles) must not return.
