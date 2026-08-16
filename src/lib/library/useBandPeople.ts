@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { buildBandIndex, type BandIndex } from "./bandIndex";
 
@@ -24,18 +24,26 @@ export function useBandPeople(songIds: string[], myUserId: string | null) {
     queryKey: ["band-people", sortedIds.join(","), myUserId ?? "anon"],
     enabled: sortedIds.length > 0,
     staleTime: 60_000,
+    // The song set changes often (archive, create) and mints a new key — keep
+    // the previous band on screen while the fresh one loads, so chips and an
+    // active filter never flash the shelf empty mid-flight.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data: memberRows, error: membersError } = await supabase
         .from("song_members")
         .select("song_id, user_id, role")
         .in("song_id", sortedIds);
-      if (membersError || !memberRows?.length) return EMPTY;
+      // A FAILED read must stay a failure (retry + previous data) — swallowing
+      // it as an empty band once blanked a full library under an active filter.
+      if (membersError) throw membersError;
+      if (!memberRows?.length) return EMPTY;
 
       const userIds = [...new Set(memberRows.map((r) => r.user_id))];
-      const { data: profileRows } = await supabase
+      const { data: profileRows, error: profilesError } = await supabase
         .from("profiles")
         .select("user_id, display_name, first_name, avatar_color")
         .in("user_id", userIds);
+      if (profilesError) throw profilesError;
 
       return buildBandIndex(memberRows, profileRows ?? [], myUserId);
     },

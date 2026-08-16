@@ -48,6 +48,8 @@ import {
   type SongCard as SongRow,
 } from "@/integrations/cog/songs";
 import { useSongs } from "@/hooks/useAppQueries";
+import { qk } from "@/hooks/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +82,7 @@ const UNGROUPED = "__ungrouped__";
 
 const SongCatalogPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const songsQuery = useSongs();
   const [activeTab, setActiveTab] = useState<Tab>("Owned");
   const [isCheckingCreate, setIsCheckingCreate] = useState(false);
@@ -118,12 +121,12 @@ const SongCatalogPage = () => {
   // The band emerges from memberships (no backend band entity exists): two
   // RLS-proven batched queries index who is in which of my songs. Multi-
   // select is AND — "the songs Craig and Parker wrote together".
-  const { user: accountUser } = useCurrentAccount();
+  const { user: accountUser, profile: accountProfile } = useCurrentAccount();
   const activeSongIds = useMemo(
     () => songs.filter((s) => s.status !== "archived").map((s) => s.id),
     [songs],
   );
-  const { band } = useBandPeople(activeSongIds, accountUser?.id ?? null);
+  const { band, loading: bandLoading } = useBandPeople(activeSongIds, accountUser?.id ?? null);
   // The Drive activity layer: who touched each song last + the unseen dot.
   // Server-computed off last_seen_at (the room's recap flow maintains it, so
   // dots clear themselves once you walk in). Best-effort — plain dates stand
@@ -153,25 +156,47 @@ const SongCatalogPage = () => {
   };
 
   // People can leave songs between visits — never keep filtering by a ghost.
+  // Runs on RESOLVED data only (keepPreviousData holds the band steady while
+  // a new key loads), and clears fully when the whole band has vanished — a
+  // stale filter with its chips row unmounted once stranded an empty shelf.
   useEffect(() => {
-    if (peopleFilter.length === 0 || band.people.length === 0) return;
+    if (peopleFilter.length === 0 || bandLoading) return;
     const known = new Set(band.people.map((p) => p.userId));
     if (peopleFilter.some((id) => !known.has(id))) {
       setPeopleFilter((prev) => prev.filter((id) => known.has(id)));
     }
-  }, [band.people, peopleFilter]);
+  }, [band.people, bandLoading, peopleFilter]);
 
   // ── Add voice memos into a song straight from the shelf (Drive gesture) ──
   const memoFileInputRef = useRef<HTMLInputElement>(null);
   const memoTargetRef = useRef<SongRow | null>(null);
+  const MAX_IMPORT_BYTES = 200 * 1024 * 1024; // server cap; quota errors surface kindly below it
   const handleAddMemoFiles = async (fileList: FileList | null) => {
     const target = memoTargetRef.current;
-    const files = [...(fileList ?? [])].filter((f) => isAudioFile(f));
-    if (!target || files.length === 0) return;
+    const picked = [...(fileList ?? [])];
+    if (!target || picked.length === 0) return;
+    // Accept what's good, NAME what was skipped — a batch never fails
+    // wholesale, and nothing vanishes silently (UploadDropZone parity).
+    const files = picked.filter((f) => isAudioFile(f) && f.size <= MAX_IMPORT_BYTES);
+    const wrongType = picked.filter((f) => !isAudioFile(f)).length;
+    const tooBig = picked.filter((f) => isAudioFile(f) && f.size > MAX_IMPORT_BYTES).length;
+    if (files.length === 0) {
+      toast.error(
+        wrongType > 0
+          ? "Those files aren't audio — try MP3, M4A, WAV, or WebM."
+          : "Those files are over the 200MB limit.",
+      );
+      return;
+    }
     let saved = 0;
     for (const file of files) {
       try {
-        const durationMs = await getAudioFileDuration(file).catch(() => 0);
+        // iOS can suspend a metadata load forever — a duration read must
+        // never hang the batch. Unknown duration is honest (0).
+        const durationMs = await Promise.race([
+          getAudioFileDuration(file).catch(() => 0),
+          new Promise<number>((resolve) => setTimeout(() => resolve(0), 4000)),
+        ]);
         await saveMemoDurable({
           blob: file,
           songId: target.id,
@@ -180,7 +205,9 @@ const SongCatalogPage = () => {
           durationMs,
           sectionLabel: "Raw idea",
           fileName: file.name,
-          createdBy: accountUser?.id ?? undefined,
+          // created_by is a DISPLAY NAME downstream (creatorName={memo.created_by})
+          // — never the raw user id.
+          createdBy: accountProfile?.display_name ?? undefined,
         });
         saved += 1;
       } catch {
@@ -189,14 +216,22 @@ const SongCatalogPage = () => {
     }
     if (saved > 0) {
       // The Drive immediacy: the folder's count moves the moment you drop
-      // files on it (the outbox guarantees the eventual truth matches).
-      setSongs((prev) =>
-        prev.map((x) =>
+      // files on it (the outbox guarantees the eventual truth matches). The
+      // bump is written into BOTH the local mirror and the query cache — the
+      // mirror effect re-syncs from the cache, so a cache-less bump would be
+      // clobbered right back down.
+      const bump = (list: SongRow[] | undefined) =>
+        (list ?? []).map((x) =>
           x.id === target.id ? { ...x, voice_memo_count: x.voice_memo_count + saved } : x,
-        ),
-      );
+        );
+      setSongs((prev) => bump(prev));
+      queryClient.setQueryData<SongRow[]>(qk.songs(), (prev) => (prev ? bump(prev) : prev));
+      const skipped: string[] = [];
+      if (wrongType > 0) skipped.push(`${wrongType} not audio`);
+      if (tooBig > 0) skipped.push(`${tooBig} over 200MB`);
       toast(
-        `${saved} ${saved === 1 ? "memo" : "memos"} saving to “${target.title}” — safe on this device, even offline.`,
+        `${saved} ${saved === 1 ? "memo" : "memos"} saving to “${target.title}” — safe on this device, even offline.` +
+          (skipped.length > 0 ? ` Skipped ${skipped.join(", ")}.` : ""),
       );
     } else {
       toast.error("Those files couldn't be read — try MP3, M4A, WAV, or WebM.");
@@ -720,6 +755,7 @@ const SongCatalogPage = () => {
                   setActiveTab(tab);
                   setActiveAlbumId(null);
                   setReorderingAlbum(false);
+                  setPeopleFilter([]);
                   // Switching tabs starts the new list from the top (Apple).
                   if (tab !== activeTab) window.scrollTo({ top: 0 });
                 }}

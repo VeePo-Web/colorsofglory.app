@@ -15,13 +15,11 @@ const MiniFaceStack = ({ people, size = 18 }: { people: MiniFace[]; size?: numbe
   const visible = people.slice(0, 3);
   const rest = people.length - visible.length;
   const label = people.map((p) => p.name).join(", ");
+  // Decorative: this stack always sits inside a labelled button (the song
+  // card), whose aria-label carries "with …" — an inner role="img" there is
+  // dead to the accessibility tree. The title stays for pointer users.
   return (
-    <span
-      className="inline-flex items-center"
-      role="img"
-      aria-label={`With ${label}`}
-      title={label}
-    >
+    <span className="inline-flex items-center" aria-hidden="true" title={label}>
       {visible.map((p, i) => (
         <span
           key={p.userId}

@@ -62,8 +62,10 @@ const VoiceLayerPanel = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const abortRef = useRef(false);
 
-  const loadMemos = useCallback(async () => {
-    setIsLoading(true);
+  const loadMemos = useCallback(async (silent = false) => {
+    // Reconcile refreshes (an outbox success per file in a batch) must not
+    // storm the list with skeletons — only the FIRST load announces itself.
+    if (!silent) setIsLoading(true);
     try {
       const data = await listVoiceMemos(songId);
       if (!abortRef.current) setMemos(data);
@@ -80,8 +82,12 @@ const VoiceLayerPanel = ({
     return () => { abortRef.current = true; };
   }, [loadMemos]);
 
+  // Multi-file drops fan out N concurrent uploads — a plain boolean cleared
+  // by the FIRST finisher; a counter clears only when the last one lands.
+  const uploadCountRef = useRef(0);
   const handleFileUpload = useCallback(async (file: File) => {
     setUploadError(null);
+    uploadCountRef.current += 1;
     setUploading(true);
 
     try {
@@ -113,7 +119,8 @@ const VoiceLayerPanel = ({
     } catch {
       setUploadError("Couldn't read that file — please try another.");
     } finally {
-      setUploading(false);
+      uploadCountRef.current = Math.max(0, uploadCountRef.current - 1);
+      if (uploadCountRef.current === 0) setUploading(false);
     }
   }, [songId, memos.length, currentUserName, onMemoAdded]);
 
@@ -126,7 +133,7 @@ const VoiceLayerPanel = ({
       if (event.songId !== songId) return;
       if (event.type === "success") {
         setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
-        void loadMemos();
+        void loadMemos(true);
       } else if (event.type === "failed") {
         setMemos((prev) =>
           prev.map((m) => (m.id === event.outboxId ? { ...m, status: "queued", is_processing: true } : m)),

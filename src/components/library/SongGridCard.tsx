@@ -47,16 +47,25 @@ const SongGridCard = ({
   // workspace header is the edit surface). Invisible when unset, and omitted
   // in the pinched-in compact density.
   const { text: dedication } = useDedication(song.id, song.dedication ?? undefined);
+  // Hooks are UNCONDITIONAL (React law): gate the CALLBACK, never the call —
+  // the conditional spread this replaces white-screened batch-select.
+  const longPress = useLongPress(selecting ? undefined : onLongPress);
   return (
   <button
     onClick={onClick}
-    {...(selecting ? {} : useLongPress(onLongPress))}
+    {...longPress}
     aria-label={
       selecting
         ? `${selected ? "Deselect" : "Select"} ${song.title}`
-        : `Open ${song.title}, ${song.voice_memo_count} ${
-            song.voice_memo_count === 1 ? "idea" : "ideas"
-          }, last edited ${relativeDate(song.last_activity_at)}`
+        : [
+            `Open ${song.title}`,
+            `${song.voice_memo_count} ${song.voice_memo_count === 1 ? "idea" : "ideas"}`,
+            people && people.length > 0 ? `with ${people.map((p) => p.name).join(", ")}` : null,
+            pulse?.unseen ? `${pulse.unseen} new since you were here` : null,
+            pulse?.sentence ?? `last edited ${relativeDate(song.last_activity_at)}`,
+          ]
+            .filter(Boolean)
+            .join(", ")
     }
     aria-pressed={selecting ? selected : undefined}
     className="group relative text-left w-full select-none rounded-2xl flex flex-col justify-between bg-white border border-[var(--cog-border)] shadow-[0_2px_8px_rgba(28,26,23,0.06)] transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] hover:-translate-y-1 hover:border-[var(--cog-border-gold)] hover:shadow-[0_16px_32px_-16px_rgba(184,149,58,0.32)] active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cog-gold)]"
@@ -150,19 +159,21 @@ const SongGridCard = ({
         )}
         {pulse?.line ? (
           <p
-            className="flex items-center gap-1 text-[0.6875rem]"
-            style={{ color: pulse.unseen > 0 ? "var(--cog-warm-gray)" : "var(--cog-muted)" }}
+            className="flex min-w-0 items-center gap-1 text-[0.6875rem]"
+            style={{ color: pulse.unseen > 0 ? "var(--cog-warm-gray)" : "var(--cog-muted)", marginLeft: 6 }}
             title={pulse.sentence ?? undefined}
           >
+            {/* Decorative here — the card button's own label carries the
+                "N new" truth (inner roles inside a labelled button are dead
+                to the accessibility tree). */}
             {pulse.unseen > 0 && (
               <span
-                aria-label={`${pulse.unseen} new since you were here`}
-                role="img"
+                aria-hidden="true"
                 className="rounded-full"
                 style={{ width: 7, height: 7, backgroundColor: "var(--cog-gold)", flexShrink: 0 }}
               />
             )}
-            {pulse.line}
+            <span className="truncate" style={{ minWidth: 0 }}>{pulse.line}</span>
           </p>
         ) : (
           <p className="text-[0.6875rem]" style={{ color: "var(--cog-muted)" }}>

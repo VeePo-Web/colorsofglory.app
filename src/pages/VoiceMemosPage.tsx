@@ -645,8 +645,12 @@ const VoiceMemosPage = () => {
 
   // ── File upload handler ─────────────────────────────────────────────────────
 
+  // Counter (not boolean): multi-file drops run concurrently; only the last
+  // finisher may clear the uploading state.
+  const uploadCountRef = useRef(0);
   const handleFileUpload = useCallback(async (file: File) => {
     setUploadError(null);
+    uploadCountRef.current += 1;
     setIsUploading(true);
 
     try {
@@ -673,7 +677,8 @@ const VoiceMemosPage = () => {
       // captured, so there's nothing to retain. Guide the user, calmly.
       setUploadError("Couldn't read that file. Please try another.");
     } finally {
-      setIsUploading(false);
+      uploadCountRef.current = Math.max(0, uploadCountRef.current - 1);
+      if (uploadCountRef.current === 0) setIsUploading(false);
     }
   }, [songId, currentUserId]);
 

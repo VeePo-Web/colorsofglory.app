@@ -45,7 +45,22 @@ const AddYourPeople = ({ songId, songTitle, myUserId }: AddYourPeopleProps) => {
     }
     setBusy(new Set());
     if (landed === remaining.length) {
-      toast(`Your ${landed === 1 ? "person is" : "people are"} in — “${songTitle}” is on ${landed === 1 ? "their" : "everyone's"} shelf now.`);
+      const addedNow = remaining.map((p) => p.userId);
+      toast(`Your ${landed === 1 ? "person is" : "people are"} in — “${songTitle}” is on ${landed === 1 ? "their" : "everyone's"} shelf now.`, {
+        duration: 6000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void Promise.allSettled(addedNow.map((id) => removeMember(songId, id))).then(() => {
+              setAdded((prev) => {
+                const next = new Set(prev);
+                for (const id of addedNow) next.delete(id);
+                return next;
+              });
+            });
+          },
+        },
+      });
     } else if (landed > 0) {
       toast(`${landed} of ${remaining.length} added — try the rest again in a moment.`);
     } else {
@@ -143,11 +158,13 @@ const AddYourPeople = ({ songId, songTitle, myUserId }: AddYourPeopleProps) => {
               aria-label={isAdded ? `${person.firstName} is in this song` : `Add ${person.firstName} to this song`}
               className="cog-press"
               style={{
-                minHeight: 36, minWidth: 72, padding: "0 12px", borderRadius: 12,
+                minHeight: 44, minWidth: 84, padding: "0 14px", borderRadius: 12,
                 cursor: isAdded ? "default" : "pointer",
                 border: isAdded ? "1px solid rgba(83,171,139,0.4)" : "1.5px solid var(--cog-gold)",
                 backgroundColor: isAdded ? "rgba(83,171,139,0.10)" : "transparent",
-                color: isAdded ? "#53AB8B" : "var(--cog-gold)",
+                // Charcoal label (gold at 13px on cream fails contrast); the
+                // gold border + icon still say which act is primary.
+                color: isAdded ? "#53AB8B" : "var(--cog-charcoal)",
                 fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700,
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
                 opacity: isBusy ? 0.6 : 1,

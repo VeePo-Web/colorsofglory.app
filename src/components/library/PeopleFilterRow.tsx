@@ -24,7 +24,7 @@ const PeopleFilterRow = ({ people, selected, onToggle, onClear }: PeopleFilterRo
           aria-pressed={selected.length === 0}
           className="rounded-full px-3.5 font-semibold transition-transform duration-150 active:scale-95"
           style={{
-            minHeight: 40,
+            minHeight: 44,
             fontFamily: "var(--font-body)",
             fontSize: "0.8125rem",
             backgroundColor: selected.length === 0 ? "var(--cog-charcoal)" : "var(--cog-cream-light)",
@@ -44,7 +44,7 @@ const PeopleFilterRow = ({ people, selected, onToggle, onClear }: PeopleFilterRo
               aria-label={`${person.firstName} — ${person.songCount} ${person.songCount === 1 ? "song" : "songs"}${active ? ", filtering" : ""}`}
               className="inline-flex items-center gap-2 rounded-full pl-1.5 pr-3.5 transition-transform duration-150 active:scale-95"
               style={{
-                minHeight: 40,
+                minHeight: 44,
                 fontFamily: "var(--font-body)",
                 fontSize: "0.8125rem",
                 fontWeight: 600,

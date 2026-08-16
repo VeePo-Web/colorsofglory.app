@@ -26,7 +26,11 @@ export function useCatalogPulse(enabled: boolean) {
   const query = useQuery({
     queryKey: ["catalog-pulse"],
     enabled,
-    staleTime: 30_000,
+    // Always refetch on mount: walking into a room clears last_seen_at server-
+    // side, so returning to the shelf must re-ask or a cleared dot lingers.
+    // One cheap RPC per catalog visit.
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: () => getCatalogBoard(200),
     retry: 1,
   });
