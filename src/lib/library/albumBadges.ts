@@ -34,6 +34,26 @@ export function albumFaces(
   return people.filter((p) => inAlbum.has(p.userId));
 }
 
+/**
+ * The face row INSIDE an album (C3 — the composition Drive can't do):
+ * the same people, but every chip count retold as THIS album's truth
+ * ("Sarah · 2" = two songs on this EP, not five across the library), and
+ * re-ranked by that local count so the album's closest hands lead. Tapping
+ * still filters by the same userIds — only the story the chip tells changes.
+ */
+export function albumFacesScoped(
+  songIds: string[],
+  membersBySong: BandIndex["membersBySong"],
+  people: BandPerson[],
+): BandPerson[] {
+  return albumFaces(songIds, membersBySong, people)
+    .map((p) => ({
+      ...p,
+      songCount: songIds.filter((id) => membersBySong.get(id)?.has(p.userId)).length,
+    }))
+    .sort((a, b) => b.songCount - a.songCount || a.firstName.localeCompare(b.firstName));
+}
+
 export interface AlbumPulse {
   /** Total unseen activity across the album's songs — any > 0 → the gold dot. */
   unseen: number;

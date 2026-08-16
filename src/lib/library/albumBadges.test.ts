@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { albumFaces, albumPulse } from "./albumBadges";
+import { albumFaces, albumFacesScoped, albumPulse } from "./albumBadges";
 import type { BandPerson } from "./bandIndex";
 import type { SongPulse } from "./useCatalogPulse";
 
@@ -42,6 +42,29 @@ describe("albumFaces — who's on this EP, from the shelf", () => {
     expect(albumFaces([], membersBySong, people)).toEqual([]);
     expect(albumFaces(["ghost"], membersBySong, people)).toEqual([]);
     expect(albumFaces(["s2"], membersBySong, [])).toEqual([]);
+  });
+});
+
+describe("albumFacesScoped — the in-album face row tells THIS album's truth", () => {
+  // Sarah leads the LIBRARY (5 songs) but Caleb leads THIS EP (2 of its 2).
+  const people = [person("sarah", "Sarah", 5), person("caleb", "Caleb", 3)];
+  const membersBySong = new Map<string, Set<string>>([
+    ["s1", new Set(["me", "caleb"])],
+    ["s2", new Set(["me", "sarah", "caleb"])],
+  ]);
+
+  it("retells every chip count as the album's own, and re-ranks by it", () => {
+    const scoped = albumFacesScoped(["s1", "s2"], membersBySong, people);
+    expect(scoped.map((p) => [p.userId, p.songCount])).toEqual([
+      ["caleb", 2],
+      ["sarah", 1],
+    ]);
+  });
+
+  it("equal local counts fall back to alphabetical — chips never reshuffle arbitrarily", () => {
+    const even = new Map<string, Set<string>>([["s2", new Set(["me", "sarah", "caleb"])]]);
+    const scoped = albumFacesScoped(["s2"], even, people);
+    expect(scoped.map((p) => p.userId)).toEqual(["caleb", "sarah"]);
   });
 });
 

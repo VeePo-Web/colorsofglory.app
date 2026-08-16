@@ -28,10 +28,10 @@ import PeopleFilterRow from "@/components/library/PeopleFilterRow";
 import { useBandPeople } from "@/lib/library/useBandPeople";
 import { useCatalogPulse } from "@/lib/library/useCatalogPulse";
 import { songMatchesPeople, shouldShowPeopleRow, peopleFilterLabel } from "@/lib/library/bandIndex";
-import { albumFaces, albumPulse } from "@/lib/library/albumBadges";
+import { albumFaces, albumFacesScoped, albumPulse } from "@/lib/library/albumBadges";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
-import { getAudioFileDuration, isAudioFile } from "@/lib/voice/audioFormat";
+import { prepareImport, validateImportFile } from "@/lib/voice/audioImport";
 import { loadLibraryPrefs, saveLibraryPrefs, type LibraryPrefs } from "@/lib/library/libraryPrefs";
 import { showLibraryTabs, showLibraryControls, showAlbumsShelf, continueMoment } from "@/lib/library/libraryCalm";
 import { loadMostRecentSession } from "@/lib/audio/practiceStorage";
@@ -176,39 +176,46 @@ const SongCatalogPage = () => {
   // ── Add voice memos into a song straight from the shelf (Drive gesture) ──
   const memoFileInputRef = useRef<HTMLInputElement>(null);
   const memoTargetRef = useRef<SongRow | null>(null);
-  const MAX_IMPORT_BYTES = 200 * 1024 * 1024; // server cap; quota errors surface kindly below it
   const handleAddMemoFiles = async (fileList: FileList | null) => {
     const target = memoTargetRef.current;
     const picked = [...(fileList ?? [])];
     if (!target || picked.length === 0) return;
     // Accept what's good, NAME what was skipped — a batch never fails
-    // wholesale, and nothing vanishes silently (UploadDropZone parity).
-    const files = picked.filter((f) => isAudioFile(f) && f.size <= MAX_IMPORT_BYTES);
-    const wrongType = picked.filter((f) => !isAudioFile(f)).length;
-    const tooBig = picked.filter((f) => isAudioFile(f) && f.size > MAX_IMPORT_BYTES).length;
+    // wholesale, and nothing vanishes silently. Validation is the shared
+    // import core (Lane D · D1): extension-first, the ONE 50MB server truth
+    // (the old 200MB client cap was a lie the server contradicted), kind
+    // per-reason copy.
+    const validations = picked.map((f) => ({ file: f, v: validateImportFile(f) }));
+    const files = validations.filter(({ v }) => v.ok).map(({ file }) => file);
+    const wrongType = validations.filter(({ v }) => !v.ok && v.reason === "not-audio").length;
+    const tooBig = validations.filter(({ v }) => !v.ok && v.reason === "too-big").length;
+    const firstSpecial = validations.find(
+      ({ v }) => !v.ok && v.reason !== "not-audio" && v.reason !== "too-big",
+    )?.v;
     if (files.length === 0) {
       toast.error(
-        wrongType > 0
+        firstSpecial && !firstSpecial.ok
+          ? firstSpecial.message
+          : wrongType > 0
           ? "Those files aren't audio — try MP3, M4A, WAV, or WebM."
-          : "Those files are over the 200MB limit.",
+          : "Those files are over the 50MB limit.",
       );
       return;
     }
     let saved = 0;
     for (const file of files) {
       try {
-        // iOS can suspend a metadata load forever — a duration read must
-        // never hang the batch. Unknown duration is honest (0).
-        const durationMs = await Promise.race([
-          getAudioFileDuration(file).catch(() => 0),
-          new Promise<number>((resolve) => setTimeout(() => resolve(0), 4000)),
-        ]);
+        // The core owns the watchdog-raced duration read (iOS can suspend a
+        // metadata load forever) AND the normalized Content-Type (iOS calls
+        // .m4a "audio/x-m4a" — the raw type 400s at the server).
+        const prepared = await prepareImport(file);
+        if (!prepared.ok) continue;
         await saveMemoDurable({
           blob: file,
           songId: target.id,
-          title: file.name.replace(/\.[^.]+$/, "") || "Imported memo",
-          mimeType: file.type || "audio/mpeg",
-          durationMs,
+          title: prepared.title ?? "Imported memo",
+          mimeType: prepared.mimeType,
+          durationMs: prepared.durationMs,
           sectionLabel: "Raw idea",
           fileName: file.name,
           // created_by is a DISPLAY NAME downstream (creatorName={memo.created_by})
@@ -234,7 +241,7 @@ const SongCatalogPage = () => {
       queryClient.setQueryData<SongRow[]>(qk.songs(), (prev) => (prev ? bump(prev) : prev));
       const skipped: string[] = [];
       if (wrongType > 0) skipped.push(`${wrongType} not audio`);
-      if (tooBig > 0) skipped.push(`${tooBig} over 200MB`);
+      if (tooBig > 0) skipped.push(`${tooBig} over 50MB`);
       toast(
         `${saved} ${saved === 1 ? "memo" : "memos"} saving to “${target.title}” — safe on this device, even offline.` +
           (skipped.length > 0 ? ` Skipped ${skipped.join(", ")}.` : ""),
@@ -300,6 +307,22 @@ const SongCatalogPage = () => {
   const activeAlbum = albums.find((a) => a.id === activeAlbumId) ?? null;
   const viewingUngrouped = activeAlbumId === UNGROUPED;
 
+  // ── C3: the face row works INSIDE an album ───────────────────────────────
+  // The same lens, scoped to the room you're in: only this album's people,
+  // every chip count retold as this album's truth. A person-lens belongs to
+  // the room it was set in — crossing an album door always clears it, so a
+  // filter never applies where its chips can't be seen.
+  useEffect(() => {
+    setPeopleFilter([]);
+  }, [activeAlbumId]);
+  const activeAlbumPeople = useMemo(
+    () =>
+      activeAlbum
+        ? albumFacesScoped(activeAlbum.songIds, band.membersBySong, band.people)
+        : [],
+    [activeAlbum, band.membersBySong, band.people],
+  );
+
   // Every song id that lives in at least one album.
   const groupedIds = useMemo(() => {
     const s = new Set<string>();
@@ -311,7 +334,8 @@ const SongCatalogPage = () => {
     // The band view: while people are selected, the Owned/Invited split stops
     // mattering — the shelf is ONE list of every active song those people
     // share (a band's drive is never split by who created the folder).
-    if (bandFilterActive) {
+    // Inside an album the lens scopes to the room instead (below).
+    if (bandFilterActive && !activeAlbum) {
       let list = songs.filter(
         (s) => s.status !== "archived" && songMatchesPeople(s.id, peopleFilter, band.membersBySong),
       );
@@ -336,6 +360,11 @@ const SongCatalogPage = () => {
     } else if (activeTab === "Owned" && activeAlbum) {
       const inAlbum = new Set(activeAlbum.songIds);
       list = list.filter((s) => inAlbum.has(s.id));
+      // The in-album lens: "which songs on this EP has Craig touched" — the
+      // walls stay (header, tracklist order); only the light changes.
+      if (bandFilterActive) {
+        list = list.filter((s) => songMatchesPeople(s.id, peopleFilter, band.membersBySong));
+      }
     }
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
@@ -897,8 +926,9 @@ const SongCatalogPage = () => {
 
         {/* The band view's honest header: whose songs, and how many. One list
             across owned + invited — a band's drive is never split by who
-            created the folder. */}
-        {!selecting && bandFilterActive && (
+            created the folder. (Inside an album, the scoped line below the
+            album header speaks instead.) */}
+        {!selecting && bandFilterActive && !activeAlbum && (
           <p
             aria-live="polite"
             className="-mt-1 mb-3 px-1 text-[0.8125rem] font-semibold"
@@ -934,8 +964,11 @@ const SongCatalogPage = () => {
         )}
 
         {/* Inside an album: the Apple Music playlist header keeps the title,
-            cover and counts on screen and gives a one-tap way back. */}
-        {!selecting && !bandFilterActive && activeTab === "Owned" && activeAlbum ? (
+            cover and counts on screen and gives a one-tap way back — and
+            STAYS while the in-album person-lens filters (the walls never
+            move; the light changes). */}
+        {!selecting && activeTab === "Owned" && activeAlbum ? (
+          <>
           <AlbumDetailHeader
             album={activeAlbum}
             songs={ownedSongs.filter((s) => activeAlbum.songIds.includes(s.id))}
@@ -963,8 +996,45 @@ const SongCatalogPage = () => {
               navigate(`/albums/${activeAlbum.id}/practice`, { state: { songs } });
             }}
             reordering={reorderingAlbum}
-            onToggleReorder={() => setReorderingAlbum((v) => !v)}
+            onToggleReorder={() => {
+              // Reordering works the full tracklist — a half-visible reorder
+              // under a person-lens would rearrange songs you can't see.
+              setPeopleFilter([]);
+              setReorderingAlbum((v) => !v);
+            }}
           />
+
+          {/* ── C3: this album's people, as its own lens ─────────────────
+              "Which songs on this EP has Craig touched" — two taps. Chips
+              carry the ALBUM's counts (albumFacesScoped), not the library's,
+              and the lens clears at the door. */}
+          {!reorderingAlbum && shouldShowPeopleRow(activeAlbumPeople) && (
+            <PeopleFilterRow
+              people={activeAlbumPeople}
+              selected={peopleFilter}
+              onToggle={(userId) =>
+                setPeopleFilter((prev) =>
+                  prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+                )
+              }
+              onClear={() => setPeopleFilter([])}
+            />
+          )}
+
+          {/* The scoped honest line: whose songs on THIS album, and how many */}
+          {bandFilterActive && (
+            <p
+              aria-live="polite"
+              className="-mt-1 mb-3 px-1 text-[0.8125rem] font-semibold"
+              style={{ color: "var(--cog-charcoal)", fontFamily: "var(--font-body)" }}
+            >
+              Songs with {peopleFilterLabel(selectedPeople)}
+              <span style={{ color: "var(--cog-warm-gray)", fontWeight: 500 }}>
+                {" "}· {visibleSongs.length} {visibleSongs.length === 1 ? "song" : "songs"} on this album
+              </span>
+            </p>
+          )}
+          </>
         ) : !selecting && !bandFilterActive && activeTab === "Owned" && viewingUngrouped ? (
           /* Ungrouped smart group — songs not yet filed into any album */
           <div className="mb-4">
@@ -1070,7 +1140,9 @@ const SongCatalogPage = () => {
           query={query}
           loading={loading}
           emptyCopy={
-            bandFilterActive
+            bandFilterActive && activeAlbum
+              ? `No songs with ${peopleFilterLabel(selectedPeople)} on this album yet.`
+              : bandFilterActive
               ? `No songs with ${peopleFilterLabel(selectedPeople)} yet — open a song's room and add them through the door.`
               : viewingUngrouped
               ? "Every song is filed into an album."
