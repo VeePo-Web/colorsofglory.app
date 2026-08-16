@@ -98,6 +98,28 @@ describe("pendingUploads — in-song take retain + retry", () => {
       expect(record.mimeType).toBe("audio/webm");
     });
 
+    it("a PERMANENT server rejection PARKS the row — blob kept, sweeps stop replaying a wall", async () => {
+      // Ledger F6: role revoked / song deleted / invalid input are walls that
+      // will never move. The take stays retained on-device, but the mount +
+      // online sweeps must not hammer the server forever. Offline/quota/5xx
+      // never park — those genuinely resolve.
+      const blob = makeBlob();
+      const record = await enqueuePendingUpload({ ...baseParams, blob });
+      mockAudioCache.get.mockResolvedValue(blob);
+      mockUploadVoiceMemo.mockRejectedValue(Object.assign(new Error("nope"), { code: "NOT_A_MEMBER" }));
+
+      await expect(flushPendingUpload(record.id)).rejects.toThrow("take-rejected-permanently");
+      const row = readRawIndex().find((r) => r.id === record.id) as { status: string; parked?: boolean };
+      expect(row.status).toBe("failed");
+      expect(row.parked).toBe(true);
+      expect(mockAudioCache.delete).not.toHaveBeenCalledWith(record.id); // blob kept
+
+      // The next sweep is a NO-OP: no second upload attempt against the wall.
+      mockUploadVoiceMemo.mockClear();
+      await expect(flushPendingUpload(record.id)).resolves.toBeNull();
+      expect(mockUploadVoiceMemo).not.toHaveBeenCalled();
+    });
+
     it("THROWS (and writes no index row) when the device refuses the durable write — never a false 'Saved'", async () => {
       // The P0 this pins: iOS private mode / storage pressure fails the IDB
       // put; the old best-effort set() swallowed it, the row was written, the

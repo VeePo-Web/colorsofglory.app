@@ -376,7 +376,7 @@ describe("normalized error contract — FORBIDDEN / QUOTA end to end", () => {
 // pipeline, both mocked; the durable index / status transitions / idempotency
 // are REAL. This is the single write path every recorded take flows through.
 vi.mock("@/lib/voice/audioCache", () => ({
-  audioCache: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), prefetch: vi.fn() },
+  audioCache: { get: vi.fn(), set: vi.fn(), setDurable: vi.fn(), delete: vi.fn(), prefetch: vi.fn() },
 }));
 vi.mock("@/lib/voice/voiceApi", () => ({ uploadVoiceMemo: vi.fn() }));
 
@@ -417,6 +417,7 @@ describe("memo save via the outbox — the take can never be lost or double-crea
     __resetCaptureOutboxForTests();
     __setOutboxAutoProcessForTests(false);
     mockAudioCache.set.mockResolvedValue(undefined);
+    mockAudioCache.setDurable.mockResolvedValue(true);
     mockAudioCache.delete.mockResolvedValue(undefined);
     mockAudioCache.get.mockResolvedValue(new Blob(["cached"], { type: "audio/webm" }));
     mockUpload.mockResolvedValue("memo-123");

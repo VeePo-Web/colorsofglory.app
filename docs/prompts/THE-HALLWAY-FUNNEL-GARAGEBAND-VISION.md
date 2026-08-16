@@ -241,10 +241,20 @@ PART 7 — PASS 2 PLAN (from the master ledger, executed with this doc)
   title row; the status line becomes screen-reader-only. The first thing
   the room shows is the song.
 
-Remaining in the master ledger for pass 3+: F3 (outbox durable-write
-confirmation), F4 (layer offset on the saveMemoDurable path), F6 (park
-non-retryable rejections), F9 (hear where this line came from), F10 (ship
-or delete the transcript→section flow), F11 (low-confidence cue).
+PASS 3 (executed): F3 ✅ every durable write now CONFIRMS (outbox + seed
+ideas throw on a refused IDB put; every caller retains + narrates — the
+GarageBand never-eat-a-take covenant holds on every path, not just the
+canvas). F4 ✅ the layer alignment offset rides the outbox path too (read
+at upload, rekeyed on success) — a layer saved anywhere seats on the
+base's grid on every device. F6 ✅ permanent server rejections (role
+revoked, song deleted, invalid input — stable codes only) PARK: the blob
+stays safe on-device, the sweeps stop hammering a wall that won't move,
+and the writer is told the truth. F11 ✅ a transcript block the server's
+own pass flagged as shaky wears a quiet "worth a quick listen" cue.
+
+Remaining for pass 4+: F9 (surface "hear where this line came from" — the
+take_id link waits for its UI moment), F10 (ship or delete the dormant
+transcript→section flow).
 
 ============================================================
 PART 8 — WHAT DONE LOOKS LIKE

@@ -8,6 +8,7 @@ vi.mock("./audioCache", () => ({
   audioCache: {
     get: vi.fn(),
     set: vi.fn(),
+    setDurable: vi.fn(),
     delete: vi.fn(),
     prefetch: vi.fn(),
   },
@@ -40,6 +41,7 @@ describe("seedIdeaApi — capture → save → claim → upload pipeline", () =>
     localStorage.clear();
     vi.clearAllMocks();
     mockAudioCache.set.mockResolvedValue(undefined);
+    mockAudioCache.setDurable.mockResolvedValue(true);
     mockAudioCache.delete.mockResolvedValue(undefined);
     mockAudioCache.get.mockResolvedValue(null);
     mockUploadVoiceMemo.mockResolvedValue("memo-123");
@@ -48,8 +50,9 @@ describe("seedIdeaApi — capture → save → claim → upload pipeline", () =>
   describe("saveSeedIdea — the sacred promise", () => {
     it("writes the blob to the local cache before recording it in the index", async () => {
       const callOrder: string[] = [];
-      mockAudioCache.set.mockImplementation(async () => {
+      mockAudioCache.setDurable.mockImplementation(async () => {
         callOrder.push("cache.set");
+        return true;
       });
 
       const blob = makeBlob();
@@ -60,9 +63,10 @@ describe("seedIdeaApi — capture → save → claim → upload pipeline", () =>
         title: "Bridge hum",
       });
 
-      // The blob must already be safely cached by the time we look at the index —
-      // an idea is never lost, even if the tab closes a moment later.
-      expect(mockAudioCache.set).toHaveBeenCalledWith(record.id, blob);
+      // The blob must already be safely cached — and CONFIRMED — by the time
+      // we look at the index: a seed idea is local-only, so the cached blob
+      // IS the recording. An unconfirmed write here made a ghost row.
+      expect(mockAudioCache.setDurable).toHaveBeenCalledWith(record.id, blob);
       callOrder.push("index written");
       expect(callOrder).toEqual(["cache.set", "index written"]);
 

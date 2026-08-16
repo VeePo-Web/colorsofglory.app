@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./audioCache", () => ({
-  audioCache: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), prefetch: vi.fn() },
+  audioCache: { get: vi.fn(), set: vi.fn(), setDurable: vi.fn(), delete: vi.fn(), prefetch: vi.fn() },
 }));
 
 import { audioCache } from "./audioCache";
@@ -26,6 +26,7 @@ describe("failedCaptureStore — durable failed-take recovery", () => {
     localStorage.clear();
     vi.clearAllMocks();
     mockCache.set.mockResolvedValue(undefined);
+    mockCache.setDurable.mockResolvedValue(true);
     mockCache.delete.mockResolvedValue(undefined);
     mockCache.get.mockResolvedValue(null);
   });

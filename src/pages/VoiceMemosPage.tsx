@@ -10,6 +10,7 @@ import UploadDropZone from "@/components/voice/UploadDropZone";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
 import { useSubscription } from "@/hooks/useSubscription";
+import { saveFailedCapture } from "@/lib/voice/failedCaptureStore";
 import {
   listVoiceMemos,
   getSignedUrl,
@@ -612,16 +613,30 @@ const VoiceMemosPage = () => {
 
     // The one canonical save: blob → device cache BEFORE any network call →
     // outbox retries on reconnect. Real peaks computed once, in the same call.
-    const { optimistic } = await saveMemoDurable({
-      blob: pendingRecording.blob,
-      songId,
-      mimeType: pendingRecording.mimeType,
-      durationMs: pendingRecording.durationMs,
-      title,
-      sectionLabel: section,
-      transcribe,
-      createdBy: currentUserId ?? "You",
-    });
+    // A refused durable write (iOS private mode / storage pressure) now
+    // THROWS from the enqueue — keep the review sheet open (the take's only
+    // home is memory), park a best-effort recovery copy, and tell the truth.
+    let optimistic: Awaited<ReturnType<typeof saveMemoDurable>>["optimistic"];
+    try {
+      ({ optimistic } = await saveMemoDurable({
+        blob: pendingRecording.blob,
+        songId,
+        mimeType: pendingRecording.mimeType,
+        durationMs: pendingRecording.durationMs,
+        title,
+        sectionLabel: section,
+        transcribe,
+        createdBy: currentUserId ?? "You",
+      }));
+    } catch {
+      void saveFailedCapture(pendingRecording.blob, {
+        songId,
+        title,
+        durationMs: pendingRecording.durationMs,
+      }).catch(() => {});
+      setUploadError("This device wouldn't keep the take — storage looks full or blocked. Free a little space and save again.");
+      return;
+    }
 
     setMemos((prev) => [optimistic, ...prev]);
     setFlow("idle");

@@ -264,23 +264,30 @@ THE-HALLWAY-FUNNEL-GARAGEBAND-VISION.md):
   is mounted always for aria-live but VISIBLE only when it has something to
   say; viewers keep their one quiet line of role clarity.
 
-STILL FILED FOR PASS 3+ (severity-ordered, all traced with file:line):
-- F3 (P2): capture outbox has the same unconfirmed-durable-write hole the
-  canvas path had (`captureOutbox.ts:272`, `seedIdeaApi.ts:58`) — apply
-  setDurable there with its callers' error paths (its own test harness mocks
-  audioCache; update together).
-- F4 (P2): `layerOffsetMs` is dropped on the `saveMemoDurable` path — layers
-  saved through the canonical outbox transmit offset 0 and play misaligned
-  cross-device (`saveMemo.ts`, `captureOutbox.ts` default uploader).
-- F6 (P2): non-retryable server rejections (RLS/4xx) retry forever with the
-  offline copy — classify error kinds, park after N attempts.
+FIXED IN PASS 3 (2026-08-16, the reliability tail):
+- F3 ✅ (P2): the capture outbox and the seed-idea shelf CONFIRM their
+  durable writes (`setDurable` + throw on refusal); every caller retains and
+  narrates — CaptureScene's retention catch, SeedReviewSheet's honest toast,
+  VoiceMemosPage now keeps the review open + parks a recovery copy. The
+  never-eat-a-take covenant holds on every save path in the app.
+- F4 ✅ (P2): the layer alignment offset rides the OUTBOX path too — the
+  default uploader reads the alignment store at upload time and success
+  rekeys it, exactly like the canvas pipeline. Cross-device stacks seat on
+  the base's grid wherever the layer was saved.
+- F6 ✅ (P2): PERMANENT server rejections (stable CogError codes only:
+  INVALID_INPUT / FORBIDDEN / NOT_A_MEMBER / SONG_NOT_FOUND / SONG_DELETED /
+  METHOD_NOT_ALLOWED) park the pending row — blob retained, sweeps stop
+  replaying, canvas narrates the truth. Offline / quota / 5xx never park.
+- F11 ✅ (P3): a transcript block the server's own segmentation flagged
+  (`confidence < 0.6`) wears a quiet "worth a quick listen" cue in Review.
+
+STILL FILED FOR PASS 4+:
 - F9 (P3): committed lyric cards carry `take_id` server-side but the board
-  hydrator never reads it — no "hear where this line came from" affordance.
+  hydrator never reads it — surface "hear where this line came from" when
+  its UI moment arrives (plumbing without a consumer stays unshipped).
 - F10 (P3): the R30 transcript→section apply flow
   (`integrations/cog/transcript.ts:102-153` + 2 RPCs) has zero UI callers —
   ship it or delete it.
-- F11 (P3): per-block LLM confidence is parsed but never rendered — no
-  "double-check this line" cue in Review.
 
 ============================================================
 PART 7 — SHIP PROTOCOL (Concurrent-Tree — mandatory every pass)

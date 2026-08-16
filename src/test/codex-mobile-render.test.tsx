@@ -92,7 +92,8 @@ describe("Codex 390px mobile render smoke", () => {
     renderRoute("/", "/", <SongCatalogPage />);
 
     expect(screen.getByRole("heading", { name: /your songs/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new song/i })).toBeInTheDocument();
+    // The create act grew albums (Lane C): "New — start a song or album".
+    expect(screen.getByRole("button", { name: /start a song/i })).toBeInTheDocument();
   });
 
   it("renders the song workspace at the primary mobile width", async () => {

@@ -49,6 +49,9 @@ type EditableBlock = {
   text: string;
   start_ms: number;
   end_ms: number;
+  /** The server's own segmentation pass flagged this boundary as shaky —
+   *  surface a quiet "worth a second look" cue, never a red wall. */
+  lowConfidence?: boolean;
 };
 
 interface ReviewSheetProps {
@@ -309,6 +312,10 @@ const ReviewSheet = ({
           text: b.text ?? "",
           start_ms: b.start_ms ?? 0,
           end_ms: b.end_ms ?? 0,
+          // The server scores its own boundaries (regex 1.0; LLM-repaired
+          // lower) — a shaky block earns a quiet second-look cue instead of
+          // rendering indistinguishable from a confident one.
+          lowConfidence: typeof b.confidence === "number" && b.confidence < 0.6,
         }));
         // The server transcript is AUTHORITATIVE on commit — it replaces the
         // instant on-device preview. Unless the writer already edited: their
@@ -895,6 +902,14 @@ const ReviewSheet = ({
                     </button>
                   </div>
                 </div>
+                {b.lowConfidence && (
+                  <p
+                    className="mb-1.5 px-1 text-[11px] font-medium"
+                    style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
+                  >
+                    The AI wasn't sure where this part starts — worth a quick listen.
+                  </p>
+                )}
                 <Textarea
                   value={b.text}
                   onChange={(e) => {

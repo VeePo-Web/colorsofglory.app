@@ -55,7 +55,10 @@ export async function saveSeedIdea(params: {
 }): Promise<SeedIdeaRecord> {
   const id = generateId();
 
-  await audioCache.set(id, params.blob);
+  // A seed idea is LOCAL-ONLY — the cached blob IS the entire recording. An
+  // unconfirmed write here made a ghost: a shelf row pointing at nothing.
+  const persisted = await audioCache.setDurable(id, params.blob);
+  if (!persisted) throw new Error("take-not-persisted");
 
   const record: SeedIdeaRecord = {
     id,

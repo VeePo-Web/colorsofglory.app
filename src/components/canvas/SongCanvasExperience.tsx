@@ -1486,6 +1486,11 @@ const SongCanvasExperience = () => {
           description: "This take is safe here and will sync once there's room.",
           action: { label: "Add storage", onClick: () => navigate("/upgrade") },
         });
+      } else if (err instanceof Error && err.message === "take-rejected-permanently") {
+        // The server said no for keeps (role revoked, song deleted) — the
+        // recording is retained on this device, and pretending "back online"
+        // will fix it would be the exact lie this surface stopped telling.
+        setCanvasStatus("This take couldn't be added to the song — it's kept safe on this device.");
       } else {
         setCanvasStatus(
           err instanceof Error && err.message === "parent-take-still-uploading"

@@ -5,6 +5,7 @@ vi.mock("./audioCache", () => ({
   audioCache: {
     get: vi.fn(),
     set: vi.fn(),
+    setDurable: vi.fn(),
     delete: vi.fn(),
     prefetch: vi.fn(),
   },
@@ -45,6 +46,7 @@ describe("captureUploaders — startup registration closes the retry-after-reloa
     __resetCaptureOutboxForTests();
     __setOutboxAutoProcessForTests(false);
     mockAudioCache.set.mockResolvedValue(undefined);
+    mockAudioCache.setDurable.mockResolvedValue(true);
     mockAudioCache.delete.mockResolvedValue(undefined);
     mockAudioCache.get.mockResolvedValue(makeBlob());
     mockMemosUpload.mockResolvedValue("memo-from-memos");

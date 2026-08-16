@@ -8,6 +8,7 @@ vi.mock("./audioCache", () => ({
   audioCache: {
     get: vi.fn(),
     set: vi.fn(),
+    setDurable: vi.fn(),
     delete: vi.fn(),
     prefetch: vi.fn(),
   },
@@ -69,6 +70,7 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
     // Drive processing explicitly so specs never race a background attempt.
     __setOutboxAutoProcessForTests(false);
     mockAudioCache.set.mockResolvedValue(undefined);
+    mockAudioCache.setDurable.mockResolvedValue(true);
     mockAudioCache.delete.mockResolvedValue(undefined);
     mockAudioCache.get.mockResolvedValue(makeBlob("cached audio"));
     mockUpload.mockResolvedValue("memo-123");
@@ -82,16 +84,17 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
   describe("enqueue — the sacred promise", () => {
     it("caches the blob BEFORE persisting the job (durable even if the tab closes a moment later)", async () => {
       let cachedBeforeIndex = false;
-      mockAudioCache.set.mockImplementation(async (id: string) => {
+      mockAudioCache.setDurable.mockImplementation(async (id: string) => {
         // At the moment the blob is cached, the index must not yet hold the job —
         // proving the blob is durable before anything else can fail.
         cachedBeforeIndex = readRawIndex().every((j) => j.id !== id);
+        return true;
       });
 
       const blob = makeBlob("the recorded idea");
       const { outboxId } = await enqueueCaptureUpload(baseParams({ blob }));
 
-      expect(mockAudioCache.set).toHaveBeenCalledWith(outboxId, blob);
+      expect(mockAudioCache.setDurable).toHaveBeenCalledWith(outboxId, blob);
       expect(cachedBeforeIndex).toBe(true);
 
       // The job is durably persisted with a stable idempotency key.
@@ -99,6 +102,15 @@ describe("captureOutbox — the in-song save can never lose a take", () => {
       expect(persisted.some((j) => j.id === outboxId)).toBe(true);
       const job = persisted.find((j) => j.id === outboxId)!;
       expect(job.idempotencyKey.length).toBeGreaterThan(0);
+    });
+
+    it("THROWS (and writes no job row) when the device refuses the durable write — never a false enqueue", async () => {
+      // The P0 pattern, held on THIS path too: iOS private mode / storage
+      // pressure fails the IDB put; a job row whose blob never landed would
+      // be a "Saved" over nothing. Callers keep their own copy and narrate.
+      mockAudioCache.setDurable.mockResolvedValue(false);
+      await expect(enqueueCaptureUpload(baseParams())).rejects.toThrow("take-not-persisted");
+      expect(readRawIndex()).toHaveLength(0);
     });
 
     it("passes a stable idempotency key so a retried take never double-creates", async () => {

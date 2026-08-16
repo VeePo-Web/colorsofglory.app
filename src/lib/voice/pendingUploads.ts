@@ -31,6 +31,10 @@ export interface PendingUpload {
   status: "pending" | "uploading" | "failed";
   attempts: number;
   createdAt: string;
+  /** The server refused this take PERMANENTLY (not a member, song deleted,
+   *  invalid input) — the blob stays safe on-device but the recovery sweeps
+   *  stop hammering a wall that will never move. Offline/quota/5xx never park. */
+  parked?: boolean;
 }
 
 const INDEX_KEY = "cog-pending-uploads";
@@ -134,6 +138,9 @@ export async function flushPendingUpload(id: string): Promise<string | null> {
   if (inFlight.has(id)) return null;
   const record = readIndex().find((r) => r.id === id);
   if (!record) return null;
+  // Parked = permanently refused by the server. The blob stays retained on
+  // this device; automatic sweeps must not replay it forever.
+  if (record.parked) return null;
   inFlight.add(id);
   try {
     return await flushPendingUploadInner(id, record);
@@ -187,8 +194,18 @@ async function flushPendingUploadInner(id: string, record: PendingUpload): Promi
     });
   } catch (err) {
     // The take stays safe and waiting — this is exactly what the calm retry
-    // affordance promises the songwriter.
-    updateRecord(id, { status: "failed" });
+    // affordance promises the songwriter. A PERMANENT server rejection
+    // (stable CogError codes only — never offline, never quota, never 5xx)
+    // additionally parks the row: the blob is kept, but the mount/online
+    // sweeps stop replaying a request the server will refuse forever.
+    const code = (err as { code?: unknown } | null)?.code;
+    const permanent =
+      typeof code === "string" &&
+      ["INVALID_INPUT", "FORBIDDEN", "NOT_A_MEMBER", "SONG_NOT_FOUND", "SONG_DELETED", "METHOD_NOT_ALLOWED"].includes(code);
+    updateRecord(id, { status: "failed", ...(permanent ? { parked: true } : {}) });
+    if (permanent) {
+      throw Object.assign(new Error("take-rejected-permanently"), { cause: err });
+    }
     throw err;
   }
 

@@ -1,5 +1,6 @@
 import { audioCache } from "./audioCache";
 import { renameContour } from "@/lib/audio/contourStore";
+import { getAlignmentOffsetMs, rekeyAlignmentOffset } from "@/lib/audio/alignmentStore";
 import { uploadVoiceMemo } from "./voiceApi";
 
 /**
@@ -84,6 +85,13 @@ const uploaders: Record<string, OutboxUploader> = {
       idempotencyKey: job.idempotencyKey,
       sectionId: (job.extra?.sectionId as string | undefined) ?? null,
       waveformPeaks: (job.extra?.waveformPeaks as number[] | undefined) ?? null,
+      // The measured guide-alignment offset (keyed by the outbox id until
+      // success rekeys it) — same thread the canvas pendingUploads path
+      // carries. Without it a layer saved through THIS path reached the
+      // server with layer_offset_ms 0 and cross-device stacks played early.
+      layerOffsetMs: job.parentMemoId
+        ? Math.max(0, Math.round(getAlignmentOffsetMs(job.id))) || undefined
+        : undefined,
     }),
 };
 
@@ -268,8 +276,12 @@ export async function enqueueCaptureUpload(params: {
 }): Promise<{ outboxId: string }> {
   const id = generateId("outbox");
 
-  // 1 — durable BEFORE anything else can fail.
-  await audioCache.set(id, params.blob);
+  // 1 — durable BEFORE anything else can fail, and CONFIRMED: iOS private
+  // mode / storage pressure can fail the IDB put silently, and a job row
+  // whose blob never landed is a "Saved" over nothing. Throwing lets every
+  // caller keep its own copy alive and tell the songwriter the truth.
+  const persisted = await audioCache.setDurable(id, params.blob);
+  if (!persisted) throw new Error("take-not-persisted");
 
   const job: OutboxJob = {
     id,
@@ -341,6 +353,9 @@ async function processJob(id: string): Promise<void> {
     // same rename so the melody waveform never flickers back to amplitude.
     await audioCache.set(memoId, blob);
     renameContour(id, memoId);
+    // The alignment offset follows the same rename so stack playback on THIS
+    // device keeps reading the measured value under the real memo id.
+    rekeyAlignmentOffset(id, memoId);
     await audioCache.delete(id);
     removeJob(id);
     emit({ type: "success", outboxId: id, memoId, songId: job.songId });
