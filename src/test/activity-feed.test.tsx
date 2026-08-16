@@ -151,16 +151,16 @@ describe("groupRows — calm folding of repeats", () => {
 // ---------- the route (Step 1) ----------
 
 describe("route — /songs/:id/activity is a real, guarded page", () => {
-  // The route tree lives inline in App.tsx (rendering <App/> here would drag
-  // in the PasswordGate + auth machine), so guard the route contract at the
-  // source level: the activity path must mount RequireAuth→ActivityPage and
-  // must never regress to the old CanvasLayerRedirect.
+  // The route tree lives in the A5 route-group fragments (rendering <App/>
+  // here would drag in the PasswordGate + auth machine), so guard the route
+  // contract at the source level: the activity path must mount
+  // RequireAuth→ActivityPage and must never regress to CanvasLayerRedirect.
   it("mounts RequireAuth→ActivityPage instead of redirecting to the canvas", () => {
-    const appSource = readFileSync(resolve(__dirname, "../App.tsx"), "utf8");
+    const appSource = readFileSync(resolve(__dirname, "../routes/songRoutes.tsx"), "utf8");
     const routeLine = appSource
       .split("\n")
       .find((line) => line.includes('path="/songs/:id/activity"'));
-    expect(routeLine, "activity route missing from App.tsx").toBeTruthy();
+    expect(routeLine, "activity route missing from songRoutes.tsx").toBeTruthy();
     expect(routeLine).toContain("<RequireAuth>");
     expect(routeLine).toContain("<ActivityPage />");
     expect(routeLine).not.toContain("CanvasLayerRedirect");

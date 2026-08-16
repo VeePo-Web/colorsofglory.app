@@ -88,7 +88,14 @@ export async function enqueuePendingUpload(
   const id = generateId();
 
   // Blob to durable storage first — everything else is recoverable from it.
-  await audioCache.set(id, params.blob);
+  // The write must be CONFIRMED: iOS Safari private mode / storage pressure
+  // can fail the put, and a swallowed failure here meant "Saved" over a take
+  // that no longer existed anywhere. Throwing lets the caller keep its own
+  // fallback copy alive and tell the songwriter the truth.
+  const persisted = await audioCache.setDurable(id, params.blob);
+  if (!persisted) {
+    throw new Error("take-not-persisted");
+  }
 
   const record: PendingUpload = {
     id,

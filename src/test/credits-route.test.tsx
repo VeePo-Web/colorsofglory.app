@@ -7,16 +7,16 @@ import { describe, it, expect } from "vitest";
 
 import CreditsPage from "@/pages/CreditsPage";
 
-// E4 Step 1 regression guard. App.tsx keeps its routes inline, so the wiring
-// is asserted at the source level — the same approach as design-guard.test.ts.
+// E4 Step 1 regression guard. Routing moved to the A5 route-group fragments
+// (src/routes/*) — the wiring is asserted at that source level.
 describe("route — /songs/:id/credits is the real Credits ledger (E4 Step 1)", () => {
-  it("App.tsx wires the credits route to the guarded page, not the canvas redirect", () => {
-    const appSource = readFileSync(join(process.cwd(), "src", "App.tsx"), "utf8");
+  it("songRoutes wires the credits route to the guarded page, not the canvas redirect", () => {
+    const appSource = readFileSync(join(process.cwd(), "src", "routes", "songRoutes.tsx"), "utf8");
     const creditsRouteLine = appSource
       .split("\n")
       .find((line) => line.includes('path="/songs/:id/credits"'));
 
-    expect(creditsRouteLine, "credits route missing from App.tsx").toBeDefined();
+    expect(creditsRouteLine, "credits route missing from songRoutes.tsx").toBeDefined();
     expect(creditsRouteLine).toContain("<RequireAuth>");
     expect(creditsRouteLine).toContain("<CreditsPage />");
     expect(creditsRouteLine).not.toContain("CanvasLayerRedirect");

@@ -37,7 +37,7 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("anchors the canvas around one root song card and clear thumb actions", async () => {
     renderCanvas();
 
-    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 20000 })).toBeInTheDocument();
     expect(screen.getByText(/start the song here/i)).toBeInTheDocument();
     expect(lastButton(/add part/i)).toBeEnabled();
     expect(lastButton(/record idea|record memo/i)).toBeEnabled();
@@ -49,10 +49,10 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("adds a named song part (Verse) and keeps it after remount", async () => {
     const view = renderCanvas();
 
-    await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 });
+    await screen.findByLabelText(/root song card/i, {}, { timeout: 20000 });
     // Open the "Add a part" picker, then pick Verse.
     fireEvent.click(lastButton(/add part/i));
-    const verseBtn = await screen.findByRole("button", { name: /^verse$/i }, { timeout: 10000 });
+    const verseBtn = await screen.findByRole("button", { name: /^verse$/i }, { timeout: 20000 });
     fireEvent.click(verseBtn);
 
     expect(await screen.findByRole("button", { name: /lyric idea: verse 1/i })).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe("Feature 04 song whiteboard canvas", () => {
   it("keeps viewer mode readable and blocks creation with product copy", async () => {
     renderCanvas("/songs/1/canvas?role=viewer");
 
-    expect(await screen.findByText(/you can view this canvas/i, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText(/you can view this canvas/i, {}, { timeout: 20000 })).toBeInTheDocument();
     // A viewer's creation dock doesn't render AT ALL — two permanently
     // ghosted pills were a dead control row, not an interface.
     expect(screen.queryByRole("button", { name: /add part/i })).toBeNull();

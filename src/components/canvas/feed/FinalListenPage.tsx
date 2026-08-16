@@ -392,16 +392,17 @@ const FinalListenPage = memo(function FinalListenPage({
                 {!isViewer && !listening && !paused && (
                   // Quiet chrome: borderless ghost chevrons — the honest,
                   // always-reachable reorder path without 2N bordered buttons
-                  // fighting the Play primary (targets stay 40px). They REST
-                  // while the song sounds: the playing queue is a snapshot,
-                  // and reordering under it visibly desynced the numbers.
+                  // fighting the Play primary (44px targets, the floor the
+                  // rest of the feed holds). They REST while the song sounds:
+                  // the playing queue is a snapshot, and reordering under it
+                  // visibly desynced the numbers.
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       disabled={i === 0}
                       onClick={(e) => { e.stopPropagation(); onReorder(card.id, -1); }}
                       aria-label={`Move ${card.section || card.title || "this part"} earlier`}
-                      style={{ width: 40, height: 40, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === 0 ? 0.25 : 0.7, cursor: i === 0 ? "default" : "pointer" }}
+                      style={{ width: 44, height: 44, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === 0 ? 0.25 : 0.7, cursor: i === 0 ? "default" : "pointer" }}
                     >
                       <ChevronUp size={16} strokeWidth={2.2} />
                     </button>
@@ -410,7 +411,7 @@ const FinalListenPage = memo(function FinalListenPage({
                       disabled={i === cards.length - 1}
                       onClick={(e) => { e.stopPropagation(); onReorder(card.id, 1); }}
                       aria-label={`Move ${card.section || card.title || "this part"} later`}
-                      style={{ width: 40, height: 40, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === cards.length - 1 ? 0.25 : 0.7, cursor: i === cards.length - 1 ? "default" : "pointer" }}
+                      style={{ width: 44, height: 44, borderRadius: 11, border: "none", backgroundColor: "transparent", color: "var(--cog-warm-gray)", display: "flex", alignItems: "center", justifyContent: "center", opacity: i === cards.length - 1 ? 0.25 : 0.7, cursor: i === cards.length - 1 ? "default" : "pointer" }}
                     >
                       <ChevronDown size={16} strokeWidth={2.2} />
                     </button>

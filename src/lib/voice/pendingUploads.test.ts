@@ -8,6 +8,7 @@ vi.mock("./audioCache", () => ({
   audioCache: {
     get: vi.fn(),
     set: vi.fn(),
+    setDurable: vi.fn(),
     delete: vi.fn(),
     prefetch: vi.fn(),
   },
@@ -54,6 +55,8 @@ describe("pendingUploads — in-song take retain + retry", () => {
     localStorage.clear();
     vi.clearAllMocks();
     mockAudioCache.set.mockResolvedValue(undefined);
+    // The durable write CONFIRMS by default; the P0 test below flips it.
+    mockAudioCache.setDurable.mockResolvedValue(true);
     mockAudioCache.delete.mockResolvedValue(undefined);
     mockAudioCache.get.mockResolvedValue(null);
     mockUploadVoiceMemo.mockResolvedValue("memo-123");
@@ -62,14 +65,15 @@ describe("pendingUploads — in-song take retain + retry", () => {
   describe("enqueuePendingUpload — the sacred promise (in-song)", () => {
     it("caches the blob BEFORE writing the index row — the take is safe before any network call", async () => {
       const callOrder: string[] = [];
-      mockAudioCache.set.mockImplementation(async () => {
+      mockAudioCache.setDurable.mockImplementation(async () => {
         callOrder.push("cache.set");
+        return true;
       });
 
       const blob = makeBlob();
       const record = await enqueuePendingUpload({ ...baseParams, blob });
 
-      expect(mockAudioCache.set).toHaveBeenCalledWith(record.id, blob);
+      expect(mockAudioCache.setDurable).toHaveBeenCalledWith(record.id, blob);
       callOrder.push("index written");
       expect(callOrder).toEqual(["cache.set", "index written"]);
 
@@ -92,6 +96,18 @@ describe("pendingUploads — in-song take retain + retry", () => {
       expect(typeless.type).toBe("");
       const record = await enqueuePendingUpload({ ...baseParams, mimeType: "", blob: typeless });
       expect(record.mimeType).toBe("audio/webm");
+    });
+
+    it("THROWS (and writes no index row) when the device refuses the durable write — never a false 'Saved'", async () => {
+      // The P0 this pins: iOS private mode / storage pressure fails the IDB
+      // put; the old best-effort set() swallowed it, the row was written, the
+      // caller cleared its salvage backup, and the take's only copy was gone
+      // behind a "Saved" toast. The enqueue must fail LOUDLY instead.
+      mockAudioCache.setDurable.mockResolvedValue(false);
+      await expect(enqueuePendingUpload({ ...baseParams, blob: makeBlob() })).rejects.toThrow(
+        "take-not-persisted",
+      );
+      expect(readRawIndex()).toHaveLength(0);
     });
   });
 

@@ -153,7 +153,12 @@ export async function getSignedPlaybackUrl(memoId: string): Promise<string> {
     "voice-memo-signed-url",
     { memo_id: memoId },
   );
-  return data.signed_url ?? data.signedUrl ?? data.url ?? "";
+  const url = data.signed_url ?? data.signedUrl ?? data.url;
+  // A "" fallback here once flowed into fetch("") → the app's own HTML,
+  // cached under the memo id — permanently silencing that take. No URL is an
+  // error, and every caller already survives this seam rejecting.
+  if (!url) throw new Error(`no signed url for memo ${memoId}`);
+  return url;
 }
 
 /** Trigger Whisper transcription on an already-uploaded memo. */

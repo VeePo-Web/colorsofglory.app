@@ -36,12 +36,14 @@ describe("Colors of Glory public metadata", () => {
 
 describe("Colors of Glory route safety", () => {
   it("wires the first onboarding path routes", () => {
-    const app = read("src/App.tsx");
+    // A5 moved all routing out of App.tsx into the route-group fragments —
+    // the contract lives there now.
+    const routes = read("src/routes/onboardingRoutes.tsx") + read("src/routes/songRoutes.tsx");
 
-    expect(app).toContain('path="/onboarding/intent"');
-    expect(app).toContain('path="/onboarding/start-song"');
-    expect(app).toContain('path="/songs/:id/capture"');
-    expect(app).toContain('path="/songs/:id/voice-added"');
+    expect(routes).toContain('path="/onboarding/intent"');
+    expect(routes).toContain('path="/onboarding/start-song"');
+    expect(routes).toContain('path="/songs/:id/capture"');
+    expect(routes).toContain('path="/songs/:id/voice-added"');
   });
 
   it("keeps the 404 page branded to Colors of Glory", () => {

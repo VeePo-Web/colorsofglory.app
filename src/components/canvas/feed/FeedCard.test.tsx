@@ -1,37 +1,71 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import FeedCard from "./FeedCard";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
-import FeedCard from "./FeedCard";
 
-const card = (over: Partial<CanvasBoardCard>): CanvasBoardCard =>
+/**
+ * Pins the hallway's "state at rest, verbs on selection" contract (Hallway
+ * ledger H7): a resting voice card tells its state quietly; the layering verb
+ * waits in the selected action row. Six memos at rest must never mean six
+ * standing CTAs.
+ */
+
+const card = {
+  id: "11111111-1111-4111-8111-111111111111",
+  type: "voice", tree: "ideas", title: "Take 3", body: "", section: "",
+  x: 0, y: 0, contributor: "Sarah", meta: "0:42",
+} as CanvasBoardCard;
+
+const interactions = (over: Partial<CanvasCardInteractions> = {}): CanvasCardInteractions =>
   ({
-    id: "x", type: "voice", tree: "ideas", title: "Morning hum", body: "", section: "",
-    contributor: "Me", x: 0, y: 0, ...over,
-  } as CanvasBoardCard);
+    onSelect: vi.fn(),
+    onPlay: vi.fn(),
+    onMoveToFinal: vi.fn(),
+    onMoveToIdeas: vi.fn(),
+    onRecordOver: vi.fn(),
+    onOpenStack: vi.fn(),
+    layerCount: 0,
+    ...over,
+  }) as CanvasCardInteractions;
 
-const interactions = (over: Partial<CanvasCardInteractions> = {}): CanvasCardInteractions => ({
-  onSelect: vi.fn(),
-  onMoveToFinal: vi.fn(),
-  onMoveToIdeas: vi.fn(),
-  onMove: vi.fn(),
-  ...over,
-});
+describe("FeedCard — state at rest, verbs on selection", () => {
+  it("a resting voice card shows NO layering verb — only the quiet state chip when layers exist", () => {
+    render(<FeedCard card={card} selected={false} interactions={interactions({ layerCount: 2 })} />);
+    expect(screen.queryByRole("button", { name: /record a layer over this take/i })).toBeNull();
+    expect(screen.getByLabelText(/2 layers on this take/i)).toBeInTheDocument();
+  });
 
-describe("FeedCard — one-tap layering on audio cards", () => {
-  it("a voice card carries the always-visible 'Layer over this' button", () => {
-    const ix = interactions({ onRecordOver: vi.fn() });
-    render(<FeedCard card={card({})} selected={false} interactions={ix} />);
-    const btn = screen.getByRole("button", { name: /record a layer over this take/i });
-    fireEvent.click(btn);
+  it("selection reveals the layering verb and the stack door", () => {
+    const ix = interactions({ layerCount: 2 });
+    render(<FeedCard card={card} selected interactions={ix} />);
+    fireEvent.click(screen.getByRole("button", { name: /record a layer over this take/i }));
     expect(ix.onRecordOver).toHaveBeenCalledTimes(1);
-    // Tapping the layer button never doubles as a card select.
+    fireEvent.click(screen.getByRole("button", { name: /open the stack — 2 layers/i }));
+    expect(ix.onOpenStack).toHaveBeenCalledTimes(1);
+  });
+
+  it("a bare memo (no layers) selected offers the layer verb but no stack door", () => {
+    render(<FeedCard card={card} selected interactions={interactions({ layerCount: 0 })} />);
+    expect(screen.getByRole("button", { name: /record a layer over this take/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open the stack/i })).toBeNull();
+  });
+
+  it("tapping the layer verb never doubles as a card select", () => {
+    const ix = interactions({ layerCount: 0 });
+    render(<FeedCard card={card} selected interactions={ix} />);
+    fireEvent.click(screen.getByRole("button", { name: /record a layer over this take/i }));
+    expect(ix.onRecordOver).toHaveBeenCalledTimes(1);
     expect(ix.onSelect).not.toHaveBeenCalled();
   });
 
-  it("non-audio cards and view-only rooms show no layer button", () => {
-    const ix = interactions(); // no onRecordOver granted (viewer / non-audio)
-    render(<FeedCard card={card({ type: "chord", title: "Chorus chords" })} selected={false} interactions={ix} />);
+  it("non-audio cards and view-only rooms (no onRecordOver granted) show no layer verb, even selected", () => {
+    const viewerIx = interactions({ onRecordOver: undefined, layerCount: 0 });
+    render(<FeedCard card={card} selected interactions={viewerIx} />);
+    expect(screen.queryByRole("button", { name: /record a layer/i })).toBeNull();
+
+    const chord = { ...card, id: "22222222-2222-4222-8222-222222222222", type: "chord" } as CanvasBoardCard;
+    render(<FeedCard card={chord} selected interactions={interactions()} />);
     expect(screen.queryByRole("button", { name: /record a layer/i })).toBeNull();
   });
 });

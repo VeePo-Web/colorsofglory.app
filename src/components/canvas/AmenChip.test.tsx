@@ -19,13 +19,15 @@ describe("AmenChip — intuitive, one-tap affirmation that always registers", ()
     expect(onToggle).toHaveBeenCalledWith("amen");
   });
 
-  it("heart and keeper each toggle their own kind", () => {
-    const onToggle = vi.fn();
-    render(<AmenChip summary={null} selected cardTitle="Chorus" onToggle={onToggle} />);
-    fireEvent.click(screen.getByRole("button", { name: /send a heart to chorus/i }));
-    fireEvent.click(screen.getByRole("button", { name: /mark chorus as a keeper/i }));
-    expect(onToggle).toHaveBeenNthCalledWith(1, "heart");
-    expect(onToggle).toHaveBeenNthCalledWith(2, "keeper");
+  it("ONE warm act: heart/keeper are data-seam survivors, never live targets", () => {
+    // The product named the concept "Amen" — three near-synonymous
+    // affirmations (amen, heart, keeper) were a 3-equal-choice stall, and
+    // heart/keeper were unlabeled icons nobody could name. This pins the
+    // subtraction: a selected card offers exactly one affirmation button.
+    render(<AmenChip summary={null} selected cardTitle="Chorus" onToggle={vi.fn()} />);
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /heart/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /keeper/i })).toBeNull();
   });
 
   it("my own amen reads as pressed, with a plain-language withdraw label", () => {

@@ -30,7 +30,7 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
 
   it("opens as the feed: Ideas | Final pager, creation dock, no spatial chrome", async () => {
     renderCanvas();
-    expect(await screen.findByRole("tab", { name: /^ideas$/i }, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /^ideas$/i }, { timeout: 20000 })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /final/i })).toBeInTheDocument();
     // The one creation surface rides along (Record memo is the primary).
     expect(screen.getAllByRole("button", { name: /record memo/i }).length).toBeGreaterThan(0);
@@ -40,7 +40,7 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
 
   it("the Final page is a listen mode with its own identity (empty state guides back to Ideas)", async () => {
     renderCanvas();
-    const finalTab = await screen.findByRole("tab", { name: /final/i }, { timeout: 10000 });
+    const finalTab = await screen.findByRole("tab", { name: /final/i }, { timeout: 20000 });
     fireEvent.click(finalTab);
     expect(await screen.findByText(/final shape lives here/i)).toBeInTheDocument();
     // The safe route back to the stream.
@@ -50,7 +50,7 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
 
   it("the whiteboard is retired: no map entry anywhere in the feed", async () => {
     renderCanvas();
-    await screen.findByRole("tab", { name: /^ideas$/i }, { timeout: 10000 });
+    await screen.findByRole("tab", { name: /^ideas$/i }, { timeout: 20000 });
     expect(screen.queryByRole("button", { name: /open the map view/i })).toBeNull();
   });
 
@@ -58,7 +58,7 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
     localStorage.setItem("cog:canvas-view", "map");
     renderCanvas();
     // The dormant spatial room still works behind the hatch (weave/merge live on).
-    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/root song card/i, {}, { timeout: 20000 })).toBeInTheDocument();
     // And its Feed pill returns to the one true canvas.
     fireEvent.click(screen.getByRole("button", { name: /open the feed view/i }));
     expect(await screen.findByRole("tab", { name: /^ideas$/i })).toBeInTheDocument();

@@ -57,9 +57,12 @@ export interface FeedCardProps {
   /** Entrance-cascade stagger: cards settle onto the page one after another
    *  like pages laid on a desk, not a wall appearing at once. */
   entranceDelayMs?: number;
+  /** The lit doorway: you just walked in from capture behind THIS idea — the
+   *  card greets you with one warm pulse, then rests. */
+  arrived?: boolean;
 }
 
-const FeedCard = memo(function FeedCard({ card, selected, interactions, adornment, onFlyToFinal, entranceDelayMs = 0 }: FeedCardProps) {
+const FeedCard = memo(function FeedCard({ card, selected, interactions, adornment, onFlyToFinal, entranceDelayMs = 0, arrived = false }: FeedCardProps) {
   const color = getCreatorColor(card.contributor);
   const tone = TYPE_TONE[card.type] ?? TYPE_TONE.note;
   const Face = FACES[card.type] ?? LyricCard;
@@ -111,9 +114,13 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         // than snaps — inline transition wins over the stylesheet's.
         transition: "box-shadow 200ms ease, border-color 200ms ease, opacity 280ms ease, transform 150ms cubic-bezier(0.25,0.46,0.45,0.94)",
         // `both` holds the card invisible through its cascade delay, then it
-        // settles like paper laid on a desk.
-        animation: "cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) both",
-        animationDelay: `${entranceDelayMs}ms`,
+        // settles like paper laid on a desk. An arrival (walked in from
+        // capture behind this idea) adds one warm pulse after the settle.
+        // Delays live INSIDE the shorthand: a separate animation-delay would
+        // cycle onto the glow and fire it during the entrance.
+        animation: arrived
+          ? `cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) ${entranceDelayMs}ms both, cog-arrival-glow 1500ms ease-out ${entranceDelayMs + 440}ms 2`
+          : `cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) ${entranceDelayMs}ms both`,
       }}
     >
       {/* The type's tone stripe — same material language as the map. */}
@@ -149,45 +156,22 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         />
       )}
 
-      {/* One-tap layering — always visible on audio cards (a gesture-hidden
-          layer path failed the intuition test) but in the QUIET register:
-          gold belongs to the one primary act per screen, and this pill is on
-          every voice card. The stack sheet stays the mixing room. */}
-      {isVoice && !dimmed && (interactions.onRecordOver || Boolean(interactions.layerCount)) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-          {interactions.onRecordOver && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
-              aria-label="Record a layer over this take"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                minHeight: 44, padding: "0 14px",
-                borderRadius: 999, cursor: "pointer",
-                backgroundColor: "rgba(28,26,23,0.04)",
-                border: "1.5px solid rgba(28,26,23,0.12)",
-                color: "var(--cog-warm-gray)",
-                fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 600,
-              }}
-            >
-              <Mic size={14} strokeWidth={2.1} />
-              Layer over this
-            </button>
-          )}
-          {/* State at rest, verbs on selection: a 3-layer stack and a bare
-              memo used to look identical until you selected them. */}
-          {Boolean(interactions.layerCount) && (
-            <span
-              aria-label={`${interactions.layerCount} ${interactions.layerCount === 1 ? "layer" : "layers"} on this take`}
-              style={{
-                fontFamily: "var(--font-body)", fontSize: 11.5, fontWeight: 700,
-                color: color.dark, whiteSpace: "nowrap",
-              }}
-            >
-              ≡ {interactions.layerCount} {interactions.layerCount === 1 ? "layer" : "layers"}
-            </span>
-          )}
-        </div>
+      {/* State at rest, verbs on selection — everywhere, including audio. A
+          standing "Layer over this" pill on EVERY resting voice card was the
+          feed's densest clutter (six memos = six secondary CTAs before one
+          choice was made). At rest a stack tells only its state; the layering
+          verb waits in the selected row, one tap away like every other verb. */}
+      {isVoice && !dimmed && Boolean(interactions.layerCount) && (
+        <p
+          aria-label={`${interactions.layerCount} ${interactions.layerCount === 1 ? "layer" : "layers"} on this take`}
+          style={{
+            margin: 0, marginTop: 8,
+            fontFamily: "var(--font-body)", fontSize: 11.5, fontWeight: 700,
+            color: color.dark, whiteSpace: "nowrap",
+          }}
+        >
+          ≡ {interactions.layerCount} {interactions.layerCount === 1 ? "layer" : "layers"}
+        </p>
       )}
 
       {/* WHO — legible in under a second at arm's length (the user's law:
@@ -217,19 +201,33 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
           style={{ display: "flex", gap: 6, marginTop: 10, borderTop: "1px solid rgba(0,0,0,0.07)", paddingTop: 8 }}
           onClick={(e) => e.stopPropagation()}
         >
-          {isVoice && interactions.onOpenStack ? (
-            // The stack button earns its slot only once layers EXIST — before
-            // that, "Layer over this" (above) is the one layering verb and a
-            // duplicate "Layers" label was pure confusion.
-            interactions.layerCount ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); interactions.onOpenStack?.(); }}
-                style={btn(`${color.base}16`, color.dark)}
-                aria-label={`Open the stack — ${interactions.layerCount} layers`}
-              >
-                {`Layers · ${interactions.layerCount}`}
-              </button>
-            ) : null
+          {isVoice ? (
+            <>
+              {/* The layering verb lives here now — selection is the feed's
+                  universal reveal (Edit works the same way), so the verb is
+                  one tap away without standing on every resting card. */}
+              {interactions.onRecordOver && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
+                  style={btn("rgba(28,26,23,0.05)", "var(--cog-warm-gray)")}
+                  aria-label="Record a layer over this take"
+                >
+                  <Mic size={13} strokeWidth={2.1} style={{ marginRight: 5, verticalAlign: "-2px", display: "inline" }} />
+                  Layer over this
+                </button>
+              )}
+              {/* The stack button earns its slot only once layers EXIST. */}
+              {interactions.onOpenStack && Boolean(interactions.layerCount) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); interactions.onOpenStack?.(); }}
+                  style={btn(`${color.base}16`, color.dark)}
+                  aria-label={`Open the stack — ${interactions.layerCount} layers`}
+                >
+                  {`Layers · ${interactions.layerCount}`}
+                </button>
+              )}
+            </>
           ) : interactions.onEdit ? (
             <button
               onClick={(e) => { e.stopPropagation(); interactions.onEdit?.(); }}

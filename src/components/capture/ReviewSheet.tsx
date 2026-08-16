@@ -275,10 +275,12 @@ const ReviewSheet = ({
         }
       }
 
-      // Kick transcription. If it 402s or 429s, surface and skip but keep editing.
-      try {
-        await requestTranscript(takeId);
-      } catch (e) {
+      // Kick transcription — WITHOUT blocking on it. supabase.functions.invoke
+      // has no timeout, so a stalled kickoff (flaky mobile network, cold edge
+      // fn) held this await forever and the 45s never-dead-end poll below —
+      // the one guarantee against a wedged "Listening back…" — never started.
+      // The kickoff's result is discarded anyway; the poll is the truth.
+      void requestTranscript(takeId).catch((e) => {
         const raw = (e as { message?: string })?.message ?? "";
         if (raw.includes("402") || raw.includes("credits_exhausted")) {
           if (!cancelled) {
@@ -289,7 +291,7 @@ const ReviewSheet = ({
             toast.message("Transcription busy", { description: "Try again in a moment." });
           }
         }
-      }
+      });
 
       // A transient poll error (one flaky fetch mid-poll) must degrade to the
       // same never-dead-end path as a timeout — a bare await left the sheet
@@ -322,7 +324,9 @@ const ReviewSheet = ({
         }
         setStatus("ready");
       } else if (row?.transcript_status === "failed") {
-        setErrorMsg(row.transcript_error ?? "Transcription failed");
+        // Never the raw backend string — a songwriter reads this. The audio
+        // is safe either way; that's the only fact that matters here.
+        setErrorMsg("We couldn't hear the words this time — your audio is saved.");
         setStatus("failed");
         if (!hasClientContent) {
           // Always give the user at least one editable block so they can save manually.
@@ -599,7 +603,11 @@ const ReviewSheet = ({
       } else if (raw.includes("unauthorized") || raw.includes("401")) {
         toast.error("Please sign in again", { description: "Your session expired." });
       } else {
-        toast.error("Could not save to canvas", { description: raw.slice(0, 140) || "Please try again." });
+        // Never the raw error slug — the idea is retained and retryable, and
+        // that is the message.
+        toast.error("Could not save to canvas", {
+          description: "Nothing was lost — your idea is still here. Please try again.",
+        });
       }
       commitRef.current = false; // failure → retry stays possible
     } finally {

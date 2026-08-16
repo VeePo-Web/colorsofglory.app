@@ -144,7 +144,9 @@ describe("Codex 390px mobile render smoke", () => {
 
     expect(screen.getByRole("heading", { name: /check your phone/i })).toBeInTheDocument();
     expect(screen.getByText(/\(555\) 555-1212/i)).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/code digit/i)).toHaveLength(6);
+    // OTP entry is ONE real input over visual boxes (the shape iOS SMS
+    // autofill requires) — six separate "digit" inputs broke autofill.
+    expect(screen.getByLabelText(/enter the 6-digit code/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /verify/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /change number/i })).toBeInTheDocument();
   });

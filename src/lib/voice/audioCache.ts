@@ -32,25 +32,45 @@ export const audioCache = {
   },
 
   async set(memoId: string, blob: Blob): Promise<void> {
+    // Best-effort cache warming — safe for prefetch/playback callers only.
+    // Anything that treats this store as the DURABLE home of a take must use
+    // setDurable and check its answer.
+    await audioCache.setDurable(memoId, blob);
+  },
+
+  /**
+   * Durable write that tells the truth: resolves true only when the IDB
+   * transaction COMMITTED. iOS Safari private mode / storage pressure fails
+   * the put — the old set() swallowed that, so a take's only copy could be
+   * reported "saved" while nothing was written (and the salvage fallback then
+   * deleted). Callers holding a songwriter's only copy branch on this.
+   */
+  async setDurable(memoId: string, blob: Blob): Promise<boolean> {
     try {
       const database = await openDB();
       return new Promise((resolve) => {
         const tx = database.transaction(STORE_NAME, "readwrite");
         tx.objectStore(STORE_NAME).put(blob, memoId);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
       });
     } catch {
-      // cache failure is non-fatal
+      return false;
     }
   },
 
   async prefetch(memoId: string, url: string): Promise<void> {
     try {
+      // An empty URL fetches the app's own HTML (200 OK) and poisons the
+      // cache under this memo id forever — refuse it, and refuse any
+      // non-audio document the server hands back.
+      if (!url) return;
       const existing = await audioCache.get(memoId);
       if (existing) return;
       const res = await fetch(url);
       if (!res.ok) return;
+      if ((res.headers.get("content-type") ?? "").includes("text/html")) return;
       const blob = await res.blob();
       await audioCache.set(memoId, blob);
     } catch {

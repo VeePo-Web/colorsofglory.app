@@ -45,6 +45,10 @@ const getUser = vi.hoisted(() => vi.fn());
 const rpc = vi.hoisted(() => vi.fn());
 const removeChannel = vi.hoisted(() => vi.fn());
 const channelFactory = vi.hoisted(() => vi.fn());
+// Per-test configurable like `rpc` — quickCapture now inserts directly into
+// idea_captures (client_key idempotency). Default (set in beforeEach) still
+// throws so an UNEXPECTED table read fails loudly.
+const from = vi.hoisted(() => vi.fn());
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -53,9 +57,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     rpc: (...a: unknown[]) => rpc(...a),
     channel: (...a: unknown[]) => channelFactory(...a),
     removeChannel: (...a: unknown[]) => removeChannel(...a),
-    from: () => {
-      throw new Error("unexpected supabase.from() in a critical-path test");
-    },
+    from: (...a: unknown[]) => from(...a),
   },
 }));
 
@@ -93,6 +95,10 @@ beforeEach(() => {
   rpc.mockReset();
   removeChannel.mockReset();
   channelFactory.mockReset();
+  from.mockReset();
+  from.mockImplementation(() => {
+    throw new Error("unexpected supabase.from() in a critical-path test");
+  });
 });
 
 // 1 ─ auth session load ──────────────────────────────────────────────────────
@@ -173,9 +179,12 @@ describe("quick capture — useQuickCapture prepends optimistically", () => {
     const client = freshClient();
     client.setQueryData(qk.captures("s1"), []);
 
-    // First call hangs (inspect the optimistic state); pattern mirrors prod UX.
+    // quickCapture = auth.getUser → idea_captures insert. The insert hangs
+    // (inspect the optimistic state); pattern mirrors prod UX.
+    getUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
     let reject: ((e: unknown) => void) | undefined;
-    rpc.mockReturnValueOnce(new Promise((_res, rej) => { reject = rej; }));
+    const single = vi.fn().mockReturnValue(new Promise((_res, rej) => { reject = rej; }));
+    from.mockReturnValue({ insert: () => ({ select: () => ({ single }) }) });
 
     const { result } = renderHook(() => useQuickCapture(), { wrapper: makeWrapper(client) });
     act(() => {

@@ -123,8 +123,9 @@ describe("SongWorkspacePage — real private room (no mock)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Chords/ }));
     expect(navigate).toHaveBeenLastCalledWith("/songs/s1/sheet");
 
+    // Notes opens the standalone song-level pad (C5), not a canvas layer.
     fireEvent.click(screen.getByRole("button", { name: /Notes/ }));
-    expect(navigate).toHaveBeenLastCalledWith("/songs/s1/canvas?layer=notes");
+    expect(navigate).toHaveBeenLastCalledWith("/songs/s1/notes");
 
     fireEvent.click(screen.getByRole("button", { name: /Invite 3 people/ }));
     expect(navigate).toHaveBeenLastCalledWith("/songs/s1/canvas?layer=people");
@@ -153,7 +154,8 @@ describe("SongWorkspacePage — real private room (no mock)", () => {
 
 describe("route guard — /songs/:id/room requires auth", () => {
   it("wraps the room route in RequireAuth", () => {
-    const appSource = readFileSync(resolve(__dirname, "../App.tsx"), "utf-8");
+    // Routing lives in the A5 route-group fragments now, not App.tsx.
+    const appSource = readFileSync(resolve(__dirname, "../routes/songRoutes.tsx"), "utf-8");
     expect(appSource).toContain(
       '<Route path="/songs/:id/room" element={<RequireAuth><SongWorkspacePage /></RequireAuth>} />',
     );

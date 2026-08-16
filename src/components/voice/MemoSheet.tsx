@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { X, Mic, RotateCcw, ChevronRight } from "lucide-react";
 import MemoStack, { type StackMemoView } from "./MemoStack";
+import TrappedDialog from "@/components/canvas/TrappedDialog";
 import { listTakes, type Take } from "@/integrations/cog/takes";
 import { listVoiceMemos } from "@/lib/voice/voiceApi";
 import { memoKey } from "@/lib/canvas/features/canvasAudio";
@@ -20,7 +21,8 @@ import { memoKey } from "@/lib/canvas/features/canvasAudio";
  * The two verbs are never merged — the sheet holds the distinction so the
  * user never has to. On open it re-reads the SERVER rows for the stack
  * (persisted parentage + the shared mix), so a canvas whose in-memory view
- * lags still shows the truth. Safe-area aware, dismissible, never traps.
+ * lags still shows the truth. Safe-area aware, dismissible (tap-out, Escape,
+ * the close button), and focus-trapped while open like every other sheet.
  */
 interface MemoSheetProps {
   base: StackMemoView;
@@ -80,13 +82,8 @@ const MemoSheet = ({
     return () => cancelAnimationFrame(t);
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Escape lives in TrappedDialog now (shared trap: Tab wraps, focus returns
+  // to the trigger on close) — a window-level listener here would fire twice.
 
   // THE ID SEAM: the sheet's base may be a CARD id (`db-voice-<uuid>` for
   // hydrated mirrors) while the server speaks raw memo uuids — every server
@@ -183,9 +180,8 @@ const MemoSheet = ({
         }}
         aria-hidden="true"
       />
-      <div
-        role="dialog"
-        aria-modal="true"
+      <TrappedDialog
+        onClose={onClose}
         aria-label={`Voice memo: ${base.title}`}
         style={{
           position: "fixed",
@@ -373,7 +369,7 @@ const MemoSheet = ({
 
           {tempoSlot}
         </div>
-      </div>
+      </TrappedDialog>
     </>
   );
 };

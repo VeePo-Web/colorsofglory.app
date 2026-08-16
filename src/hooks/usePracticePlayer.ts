@@ -248,6 +248,9 @@ export function usePracticePlayer() {
       if (!blob) {
         const url = await getSignedUrl(section.memoId);
         const resp = await fetch(url);
+        // A non-ok body (expired signed URL → HTML error page) must never be
+        // cached under the memo id — it would silence the take permanently.
+        if (!resp.ok) throw new Error("playback-fetch-failed");
         blob = await resp.blob();
         await audioCache.set(section.memoId, blob);
       }
@@ -529,6 +532,7 @@ export function usePracticePlayer() {
           if (!existing) {
             const url = await getSignedUrl(section.memoId);
             const resp = await fetch(url);
+            if (!resp.ok) throw new Error("playback-fetch-failed");
             const blob = await resp.blob();
             await audioCache.set(section.memoId, blob);
           }
@@ -833,6 +837,7 @@ export function usePracticePlayer() {
       if (!blob) {
         const url = await getSignedUrl(take.memoId);
         const resp = await fetch(url);
+        if (!resp.ok) throw new Error("playback-fetch-failed");
         blob = await resp.blob();
         await audioCache.set(take.memoId, blob);
       }

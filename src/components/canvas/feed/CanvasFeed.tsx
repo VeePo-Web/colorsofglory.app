@@ -44,6 +44,12 @@ export interface CanvasFeedProps {
   /** Nonce: a moment (e.g. the promote toast's "Hear it") asks the feed to
    *  turn to the Final page. Every bump turns the page. */
   finalPageRequest?: number;
+  /** The lit doorway: card ids the writer just walked in behind (from
+   *  capture) — each greets them with one warm pulse, then rests. */
+  arrivalIds?: ReadonlySet<string>;
+  /** LAW: one bottom surface. When a focused workflow owns the bottom safe
+   *  area, the creation dock yields — enforced here, where users actually are. */
+  dockHidden?: boolean;
   onPlaySong: (ids: string[]) => void;
   onPlayPause: () => void;
   onNext: () => void;
@@ -65,6 +71,8 @@ const CanvasFeed = memo(function CanvasFeed({
   listenFinished,
   listenPaused,
   finalPageRequest = 0,
+  arrivalIds,
+  dockHidden = false,
   onPlaySong,
   onPlayPause,
   onNext,
@@ -213,11 +221,20 @@ const CanvasFeed = memo(function CanvasFeed({
     // shouts (two 800-weight texts at the top was a double headline).
     fontWeight: active ? 800 : 600,
     letterSpacing: "0.01em",
-    color: active ? "#FFFFFF" : "var(--cog-warm-gray)",
+    // A location marker, not a call to action: the active tab wears its
+    // space's PALE tone with dark text (the Apple segmented-control register).
+    // A solid gold fill here competed with Record memo for "the one thing to
+    // do" — gold fill belongs to exactly one act per screen, and it isn't
+    // knowing which page you're on.
+    color: active
+      ? tone === "gold"
+        ? "var(--cog-charcoal, #1C1A17)"
+        : GLORY.sage.dark
+      : "var(--cog-warm-gray)",
     backgroundColor: active
       ? tone === "gold"
-        ? "var(--cog-gold, #B8953A)"
-        : GLORY.sage.dark
+        ? "var(--cog-gold-pale, #E8D5A0)"
+        : GLORY.sage.glow
       : "transparent",
     transition: `background-color 240ms ${EASE}, color 240ms ${EASE}, transform 240ms ${EASE}`,
   });
@@ -238,6 +255,11 @@ const CanvasFeed = memo(function CanvasFeed({
       <style>{`
         @keyframes cog-feed-enter { 0% { opacity: 0; transform: translateY(10px) scale(0.985); } 100% { opacity: 1; transform: none; } }
         @keyframes cog-final-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        @keyframes cog-arrival-glow {
+          0%   { box-shadow: 0 4px 16px rgba(28,26,23,0.06); border-color: rgba(28,26,23,0.08); }
+          45%  { box-shadow: 0 0 0 5px rgba(184,149,58,0.22), 0 12px 34px -8px rgba(184,149,58,0.38); border-color: rgba(184,149,58,0.55); }
+          100% { box-shadow: 0 4px 16px rgba(28,26,23,0.06); border-color: rgba(28,26,23,0.08); }
+        }
         [data-canvas-feed] button { transition: transform 130ms cubic-bezier(0.25,0.46,0.45,0.94), background-color 150ms ease, color 150ms ease, box-shadow 200ms ease; }
         [data-canvas-feed] button:active { transform: scale(0.96); }
         [data-canvas-feed] [data-feed-card]:active { transform: scale(0.988); }
@@ -381,6 +403,7 @@ const CanvasFeed = memo(function CanvasFeed({
                         adornment={cardAdornment?.(card)}
                         onFlyToFinal={flyToFinal}
                         entranceDelayMs={nextEntranceDelay(card.id)}
+                        arrived={arrivalIds?.has(card.id) ?? false}
                       />
                     </SwipePromoteRow>
                   ))}
@@ -416,8 +439,10 @@ const CanvasFeed = memo(function CanvasFeed({
       </div>
 
       {/* The creation dock — Ideas page only; Final owns its own transport.
-          Viewers get no dock at all (an all-ghosted dock is not an interface). */}
-      {page === "ideas" && dockActions.length > 0 && <CreativeActionDock actions={dockActions} />}
+          Viewers get no dock at all (an all-ghosted dock is not an interface).
+          And ONE bottom surface: when a focused workflow owns the bottom safe
+          area, the dock yields — the law, enforced where the users are. */}
+      {page === "ideas" && !dockHidden && dockActions.length > 0 && <CreativeActionDock actions={dockActions} />}
 
       {/* The traveling ghost — a promoted idea physically flies to Final. */}
       {ghost && (

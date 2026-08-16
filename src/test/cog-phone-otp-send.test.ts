@@ -33,8 +33,17 @@ describe("sendPhoneOtp — Twilio Verify start contract", () => {
     await expect(sendPhoneOtp("+447700900000")).rejects.toMatchObject({ code: "GEO_BLOCKED" });
   });
 
-  it("maps RATE_LIMITED and CEILING to a single rate-limit error", async () => {
+  it("keeps CEILING and RATE_LIMITED distinct — the ceiling steers to email, the rate limit says wait", async () => {
+    // CEILING (the daily SMS spend cap — toll-fraud rail) is deliberately its
+    // own code now: folding it into RATE_LIMITED told the user to "wait a
+    // minute" for a limit that resets tomorrow. The honest move is email.
     invoke.mockResolvedValue({ data: { ok: false, code: "CEILING" }, error: null });
+    const ceiling = await sendPhoneOtp("+15555550123").catch((e) => e);
+    expect(ceiling).toBeInstanceOf(AuthError);
+    expect(ceiling.code).toBe("CEILING");
+    expect(ceiling.message).toMatch(/email/i);
+
+    invoke.mockResolvedValue({ data: { ok: false, code: "RATE_LIMITED" }, error: null });
     await expect(sendPhoneOtp("+15555550123")).rejects.toMatchObject({ code: "RATE_LIMITED" });
   });
 

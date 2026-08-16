@@ -330,6 +330,25 @@ const SongCanvasExperience = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // THE LIT DOORWAY — both capture exits deep-link here as ?from=capture
+  // (CommitRibbon promised "the new nodes pulse for the user" in writing; the
+  // param went unread). Captured once, consumed from the URL exactly like the
+  // invite arrival above, then the writer's freshest cards greet them with
+  // one warm pulse when the board shows them (effect lives below, after the
+  // cards state exists).
+  const [isCaptureArrival, setIsCaptureArrival] = useState(
+    () => searchParams.get("from") === "capture",
+  );
+  const [arrivalIds, setArrivalIds] = useState<ReadonlySet<string> | undefined>(undefined);
+  useEffect(() => {
+    if (!isCaptureArrival) return;
+    const next = new URLSearchParams(window.location.search);
+    if (!next.has("from")) return;
+    next.delete("from");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // First-run tour refs — the canvas hooks live below, after showFirstRun is
   // known, so they can wait for the empty-room first-action guide to finish.
   const featuresTourRef = useRef<HTMLElement>(null);
@@ -1111,12 +1130,41 @@ const SongCanvasExperience = () => {
       onCardChange: schedule,
       onTakeChange: schedule,
       onCaptureChange: schedule,
+      // F12's missing heartbeat: transcription finishes ~30s after a save
+      // with NO other table moving — without this, the words a voice card
+      // carries appeared only after an unrelated event or a full reload.
+      onTranscriptChange: schedule,
     });
     return () => {
       if (hydrateTimerRef.current != null) window.clearTimeout(hydrateTimerRef.current);
       unsubscribe();
     };
   }, [songId, hydrateVoiceMemos]);
+
+  // The lit doorway's greeting: once the board shows the writer's fresh work
+  // (their own top-level cards from the last ten minutes), those cards get
+  // the one-time arrival pulse and the doorway stands down. The set is never
+  // cleared — restyling the animation list mid-session would restart every
+  // card's entrance (the same trap the cascade delays document).
+  useEffect(() => {
+    if (!isCaptureArrival) return;
+    const uid = profile?.user_id;
+    const cutoff = Date.now() - 10 * 60_000;
+    const fresh = cards
+      .filter(
+        (c) =>
+          c.tree === "ideas" &&
+          !c.parentMemoId &&
+          (!uid || c.createdBy === uid) &&
+          c.createdAt &&
+          new Date(c.createdAt).getTime() >= cutoff,
+      )
+      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+      .slice(0, 4);
+    if (fresh.length === 0) return; // hydration hasn't landed them yet — wait
+    setArrivalIds(new Set(fresh.map((c) => c.id)));
+    setIsCaptureArrival(false);
+  }, [isCaptureArrival, cards, profile?.user_id]);
 
   // ── Card manipulation ──────────────────────────────────────────────────────
 
@@ -1441,12 +1489,14 @@ const SongCanvasExperience = () => {
     // ONE save narrator: the toast. (A simultaneous "Saving..." status line
     // contradicted the "Saved" toast for its whole life.) The destination
     // must read as a place — "Saved to the stack", not "Saved to Layer
-    // added to stack".
-    showSavedMoment(
-      name || "Voice memo",
-      parentMemoId ? "the stack" : (section || "Raw idea"),
-      "Voice memo",
-    );
+    // added to stack". It fires AFTER the durable write confirms — never
+    // before the take actually has a home on this device.
+    const narrateSaved = () =>
+      showSavedMoment(
+        name || "Voice memo",
+        parentMemoId ? "the stack" : (section || "Raw idea"),
+        "Voice memo",
+      );
     setRecordingFlow("idle");
     setRecordingNote("");
     setPendingRecording(null);
@@ -1477,10 +1527,31 @@ const SongCanvasExperience = () => {
     // Demo rooms have no server: the take lives entirely on-device. Queuing it
     // for upload made every visit replay a flush that can never succeed, each
     // failure showing "we'll finish saving when you're back online" — forever.
+    // The device refused the durable write (iOS private mode, storage
+    // pressure). The blob's only homes now are memory and — for interrupted
+    // takes — the salvage backup, which we deliberately do NOT clear. Park a
+    // recovery copy where the failed-capture shelf can find it and tell the
+    // truth: a "Saved" toast over nothing was the worst lie this surface told.
+    const persistFailed = async () => {
+      await saveFailedCapture(rec.blob, {
+        songId,
+        title: name || "Voice memo",
+        durationMs: rec.durationMs,
+      }).catch(() => {});
+      toast.error("This device wouldn't keep the take", {
+        description: "Storage looks full or blocked. Free a little space and record again — nothing was sent anywhere.",
+      });
+    };
+
     if (isDemoRoom) {
       const localId = crypto.randomUUID();
-      await audioCache.set(localId, rec.blob);
+      const persisted = await audioCache.setDurable(localId, rec.blob);
+      if (!persisted) {
+        await persistFailed();
+        return;
+      }
       clearSalvageBackup();
+      narrateSaved();
       if (parentMemoId && takeAlignOffsetRef.current > 0) {
         setAlignmentOffset(localId, takeAlignOffsetRef.current);
         takeAlignOffsetRef.current = 0;
@@ -1492,19 +1563,26 @@ const SongCanvasExperience = () => {
     // Local-first: the blob is cached to the device BEFORE any network call, so a
     // base take or a layered "record over this" can never be lost on a dropped
     // upload. The pending row's id keys both the card and the upload idempotency.
-    const pending = await enqueuePendingUpload({
-      blob: rec.blob,
-      songId,
-      mimeType: rec.mimeType,
-      durationMs: rec.durationMs,
-      title: name,
-      sectionLabel: section,
-      transcribe,
-      parentMemoId,
-    });
+    let pending: Awaited<ReturnType<typeof enqueuePendingUpload>>;
+    try {
+      pending = await enqueuePendingUpload({
+        blob: rec.blob,
+        songId,
+        mimeType: rec.mimeType,
+        durationMs: rec.durationMs,
+        title: name,
+        sectionLabel: section,
+        transcribe,
+        parentMemoId,
+      });
+    } catch {
+      await persistFailed();
+      return;
+    }
     // Durably queued from here on — the interruption backup retires (after
     // the enqueue, so a thrown enqueue never leaves the take backup-less).
     clearSalvageBackup();
+    narrateSaved();
 
     // A layer cut against the headphone guide carries its measured latency
     // offset so stack playback seats it on the base's grid (see alignmentStore).
@@ -2820,6 +2898,8 @@ const SongCanvasExperience = () => {
             listenFinished={listenPath.finished}
             listenPaused={listenPath.paused}
             finalPageRequest={finalPageRequest}
+            arrivalIds={arrivalIds}
+            dockHidden={bottomWorkflowActive}
             onPlaySong={(ids) => listenPath.playAll(ids)}
             onPlayPause={listenPath.playPause}
             onNext={listenPath.next}
@@ -2992,8 +3072,10 @@ const SongCanvasExperience = () => {
 
       {/* One bottom surface at a time: an active weave owns the bottom; an
           arrange session next; a merge selection hides the (collapsed) listen
-          pill's expanded state; pills coexist quietly. */}
-      {weave.active && weave.target && (
+          pill's expanded state; pills coexist quietly. Every workflow bar is
+          map-gated — in the feed, the dock and the Final transport are the
+          only bottom owners, and the dock yields via bottomWorkflowActive. */}
+      {canvasView === "map" && weave.active && weave.target && (
         <WeaveBar
           sectionName={weaveSectionName}
           lineCount={weave.targetView?.lines.length ?? 0}
@@ -3006,7 +3088,7 @@ const SongCanvasExperience = () => {
           onDone={weave.exit}
         />
       )}
-      {weave.active && weave.labIndex != null && weave.targetView?.lines[weave.labIndex] != null && (
+      {canvasView === "map" && weave.active && weave.labIndex != null && weave.targetView?.lines[weave.labIndex] != null && (
         <Suspense fallback={null}>
           <LineLabSheet
             line={weave.targetView.lines[weave.labIndex]}
@@ -3045,7 +3127,7 @@ const SongCanvasExperience = () => {
           onSave={listenPath.save}
         />
       )}
-      {canvasView === "map" && !weave.active && (
+      {canvasView === "map" && !weave.active && merge.selection.length === 0 && (
       <FinalArrangementBar
         arranging={arrangement.arranging}
         canArrange={arrangement.canArrange}
@@ -3422,8 +3504,9 @@ const SongCanvasExperience = () => {
       )}
 
       {/* The once-per-device hallway welcome — the room named, the one move
-          taught, then it dissolves forever. The tour waits behind it. */}
-      {roomWelcome && canvasView === "feed" && (
+          taught, then it dissolves forever. The tour waits behind it. Viewers
+          are exempt: "Start writing" is a promise this role can't act on. */}
+      {roomWelcome && canvasView === "feed" && !isViewer && (
         <RoomWelcome songTitle={songTitle} onDismiss={() => setRoomWelcome(false)} />
       )}
 

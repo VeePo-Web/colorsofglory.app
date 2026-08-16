@@ -23,6 +23,13 @@ export type SongRoomHandlers = {
   onCaptureChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
   /** The song row itself (shared tempo, key, title). Fires on UPDATE. */
   onSongChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
+  /**
+   * A memo's transcript finished (or failed) — the F12 moment. Without this
+   * the words a voice card carries only appeared after an unrelated board
+   * event or a full reload: transcription completes ~30s after save, no other
+   * table moves, and the card stayed silent forever for a solo writer.
+   */
+  onTranscriptChange?: (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void;
 };
 
 /**
@@ -137,6 +144,13 @@ export function subscribeSongRoom(song_id: string, handlers: SongRoomHandlers): 
       "postgres_changes" as any,
       { event: "*", schema: "public", table: "idea_captures", filter },
       handlers.onCaptureChange as any,
+    );
+  }
+  if (handlers.onTranscriptChange) {
+    channel.on(
+      "postgres_changes" as any,
+      { event: "*", schema: "public", table: "voice_memo_transcripts", filter },
+      handlers.onTranscriptChange as any,
     );
   }
   if (handlers.onSongChange) {
