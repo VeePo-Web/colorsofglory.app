@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 
 interface CaptureSheetShellProps {
   ariaLabel: string;
@@ -75,6 +76,11 @@ function useKeyboardInset(): number {
  * identical by construction and recolor with the design system, not by hand.
  */
 const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, children }: CaptureSheetShellProps) => {
+  // G10: the shared trap — Tab wraps, focus enters on open, returns on close.
+  // Escape routes through onBackdropClick, which is UNDEFINED during a live
+  // take (RecordingSheet passes it only when there is nothing to lose), so a
+  // keyboard can never discard a recording.
+  const trapRef = useModalFocusTrap(onBackdropClick ?? (() => {}));
   const [visible, setVisible] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const kbInset = useKeyboardInset();
@@ -113,9 +119,11 @@ const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, 
 
       {/* Bottom sheet */}
       <div
+        ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        tabIndex={-1}
         style={{
           position: "fixed",
           bottom: 0,

@@ -35,9 +35,9 @@ const CaptureStopButton = ({ isStopping, onStop }: CaptureStopButtonProps) => (
       justifyContent: "center",
       gap: 8,
     }}
-    onMouseDown={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)"; }}
-    onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
-    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
+    // CSS :active, not mouse events — iOS Safari synthesizes mouse events
+    // only after touchend, so the press never rendered under a thumb.
+    className="cog-press"
     aria-label="Stop recording"
   >
     {!isStopping && <Square size={13} fill="#FFFFFF" strokeWidth={0} />}

@@ -3271,9 +3271,21 @@ const SongCanvasExperience = () => {
       {recordingFlow === "reviewing" && pendingRecording && (
         <VoiceReviewSheet
           recording={pendingRecording}
-          defaultName={recordingNote.trim() || `Voice Memo ${voiceMemoCountRef.current + 1}`}
+          // A layer inherits its base's name (G8) — the writer shouldn't
+          // invent a title for "the harmony on X"; that's what it IS.
+          defaultName={
+            recordingNote.trim() ||
+            (recordingLayerOf ? `${recordingLayerOf} — layer` : `Voice Memo ${voiceMemoCountRef.current + 1}`)
+          }
           section={recordingSection}
           isPro={isPro}
+          // And it needs NO section decision: its home is the stack. The
+          // destination line says so; the picker never renders (3 → 1).
+          destinationNote={
+            recordingLayerOf
+              ? `Goes with “${recordingLayerOf}” — both voices play together.`
+              : undefined
+          }
           onSave={handleSaveMemo}
           onDiscard={handleCancelRecording}
         />

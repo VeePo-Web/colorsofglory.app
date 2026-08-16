@@ -318,21 +318,29 @@ flow, executed):
   callers; the DB RPCs remain; `git log -S` resurrects it when the sheet
   lane's UI moment arrives).
 
-STILL FILED FOR PASS 5+ (from the details-within-details walk):
+FIXED IN PASS 5 (2026-08-16 — THE SEAMLESS LAYER):
+- G8 ✅: a layer's review sheet KNOWS what it is — the name defaults to
+  "{base} — layer", and the section picker never renders (the destination
+  line says "Goes with 'X' — both voices play together"). 3 decisions → 1.
+- G9 ✅: the stack SCRUBS — seek() (built, wired to nothing) now drives a
+  pointer-captured slider with keyboard arrows and spoken position. To
+  re-hear the bar where the harmony lands, you drag.
+- G10a ✅: CaptureSheetShell joined the shared focus trap (Tab wraps, focus
+  returns) — with Escape routed through onBackdropClick, which is undefined
+  during a live take, so a keyboard can never discard a recording.
+- G11 (partial) ✅: gain sliders speak percentages (aria-valuetext); the
+  Stop button's press state moved to CSS :active via cog-press (iOS never
+  rendered the mouse-event version under a thumb).
+
+STILL FILED FOR PASS 6+:
 - F9 (P3): take_id → "hear where this line came from", held for its UI moment.
 - G7 (P2): ONE persistent scrim under the layer flow's three sheet hand-offs
-  (stack→record→review→stack) — each currently re-fades its own scrim with a
-  1-2 frame bare-canvas flash between.
-- G8 (P2): the review sheet should KNOW it's a layer (header "Layer over
-  'X'", default name from the base, no section decision — 3 decisions → 1).
-- G9 (P2): scrub the stack (seek() exists, wired to nothing — the progress
-  bar should be a 44px slider).
-- G10 (P2): focus-trap CaptureSheetShell (no-op close during live takes) +
-  the new layer should announce itself in the stack (arrival glow + status).
-- G11 (P3): earbuds toggle reachable without a BPM (hoist from
-  MetronomeStrip); stop-button count-in label; gain slider aria-valuetext;
-  end-of-stack announcement; press states via cog-press on the flow's
-  inline-styled buttons.
+  (stack→record→review→stack) — the last bare-canvas flash mid-flow.
+- G10b (P3): the new layer announces itself in the stack (arrival glow +
+  role=status "Your layer is in the stack").
+- G11 (rest, P3): earbuds toggle reachable without a BPM (hoist from
+  MetronomeStrip); stop-button label during count-in ("cancel the
+  count-in"); end-of-stack announcement for screen readers.
 
 ============================================================
 PART 7 — SHIP PROTOCOL (Concurrent-Tree — mandatory every pass)

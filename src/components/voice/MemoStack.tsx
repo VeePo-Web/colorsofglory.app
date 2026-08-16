@@ -80,7 +80,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
     return { initialGains, initialMuted, serverOffsets };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedsKey]);
-  const { state, prepare, playPause, toggleMute, toggleSolo, setGain } = useStackPlayer(
+  const { state, prepare, playPause, toggleMute, toggleSolo, setGain, seek } = useStackPlayer(
     playIds,
     seeds,
   );
@@ -199,8 +199,36 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
           );
         })}
       </div>
-      <div style={{ height: 3, borderRadius: 9999, backgroundColor: "rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 14 }}>
-        <div style={{ height: "100%", width: `${state.progress * 100}%`, backgroundColor: baseColor.base, transition: "width 120ms linear" }} />
+      {/* Scrub under the thumb (G9): to re-hear the one bar where the
+          harmony lands, you drag — not replay from zero. A 24px hit area
+          wraps the 3px bar; GarageBand's rule: the sound follows the finger. */}
+      <div
+        role="slider"
+        aria-label="Where you are in the take — drag to move"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(state.progress * 100)}
+        aria-valuetext={`${Math.round(state.progress * 100)}% through`}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight") { e.preventDefault(); seek(Math.min(1, state.progress + 0.05)); }
+          if (e.key === "ArrowLeft") { e.preventDefault(); seek(Math.max(0, state.progress - 0.05)); }
+        }}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const r = e.currentTarget.getBoundingClientRect();
+          seek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
+        }}
+        onPointerMove={(e) => {
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          seek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
+        }}
+        style={{ padding: "10px 0", marginBottom: 4, cursor: "pointer", touchAction: "none" }}
+      >
+        <div style={{ height: 3, borderRadius: 9999, backgroundColor: "rgba(0,0,0,0.07)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${state.progress * 100}%`, backgroundColor: baseColor.base, transition: "width 120ms linear" }} />
+        </div>
       </div>
 
       {/* ── Layer rows (the stack) ─────────────────────────────────────── */}
@@ -281,6 +309,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
                       persistGain(layer.id, v);
                     }}
                     aria-label={`${layer.contributor}'s layer volume`}
+                    aria-valuetext={`${Math.round(((state.gains[layer.id] ?? layer.layerGain ?? 1) / 1.5) * 100)}%`}
                     style={{
                       width: "100%",
                       maxWidth: 150,

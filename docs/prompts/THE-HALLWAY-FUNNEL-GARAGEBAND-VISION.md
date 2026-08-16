@@ -294,9 +294,22 @@ stays safe on-device, the sweeps stop hammering a wall that won't move,
 and the writer is told the truth. F11 ✅ a transcript block the server's
 own pass flagged as shaky wears a quiet "worth a quick listen" cue.
 
-Remaining for pass 4+: F9 (surface "hear where this line came from" — the
-take_id link waits for its UI moment), F10 (ship or delete the dormant
-transcript→section flow).
+PASS 4 (executed — THE 8-YEAR-OLD PASS): Part 1.5's four contracts became
+law; the invisible save narrator got its CSS; the layer flow narrates its
+first 400ms, its base, and its guide; the stack is honest when offline;
+one act = one name everywhere ("Sing over this" / "Record memo" /
+"playing now" / "Just this"); ~40 strings brought to grade 3. F10 deleted.
+
+PASS 5 PLAN (the seamless layer): G8 — the review sheet KNOWS it's a layer
+(named header, base-derived default name, no section decision: 3 → 1).
+G9 — the stack scrubs under the thumb (seek() finally wired to a 44px
+slider). G10 — the record/review shells join the shared focus trap
+(Escape stays a no-op during a live take — never discard by keyboard).
+G11 — the gain slider speaks percentages, the stop button tells the truth
+during count-in, the flow's inline-styled buttons gain press states.
+Held for pass 6: G7 (the ONE persistent scrim under all three sheet
+hand-offs — the last flash of bare canvas mid-flow) and the layer's
+arrival glow in the stack.
 
 ============================================================
 PART 8 — WHAT DONE LOOKS LIKE
