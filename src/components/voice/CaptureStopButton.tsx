@@ -1,6 +1,9 @@
 import { Square } from "lucide-react";
 
 interface CaptureStopButtonProps {
+  /** During the count-in nothing is recording — the button's real job is
+   *  cancelling the count-in, and its words must say so. */
+  countingIn?: boolean;
   isStopping: boolean;
   onStop: () => void;
 }
@@ -11,7 +14,7 @@ interface CaptureStopButtonProps {
  * Colors of Glory reads as reverent, matching the gold live waveform. Red has no
  * place in the COG palette, and a worship idea being captured is not an emergency.
  */
-const CaptureStopButton = ({ isStopping, onStop }: CaptureStopButtonProps) => (
+const CaptureStopButton = ({ isStopping, onStop, countingIn = false }: CaptureStopButtonProps) => (
   <button
     type="button"
     onClick={onStop}
@@ -38,10 +41,10 @@ const CaptureStopButton = ({ isStopping, onStop }: CaptureStopButtonProps) => (
     // CSS :active, not mouse events — iOS Safari synthesizes mouse events
     // only after touchend, so the press never rendered under a thumb.
     className="cog-press"
-    aria-label="Stop recording"
+    aria-label={countingIn ? "Cancel the count-in" : "Stop recording"}
   >
     {!isStopping && <Square size={13} fill="#FFFFFF" strokeWidth={0} />}
-    {isStopping ? "Saving…" : "Stop"}
+    {isStopping ? "Saving…" : countingIn ? "Cancel" : "Stop"}
   </button>
 );
 

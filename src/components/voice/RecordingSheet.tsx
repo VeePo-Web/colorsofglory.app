@@ -218,7 +218,7 @@ const RecordingSheet = ({
           </p>
 
           {/* Stop button */}
-          <CaptureStopButton isStopping={isStopping} onStop={onStop} />
+          <CaptureStopButton isStopping={isStopping} onStop={onStop} countingIn={countingIn} />
         </div>
       )}
     </CaptureSheetShell>

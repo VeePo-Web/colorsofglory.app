@@ -307,9 +307,18 @@ slider). G10 — the record/review shells join the shared focus trap
 (Escape stays a no-op during a live take — never discard by keyboard).
 G11 — the gain slider speaks percentages, the stop button tells the truth
 during count-in, the flow's inline-styled buttons gain press states.
-Held for pass 6: G7 (the ONE persistent scrim under all three sheet
-hand-offs — the last flash of bare canvas mid-flow) and the layer's
-arrival glow in the stack.
+PASS 6 PLAN (the unbroken dim): G7 is the one remaining seam a Jobs review
+would bounce — three times in one layer flow (stack→record, record→review,
+review→stack) a sheet unmounts its own scrim and the next re-fades from
+zero, flashing full-brightness canvas for 1-2 frames. THE FIX, exactly:
+hoist ONE scrim into SongCanvasExperience, rendered while
+`recordingFlow !== "idle" || stackBaseId != null`, fading in once and out
+once; pass `scrim={false}` through CaptureSheetShell and MemoSheet so the
+sheets cross-slide over an unbroken dim. Then G10b (the new layer greets
+itself: arrival glow + role=status "Your layer is in the stack") and the
+earbuds toggle hoisted out of MetronomeStrip so it renders without a BPM.
+This pass ships the small truth first: the Stop button stops LYING during
+the count-in (its job there is "cancel the count-in", not "stop recording").
 
 ============================================================
 PART 8 — WHAT DONE LOOKS LIKE
