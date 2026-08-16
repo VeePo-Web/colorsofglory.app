@@ -68,7 +68,9 @@ import {
   remapPendingParents,
 } from "@/lib/voice/pendingUploads";
 import { deleteMemo } from "@/lib/voice/voiceApi";
-import { saveFailedCapture, clearFailedCapture } from "@/lib/voice/failedCaptureStore";
+import { saveFailedCapture, clearFailedCapture, listFailedCaptures } from "@/lib/voice/failedCaptureStore";
+import { isStorageQuotaError } from "@/lib/voice/captureOutbox";
+import { useSubscription } from "@/hooks/useSubscription";
 import { audioCache } from "@/lib/voice/audioCache";
 import RoomWelcome, { hasSeenRoomWelcome } from "@/components/canvas/RoomWelcome";
 import { formatDuration } from "@/lib/voice/audioFormat";
@@ -314,6 +316,9 @@ const SongCanvasExperience = () => {
   const isDemoRoom = songId === "demo";
   const isViewer = !isDemoRoom && (caps.isViewer || searchParams.get("role") === "viewer");
   const canReview = isDemoRoom || caps.isOwner;
+  // The REAL plan for the review sheet's transcribe toggle — defaulting the
+  // prop left a paying writer's toggle permanently locked on this surface.
+  const { isPro } = useSubscription();
   // Fresh arrival from an accepted invite (?invite=1) — show the one-time
   // "you joined as [role]" welcome toast so they know where they stand.
   // The flag is captured once, then CONSUMED from the URL, so a reload or a
@@ -642,6 +647,11 @@ const SongCanvasExperience = () => {
           songId,
           title: recordingParentIdRef.current ? "Interrupted layer" : "Interrupted take",
           durationMs: result.durationMs,
+          // The parentage survives the salvage: an interrupted layer must
+          // come back AS A LAYER (the ref already holds the memoKey-
+          // normalized parent), and only the canvas reclaims its own rows.
+          parentMemoId: recordingParentIdRef.current,
+          origin: "canvas",
         })
           .then((rec) => {
             salvageBackupIdRef.current = rec.id;
@@ -1466,13 +1476,23 @@ const SongCanvasExperience = () => {
         c.id === pendingId ? { ...c, isProcessing: false } : c,
       ));
       // Honest per-cause copy: a layer held back behind its still-uploading
-      // base isn't an offline problem — saying "when you're back online" to
-      // an online device read as broken.
-      setCanvasStatus(
-        err instanceof Error && err.message === "parent-take-still-uploading"
-          ? "Your layer is safe — finishing the base take first."
-          : "You can keep adding ideas. We'll finish saving when you're back online.",
-      );
+      // base isn't an offline problem, and a FULL STORAGE PLAN isn't one
+      // either — "when you're back online" to an online device with a full
+      // plan was a wall the writer could never see. The take is retained in
+      // every branch; only the narration (and the way out) differs.
+      if (isStorageQuotaError(err)) {
+        setCanvasStatus("Your recording is safe on this device — your storage is full.");
+        toast.message("Your song storage is full", {
+          description: "This take is safe here and will sync once there's room.",
+          action: { label: "Add storage", onClick: () => navigate("/upgrade") },
+        });
+      } else {
+        setCanvasStatus(
+          err instanceof Error && err.message === "parent-take-still-uploading"
+            ? "Your layer is safe — finishing the base take first."
+            : "You can keep adding ideas. We'll finish saving when you're back online.",
+        );
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listenPath.replaceCardId]);
@@ -1537,6 +1557,8 @@ const SongCanvasExperience = () => {
         songId,
         title: name || "Voice memo",
         durationMs: rec.durationMs,
+        parentMemoId,
+        origin: "canvas",
       }).catch(() => {});
       toast.error("This device wouldn't keep the take", {
         description: "Storage looks full or blocked. Free a little space and record again — nothing was sent anywhere.",
@@ -1612,6 +1634,40 @@ const SongCanvasExperience = () => {
     if (isDemoRoom) return;
     let cancelled = false;
     const sweep = async () => {
+      // THE RECLAIM (GarageBand's deepest magic: never eat a take): a canvas
+      // take salvaged by an interruption whose review was then lost (iOS
+      // killed the backgrounded tab) sat invisible in the salvage shelf
+      // forever — and its layer parentage with it. Reclaim OUR OWN rows for
+      // this song into the normal upload queue, parent intact, then let the
+      // ordinary flush land them. The one still under an OPEN review sheet
+      // this session stays put (reclaiming it would double-save on Save).
+      for (const row of listFailedCaptures()) {
+        if (cancelled) return;
+        if (row.origin !== "canvas" || row.songId !== songId) continue;
+        if (row.id === salvageBackupIdRef.current) continue;
+        const blob = await audioCache.get(row.id);
+        if (!blob) {
+          void clearFailedCapture(row.id); // orphaned index — stop haunting
+          continue;
+        }
+        try {
+          const pending = await enqueuePendingUpload({
+            blob,
+            songId,
+            mimeType: row.mimeType || blob.type || "audio/webm",
+            durationMs: row.durationMs,
+            title: row.title,
+            sectionLabel: row.parentMemoId ? "Layer" : "Raw idea",
+            transcribe: false,
+            parentMemoId: row.parentMemoId ?? undefined,
+          });
+          await clearFailedCapture(row.id);
+          await flushCanvasUpload(pending.id);
+        } catch {
+          // The device is still refusing durable writes — leave the salvage
+          // row exactly where it is and try again next open.
+        }
+      }
       const orphans = await listPendingUploads(songId);
       for (const orphan of orphans) {
         if (cancelled) return;
@@ -2765,42 +2821,12 @@ const SongCanvasExperience = () => {
           {songTitle}
         </h1>
 
-        {/* Spacer mirroring the back button so the serif title truly centers.
-            The decorative crown is gone — the title is the header's one bold,
-            and the brand already lives in the gold system itself. */}
-        <div className="flex-shrink-0" style={{ minWidth: 64 }} aria-hidden="true" />
-      </header>
-
-      {/* Both rows wrap on narrow screens — the owner's "Review N" pill must
-          never be pushed off the right edge of a 390px phone. */}
-      <div className="relative z-30 mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-5 pb-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {/* Quiet status line — plain text, never pill chrome: a passive
-              status wearing the gold-control costume read as a dead button.
-              Empty at rest (the resting slogan was a permanent claim with no
-              state); the aria-live region stays mounted for announcements. */}
-          <p
-            aria-live="polite"
-            className="truncate px-1 text-[11px] font-medium"
-            style={{ color: "var(--cog-warm-gray)" }}
-          >
-            {canvasStatus}
-          </p>
-          {/* Studio tools — dormant under the essence trim (the recorder's
-              own MetronomeStrip still serves tempo where it matters). */}
-          {SHOW_STUDIO_TOOLS && <CanvasMetronomeToggle metronome={metronome} />}
-          {SHOW_STUDIO_TOOLS && <Pad inheritedKey={songKeySignature} />}
-          {SHOW_STUDIO_TOOLS && (
-          <button
-            type="button"
-            onClick={() => setShowRecap(true)}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-70 active:scale-[0.94]"
-            style={{ color: "var(--cog-warm-gray)" }}
-            aria-label="What changed since you left"
-          >
-            <History size={16} strokeWidth={1.9} />
-          </button>
-          )}
+        {/* The room's people-actions live AT the threshold (iOS nav-bar
+            register): Review when co-writers left work, Invite always. The
+            second chrome band is gone — the first thing under the title is
+            the song, and the status line below speaks only when it has
+            something to say. */}
+        <div className="flex shrink-0 items-center gap-1.5">
           {canReview && !isViewer && reviewQueueItems.length > 0 && (
             <button
               type="button"
@@ -2818,14 +2844,9 @@ const SongCanvasExperience = () => {
               Review {reviewQueueItems.length}
             </button>
           )}
-        </div>
-        {isViewer ? (
-          <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
-            You can view this canvas. Ask the owner if you need to contribute.
-          </p>
-        ) : (
-          <button
-            ref={inviteTourRef}
+          {!isViewer && (
+            <button
+              ref={inviteTourRef}
             type="button"
             onClick={() => setShowShareSheet(true)}
             className="flex min-h-11 shrink-0 items-center gap-2 rounded-full py-1 pl-2 pr-1.5 transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
@@ -2880,7 +2901,44 @@ const SongCanvasExperience = () => {
               <UserPlus size={12} strokeWidth={2.2} />
               Invite
             </span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* The speaking line — mounted always (aria-live must pre-exist its
+          announcements), VISIBLE only when it has something to say. At rest
+          the room shows two bands, then the song. Viewers keep their one
+          quiet line of role clarity here. Studio tools stay dormant. */}
+      <div
+        className={`relative z-30 mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-x-3 px-5 ${
+          canvasStatus || isViewer || SHOW_STUDIO_TOOLS ? "pb-2 gap-y-1.5" : ""
+        }`}
+      >
+        <p
+          aria-live="polite"
+          className={canvasStatus ? "truncate px-1 text-[11px] font-medium" : "sr-only"}
+          style={canvasStatus ? { color: "var(--cog-warm-gray)" } : undefined}
+        >
+          {canvasStatus}
+        </p>
+        {SHOW_STUDIO_TOOLS && <CanvasMetronomeToggle metronome={metronome} />}
+        {SHOW_STUDIO_TOOLS && <Pad inheritedKey={songKeySignature} />}
+        {SHOW_STUDIO_TOOLS && (
+          <button
+            type="button"
+            onClick={() => setShowRecap(true)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-70 active:scale-[0.94]"
+            style={{ color: "var(--cog-warm-gray)" }}
+            aria-label="What changed since you left"
+          >
+            <History size={16} strokeWidth={1.9} />
           </button>
+        )}
+        {isViewer && (
+          <p className="text-right text-xs font-medium" style={{ color: "#6B6459" }}>
+            You can view this canvas. Ask the owner if you need to contribute.
+          </p>
         )}
       </div>
 
@@ -3185,6 +3243,7 @@ const SongCanvasExperience = () => {
           recording={pendingRecording}
           defaultName={recordingNote.trim() || `Voice Memo ${voiceMemoCountRef.current + 1}`}
           section={recordingSection}
+          isPro={isPro}
           onSave={handleSaveMemo}
           onDiscard={handleCancelRecording}
         />

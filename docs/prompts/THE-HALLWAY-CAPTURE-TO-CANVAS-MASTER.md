@@ -240,17 +240,31 @@ FIXED THIS PASS:
   added: the P0 durable-write throw (`pendingUploads.test.ts`) and the
   verbs-on-selection card contract (`FeedCard.test.tsx`).
 
-FILED FOR NEXT PASSES (severity-ordered, all traced with file:line):
-- F1 (P1): canvas salvage replay — an interrupted layer whose review is lost
-  (iOS kills the backgrounded tab) is retained in failedCaptureStore but
-  invisible to the canvas forever, and `FailedCapture` drops `parentMemoId`
-  (`SongCanvasExperience.tsx` handleAutoFinalize / `failedCaptureStore.ts`).
-  Add parentMemoId to the record + a canvas mount sweep surfacing recoverable
-  takes.
-- F2 (P1): quota mis-narration — the canvas flush shows "when you're back
-  online" for ANY failure including QUOTA_EXCEEDED_STORAGE; no add-storage
-  path, retries forever (`pendingUploads.ts` flush + `flushCanvasUpload`
-  catch). Mirror captureOutbox's quota parking + honest copy.
+FIXED IN PASS 2 (2026-08 — executed with the companion vision doc
+THE-HALLWAY-FUNNEL-GARAGEBAND-VISION.md):
+- F1 ✅ (P1, the GarageBand covenant): `FailedCapture` now carries
+  `parentMemoId` + `origin`; the canvas RECLAIMS its own salvaged takes on
+  room open — re-enqueued with parentage intact, flushed through the normal
+  pipeline, invisible recovery. The capture scene's retry shelf no longer
+  offers canvas-origin rows (no double-claim), and a take whose review sheet
+  is still open this session is never reclaimed under it.
+- F2 ✅ (P1): a full storage plan is narrated as a full storage plan — the
+  take is safe on device, with an "Add storage" action — never "when you're
+  back online" to an online writer (`isStorageQuotaError` now exported and
+  branched in the canvas flush).
+- F5 ✅ (P2): rows still "uploading" no longer hydrate as board mirrors — the
+  uploader's device showed the same take twice for seconds, and every other
+  device showed a card with no audio behind it. A card appears everywhere
+  the moment finalize lands.
+- F7 ✅ (P2): the REAL plan reaches the review sheet on BOTH surfaces (the
+  canvas never passed `isPro` either) and the upload drop zone — a paying
+  writer's transcribe toggle and upload ceiling now match what they pay for.
+- F8 ✅ (P2): the threshold dropped to two chrome bands. Review + Invite
+  live at the title row's right edge (iOS nav-bar register); the status line
+  is mounted always for aria-live but VISIBLE only when it has something to
+  say; viewers keep their one quiet line of role clarity.
+
+STILL FILED FOR PASS 3+ (severity-ordered, all traced with file:line):
 - F3 (P2): capture outbox has the same unconfirmed-durable-write hole the
   canvas path had (`captureOutbox.ts:272`, `seedIdeaApi.ts:58`) — apply
   setDurable there with its callers' error paths (its own test harness mocks
@@ -258,16 +272,8 @@ FILED FOR NEXT PASSES (severity-ordered, all traced with file:line):
 - F4 (P2): `layerOffsetMs` is dropped on the `saveMemoDurable` path — layers
   saved through the canonical outbox transmit offset 0 and play misaligned
   cross-device (`saveMemo.ts`, `captureOutbox.ts` default uploader).
-- F5 (P2): transient duplicate voice card during upload (hydrate returns the
-  "uploading" mirror before the temp card renames — dedupe against pending
-  ids, `canvasBoardSource.ts:241` + host merge).
 - F6 (P2): non-retryable server rejections (RLS/4xx) retry forever with the
   offline copy — classify error kinds, park after N attempts.
-- F7 (P2): VoiceMemosPage renders VoiceReviewSheet without `isPro` — a paid
-  user's transcribe toggle is permanently locked on that surface
-  (`VoiceMemosPage.tsx:938`).
-- F8 (P2): feed head stacks three chrome rows before the first card —
-  collapse the status/Review/Invite row into the title row.
 - F9 (P3): committed lyric cards carry `take_id` server-side but the board
   hydrator never reads it — no "hear where this line came from" affordance.
 - F10 (P3): the R30 transcript→section apply flow

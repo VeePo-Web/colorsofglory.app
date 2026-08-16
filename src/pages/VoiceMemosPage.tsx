@@ -9,6 +9,7 @@ import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import UploadDropZone from "@/components/voice/UploadDropZone";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { RecordingResult } from "@/hooks/useVoiceRecorder";
+import { useSubscription } from "@/hooks/useSubscription";
 import {
   listVoiceMemos,
   getSignedUrl,
@@ -444,6 +445,10 @@ const VoiceMemosPage = () => {
   const { id } = useParams();
   const songId = id ?? "1";
   const songTitle = useSongTitle(songId);
+  // The REAL plan — without it every surface here defaulted isPro=false and
+  // a paying writer's transcribe toggle sat permanently locked (and uploads
+  // capped at the free size) no matter what they paid.
+  const { isPro } = useSubscription();
 
   // Real memo list
   const [memos, setMemos] = useState<VoiceMemoRecord[]>([]);
@@ -793,7 +798,7 @@ const VoiceMemosPage = () => {
         {/* Upload zone */}
         {showUpload && (
           <div style={{ marginBottom: 20 }}>
-            <UploadDropZone onFile={handleFileUpload} disabled={isUploading} />
+            <UploadDropZone onFile={handleFileUpload} disabled={isUploading} isPro={isPro} />
             {isUploading && (
               <p style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#B8953A", textAlign: "center", marginTop: 6 }}>
                 Uploading...
@@ -945,6 +950,7 @@ const VoiceMemosPage = () => {
           recording={pendingRecording}
           defaultName={recordingNote.trim() || defaultCaptureName()}
           section={recordingSection}
+          isPro={isPro}
           onSave={handleSaveMemo}
           onDiscard={handleCancelRecording}
         />

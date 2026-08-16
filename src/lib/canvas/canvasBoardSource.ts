@@ -238,7 +238,12 @@ export async function hydrateBoard(songId: string): Promise<HydratedBoard> {
       // ears (they used to land in the UI only).
       .select("id, title, duration_ms, status, created_at, author_user_id, waveform_peaks, parent_memo_id, layer_gain, layer_muted, layer_offset_ms")
       .eq("song_id", songId)
-      .not("status", "in", '("failed","deleted")')
+      // "uploading" is excluded too: mid-upload the uploader's own device
+      // still shows its temp-id card, so the half-born mirror rendered the
+      // same take TWICE for several seconds — and on every OTHER device it
+      // was a card with no audio behind it (a card you can't play is a lie).
+      // The row surfaces everywhere the moment finalize lands.
+      .not("status", "in", '("failed","deleted","uploading")')
       // Newest first — an ascending window pinned the 60 OLDEST memos and a
       // busy song's fresh takes never reached other devices.
       .order("created_at", { ascending: false })

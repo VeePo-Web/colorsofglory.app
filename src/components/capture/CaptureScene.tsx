@@ -576,8 +576,11 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
     (async () => {
       // Only THIS surface's takes: a row saved for song X must never replay
       // into song Y (or into the global shelf) — the store keys each row by
-      // the song it was captured for.
-      const rows = listFailedCaptures().filter((r) => (r.songId ?? null) === (songId ?? null));
+      // the song it was captured for. Canvas-origin salvage belongs to the
+      // canvas's own reclaim sweep; offering it here would double-claim.
+      const rows = listFailedCaptures().filter(
+        (r) => (r.songId ?? null) === (songId ?? null) && r.origin !== "canvas",
+      );
       if (cancelled || rows.length === 0) return;
       const file = await getFailedCaptureFile(rows[0].id);
       if (cancelled || !file) return;

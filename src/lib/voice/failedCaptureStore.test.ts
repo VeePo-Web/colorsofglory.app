@@ -58,6 +58,25 @@ describe("failedCaptureStore — durable failed-take recovery", () => {
     expect(readRaw()).toHaveLength(0);
   });
 
+  it("keeps a layer's parentage + origin through the salvage — an interrupted layer must come back AS A LAYER", async () => {
+    // The hallway covenant (ledger F1): a "record over this" interrupted by
+    // a call, then lost with a killed tab, is reclaimed by the canvas WITH
+    // its base — parentMemoId and the canvas origin ride the durable record.
+    const rec = await saveFailedCapture(blob(), {
+      songId: "s1",
+      title: "Interrupted layer",
+      durationMs: 900,
+      parentMemoId: "base-memo-uuid",
+      origin: "canvas",
+    });
+    expect(rec).toMatchObject({ parentMemoId: "base-memo-uuid", origin: "canvas" });
+    const listed = listFailedCaptures().find((r) => r.id === rec.id);
+    expect(listed).toMatchObject({ parentMemoId: "base-memo-uuid", origin: "canvas" });
+    // Legacy rows (no origin) still read as capture's — never auto-claimed.
+    const legacy = await saveFailedCapture(blob(), { songId: "s1", title: "old", durationMs: 1 });
+    expect(listFailedCaptures().find((r) => r.id === legacy.id)?.origin).toBeUndefined();
+  });
+
   it("lists newest first and clears individually + wholesale", async () => {
     const a = await saveFailedCapture(blob("a"), { songId: null, title: "a", durationMs: 1 });
     await new Promise((r) => setTimeout(r, 2));

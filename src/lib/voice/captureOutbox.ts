@@ -121,7 +121,7 @@ export type OutboxEvent =
  * normalized. This is treated as RETAIN-and-retry (like offline), NOT a burned
  * attempt — the idea is never lost, it just waits for room.
  */
-function isStorageQuotaError(err: unknown): boolean {
+export function isStorageQuotaError(err: unknown): boolean {
   const code = (err as { code?: unknown } | null)?.code;
   if (typeof code === "string" && code === "QUOTA_EXCEEDED_STORAGE") return true;
   const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";

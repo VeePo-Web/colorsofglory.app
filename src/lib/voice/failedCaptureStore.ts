@@ -14,6 +14,13 @@ export interface FailedCapture {
   durationMs: number;
   mimeType: string;
   createdAt: string;
+  /** A layer's base memo id (raw uuid) — an interrupted "record over this"
+   *  must come back AS A LAYER, never as a loose orphan take. */
+  parentMemoId?: string | null;
+  /** Which surface parked this take. The canvas auto-reclaims its own rows
+   *  on room open; the capture scene's retry shelf must never offer them
+   *  (and vice versa). Absent = legacy row = capture's. */
+  origin?: "capture" | "canvas";
 }
 
 const INDEX_KEY = "cog-failed-captures";
@@ -48,7 +55,13 @@ function generateId(): string {
  */
 export async function saveFailedCapture(
   blob: Blob,
-  meta: { songId: string | null; title: string; durationMs: number },
+  meta: {
+    songId: string | null;
+    title: string;
+    durationMs: number;
+    parentMemoId?: string | null;
+    origin?: "capture" | "canvas";
+  },
 ): Promise<FailedCapture> {
   const id = generateId();
   await audioCache.set(id, blob);
@@ -59,6 +72,8 @@ export async function saveFailedCapture(
     durationMs: meta.durationMs,
     mimeType: blob.type || "audio/webm",
     createdAt: new Date().toISOString(),
+    ...(meta.parentMemoId ? { parentMemoId: meta.parentMemoId } : {}),
+    ...(meta.origin ? { origin: meta.origin } : {}),
   };
   write([record, ...read()]);
   return record;
