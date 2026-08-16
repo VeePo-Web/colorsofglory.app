@@ -11,7 +11,7 @@ import { memoKey } from "@/lib/canvas/features/canvasAudio";
  * (docs/features/VOICE-MEMO-STACKING-RESEARCH.md §5). It replaces
  * StackSheet (retired) and the never-built TakesDrawer:
  *
- *  Section A · "This sound · other tries" — TAKES (F15): attempts at the
+ *  Section A · "Other tries at this" — TAKES (F15): attempts at the
  *    SAME idea, one keeper plays. Verb: "Try again". Managing tries opens
  *    the polished TakeMiniPlayer (keeper/rename/archive/swipe-compare) via
  *    onOpenTries — the consumer orchestrates layering (z-order stays sane).
@@ -228,10 +228,10 @@ const MemoSheet = ({
             <X size={18} />
           </button>
 
-          {/* ── Section A · This sound · other tries (takes, one keeper) ── */}
+          {/* ── Section A · Other tries at this (takes, one keeper) ── */}
           {(onOpenTries || (earlierCount ?? 0) > 0) && (
             <section aria-label="This sound and its other tries" style={{ marginBottom: 16 }}>
-              <SectionLabel>This sound · other tries</SectionLabel>
+              <SectionLabel>Other tries at this</SectionLabel>
               <button
                 type="button"
                 onClick={() => onOpenTries?.(base.id)}
@@ -239,7 +239,7 @@ const MemoSheet = ({
                 aria-label={
                   earlierCount
                     ? `${earlierCount} earlier ${earlierCount === 1 ? "try" : "tries"} of this idea — open`
-                    : "Open the takes for this idea"
+                    : "See the other tries"
                 }
                 style={{
                   width: "100%",
@@ -290,7 +290,7 @@ const MemoSheet = ({
                     {takes === null
                       ? "…"
                       : earlierCount === 0
-                      ? "the only try so far — another take of this same idea lives here"
+                      ? "the only try so far — your other tries of this same idea live here"
                       : `${earlierCount} earlier ${earlierCount === 1 ? "try" : "tries"} tucked away`}
                   </span>
                 </span>
@@ -317,10 +317,10 @@ const MemoSheet = ({
                     justifyContent: "center",
                     gap: 8,
                   }}
-                  aria-label="Try again — record another take of this same idea"
+                  aria-label="Try it again — another try at this same idea"
                 >
                   <RotateCcw size={14} strokeWidth={2} />
-                  Try again — another take of this
+                  Try it again
                 </button>
               )}
             </section>
@@ -361,8 +361,7 @@ const MemoSheet = ({
                 }}
               >
                 <Mic size={11} strokeWidth={2} style={{ display: "inline", verticalAlign: "-1px", marginRight: 4 }} />
-                A layer is a different voice over this one — a harmony, a hum, a response — and
-                they play together. (A "try" is another take of the same idea; that lives above.)
+                Sing over this and both voices play together — a harmony, a hum, an answer.
               </p>
             )}
           </section>

@@ -28,6 +28,48 @@ the song. The hallway applies that test to every pixel of Canvas mode:
 >  If not, the software must make it — silently, reversibly, correctly."
 
 ============================================================
+PART 1.5 — THE 8-YEAR-OLD TEST (the law above the laws)
+============================================================
+
+An 8-year-old can run GarageBand. Not because it is childish — because every
+surface obeys four contracts a child (and a distracted adult, and a
+worship leader mid-rehearsal, which is the same cognitive state) can trust:
+
+1. **THE GUESS CONTRACT.** Looking at any control, a child's first guess
+   about what it does is the right one. If a label needs product knowledge
+   to parse, the label is wrong. If an icon needs a label to explain it,
+   pair them — an unlabeled icon is a riddle, and children don't tap
+   riddles. (Neither do adults; adults just blame themselves.)
+2. **THE RESULT CONTRACT.** The tap does exactly what it looked like it
+   would do, and you SEE the result happen — the card flies, the stack
+   grows, the song plays. Nothing important happens invisibly; nothing
+   visible happens that wasn't asked for.
+3. **THE WORDS CONTRACT.** Every visible string reads at grade 3: short
+   words, one clause, the user's own vocabulary (song, idea, sing, hear,
+   keep), never the builder's (sync, queue, transcript, BPM without
+   context). One act = one name, on every surface — the same verb never
+   wears two costumes.
+4. **THE COURAGE CONTRACT.** A child taps freely because nothing they can
+   reach is destructive, everything is reversible, and mistakes are met
+   with kindness ("your idea is still here"), never blame. Fearlessness is
+   a UI property: it is manufactured by undo, honesty, and calm copy.
+
+The test in practice, run every pass: hand the phone (in your mind, and
+eventually in a hallway at church) to an 8-year-old with one sentence of
+setup — "this is where your song lives." Watch for the FIRST hesitation.
+The hesitation is the finding. Fix that, then watch again.
+
+DETAILS WITHIN THE DETAILS — the Jobs discipline, made operational. A
+surface passes the big audit and still fails the fingertips. So each pass
+also descends one level: not "is there a record button" but what happens
+in the 400ms after it's pressed; not "is there a guide track" but what the
+writer SEES in the silence before it starts; not "is there an undo" but
+whether the toast's word choice makes a 9-year-old feel safe enough to tap
+again. Every detail contains details. The pass is done at the level where
+the details stop mattering to the person holding the phone — and one
+level deeper, because that person is mid-melody and deserves margin.
+
+============================================================
 PART 2 — THE FRICTIONLESS FUNNEL (every tap counted, every decision priced)
 ============================================================
 

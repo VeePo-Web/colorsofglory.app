@@ -72,7 +72,7 @@ describe("FinalListenPage — the song as a performance", () => {
     expect(screen.getByText(/that.s the whole song/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /play the song again/i }));
     expect(p.onPlaySong).toHaveBeenCalledWith(["v1", "ch", "v2"]);
-    fireEvent.click(screen.getByRole("button", { name: /keep shaping in ideas/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to ideas/i }));
     expect(p.onGoToIdeas).toHaveBeenCalledTimes(1);
   });
 
@@ -84,13 +84,13 @@ describe("FinalListenPage — the song as a performance", () => {
   it("the finished moment opens the door when the host says the writer is alone (GOLDEN-PATH E2 ⇢ F1)", () => {
     const onInvite = vi.fn();
     setup({ finished: true, onInvite });
-    fireEvent.click(screen.getByRole("button", { name: /someone should hear this/i }));
+    fireEvent.click(screen.getByRole("button", { name: /invite someone to hear it/i }));
     expect(onInvite).toHaveBeenCalledTimes(1);
   });
 
   it("the invite line stays absent when the host withholds it (co-writers present, or a viewer)", () => {
     setup({ finished: true });
-    expect(screen.queryByRole("button", { name: /someone should hear this/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /invite someone to hear it/i })).toBeNull();
   });
 
   it("while finished, the finished card owns the ONE gold play — the header yields", () => {

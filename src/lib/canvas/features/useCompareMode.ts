@@ -170,7 +170,7 @@ export function useCompareMode({ cards, isViewer, mutations, onMoment }: UseComp
         { id: winner.id, patch: { status: winner.tree === "ideas" ? "shortlisted" : winner.status } },
         { id: loser.id, patch: { isDimmedReference: true, dimReason: "compare_kept" } },
       ]);
-      onMoment?.("Direction chosen", winner.section || "Ideas tree", winner.title);
+      onMoment?.("Direction chosen", winner.section || "Ideas", winner.title);
       toast("Direction saved — the other idea is kept", {
         duration: 7000,
         action: { label: "Undo", onClick: () => mutations.patchCards(before) },

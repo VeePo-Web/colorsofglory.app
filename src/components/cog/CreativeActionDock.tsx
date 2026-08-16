@@ -38,7 +38,7 @@ const CreativeActionDock = ({ actions, className, style }: CreativeActionDockPro
 
   return (
     <div
-      aria-label="Quick creation actions"
+      aria-label="Make something"
       className={cn("cog-creation-dock", className)}
       style={style}
     >
@@ -63,7 +63,7 @@ const CreativeActionDock = ({ actions, className, style }: CreativeActionDockPro
               <Icon size={action.primary ? 21 : 18} strokeWidth={action.primary ? 2.35 : 2} />
             </span>
             <span className="cog-creation-action-label">
-              {action.loading ? "Loading..." : action.label}
+              {action.loading ? "One moment…" : action.label}
             </span>
           </button>
         );

@@ -28,6 +28,14 @@ interface RecordingSheetProps {
    * the Stop button doubles as "cancel the count-in".
    */
   countingIn?: boolean;
+  /** The base take's title when this recording is a LAYER over it — the one
+   *  fact that tells the writer "sing along with this", on screen the whole
+   *  take. Absent for a normal memo. */
+  layerOf?: string;
+  /** How the sing-along guide actually stands: playing in earbuds, silent
+   *  (no earbuds confirmed / couldn't start), or not applicable (null). The
+   *  writer must never record into unexplained silence. */
+  guide?: "playing" | "silent" | null;
 }
 
 /**
@@ -50,18 +58,27 @@ const RecordingSheet = ({
   onOpenSettings,
   metronomeSlot,
   countingIn = false,
+  layerOf,
+  guide = null,
 }: RecordingSheetProps) => {
   const noteRef = useRef<HTMLInputElement>(null);
 
   const isDenied = phase === "permission-denied";
   const isStopping = phase === "stopping";
+  // The mic-opening moment is narrated too (P1-1): the sheet appears the
+  // instant the tap lands, and never claims "Recording" before it's true.
+  const isOpening = phase === "requesting-permission";
   const liveStatus = isDenied
     ? "Microphone access needed"
     : isStopping
       ? "Saving your recording"
-      : countingIn
-        ? "Count-in — recording starts on the downbeat"
-        : "Recording in progress";
+      : isOpening
+        ? "Opening the mic…"
+        : countingIn
+          ? "Get ready — recording starts on the next beat"
+          : layerOf
+            ? `Recording over “${layerOf}”`
+            : "Recording in progress";
 
   return (
     <CaptureSheetShell
@@ -90,8 +107,36 @@ const RecordingSheet = ({
             padding: "20px 24px 0",
           }}
         >
-          {/* Section chip */}
-          <SectionChip value={section} onChange={onSectionChange} disabled={isStopping} />
+          {/* A layer names its base the whole take — "sing along with this"
+              is the feature's one promise, so the promise stays on screen —
+              and says plainly whether the guide is actually sounding. */}
+          {layerOf ? (
+            <div style={{ textAlign: "center" }}>
+              <p
+                style={{
+                  margin: 0, fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700,
+                  color: "var(--cog-charcoal)",
+                }}
+              >
+                Singing over &ldquo;{layerOf}&rdquo;
+              </p>
+              <p
+                style={{
+                  margin: "4px 0 0", fontFamily: "var(--font-body)", fontSize: 11.5, fontWeight: 500,
+                  color: "var(--cog-warm-gray)",
+                }}
+                role="status"
+              >
+                {guide === "playing"
+                  ? "It's playing in your earbuds — sing along."
+                  : guide === "silent"
+                    ? "Put in earbuds to hear it while you sing."
+                    : "Both voices will play together."}
+              </p>
+            </div>
+          ) : (
+            <SectionChip value={section} onChange={onSectionChange} disabled={isStopping} />
+          )}
 
           {/* Note label field */}
           <input
@@ -99,7 +144,7 @@ const RecordingSheet = ({
             type="text"
             value={noteValue}
             onChange={(e) => onNoteChange(e.target.value)}
-            placeholder="Add a label while you record..."
+            placeholder="Give it a name while you record…"
             disabled={isStopping}
             // Songwriter-friendly mobile keyboard: capitalize like a title, but no
             // autocorrect/spellcheck mangling creative or non-dictionary labels.

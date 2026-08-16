@@ -67,7 +67,7 @@ import {
   listPendingUploads,
   remapPendingParents,
 } from "@/lib/voice/pendingUploads";
-import { deleteMemo } from "@/lib/voice/voiceApi";
+import { deleteMemo, getSignedUrl } from "@/lib/voice/voiceApi";
 import { saveFailedCapture, clearFailedCapture, listFailedCaptures } from "@/lib/voice/failedCaptureStore";
 import { isStorageQuotaError } from "@/lib/voice/captureOutbox";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -245,7 +245,7 @@ const getStoredFeatureMeta = (songId: string): CanvasFeatureMeta => {
 const REVIEW_DOT = (
   <span
     role="img"
-    aria-label="Awaiting your review"
+    aria-label="Waiting for you"
     style={{
       position: "absolute",
       top: -5,
@@ -678,6 +678,10 @@ const SongCanvasExperience = () => {
   recorderStateRef.current = recorderState;
   const [recordingSection, setRecordingSection] = useState("Raw idea");
   const [recordingNote, setRecordingNote] = useState("");
+  // A layer take carries its base's NAME on the sheet ("Singing over X") and
+  // the honest state of the sing-along guide — playing, or needs earbuds.
+  const [recordingLayerOf, setRecordingLayerOf] = useState<string | null>(null);
+  const [guideLive, setGuideLive] = useState<"playing" | "silent" | null>(null);
   const [pendingRecording, setPendingRecording] = useState<RecordingResult | null>(null);
   const voiceMemoCountRef = useRef(0);
   // When set, the next saved take is a layer recorded over this base memo.
@@ -1326,6 +1330,8 @@ const SongCanvasExperience = () => {
       // strips the mirror prefix; temp pending ids and demo ids pass through.
       recordingParentIdRef.current = parentId ? memoKey(parentId) : null;
       setRecordingSection(parentId ? "Layer" : "Raw idea");
+      if (!parentId) setRecordingLayerOf(null); // a plain memo never wears a base's name
+      setGuideLive(null); // unknown until the guide resolves — the sheet stays neutral
       setRecordingNote("");
       takeAlignOffsetRef.current = 0;
       // One audible bar of count-in, resolving on the downbeat — THEN the mic
@@ -1395,6 +1401,10 @@ const SongCanvasExperience = () => {
           takeAlignOffsetRef.current =
             Math.max(0, Math.round(guide.startedAtMs - recorderStartMs)) + guide.latencyEstimateMs;
         }
+        // Narrate the guide's truth (P1-3): "playing in your earbuds" or
+        // "put in earbuds to hear it" — never unexplained silence while the
+        // feature's whole promise is singing along.
+        setGuideLive(guide ? "playing" : "silent");
       }
     } finally {
       takeStartInFlightRef.current = false;
@@ -1483,18 +1493,18 @@ const SongCanvasExperience = () => {
       if (isStorageQuotaError(err)) {
         setCanvasStatus("Your recording is safe on this device — your storage is full.");
         toast.message("Your song storage is full", {
-          description: "This take is safe here and will sync once there's room.",
+          description: "This one is safe here. It'll reach your other devices once there's room.",
           action: { label: "Add storage", onClick: () => navigate("/upgrade") },
         });
       } else if (err instanceof Error && err.message === "take-rejected-permanently") {
         // The server said no for keeps (role revoked, song deleted) — the
         // recording is retained on this device, and pretending "back online"
         // will fix it would be the exact lie this surface stopped telling.
-        setCanvasStatus("This take couldn't be added to the song — it's kept safe on this device.");
+        setCanvasStatus("This recording couldn't be added to the song — it's kept safe on this device.");
       } else {
         setCanvasStatus(
           err instanceof Error && err.message === "parent-take-still-uploading"
-            ? "Your layer is safe — finishing the base take first."
+            ? "Your recording is safe — we’re finishing the first one."
             : "You can keep adding ideas. We'll finish saving when you're back online.",
         );
       }
@@ -1519,7 +1529,7 @@ const SongCanvasExperience = () => {
     const narrateSaved = () =>
       showSavedMoment(
         name || "Voice memo",
-        parentMemoId ? "the stack" : (section || "Raw idea"),
+        parentMemoId ? "this sound" : (section || "Ideas"),
         "Voice memo",
       );
     setRecordingFlow("idle");
@@ -1697,8 +1707,17 @@ const SongCanvasExperience = () => {
 
   const handleRecordOver = useCallback((baseId: string) => {
     setStackBaseId(null);
+    // The base's NAME rides into the recording sheet — "Singing over X" is
+    // the fact that makes the whole take make sense (P1-2) — and its audio
+    // starts warming at the TAP, not after the mic opens, so the guide has
+    // the shortest possible silence (P1-3).
+    const mid = memoKey(baseId);
+    setRecordingLayerOf(cards.find((c) => memoKey(c.id) === mid)?.title || "this take");
+    void getSignedUrl(mid)
+      .then((u) => audioCache.prefetch(mid, u))
+      .catch(() => {/* the guide path retries via its own resolution */});
     void handleStartRecording(baseId);
-  }, [handleStartRecording]);
+  }, [handleStartRecording, cards]);
 
   // Remove a layer from its stack — own-work only (the sheet gates per
   // layer). Optimistic in BOTH id spaces; the mirror id is tombstoned so a
@@ -3223,8 +3242,12 @@ const SongCanvasExperience = () => {
         onDone={() => setSaveMoment(null)}
       />
 
-      {/* Recording sheet */}
-      {(recordingFlow === "recording" || recorderState.phase === "permission-denied") && (
+      {/* Recording sheet — opens on the TAP (requesting-permission counts):
+          the 400ms of dead feed between "Sing over this" and the mic opening
+          read as a broken button (P1-1). */}
+      {(recordingFlow === "recording" ||
+        recorderState.phase === "requesting-permission" ||
+        recorderState.phase === "permission-denied") && (
         <RecordingSheet
           phase={recorderState.phase}
           durationMs={recorderState.durationMs}
@@ -3239,6 +3262,8 @@ const SongCanvasExperience = () => {
           onOpenSettings={openMicSettings}
           metronomeSlot={<MetronomeStrip bpm={songBpm} beatsPerBar={beatsPerBar} />}
           countingIn={countingIn}
+          layerOf={recordingLayerOf ?? undefined}
+          guide={recordingLayerOf ? guideLive : null}
         />
       )}
 
@@ -3419,10 +3444,10 @@ const SongCanvasExperience = () => {
         if (c.tree === "final" && !isViewer) {
           const pos = finalOrder[c.id];
           if (pos && pos > 1) {
-            actions.push({ id: "up", label: "Move up in the arrangement", tone: "muted", onClick: () => arrangement.moveBy(c.id, -1) });
+            actions.push({ id: "up", label: "Move earlier in the song", tone: "muted", onClick: () => arrangement.moveBy(c.id, -1) });
           }
           if (pos && pos < finalCards.length) {
-            actions.push({ id: "down", label: "Move down in the arrangement", tone: "muted", onClick: () => arrangement.moveBy(c.id, 1) });
+            actions.push({ id: "down", label: "Move later in the song", tone: "muted", onClick: () => arrangement.moveBy(c.id, 1) });
           }
         }
         // WEAVE — compose this final section line-by-line from the Ideas tree
@@ -3431,7 +3456,7 @@ const SongCanvasExperience = () => {
         if (canvasView === "map" && (c.type === "lyric" || c.type === "section") && c.tree === "final" && !isViewer && !c.isDimmedReference) {
           actions.push({
             id: "weave",
-            label: "Weave lines into this section",
+            label: "Build this part from your ideas",
             onClick: () => {
               weave.enter(c.id);
               goToZone("ideas");
@@ -3452,14 +3477,14 @@ const SongCanvasExperience = () => {
         if (!isViewer && compare.canCompare(c)) {
           actions.push({
             id: "compare",
-            label: "Compare A vs B",
+            label: "Hear them side by side",
             icon: <Columns2 size={16} strokeWidth={1.9} />,
             onClick: () => compare.open(c.id),
           });
         } else if (!isViewer && c.tree === "ideas" && !c.isDimmedReference) {
           actions.push({
             id: "variant",
-            label: "Write another take to compare",
+            label: "Write a second version",
             tone: "muted",
             icon: <CopyPlus size={16} strokeWidth={1.9} />,
             onClick: () => handleNewVariant(c.id),
@@ -3472,7 +3497,7 @@ const SongCanvasExperience = () => {
           const inPath = listenPath.queue.includes(c.id);
           actions.push({
             id: "path",
-            label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to Listen Path",
+            label: inPath ? `Remove from Listen Path (#${listenPath.queue.indexOf(c.id) + 1})` : "Add to the play order",
             icon: <ListMusic size={16} strokeWidth={1.9} />,
             onClick: () => listenPath.toggleCard(c.id),
             active: inPath,
@@ -3485,7 +3510,7 @@ const SongCanvasExperience = () => {
           const inMerge = merge.selection.includes(c.id);
           actions.push({
             id: "merge",
-            label: inMerge ? "Cancel merge selection" : "Select to merge",
+            label: inMerge ? "Never mind" : "Join with another idea",
             onClick: () => merge.toggleSelect(c.id),
             active: inMerge,
           });
@@ -3590,7 +3615,7 @@ const SongCanvasExperience = () => {
         <CoachMark
           targetRef={ideasTourRef}
           lead="Two spaces, one song."
-          body="Explore ideas on the left. Tap a keeper, then → Final — or drag it across."
+          body="Explore ideas on the left. Tap the one you love, then → Final."
           onGotIt={ideasTour.gotIt}
           onSkip={ideasTour.skip}
           isFinal={ideasTour.isFinal}

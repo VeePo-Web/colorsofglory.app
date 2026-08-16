@@ -132,8 +132,8 @@ const RoomWelcome = ({ songTitle, onDismiss }: { songTitle: string; onDismiss: (
             color: "var(--cog-warm-gray)",
           }}
         >
-          Everything for this song stays here — your ideas on this page, the finished song one
-          swipe left.
+          Everything for this song stays here. Your ideas live on this page — swipe left for
+          Final, the finished song.
         </p>
         <button
           ref={btnRef}

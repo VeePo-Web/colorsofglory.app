@@ -281,13 +281,58 @@ FIXED IN PASS 3 (2026-08-16, the reliability tail):
 - F11 ✅ (P3): a transcript block the server's own segmentation flagged
   (`confidence < 0.6`) wears a quiet "worth a quick listen" cue in Review.
 
-STILL FILED FOR PASS 4+:
-- F9 (P3): committed lyric cards carry `take_id` server-side but the board
-  hydrator never reads it — surface "hear where this line came from" when
-  its UI moment arrives (plumbing without a consumer stays unshipped).
-- F10 (P3): the R30 transcript→section apply flow
-  (`integrations/cog/transcript.ts:102-153` + 2 RPCs) has zero UI callers —
-  ship it or delete it.
+FIXED IN PASS 4 (2026-08-16 — THE 8-YEAR-OLD PASS; vision Part 1.5 of the
+funnel doc; a full word census + a details-within-details walk of the layer
+flow, executed):
+- G1 ✅ (P1): the save narrator EXISTED ONLY IN NAME — SongRoomSaveToast's
+  four CSS classes were defined in no stylesheet, so every "Saved to this
+  song" moment rendered as an unstyled invisible div. It speaks now (fixed,
+  above the sheets, safe-area aware, reduced-motion safe).
+- G2 ✅ (P1): the 400ms of dead feed after "Sing over this" — the recording
+  sheet now opens on the TAP (requesting-permission narrates "Opening the
+  mic…"), never claiming "Recording" before it's true.
+- G3 ✅ (P1): a layer take now NAMES ITS BASE the whole time ("Singing over
+  'X'") and tells the guide's truth: "playing in your earbuds" or "put in
+  earbuds to hear it" — never unexplained silence. The base's audio warms
+  at the tap. The section chip (whose list didn't even contain "Layer") no
+  longer renders for layers.
+- G4 ✅ (P1): a stack that resolved NOTHING (offline) no longer flips to a
+  Pause button over silence — Play disables honestly ("Can't reach this
+  audio yet"), with aria-busy while decoding.
+- G5 ✅ (P1, one act = one name): the layering verb is "Sing over this" on
+  every surface (was "Layer over this" / "Record a layer" / spec's "Record
+  over this" — three names, one tap apart). "playing now" everywhere (was
+  also "sounding now"). "Record memo" everywhere (was also "Record idea").
+  Solo → "Just this" ("Unsolo" is not a word). "Ideas tree"→"Ideas" in
+  user-facing toasts. Arrangement arias match Final's child-parseable
+  "Move earlier/later in the song."
+- G6 ✅ (P2 sweep, the words contract at grade 3): count-in copy, welcome
+  teaches the tab's actual name ("swipe left for Final"), sparks→ideas,
+  "Just added" group, transcribe row ("Turn my words into lyrics"),
+  Discard→Delete, jargon-free error copy ("we're finishing the first one"),
+  keeper hint, merge/compare labels, "New order saved", try/take vocabulary
+  unified, ~30s notation → words, plus the detail pass: selected verbs
+  ARRIVE (180ms) instead of popping, arrival glow runs once, action labels
+  never overflow, dev "Loading..." → "One moment…".
+- F10 ✅ (P3): the dormant transcript→section client flow is deleted (zero
+  callers; the DB RPCs remain; `git log -S` resurrects it when the sheet
+  lane's UI moment arrives).
+
+STILL FILED FOR PASS 5+ (from the details-within-details walk):
+- F9 (P3): take_id → "hear where this line came from", held for its UI moment.
+- G7 (P2): ONE persistent scrim under the layer flow's three sheet hand-offs
+  (stack→record→review→stack) — each currently re-fades its own scrim with a
+  1-2 frame bare-canvas flash between.
+- G8 (P2): the review sheet should KNOW it's a layer (header "Layer over
+  'X'", default name from the base, no section decision — 3 decisions → 1).
+- G9 (P2): scrub the stack (seek() exists, wired to nothing — the progress
+  bar should be a 44px slider).
+- G10 (P2): focus-trap CaptureSheetShell (no-op close during live takes) +
+  the new layer should announce itself in the stack (arrival glow + status).
+- G11 (P3): earbuds toggle reachable without a BPM (hoist from
+  MetronomeStrip); stop-button count-in label; gain slider aria-valuetext;
+  end-of-stack announcement; press states via cog-press on the flow's
+  inline-styled buttons.
 
 ============================================================
 PART 7 — SHIP PROTOCOL (Concurrent-Tree — mandatory every pass)

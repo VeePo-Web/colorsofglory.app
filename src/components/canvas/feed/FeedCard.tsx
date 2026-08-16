@@ -35,6 +35,10 @@ const FACES: Record<string, ComponentType<CardFaceProps>> = {
 
 const btn = (bg: string, color: string): React.CSSProperties => ({
   flex: 1,
+  minWidth: 0,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   height: 44,
   borderRadius: 11,
   border: "none",
@@ -119,7 +123,7 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
         // Delays live INSIDE the shorthand: a separate animation-delay would
         // cycle onto the glow and fire it during the entrance.
         animation: arrived
-          ? `cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) ${entranceDelayMs}ms both, cog-arrival-glow 1500ms ease-out ${entranceDelayMs + 440}ms 2`
+          ? `cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) ${entranceDelayMs}ms both, cog-arrival-glow 1500ms ease-out ${entranceDelayMs + 440}ms 1`
           : `cog-feed-enter 380ms cubic-bezier(0.22,1,0.36,1) ${entranceDelayMs}ms both`,
       }}
     >
@@ -188,7 +192,7 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
       )}
       {dimmed && (
         <p style={{ fontSize: 10, color: color.dark, marginTop: 6, fontWeight: 600 }}>
-          ↳ Already part of the song
+          ↳ Already in the song
         </p>
       )}
 
@@ -198,7 +202,12 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
       {/* Selected action row — the same verbs as the map, feed-native frame. */}
       {selected && !dimmed && (
         <div
-          style={{ display: "flex", gap: 6, marginTop: 10, borderTop: "1px solid rgba(0,0,0,0.07)", paddingTop: 8 }}
+          style={{
+            display: "flex", gap: 6, marginTop: 10, borderTop: "1px solid rgba(0,0,0,0.07)", paddingTop: 8,
+            // The verbs ARRIVE rather than pop — 52px of content appearing
+            // under the thumb with no motion read as a glitch.
+            animation: "cog-feed-enter 180ms cubic-bezier(0.22,1,0.36,1) both",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {isVoice ? (
@@ -211,10 +220,10 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
                   type="button"
                   onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
                   style={btn("rgba(28,26,23,0.05)", "var(--cog-warm-gray)")}
-                  aria-label="Record a layer over this take"
+                  aria-label="Sing over this — your voice plays together with it"
                 >
                   <Mic size={13} strokeWidth={2.1} style={{ marginRight: 5, verticalAlign: "-2px", display: "inline" }} />
-                  Layer over this
+                  Sing over this
                 </button>
               )}
               {/* The stack button earns its slot only once layers EXIST. */}

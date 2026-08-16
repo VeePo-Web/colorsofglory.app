@@ -118,8 +118,8 @@ const FinalListenPage = memo(function FinalListenPage({
           The song&rsquo;s final shape lives here
         </p>
         <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          When an idea is ready, send it over with <strong>→ Final</strong>. The parts land here in
-          running order — then press play and hear the whole song.
+          When an idea is ready, send it over with <strong>→ Final</strong>. Parts land here in
+          order — then press play and hear the whole song.
         </p>
         <button
           type="button"
@@ -131,7 +131,7 @@ const FinalListenPage = memo(function FinalListenPage({
             boxShadow: "0 6px 18px rgba(184,149,58,0.35)",
           }}
         >
-          Back to the ideas
+          Back to Ideas
         </button>
       </div>
     );
@@ -249,14 +249,14 @@ const FinalListenPage = memo(function FinalListenPage({
             <button
               type="button"
               onClick={onGoToIdeas}
-              aria-label="Keep shaping in Ideas"
+              aria-label="Back to Ideas"
               style={{
                 flex: 1, minHeight: 46, borderRadius: 12, cursor: "pointer",
                 border: "1px solid rgba(28,26,23,0.10)", backgroundColor: "rgba(255,255,255,0.8)",
                 color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 600,
               }}
             >
-              Keep shaping in Ideas
+              Back to Ideas
             </button>
           </div>
           {/* The hallway's next room: the song just played all the way
@@ -267,14 +267,14 @@ const FinalListenPage = memo(function FinalListenPage({
             <button
               type="button"
               onClick={onInvite}
-              aria-label="Someone should hear this — invite them into the song"
+              aria-label="Invite someone to hear it"
               style={{
                 width: "100%", minHeight: 44, borderRadius: 12, cursor: "pointer",
                 border: "none", backgroundColor: "transparent",
                 color: "var(--cog-gold)", fontFamily: "var(--font-body)", fontSize: 13.5, fontWeight: 700,
               }}
             >
-              Someone should hear this — invite them in
+              Invite someone to hear it
             </button>
           )}
         </div>
@@ -321,7 +321,7 @@ const FinalListenPage = memo(function FinalListenPage({
                   sounding
                     ? paused
                       ? ", paused here — tap to resume"
-                      : ", sounding now — tap to pause"
+                      : ", playing now — tap to pause"
                     : ", tap to play from here"
                 }`}
                 onClick={tapRow}

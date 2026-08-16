@@ -142,17 +142,27 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
         {/* Group play/pause — the whole stack at once */}
         <button
           type="button"
+          className="cog-press"
           onClick={playPause}
-          disabled={state.loading}
+          disabled={state.loading || state.unavailable}
+          aria-busy={state.loading}
           style={{
             width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
             backgroundColor: baseColor.base, color: "#FFF", border: "none",
-            cursor: state.loading ? "wait" : "pointer",
+            cursor: state.loading ? "wait" : state.unavailable ? "default" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: `0 4px 14px ${baseColor.glow}`,
-            opacity: state.loading ? 0.6 : 1,
+            opacity: state.loading || state.unavailable ? 0.6 : 1,
           }}
-          aria-label={state.isPlaying ? "Pause stack" : `Play ${base.title} with all layers`}
+          aria-label={
+            state.loading
+              ? "Getting the takes ready"
+              : state.unavailable
+                ? "Can't reach this audio yet — check your connection"
+                : state.isPlaying
+                  ? "Pause"
+                  : `Play ${base.title} with every voice`
+          }
         >
           {state.isPlaying ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" style={{ marginLeft: 2 }} />}
         </button>
@@ -168,7 +178,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
             </p>
           </div>
           <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "var(--cog-muted)" }}>
-            {base.contributor} · base · {formatDuration(base.durationMs)}
+            {base.contributor} · first voice · {formatDuration(base.durationMs)}
             {bpm ? ` · ${bpm} BPM` : ""}
           </p>
         </div>
@@ -339,12 +349,13 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
                 >
                   {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
                 </button>
-                {/* Solo */}
+                {/* Solo — but in the writer's words: "Just this" is what the
+                    act IS ("Unsolo" is not a word anyone's child says). */}
                 <button
                   type="button"
                   onClick={() => toggleSolo(layer.id)}
                   aria-pressed={isSolo}
-                  aria-label={isSolo ? `Unsolo ${layer.contributor}'s layer` : `Solo ${layer.contributor}'s layer`}
+                  aria-label={isSolo ? "Hear everyone again" : `Hear just ${layer.contributor}'s voice`}
                   style={{
                     minWidth: 44, height: 44, borderRadius: 12, flexShrink: 0,
                     padding: "0 12px",
@@ -354,7 +365,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
                     fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
                   }}
                 >
-                  Solo
+                  Just this
                 </button>
                 {/* Remove — the quietest control on the row, own-work only
                     (GarageBand lets you delete your track; here it asks once). */}
@@ -391,10 +402,10 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             boxShadow: "0 4px 16px rgba(184,149,58,0.35)",
           }}
-          aria-label={`Record a layer — a new voice that plays together with ${base.title}`}
+          aria-label={`Sing over this — your voice plays together with ${base.title}`}
         >
           <Mic size={16} strokeWidth={2} />
-          Record a layer
+          Sing over this
         </button>
       )}
     </section>

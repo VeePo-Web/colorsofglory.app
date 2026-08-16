@@ -174,7 +174,7 @@ describe("Codex 390px mobile render smoke", () => {
     expect(await screen.findByRole("heading", { name: /in this room/i }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /what changed/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add idea/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /record idea/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record memo/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/song whiteboard canvas/i)).toBeInTheDocument();
   }, 10000);
 });

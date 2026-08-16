@@ -16,7 +16,9 @@ import { memoKey } from "@/lib/canvas/features/canvasAudio";
  * spatial map renders. One data model, two lenses.
  */
 
-export const SPARKS_GROUP = "New sparks";
+// "Just added" says the fact; "New sparks" was an app-invented metaphor no
+// surface ever taught (the 8-year-old words contract).
+export const SPARKS_GROUP = "Just added";
 export const USED_GROUP = "Already in the song";
 
 /** Section labels that mean "not filed anywhere yet". */

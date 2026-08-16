@@ -38,7 +38,7 @@ const CanvasRouteFallback = () => {
         <h2>In this room</h2>
         <h2>What changed</h2>
         <button type="button" disabled>Add idea</button>
-        <button type="button" disabled>Record idea</button>
+        <button type="button" disabled>Record memo</button>
       </section>
     </div>
   );

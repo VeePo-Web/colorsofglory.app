@@ -44,7 +44,7 @@ describe("Glory Feed — the ideas→song flow is the phone default", () => {
     fireEvent.click(finalTab);
     expect(await screen.findByText(/final shape lives here/i)).toBeInTheDocument();
     // The safe route back to the stream.
-    fireEvent.click(screen.getByRole("button", { name: /back to the ideas/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to ideas/i }));
     await waitFor(() => expect(screen.getByRole("tab", { name: /^ideas$/i })).toHaveAttribute("aria-selected", "true"));
   });
 

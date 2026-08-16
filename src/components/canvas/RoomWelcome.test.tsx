@@ -9,7 +9,10 @@ describe("RoomWelcome — the hallway, taught once per device", () => {
     const onDismiss = vi.fn();
     render(<RoomWelcome songTitle="Grace in the Waiting" onDismiss={onDismiss} />);
     expect(screen.getByText(/grace in the waiting/i)).toBeInTheDocument();
-    expect(screen.getByText(/one\s*swipe left/i)).toBeInTheDocument();
+    // The teaching sentence names the DESTINATION the tab shows ("Final") —
+    // the old wording taught "the finished song" but the tab said Final, so
+    // the one lesson pointed at a label that didn't exist.
+    expect(screen.getByText(/swipe left for\s*final/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /start writing/i }));
     expect(hasSeenRoomWelcome()).toBe(true);
     // Reduced-motion is off in jsdom's matchMedia mock? Either path must

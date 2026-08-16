@@ -93,7 +93,7 @@ export function useMergeSplice({ cards, isViewer, mutations, onMoment }: UseMerg
 
     mutations.applyMerge(idA, idB, merged);
     setSelection([]);
-    onMoment?.("Ideas merged", "Ideas tree", "New section created");
+    onMoment?.("Ideas merged", "Ideas", "New section created");
     toast("Ideas merged into a new section", {
       duration: 7000,
       action: {

@@ -352,7 +352,7 @@ const CanvasFeed = memo(function CanvasFeed({
                       The song starts here
                     </p>
                     <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: 0 }}>
-                      Hum it, speak it, or write it — one tap below and the first spark is safe.
+                      Hum it, speak it, or write it — one tap below and your first idea is safe.
                     </p>
                   </>
                 ) : (
@@ -361,7 +361,7 @@ const CanvasFeed = memo(function CanvasFeed({
                       Every idea is in the song
                     </p>
                     <p style={{ fontFamily: "var(--font-body)", fontSize: 13.5, color: "var(--cog-warm-gray)", lineHeight: 1.6, margin: 0 }}>
-                      Swipe to Final to hear it — or catch the next spark below.
+                      Swipe to Final to hear it — or catch the next idea below.
                     </p>
                   </>
                 )}

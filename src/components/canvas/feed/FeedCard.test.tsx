@@ -32,14 +32,14 @@ const interactions = (over: Partial<CanvasCardInteractions> = {}): CanvasCardInt
 describe("FeedCard — state at rest, verbs on selection", () => {
   it("a resting voice card shows NO layering verb — only the quiet state chip when layers exist", () => {
     render(<FeedCard card={card} selected={false} interactions={interactions({ layerCount: 2 })} />);
-    expect(screen.queryByRole("button", { name: /record a layer over this take/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /sing over this/i })).toBeNull();
     expect(screen.getByLabelText(/2 layers on this take/i)).toBeInTheDocument();
   });
 
   it("selection reveals the layering verb and the stack door", () => {
     const ix = interactions({ layerCount: 2 });
     render(<FeedCard card={card} selected interactions={ix} />);
-    fireEvent.click(screen.getByRole("button", { name: /record a layer over this take/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sing over this/i }));
     expect(ix.onRecordOver).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /open the stack — 2 layers/i }));
     expect(ix.onOpenStack).toHaveBeenCalledTimes(1);
@@ -47,14 +47,14 @@ describe("FeedCard — state at rest, verbs on selection", () => {
 
   it("a bare memo (no layers) selected offers the layer verb but no stack door", () => {
     render(<FeedCard card={card} selected interactions={interactions({ layerCount: 0 })} />);
-    expect(screen.getByRole("button", { name: /record a layer over this take/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sing over this/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /open the stack/i })).toBeNull();
   });
 
   it("tapping the layer verb never doubles as a card select", () => {
     const ix = interactions({ layerCount: 0 });
     render(<FeedCard card={card} selected interactions={ix} />);
-    fireEvent.click(screen.getByRole("button", { name: /record a layer over this take/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sing over this/i }));
     expect(ix.onRecordOver).toHaveBeenCalledTimes(1);
     expect(ix.onSelect).not.toHaveBeenCalled();
   });
@@ -62,10 +62,10 @@ describe("FeedCard — state at rest, verbs on selection", () => {
   it("non-audio cards and view-only rooms (no onRecordOver granted) show no layer verb, even selected", () => {
     const viewerIx = interactions({ onRecordOver: undefined, layerCount: 0 });
     render(<FeedCard card={card} selected interactions={viewerIx} />);
-    expect(screen.queryByRole("button", { name: /record a layer/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /sing over this/i })).toBeNull();
 
     const chord = { ...card, id: "22222222-2222-4222-8222-222222222222", type: "chord" } as CanvasBoardCard;
     render(<FeedCard card={chord} selected interactions={interactions()} />);
-    expect(screen.queryByRole("button", { name: /record a layer/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /sing over this/i })).toBeNull();
   });
 });

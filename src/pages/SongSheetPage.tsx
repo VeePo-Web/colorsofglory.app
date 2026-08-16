@@ -474,7 +474,7 @@ const SongSheetPage = () => {
         </div>
       </div>
 
-      {/* ── Fixed bottom bar: Add section · Record idea ─────────────────── */}
+      {/* ── Fixed bottom bar: Add section · Record memo ─────────────────── */}
       <div
         className="fixed bottom-0 left-0 right-0 flex gap-2.5 px-5 pt-3"
         style={{
@@ -502,7 +502,7 @@ const SongSheetPage = () => {
           className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold transition-transform active:scale-[0.97]"
           style={{ minHeight: 44, backgroundColor: "var(--cog-gold)", color: "#fff", fontFamily: "var(--font-body)" }}
         >
-          <Music size={15} strokeWidth={2.2} /> Record idea
+          <Music size={15} strokeWidth={2.2} /> Record memo
         </button>
       </div>
 

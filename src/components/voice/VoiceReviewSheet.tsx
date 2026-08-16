@@ -153,7 +153,7 @@ const VoiceReviewSheet = ({
               boxShadow: "0 2px 8px rgba(184,149,58,0.35)",
               flexShrink: 0,
             }}
-            aria-label={isPlaying ? "Pause preview" : "Play preview"}
+            aria-label={isPlaying ? "Pause" : "Play it back"}
           >
             {isPlaying
               ? <Pause size={16} fill="white" />
@@ -308,14 +308,14 @@ const VoiceReviewSheet = ({
           role="button"
           tabIndex={isPro ? 0 : -1}
           onKeyDown={(e) => { if (e.key === " " && isPro) setTranscribe((v) => !v); }}
-          aria-label={`Auto-transcribe to lyrics draft. ${isPro ? "" : "Pro feature."}`}
+          aria-label={`Turn my words into lyrics. ${isPro ? "" : "Pro feature."}`}
         >
           <div>
             <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "var(--cog-charcoal)" }}>
-              {!isPro && "🔒 "}Auto-transcribe to lyrics draft
+              {!isPro && "🔒 "}Turn my words into lyrics
             </p>
             <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "var(--cog-muted)" }}>
-              {isPro ? "Powered by AI · ~30s after saving" : "Upgrade to Pro"}
+              {isPro ? "Ready about 30 seconds after you save" : "Upgrade to Pro"}
             </p>
           </div>
           {/* Toggle pill */}
@@ -360,7 +360,7 @@ const VoiceReviewSheet = ({
             }}
           >
             <Trash2 size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
-            Discard
+            Delete
           </button>
           <button
             type="button"

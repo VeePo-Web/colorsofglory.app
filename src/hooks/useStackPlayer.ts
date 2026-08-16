@@ -36,6 +36,9 @@ export interface StackPlayerState {
   /** 0–1, tracked from the shared clock (or the base element on fallback). */
   progress: number;
   loading: boolean;
+  /** NOTHING resolved (offline, every URL failed) — Play must say so and
+   *  stay honest, never flip to a Pause button over silence. */
+  unavailable: boolean;
   muted: Set<string>;
   soloId: string | null;
   /** Live per-id gain targets (persisted values seeded by the caller). */
@@ -88,6 +91,7 @@ export function useStackPlayer(
     isPlaying: false,
     progress: 0,
     loading: false,
+    unavailable: false,
     muted: EMPTY_MUTED,
     soloId: null,
     gains: {},
@@ -194,6 +198,7 @@ export function useStackPlayer(
       isPlaying: false,
       progress: 0,
       loading: false,
+      unavailable: false,
       muted: muted.size ? muted : EMPTY_MUTED,
       soloId,
       gains,
@@ -357,9 +362,12 @@ export function useStackPlayer(
       };
     }
 
+    // Honesty gate (P1-5): if NOTHING resolved (offline, every URL refused),
+    // Play must say so — flipping to a Pause button over silence was a lie.
+    const resolvedCount = layersRef.current.size + elementsRef.current.size;
     setState((s) => {
       applyMix(s.muted, s.soloId, s.gains);
-      return { ...s, loading: false };
+      return { ...s, loading: false, unavailable: resolvedCount === 0 };
     });
   }, [idsKey, applyMix, headOffsetS]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -410,6 +418,7 @@ export function useStackPlayer(
   /** Toggle group playback. MUST be called from a user gesture (iOS). */
   const playPause = useCallback(() => {
     const s = stateRef.current;
+    if (s.unavailable) return; // nothing resolved — the button is honest, not a toggle
     if (s.isPlaying) {
       if (ctxRef.current && layersRef.current.size > 0) {
         pausedPosRef.current = ctxRef.current.currentTime - startedAtRef.current;

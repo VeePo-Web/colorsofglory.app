@@ -8,7 +8,7 @@ import type { CanvasFeatureMutations } from "./mutations";
  * useFinalArrangement — the F23 order model plus the relocated move-to-final /
  * return-to-ideas mechanics.
  *
- * The Final tree IS the arrangement: top-to-bottom y-order is the play order
+ * The Final IS the arrangement: top-to-bottom y-order is the play order
  * (this matches the board's existing set-list numbering). Reordering swaps
  * column slots — positions persist through the store with the cards, so the
  * saved order survives reload. D2 owns this order model + reorder logic; the
@@ -123,8 +123,8 @@ export function useFinalArrangement({
     }));
     if (reslotted.length > 0) mutations.patchCards(reslotted);
     setArranging(false);
-    onMoment?.("Arrangement saved", "Final tree", "Running order");
-    toast("Running order saved", {
+    onMoment?.("Arrangement saved", "Final", "Running order");
+    toast("New order saved", {
       duration: 7000,
       action: {
         label: "Undo",
@@ -151,7 +151,7 @@ export function useFinalArrangement({
           { id: cardId, patch: { tree: "final", status: "approved", ...finalSlot(orderedFinalCards.length) } },
         ]);
         onTreeChange?.(cardId, "final");
-        onMoment?.("Approved idea", "Final tree", "Arrangement");
+        onMoment?.("Approved idea", "Final", "Arrangement");
         const undoInPlace = () => {
           mutations.patchCards([before]);
           onTreeChange?.(cardId, "ideas");
@@ -179,7 +179,7 @@ export function useFinalArrangement({
         status: "approved",
       };
       mutations.promoteToFinal(cardId, finalCopy);
-      onMoment?.("Approved idea", "Final tree", "Arrangement");
+      onMoment?.("Approved idea", "Final", "Arrangement");
       const undoCopy = () => mutations.returnToIdeas(finalCopy.id, cardId);
       toast(
         "Idea moved to Final",
@@ -230,7 +230,7 @@ export function useFinalArrangement({
       } else {
         // No source on the board (backend-hydrated / demo final). NEVER delete
         // — this was the one hard-destroy in a never-delete system. Patch the
-        // card itself back into the Ideas tree.
+        // card itself back into the Ideas.
         const ideaCount = cards.filter((c) => c.tree === "ideas" && !c.parentMemoId).length;
         const before = {
           id: finalCard.id,
@@ -251,7 +251,7 @@ export function useFinalArrangement({
           },
         });
       }
-      onMoment?.("Returned idea", "Ideas tree", "Arrangement");
+      onMoment?.("Returned idea", "Ideas", "Arrangement");
     },
     [isViewer, cards, mutations, ideaSlot, onTreeChange, onMoment],
   );
