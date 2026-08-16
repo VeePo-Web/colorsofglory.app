@@ -213,6 +213,20 @@ export function useStackPlayer(
     };
   }, [idsKey, releaseAll]);
 
+  // Unmount-only: give the AudioContext back to the OS. iOS caps live
+  // contexts per page (~4) — a sheet opened and closed a few times used to
+  // strand one context per mount until the whole page's audio went silent.
+  // Membership changes deliberately KEEP the context (churning it would cost
+  // a decode + user-gesture resume per change); prepare() already recreates
+  // a closed one.
+  useEffect(
+    () => () => {
+      ctxRef.current?.close().catch(() => {});
+      ctxRef.current = null;
+    },
+    [],
+  );
+
   /** Total stack length in seconds (the longest layer incl. its head offset). */
   const stackDuration = useCallback((): number => {
     let d = 0;

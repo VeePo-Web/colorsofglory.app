@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { Play, Pause, Mic, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Play, Pause, Mic, Volume2, VolumeX, Trash2 } from "lucide-react";
 import { useStackPlayer } from "@/hooks/useStackPlayer";
 import { stackPlayOrder, type MemoStackGroup } from "@/lib/voice/stackModel";
 import { setLayerMix } from "@/integrations/cog/memos";
@@ -42,13 +42,23 @@ interface MemoStackProps {
   /** Role-gated: viewers don't see "Record over this". */
   canRecordOver?: boolean;
   onRecordOver?: (baseMemoId: string) => void;
+  /** Remove a botched layer right here (GarageBand's one-gesture delete,
+   *  behind a calm inline confirm). Absent = viewers/no permission. */
+  onRemoveLayer?: (layerId: string) => void;
+  /** Per-layer permission: only the layer's own writer may remove their
+   *  work — nobody's contribution is erased by another hand. */
+  canRemoveLayer?: (layerId: string) => boolean;
 }
 
 const STACK_BARS = 28;
 const STACK_WAVE_H = 34;
+const LAYER_BARS = 20;
+const LAYER_WAVE_H = 14;
 
-const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: MemoStackProps) => {
+const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRemoveLayer, canRemoveLayer }: MemoStackProps) => {
   const group: MemoStackGroup<StackMemoView> = { base, layers };
+  // Which layer is showing its inline "Remove?" confirm strip.
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const playIds = stackPlayOrder(group);
   // Seed the mixer from the PERSISTED mix — the balance the room last set —
   // and hand the engine the record-latency offsets so layers line up.
@@ -188,6 +198,16 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
         const lc = getCreatorColor(layer.contributor);
         const isMuted = state.muted.has(layer.id);
         const isSolo = state.soloId === layer.id;
+        const confirming = confirmRemoveId === layer.id;
+        // The layer's own shape — base and layer visually READ as aligned
+        // takes, not anonymous strips (alignment used to be audio-only).
+        const layerWave = resolveWaveformBars({
+          seedId: layer.id,
+          peaks: layer.waveformPeaks,
+          contour: layer.pitchContour,
+          barCount: LAYER_BARS,
+          maxHeight: LAYER_WAVE_H,
+        });
         return (
           <div
             key={layer.id}
@@ -212,71 +232,149 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver }: Me
               <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "var(--cog-charcoal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {layer.title}
               </p>
-              <p style={{ margin: "1px 0 0", fontFamily: "var(--font-body)", fontSize: 10, color: "var(--cog-muted)" }}>
-                {layer.contributor} · layer · {formatDuration(layer.durationMs)}
-              </p>
-              {/* The quick mix — a quiet per-layer volume. Live (ramped, no
-                  clicks, mid-playback) + persisted debounced, shared with
-                  the room. Volume + mute + solo is the ENTIRE mixer. */}
-              <input
-                type="range"
-                min={0}
-                max={1.5}
-                step={0.05}
-                value={state.gains[layer.id] ?? layer.layerGain ?? 1}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setGain(layer.id, v);
-                  persistGain(layer.id, v);
-                }}
-                aria-label={`${layer.contributor}'s layer volume`}
-                style={{
-                  width: "100%",
-                  maxWidth: 150,
-                  height: 20,
-                  marginTop: 4,
-                  accentColor: lc.base,
-                  cursor: "pointer",
-                }}
-              />
+              {confirming ? (
+                <p style={{ margin: "3px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "var(--cog-charcoal)", lineHeight: 1.4 }}>
+                  Remove this layer? It leaves the stack for everyone.
+                </p>
+              ) : (
+                <>
+                  <p style={{ margin: "1px 0 0", fontFamily: "var(--font-body)", fontSize: 10, color: "var(--cog-muted)" }}>
+                    {layer.contributor} · layer · {formatDuration(layer.durationMs)}
+                  </p>
+                  <div
+                    aria-hidden="true"
+                    style={{ display: "flex", alignItems: "flex-end", gap: 2, height: LAYER_WAVE_H, marginTop: 4, overflow: "hidden" }}
+                  >
+                    {layerWave.bars.map((bar, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          width: 3, height: Math.max(2, bar.height), borderRadius: 2, flexShrink: 0,
+                          backgroundColor: lc.base,
+                          opacity: bar.voiced ? bar.amp * 0.5 + 0.25 : 0.12,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* The quick mix — a quiet per-layer volume. Live (ramped, no
+                      clicks, mid-playback) + persisted debounced, shared with
+                      the room. Volume + mute + solo is the ENTIRE mixer. */}
+                  <input
+                    type="range"
+                    min={0}
+                    max={1.5}
+                    step={0.05}
+                    value={state.gains[layer.id] ?? layer.layerGain ?? 1}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setGain(layer.id, v);
+                      persistGain(layer.id, v);
+                    }}
+                    aria-label={`${layer.contributor}'s layer volume`}
+                    style={{
+                      width: "100%",
+                      maxWidth: 150,
+                      height: 20,
+                      marginTop: 4,
+                      accentColor: lc.base,
+                      cursor: "pointer",
+                    }}
+                  />
+                </>
+              )}
             </div>
-            {/* Mute */}
-            <button
-              type="button"
-              onClick={() => {
-                const nowMuted = !state.muted.has(layer.id);
-                toggleMute(layer.id);
-                void setLayerMix(memoKey(layer.id), { muted: nowMuted });
-              }}
-              aria-pressed={isMuted}
-              aria-label={isMuted ? `Unmute ${layer.contributor}'s layer` : `Mute ${layer.contributor}'s layer`}
-              style={{
-                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                backgroundColor: isMuted ? "rgba(0,0,0,0.06)" : `${lc.base}14`,
-                border: "none", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: isMuted ? "#999" : lc.base,
-              }}
-            >
-              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
-            {/* Solo */}
-            <button
-              type="button"
-              onClick={() => toggleSolo(layer.id)}
-              aria-pressed={isSolo}
-              aria-label={isSolo ? `Unsolo ${layer.contributor}'s layer` : `Solo ${layer.contributor}'s layer`}
-              style={{
-                minWidth: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                padding: "0 12px",
-                backgroundColor: isSolo ? lc.base : "transparent",
-                border: `1px solid ${isSolo ? lc.base : "rgba(0,0,0,0.12)"}`,
-                cursor: "pointer", color: isSolo ? "#FFF" : "#999",
-                fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
-              }}
-            >
-              Solo
-            </button>
+            {confirming ? (
+              /* The calm inline confirm — no modal, no red wall. Remove is a
+                 real removal (the row said so above); Keep walks it back. */
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmRemoveId(null);
+                    onRemoveLayer?.(layer.id);
+                  }}
+                  style={{
+                    minWidth: 44, height: 44, borderRadius: 12, padding: "0 14px",
+                    backgroundColor: "var(--cog-charcoal)", color: "#FFF",
+                    border: "none", cursor: "pointer",
+                    fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
+                  }}
+                  aria-label={`Remove ${layer.contributor}'s layer from this stack`}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemoveId(null)}
+                  style={{
+                    minWidth: 44, height: 44, borderRadius: 12, padding: "0 12px",
+                    backgroundColor: "transparent", color: "var(--cog-warm-gray)",
+                    border: "1px solid rgba(0,0,0,0.12)", cursor: "pointer",
+                    fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
+                  }}
+                  aria-label="Keep this layer"
+                >
+                  Keep
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Mute */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nowMuted = !state.muted.has(layer.id);
+                    toggleMute(layer.id);
+                    void setLayerMix(memoKey(layer.id), { muted: nowMuted });
+                  }}
+                  aria-pressed={isMuted}
+                  aria-label={isMuted ? `Unmute ${layer.contributor}'s layer` : `Mute ${layer.contributor}'s layer`}
+                  style={{
+                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                    backgroundColor: isMuted ? "rgba(0,0,0,0.06)" : `${lc.base}14`,
+                    border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: isMuted ? "#999" : lc.base,
+                  }}
+                >
+                  {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+                {/* Solo */}
+                <button
+                  type="button"
+                  onClick={() => toggleSolo(layer.id)}
+                  aria-pressed={isSolo}
+                  aria-label={isSolo ? `Unsolo ${layer.contributor}'s layer` : `Solo ${layer.contributor}'s layer`}
+                  style={{
+                    minWidth: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                    padding: "0 12px",
+                    backgroundColor: isSolo ? lc.base : "transparent",
+                    border: `1px solid ${isSolo ? lc.base : "rgba(0,0,0,0.12)"}`,
+                    cursor: "pointer", color: isSolo ? "#FFF" : "#999",
+                    fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  Solo
+                </button>
+                {/* Remove — the quietest control on the row, own-work only
+                    (GarageBand lets you delete your track; here it asks once). */}
+                {onRemoveLayer && (canRemoveLayer?.(layer.id) ?? false) && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRemoveId(layer.id)}
+                    aria-label={`Remove your layer "${layer.title}"`}
+                    style={{
+                      width: 36, height: 44, borderRadius: 12, flexShrink: 0,
+                      backgroundColor: "transparent", border: "none", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--cog-muted)",
+                    }}
+                  >
+                    <Trash2 size={15} strokeWidth={2} />
+                  </button>
+                )}
+              </>
+            )}
           </div>
         );
       })}

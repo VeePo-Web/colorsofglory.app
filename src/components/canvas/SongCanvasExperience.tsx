@@ -61,11 +61,13 @@ import RecordingSheet from "@/components/voice/RecordingSheet";
 import VoiceReviewSheet from "@/components/voice/VoiceReviewSheet";
 import VoiceLayerPanel from "@/components/voice/VoiceLayerPanel";
 import {
+  discardPendingUpload,
   enqueuePendingUpload,
   flushPendingUpload,
   listPendingUploads,
   remapPendingParents,
 } from "@/lib/voice/pendingUploads";
+import { deleteMemo } from "@/lib/voice/voiceApi";
 import { saveFailedCapture, clearFailedCapture } from "@/lib/voice/failedCaptureStore";
 import { audioCache } from "@/lib/voice/audioCache";
 import RoomWelcome, { hasSeenRoomWelcome } from "@/components/canvas/RoomWelcome";
@@ -1559,6 +1561,44 @@ const SongCanvasExperience = () => {
     void handleStartRecording(baseId);
   }, [handleStartRecording]);
 
+  // Remove a layer from its stack — own-work only (the sheet gates per
+  // layer). Optimistic in BOTH id spaces; the mirror id is tombstoned so a
+  // racing realtime hydrate can't resurrect it before the delete lands; an
+  // honest walk-back (toast + rehydrate) if the server refuses. A layer that
+  // never finished uploading simply leaves the pending queue — no server row
+  // exists to delete.
+  const handleRemoveLayer = useCallback(
+    (layerCardId: string) => {
+      const mid = memoKey(layerCardId);
+      const mirrorId = `db-voice-${mid}`;
+      if (soloPlayIdRef.current && memoKey(soloPlayIdRef.current) === mid) {
+        stopCanvasAudio();
+        setSoloPlayId(null);
+      }
+      setCards((prev) => prev.filter((c) => memoKey(c.id) !== mid));
+      if (isDemoRoom) return; // on-device room — no server row behind the card
+      addTombstone(songId, mirrorId);
+      void (async () => {
+        try {
+          const pending = await listPendingUploads(songId);
+          const queued = pending.find((p) => memoKey(p.id) === mid);
+          if (queued) {
+            await discardPendingUpload(queued.id);
+            removeTombstone(songId, mirrorId);
+            return;
+          }
+          await deleteMemo(mid);
+          removeTombstone(songId, mirrorId); // row is gone — the marker is noise now
+        } catch {
+          removeTombstone(songId, mirrorId);
+          toast("Couldn't remove that layer — it's still in the song.");
+          void hydrateVoiceMemos();
+        }
+      })();
+    },
+    [songId, isDemoRoom, hydrateVoiceMemos],
+  );
+
   // Layer switching is owned by SongTabBar + ?layer= deep links (the header
   // chip strip that duplicated it is gone).
 
@@ -2333,9 +2373,16 @@ const SongCanvasExperience = () => {
     const arrivals = serverCards.filter((c) => !known.has(c.id));
     serverCards.forEach((c) => known.add(c.id));
     if (arrivals.length === 0 || Date.now() < arrivalWarmupRef.current) return;
+    // Never toast over a live take — an arrival mid-recording would pop the
+    // announcer onto the RecordingSheet. The card is already absorbed into
+    // the known set above, so it lands silently; the recap catches them up.
+    if (recordingFlow !== "idle") return;
     const fromOthers = arrivals.filter((c) => (c.createdBy || c.contributor) && !isMine(c));
     if (fromOthers.length === 0) return;
     const first = fromOthers[0];
+    // A roster miss (identityRef hasn't resolved the writer yet) leaves
+    // contributor empty — never render a nameless " added a voice idea".
+    const who = first.contributor || "A co-writer";
     const base = first.parentMemoId
       ? cards.find((b) => !b.parentMemoId && memoKey(b.id) === memoKey(first.parentMemoId as string))
       : null;
@@ -2354,14 +2401,14 @@ const SongCanvasExperience = () => {
     const target = first.parentMemoId ? base : first;
     toast(
       fromOthers.length === 1
-        ? `${first.contributor} added ${label}`
-        : `${first.contributor} + ${fromOthers.length - 1} more added ideas`,
+        ? `${who} added ${label}`
+        : `${who} + ${fromOthers.length - 1} more added ideas`,
       {
         duration: 6000,
         ...(target ? { action: { label: "See it", onClick: () => jumpToCardId(target.id) } } : {}),
       },
     );
-  }, [cards, isMine, jumpToCardId]);
+  }, [cards, isMine, jumpToCardId, recordingFlow]);
 
   // The recap digest, from the room's real cards: what other hands added,
   // latest first, each row a deep link to its card (COG Product 12).
@@ -3085,6 +3132,12 @@ const SongCanvasExperience = () => {
             bpm={songBpm}
             canRecordOver={!isViewer}
             onRecordOver={handleRecordOver}
+            onRemoveLayer={isViewer ? undefined : handleRemoveLayer}
+            canRemoveLayer={(layerId) => {
+              // Own work only — nobody's harmony is erased by another hand.
+              const c = cards.find((cc) => memoKey(cc.id) === memoKey(layerId));
+              return c ? isMine(c) : false;
+            }}
             onOpenTries={(memoId) => {
               // The tries flow lives in the polished TakeMiniPlayer —
               // close the sheet first so z-order stays sane.

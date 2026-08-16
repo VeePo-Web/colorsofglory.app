@@ -30,6 +30,9 @@ interface MemoSheetProps {
   bpm?: number | null;
   canRecordOver: boolean;
   onRecordOver: (baseMemoId: string) => void;
+  /** Remove a layer (own-work only — gated per layer by canRemoveLayer). */
+  onRemoveLayer?: (layerId: string) => void;
+  canRemoveLayer?: (layerId: string) => boolean;
   /** Open the takes player (TakeMiniPlayer) for this memo — the tries flow. */
   onOpenTries?: (memoId: string) => void;
   /** Future: record a new TAKE of this memo (the "Try again" verb). */
@@ -59,6 +62,8 @@ const MemoSheet = ({
   bpm,
   canRecordOver,
   onRecordOver,
+  onRemoveLayer,
+  canRemoveLayer,
   onOpenTries,
   onTryAgain,
   onClose,
@@ -334,6 +339,20 @@ const MemoSheet = ({
               bpm={bpm}
               canRecordOver={canRecordOver}
               onRecordOver={onRecordOver}
+              canRemoveLayer={canRemoveLayer}
+              onRemoveLayer={
+                onRemoveLayer
+                  ? (layerId) => {
+                      // Prune the server-truth overlay too — otherwise the
+                      // removed layer resurrects from freshLayers (read at
+                      // open) until the sheet is next reopened.
+                      setFreshLayers((prev) =>
+                        prev ? prev.filter((l) => memoKey(l.id) !== memoKey(layerId)) : prev,
+                      );
+                      onRemoveLayer(layerId);
+                    }
+                  : undefined
+              }
             />
             {shownLayers.length === 0 && (
               <p
