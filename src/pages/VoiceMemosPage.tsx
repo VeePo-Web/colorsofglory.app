@@ -18,7 +18,13 @@ import {
   type VoiceMemoRecord,
 } from "@/lib/voice/voiceApi";
 import { formatDuration } from "@/lib/voice/audioFormat";
-import { prepareImport } from "@/lib/voice/audioImport";
+import { prepareImport, type PreparedImport } from "@/lib/voice/audioImport";
+import {
+  batchSettled,
+  isLikelyDuplicate,
+  summarizeBatch,
+  type BatchFileState,
+} from "@/lib/voice/importBatch";
 import { audioCache } from "@/lib/voice/audioCache";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
 import {
@@ -456,6 +462,21 @@ const VoiceMemosPage = () => {
   const [showUpload, setShowUpload] = useState(false);
   const [showHumFind, setShowHumFind] = useState(false);
 
+  // ── The import batch (Lane D · Moment 3) ──────────────────────────────────
+  // Per-file truth lives on the cards; the BATCH speaks through one calm
+  // summary line, keyed by outbox id. A failed file retries alone.
+  const [batch, setBatch] = useState<Map<string, BatchFileState>>(new Map());
+  // Duplicate gate: "the file you just sent is the first thing your thumb
+  // finds in Recents" — likely re-imports wait here for one calm question,
+  // answered one at a time (guided-rail grammar).
+  const [dupQueue, setDupQueue] = useState<Array<{ prepared: Extract<PreparedImport, { ok: true }> }>>([]);
+  // T8: returning to the tab mid-save earns one honest sentence.
+  const [returnedMidSave, setReturnedMidSave] = useState(false);
+  const memosRef = useRef(memos);
+  memosRef.current = memos;
+  const batchRef = useRef(batch);
+  batchRef.current = batch;
+
   // Recording flow
   type Flow = "idle" | "recording" | "reviewing";
   const [flow, setFlow] = useState<Flow>("idle");
@@ -511,6 +532,9 @@ const VoiceMemosPage = () => {
         setMemos((prev) => prev.filter((m) => m.id !== event.outboxId));
         void loadMemos();
         setUploadError(null);
+        setBatch((prev) =>
+          prev.has(event.outboxId) ? new Map(prev).set(event.outboxId, "saved") : prev,
+        );
       } else if (event.reason === "quota_storage") {
         // Storage is full — the take is SAFE on the device and will sync the
         // moment there's room. Keep the optimistic card as-is (it reads
@@ -523,10 +547,40 @@ const VoiceMemosPage = () => {
           ),
         );
         setUploadError("Your recording is safe. Tap Retry on the memo to finish saving.");
+        setBatch((prev) =>
+          prev.has(event.outboxId) ? new Map(prev).set(event.outboxId, "failed") : prev,
+        );
       }
     });
     return unsubscribe;
   }, [songId, loadMemos]);
+
+  // A finished batch lets its line go quietly (6s) — unless a file needs a
+  // retry, in which case the sentence is actionable and STAYS.
+  useEffect(() => {
+    const states = [...batch.values()];
+    if (!batchSettled(states) || states.some((s) => s === "failed")) return;
+    const t = window.setTimeout(() => setBatch(new Map()), 6000);
+    return () => window.clearTimeout(t);
+  }, [batch]);
+
+  // T8: coming back to the tab mid-save earns one honest sentence — iOS
+  // cancels in-flight uploads when Safari backgrounds, so the return moment
+  // is exactly when the writer wonders if their memo made it.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      if (![...batchRef.current.values()].some((s) => s === "saving")) return;
+      setReturnedMidSave(true);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  useEffect(() => {
+    if (!returnedMidSave) return;
+    const t = window.setTimeout(() => setReturnedMidSave(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [returnedMidSave]);
 
   // Recovery sweep: takes whose upload was interrupted last session (tab
   // closed, app killed, network died) are still queued in the outbox with their
@@ -650,6 +704,8 @@ const VoiceMemosPage = () => {
         m.id === outboxId ? { ...m, is_processing: true, status: "uploading" } : m,
       ),
     );
+    // A retried file rejoins the batch line ALONE — the rest never restart.
+    setBatch((prev) => (prev.has(outboxId) ? new Map(prev).set(outboxId, "saving") : prev));
     await retryOutboxJob(outboxId);
   }, []);
 
@@ -658,6 +714,13 @@ const VoiceMemosPage = () => {
     await discardOutboxJob(outboxId);
     setMemos((prev) => prev.filter((m) => m.id !== outboxId));
     setUploadError(null);
+    // A deliberately discarded file leaves the batch count too.
+    setBatch((prev) => {
+      if (!prev.has(outboxId)) return prev;
+      const next = new Map(prev);
+      next.delete(outboxId);
+      return next;
+    });
   }, []);
 
   // ── File upload handler ─────────────────────────────────────────────────────
@@ -665,6 +728,35 @@ const VoiceMemosPage = () => {
   // Counter (not boolean): multi-file drops run concurrently; only the last
   // finisher may clear the uploading state.
   const uploadCountRef = useRef(0);
+
+  // The commit half: the file is already validated + prepared — save it
+  // durably and start tracking it in the batch line. Shared by the direct
+  // path and the duplicate gate's "Import anyway".
+  const commitImport = useCallback(
+    async (prepared: Extract<PreparedImport, { ok: true }>) => {
+      try {
+        // Imports ride the same canonical path as recorded takes: cache-first,
+        // auto-retry, real peaks. Downstream, an imported memo is
+        // indistinguishable from a recorded one (F11).
+        const { optimistic } = await saveMemoDurable({
+          blob: prepared.file,
+          songId,
+          mimeType: prepared.mimeType,
+          durationMs: prepared.durationMs,
+          title: prepared.title ?? defaultCaptureName(),
+          sectionLabel: "Raw idea",
+          fileName: prepared.file.name,
+          createdBy: currentUserId ?? "You",
+        });
+        setMemos((prev) => [optimistic, ...prev]);
+        setBatch((prev) => new Map(prev).set(optimistic.id, "saving"));
+      } catch {
+        setUploadError("Couldn't read that file. Please try another.");
+      }
+    },
+    [songId, currentUserId],
+  );
+
   const handleFileUpload = useCallback(async (file: File) => {
     setUploadError(null);
     uploadCountRef.current += 1;
@@ -680,21 +772,19 @@ const VoiceMemosPage = () => {
         setUploadError(prepared.message);
         return;
       }
-
-      // Imports ride the same canonical path as recorded takes: cache-first,
-      // auto-retry, real peaks. Downstream, an imported memo is
-      // indistinguishable from a recorded one (F11).
-      const { optimistic } = await saveMemoDurable({
-        blob: file,
-        songId,
-        mimeType: prepared.mimeType,
-        durationMs: prepared.durationMs,
-        title: prepared.title ?? defaultCaptureName(),
-        sectionLabel: "Raw idea",
-        fileName: file.name,
-        createdBy: currentUserId ?? "You",
-      });
-      setMemos((prev) => [optimistic, ...prev]);
+      // The duplicate gate (Feature 11): the memo you JUST saved to Files is
+      // the first thing Recents offers your thumb again. Title + duration
+      // must both agree before we ever question the writer.
+      if (
+        isLikelyDuplicate(
+          { title: prepared.title, durationMs: prepared.durationMs },
+          memosRef.current.map((m) => ({ title: m.title, durationMs: m.duration_ms })),
+        )
+      ) {
+        setDupQueue((prev) => [...prev, { prepared }]);
+        return;
+      }
+      await commitImport(prepared);
     } catch {
       // Reading the file itself failed (corrupt / unsupported) — nothing was
       // captured, so there's nothing to retain. Guide the user, calmly.
@@ -703,7 +793,7 @@ const VoiceMemosPage = () => {
       uploadCountRef.current = Math.max(0, uploadCountRef.current - 1);
       if (uploadCountRef.current === 0) setIsUploading(false);
     }
-  }, [songId, currentUserId]);
+  }, [commitImport]);
 
   const handleDelete = useCallback(async (memoId: string) => {
     setMemos((prev) => prev.filter((m) => m.id !== memoId));
@@ -817,11 +907,73 @@ const VoiceMemosPage = () => {
         {showUpload && (
           <div style={{ marginBottom: 20 }}>
             <UploadDropZone onFile={handleFileUpload} disabled={isUploading} isPro={isPro} />
-            {isUploading && (
-              <p style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#B8953A", textAlign: "center", marginTop: 6 }}>
-                Uploading...
-              </p>
-            )}
+            {(() => {
+              // ONE calm line for the whole batch (never a global spinner);
+              // per-file truth lives on the cards below. Returning mid-save
+              // swaps in the keep-open sentence for a breath.
+              const states = [...batch.values()];
+              const line =
+                returnedMidSave && states.some((s) => s === "saving")
+                  ? "Still saving — keep this open a moment."
+                  : summarizeBatch(states);
+              return line ? (
+                <p
+                  role="status"
+                  style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#B8953A", textAlign: "center", marginTop: 6 }}
+                >
+                  {line}
+                </p>
+              ) : null;
+            })()}
+          </div>
+        )}
+
+        {/* The duplicate gate — one calm question at a time, never a modal.
+            Recents offers the just-sent file first; both signals (title +
+            duration) agreed before we asked. */}
+        {dupQueue.length > 0 && (
+          <div
+            role="status"
+            style={{
+              backgroundColor: "rgba(184,149,58,0.10)",
+              border: "1px solid rgba(184,149,58,0.22)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              marginBottom: 12,
+            }}
+          >
+            <p style={{ margin: 0, fontFamily: "var(--font-body)", fontSize: 13, color: "var(--cog-charcoal)" }}>
+              &ldquo;{dupQueue[0].prepared.title}&rdquo; may already be in this song.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const { prepared } = dupQueue[0];
+                  setDupQueue((q) => q.slice(1));
+                  void commitImport(prepared);
+                }}
+                style={{
+                  minHeight: 44, padding: "0 14px", borderRadius: 10,
+                  border: "none", backgroundColor: "var(--cog-gold)", color: "#FFF",
+                  fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Import anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => setDupQueue((q) => q.slice(1))}
+                style={{
+                  minHeight: 44, padding: "0 14px", borderRadius: 10,
+                  border: "1px solid rgba(0,0,0,0.12)", backgroundColor: "transparent",
+                  color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Skip — it&rsquo;s already here
+              </button>
+            </div>
           </div>
         )}
 

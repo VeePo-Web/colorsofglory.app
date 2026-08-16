@@ -242,6 +242,15 @@ function ensureWired(): void {
   if (wired || typeof window === "undefined") return;
   wired = true;
   window.addEventListener("online", () => void processOutbox());
+  // T8 (Lane D): backgrounding iOS Safari cancels in-flight uploads and there
+  // is no Background Sync to rescue them — so returning to the tab is a
+  // first-class retry moment. Breathe ~1s first: an iOS 18-era bug fails
+  // fetches fired immediately on visibility return ("Load failed").
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (readIndex().length === 0) return;
+    setTimeout(() => void processOutbox(), 1000);
+  });
   // Process any jobs left over from a previous session as soon as we load.
   // Gated by autoProcess so tests can drive processing deterministically; in
   // production autoProcess is always true.
