@@ -49,7 +49,11 @@ describe("SongCatalogPage — world-class hero (content-locked, token-precise)",
     expect(screen.queryByRole("button", { name: "Owned" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Invited" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archived" })).toBeNull();
-    expect(screen.getByRole("button", { name: /New song/ })).toBeInTheDocument();
+    // The ONE creation door (C1): a single "New" FAB whose accessible name
+    // tells the whole truth — it makes songs AND albums. The retired doors
+    // ("New song" FAB, browse-surface "New album" tiles) must not return.
+    expect(screen.getByRole("button", { name: "New — start a song or album" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New album" })).toBeNull();
     expect(screen.getByLabelText("Settings")).toBeInTheDocument();
   });
 

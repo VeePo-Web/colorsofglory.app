@@ -20,10 +20,9 @@ describe("libraryCalm — every library surface earns its place", () => {
     expect(showLibraryControls(0)).toBe(false);
   });
 
-  it("the albums shelf shows once albums exist, or once the library is big enough to need filing", () => {
-    expect(showAlbumsShelf(0, 3)).toBe(false); // no premature homework
-    expect(showAlbumsShelf(1, 3)).toBe(true); // real albums always show
-    expect(showAlbumsShelf(0, CONTROLS_THRESHOLD)).toBe(true); // big library invites filing
+  it("the albums shelf shows only once albums exist — creation lives behind the one + New door", () => {
+    expect(showAlbumsShelf(0)).toBe(false); // no premature homework, no empty ad
+    expect(showAlbumsShelf(1)).toBe(true); // real albums always show
   });
 
   it("exactly ONE continue moment: practice outranks last-touched song; neither → none", () => {

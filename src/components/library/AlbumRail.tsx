@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Disc3, Layers, Music, Plus } from "lucide-react";
+import { Disc3, Layers, Music } from "lucide-react";
 import type { SongAlbum } from "@/lib/library/albums";
 
 interface AlbumRailProps {
@@ -10,16 +10,16 @@ interface AlbumRailProps {
   onSelectAll: () => void;
   onSelectUngrouped: () => void;
   onSelectAlbum: (id: string) => void;
-  onNewAlbum: () => void;
 }
 
 /**
  * AlbumRail — the tablet/desktop (lg+) persistent album sidebar, the Apple
- * Music library pattern: "All songs", the "Ungrouped" smart group, every
- * album, and "New album" always in view, so a songwriter moves between the
- * projects they're writing in one tap without a horizontal shelf. Hidden on
- * phones and portrait tablets (the horizontal shelf owns those); this only
- * renders at lg, so the mobile layout is untouched.
+ * Music library pattern: "All songs", the "Ungrouped" smart group, and every
+ * album, so a songwriter moves between the projects they're writing in one
+ * tap without a horizontal shelf. Creation lives behind the library's one
+ * "+ New" door (NewSheet) — the rail only navigates. Hidden on phones and
+ * portrait tablets (the horizontal shelf owns those); this only renders at
+ * lg, so the mobile layout is untouched.
  */
 const AlbumRail = ({
   albums,
@@ -29,7 +29,6 @@ const AlbumRail = ({
   onSelectAll,
   onSelectUngrouped,
   onSelectAlbum,
-  onNewAlbum,
 }: AlbumRailProps) => {
   const rowBase =
     "flex w-full items-center gap-2.5 rounded-xl px-3 text-left transition-colors duration-150";
@@ -118,14 +117,6 @@ const AlbumRail = ({
             count={album.songIds.length}
           />
         ))}
-
-        <Row
-          active={false}
-          accent
-          onClick={onNewAlbum}
-          icon={<Plus size={16} strokeWidth={2.2} />}
-          label="New album"
-        />
       </div>
     </nav>
   );

@@ -28,10 +28,13 @@ export function showLibraryControls(activeTabCount: number): boolean {
   return activeTabCount >= CONTROLS_THRESHOLD;
 }
 
-/** The albums shelf appears once albums EXIST, or once the library is big
- *  enough that filing becomes a real need — never as premature homework. */
-export function showAlbumsShelf(albumCount: number, ownedCount: number): boolean {
-  return albumCount > 0 || ownedCount >= CONTROLS_THRESHOLD;
+/** The albums shelf appears once albums EXIST — never as premature homework
+ *  or an empty creation ad. Making the FIRST album lives behind the library's
+ *  one "+ New" door (NewSheet), the way Drive teaches Folder through its
+ *  + New menu: everyone opens that door for every new song, so the Album row
+ *  is the discovery surface. */
+export function showAlbumsShelf(albumCount: number): boolean {
+  return albumCount > 0;
 }
 
 /**

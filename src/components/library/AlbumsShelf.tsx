@@ -1,4 +1,4 @@
-import { Plus, Pencil, Disc3, Layers } from "lucide-react";
+import { Pencil, Disc3, Layers } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
 import { coverColor } from "@/lib/library/format";
@@ -9,7 +9,6 @@ interface AlbumsShelfProps {
   songs: SongRow[];
   activeAlbumId: string | null;
   onSelect: (id: string | null) => void;
-  onNew: () => void;
   onEdit: (album: SongAlbum) => void;
   /** Hold a card still, then slide — commits the new shelf order. */
   onReorder: (orderedIds: string[]) => void;
@@ -57,13 +56,14 @@ const AlbumCover = ({ colors, empty }: { colors: string[]; empty: boolean }) => 
  * worship EP, a Christmas collection, a season of writing) as a horizontal
  * shelf above the catalog. Tap an album to focus the library
  * on it; tap again to release. Selected album grows a quiet edit affordance.
+ * Making a NEW album lives behind the library's one "+ New" door (NewSheet),
+ * so the shelf only ever shows real albums — never a creation ad.
  */
 const AlbumsShelf = ({
   albums,
   songs,
   activeAlbumId,
   onSelect,
-  onNew,
   onEdit,
   onReorder,
   ungroupedCount = 0,
@@ -185,42 +185,6 @@ const AlbumsShelf = ({
           );
         })}
 
-        {/* New album */}
-        <button
-          onClick={onNew}
-          aria-label="New album"
-          className="w-[88px] shrink-0 text-left transition-transform duration-150 active:scale-95"
-        >
-          <div
-            className="flex h-[88px] w-[88px] items-center justify-center rounded-2xl"
-            style={{
-              border: "1.5px dashed var(--cog-border-gold)",
-              backgroundColor: "var(--cog-cream-light)",
-            }}
-          >
-            <Plus size={20} strokeWidth={2} style={{ color: "var(--cog-gold)" }} />
-          </div>
-          <p
-            className="mt-1.5 text-[0.75rem] font-semibold"
-            style={{ color: "var(--cog-warm-gray)", fontFamily: "var(--font-body)" }}
-          >
-            New album
-          </p>
-        </button>
-
-        {/* First-album purpose hint — teach what an album is for at the moment
-            of discovery: grouping the songs of a project you're writing. */}
-        {albums.length === 0 && (
-          <div className="flex h-[88px] max-w-[190px] shrink-0 items-center">
-            <p
-              className="text-[0.8125rem] leading-snug"
-              style={{ color: "var(--cog-muted)", fontFamily: "var(--font-body)" }}
-            >
-              Group the songs of a project you're writing — a worship EP, a
-              Christmas set.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

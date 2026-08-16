@@ -22,6 +22,7 @@ import SongActionsSheet from "@/components/library/SongActionsSheet";
 import SelectionBar from "@/components/library/SelectionBar";
 import BatchAlbumSheet from "@/components/library/BatchAlbumSheet";
 import NewSongRail from "@/components/library/NewSongRail";
+import NewSheet from "@/components/library/NewSheet";
 import { saveDedicationDurable } from "@/lib/songs/dedication";
 import PeopleFilterRow from "@/components/library/PeopleFilterRow";
 import { useBandPeople } from "@/lib/library/useBandPeople";
@@ -62,7 +63,7 @@ import {
 type Tab = "Owned" | "Invited" | "Archived";
 
 const EMPTY_COPY: Record<Tab, string> = {
-  Owned: "No songs yet. Tap New song to start brainstorming.",
+  Owned: "No songs yet. Tap New to start one.",
   Invited: "No invited songs yet. Songs shared with you will appear here.",
   Archived: "Archived songs stay safe and readable here.",
 };
@@ -93,6 +94,10 @@ const SongCatalogPage = () => {
   const loading = songsQuery.isLoading;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  // The ONE door for making things (C1): the FAB opens this two-row chooser
+  // (Song / Album) — Drive's "+ New". Every browse-surface "New album"
+  // affordance retired into it.
+  const [newSheetOpen, setNewSheetOpen] = useState(false);
 
   // Library organization — view prefs persist so the catalog reopens the way
   // the songwriter left it (Apple Music remembers your Library view).
@@ -525,7 +530,7 @@ const SongCatalogPage = () => {
   // threshold, the search field must NOT unmount while its filter is still
   // applied — a stranded query with no clear affordance is a trap.
   const controlsVisible = showLibraryControls(tabCounts[activeTab]) || query.trim() !== "";
-  const albumsVisible = showAlbumsShelf(albums.length, ownedSongs.length);
+  const albumsVisible = showAlbumsShelf(albums.length);
   // ONE continue moment: a saved practice session outranks the last-touched
   // song; two stacked "pick up where you left off" cards was the loudest
   // clutter on the page. Cheap localStorage read, refreshed per mount.
@@ -629,9 +634,11 @@ const SongCatalogPage = () => {
     setIsCheckingCreate(true);
     try {
       const allowed = await canCreateSong();
+      setNewSheetOpen(false);
       if (allowed) setDialogOpen(true);
       else navigate("/upgrade?source=song_gate_free");
     } catch {
+      setNewSheetOpen(false);
       setDialogOpen(true);
     } finally {
       setIsCheckingCreate(false);
@@ -667,7 +674,7 @@ const SongCatalogPage = () => {
       setNavDirection("right");
       navigate("/");
     },
-    disabled: dialogOpen || albumSheet.open || actionsSong !== null || renameTarget !== null,
+    disabled: dialogOpen || newSheetOpen || albumSheet.open || actionsSong !== null || renameTarget !== null,
   });
   const enterClass = useSpatialEntrance(useLocation().pathname);
 
@@ -811,7 +818,6 @@ const SongCatalogPage = () => {
               setActiveAlbumId(id);
               setReorderingAlbum(false);
             }}
-            onNewAlbum={() => setAlbumSheet({ open: true, album: null })}
           />
         )}
 
@@ -991,7 +997,6 @@ const SongCatalogPage = () => {
                 ungroupedCount={ungroupedCount}
                 onSelect={setActiveAlbumId}
                 onSelectUngrouped={() => setActiveAlbumId(UNGROUPED)}
-                onNew={() => setAlbumSheet({ open: true, album: null })}
                 onEdit={(album) => setAlbumSheet({ open: true, album })}
                 onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
               />
@@ -1092,15 +1097,15 @@ const SongCatalogPage = () => {
         </div>
       </div>
 
-      {/* "+ New song" FAB — gold pill, bottom-right so it clears the BottomNav's
+      {/* "+ New" FAB — the ONE door for making things (a Song or an Album,
+          Drive's "+ New"). Gold pill, bottom-right so it clears the BottomNav's
           raised center capture mic (one action never sits on another). Hidden
           while batch-selecting so the selection bar owns the bottom zone. */}
       {!selecting && (
         <button
-          onClick={handleCreateSong}
-          disabled={isCheckingCreate}
-          aria-busy={isCheckingCreate}
-          className="fixed flex items-center justify-center gap-2 px-5 rounded-full font-semibold text-white bg-[var(--cog-gold)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--cog-gold-light)] active:scale-95 disabled:opacity-80"
+          onClick={() => setNewSheetOpen(true)}
+          aria-label="New — start a song or album"
+          className="fixed flex items-center justify-center gap-2 px-5 rounded-full font-semibold text-white bg-[var(--cog-gold)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--cog-gold-light)] active:scale-95"
           style={{
             bottom: 96,
             right: 16,
@@ -1112,8 +1117,21 @@ const SongCatalogPage = () => {
           }}
         >
           <Plus size={17} strokeWidth={2.5} />
-          {isCheckingCreate ? "Checking..." : "New song"}
+          New
         </button>
+      )}
+
+      {newSheetOpen && (
+        <NewSheet
+          albumName={activeAlbum?.name ?? null}
+          checkingSong={isCheckingCreate}
+          onSong={() => void handleCreateSong()}
+          onAlbum={() => {
+            setNewSheetOpen(false);
+            setAlbumSheet({ open: true, album: null });
+          }}
+          onClose={() => setNewSheetOpen(false)}
+        />
       )}
 
       {selecting && (
