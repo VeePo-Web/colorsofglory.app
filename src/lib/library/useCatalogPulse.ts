@@ -10,6 +10,9 @@ export interface SongPulse {
   line: string | null;
   /** The full sentence ("Sarah added a voice memo") — tooltip/aria. */
   sentence: string | null;
+  /** Raw ISO of the last event — lets an album pick its FRESHEST song's
+   *  line (formatted lines can't be compared; timestamps can). */
+  at: string | null;
 }
 
 /**
@@ -45,6 +48,7 @@ export function useCatalogPulse(enabled: boolean) {
           ? `${actor.split(/\s+/)[0]} · ${relativeDate(row.last_event.created_at)}`
           : null,
       sentence: row.last_event ? activitySentence(row.last_event.kind, actor) : null,
+      at: row.last_event?.created_at ?? null,
     });
   }
 

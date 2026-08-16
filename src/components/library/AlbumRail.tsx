@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Disc3, Layers, Music } from "lucide-react";
 import type { SongAlbum } from "@/lib/library/albums";
+import type { AlbumPulse } from "@/lib/library/albumBadges";
+import { albumColor } from "@/lib/library/albumColors";
 
 interface AlbumRailProps {
   albums: SongAlbum[];
@@ -10,6 +12,8 @@ interface AlbumRailProps {
   onSelectAll: () => void;
   onSelectUngrouped: () => void;
   onSelectAlbum: (id: string) => void;
+  /** What's new inside each album — drives the rail's gold dot. */
+  pulseFor?: (album: SongAlbum) => AlbumPulse | null;
 }
 
 /**
@@ -29,6 +33,7 @@ const AlbumRail = ({
   onSelectAll,
   onSelectUngrouped,
   onSelectAlbum,
+  pulseFor,
 }: AlbumRailProps) => {
   const rowBase =
     "flex w-full items-center gap-2.5 rounded-xl px-3 text-left transition-colors duration-150";
@@ -39,14 +44,18 @@ const AlbumRail = ({
     icon,
     label,
     count,
-    accent = false,
+    iconColor,
+    unseen = 0,
   }: {
     active: boolean;
     onClick: () => void;
     icon: ReactNode;
     label: string;
     count?: number;
-    accent?: boolean;
+    /** The album's own swatch — Drive's colored folder in the sidebar. */
+    iconColor?: string;
+    /** Anything new inside → the quiet gold dot after the count. */
+    unseen?: number;
   }) => (
     <button
       onClick={onClick}
@@ -57,15 +66,15 @@ const AlbumRail = ({
         backgroundColor: active ? "var(--cog-gold-pale)" : "transparent",
       }}
     >
-      <span style={{ color: active || accent ? "var(--cog-gold)" : "var(--cog-warm-gray)" }}>
+      <span style={{ color: active ? "var(--cog-gold)" : iconColor ?? "var(--cog-warm-gray)" }}>
         {icon}
       </span>
       <span
         className="min-w-0 flex-1 truncate text-[0.875rem]"
         style={{
-          color: active ? "var(--cog-gold)" : accent ? "var(--cog-gold)" : "var(--cog-charcoal)",
+          color: active ? "var(--cog-gold)" : "var(--cog-charcoal)",
           fontFamily: "var(--font-body)",
-          fontWeight: active ? 700 : accent ? 600 : 500,
+          fontWeight: active ? 700 : 500,
         }}
       >
         {label}
@@ -74,6 +83,16 @@ const AlbumRail = ({
         <span className="text-[0.75rem]" style={{ color: "var(--cog-muted)" }}>
           {count}
         </span>
+      )}
+      {unseen > 0 && (
+        <>
+          <span
+            aria-hidden="true"
+            className="rounded-full"
+            style={{ width: 7, height: 7, backgroundColor: "var(--cog-gold)", flexShrink: 0 }}
+          />
+          <span className="sr-only">, {unseen} new since you were here</span>
+        </>
       )}
     </button>
   );
@@ -115,6 +134,8 @@ const AlbumRail = ({
             icon={<Disc3 size={16} strokeWidth={1.8} />}
             label={album.name}
             count={album.songIds.length}
+            iconColor={albumColor(album.color)?.swatch}
+            unseen={pulseFor?.(album)?.unseen ?? 0}
           />
         ))}
       </div>

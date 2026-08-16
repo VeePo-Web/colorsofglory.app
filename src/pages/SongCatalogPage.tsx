@@ -28,6 +28,7 @@ import PeopleFilterRow from "@/components/library/PeopleFilterRow";
 import { useBandPeople } from "@/lib/library/useBandPeople";
 import { useCatalogPulse } from "@/lib/library/useCatalogPulse";
 import { songMatchesPeople, shouldShowPeopleRow, peopleFilterLabel } from "@/lib/library/bandIndex";
+import { albumFaces, albumPulse } from "@/lib/library/albumBadges";
 import { useCurrentAccount } from "@/integrations/cog/auth";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
 import { getAudioFileDuration, isAudioFile } from "@/lib/voice/audioFormat";
@@ -387,16 +388,23 @@ const SongCatalogPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songs, activeTab, query, activeAlbumId, bandFilterActive]);
 
-  const handleAlbumSave = (name: string, songIds: string[]) => {
+  const handleAlbumSave = (name: string, songIds: string[], color: string | null) => {
     if (albumSheet.album) {
-      setAlbums(updateAlbum(albumSheet.album.id, { name, songIds }));
+      setAlbums(updateAlbum(albumSheet.album.id, { name, songIds, color }));
     } else {
-      const album = createAlbum(name, songIds);
+      const album = createAlbum(name, songIds, color);
       setAlbums(listAlbums());
       setActiveAlbumId(album.id);
     }
     setAlbumSheet({ open: false, album: null });
   };
+
+  // The Drive cover truths, derived — who's on each album (the union of its
+  // songs' people) and what's new inside (freshest pulse + summed unseen).
+  // Pure functions over data the shelf already holds; zero extra requests.
+  const facesForAlbum = (album: SongAlbum) =>
+    albumFaces(album.songIds, band.membersBySong, band.people);
+  const pulseForAlbum = (album: SongAlbum) => albumPulse(album.songIds, pulseBySong);
 
   const handleAlbumDelete = (id: string) => {
     setAlbums(deleteAlbum(id));
@@ -818,6 +826,7 @@ const SongCatalogPage = () => {
               setActiveAlbumId(id);
               setReorderingAlbum(false);
             }}
+            pulseFor={pulseForAlbum}
           />
         )}
 
@@ -999,6 +1008,8 @@ const SongCatalogPage = () => {
                 onSelectUngrouped={() => setActiveAlbumId(UNGROUPED)}
                 onEdit={(album) => setAlbumSheet({ open: true, album })}
                 onReorder={(orderedIds) => setAlbums(reorderAlbums(orderedIds))}
+                facesFor={facesForAlbum}
+                pulseFor={pulseForAlbum}
               />
             </div>
           )

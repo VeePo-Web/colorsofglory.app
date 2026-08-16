@@ -3,6 +3,7 @@ import { X, Check, Search } from "lucide-react";
 import { useModalFocusTrap } from "@/hooks/useModalFocusTrap";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
+import { ALBUM_COLORS } from "@/lib/library/albumColors";
 import { coverColor } from "@/lib/library/format";
 
 interface AlbumEditSheetProps {
@@ -11,7 +12,7 @@ interface AlbumEditSheetProps {
   songs: SongRow[];
   /** Pre-selected songs when creating (e.g. "New album with this song"). */
   initialSongIds?: string[];
-  onSave: (name: string, songIds: string[]) => void;
+  onSave: (name: string, songIds: string[], color: string | null) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }
@@ -26,6 +27,7 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
   const [selected, setSelected] = useState<Set<string>>(
     new Set(album?.songIds ?? initialSongIds ?? []),
   );
+  const [color, setColor] = useState<string | null>(album?.color ?? null);
   const [query, setQuery] = useState("");
   // Captured once so the list order stays stable — the album's current songs
   // sit at the top on open, and toggling never makes a row leap around.
@@ -136,6 +138,45 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
               fontSize: 16,
             }}
           />
+        </div>
+
+        {/* The tap-optional color beat (Drive's folder color) — never a form
+            field: skip it and the cover keeps its song-mosaic art. Tapping
+            the chosen swatch again lets it go. */}
+        <div
+          role="group"
+          aria-label="Album color — optional"
+          className="flex items-center px-4 pt-2.5"
+        >
+          {ALBUM_COLORS.map((c) => {
+            const on = color === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setColor(on ? null : c.key)}
+                aria-pressed={on}
+                aria-label={`Color: ${c.label}`}
+                className="flex items-center justify-center transition-transform duration-150 active:scale-90"
+                style={{ width: 44, height: 44 }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex items-center justify-center rounded-full transition-shadow duration-150"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    backgroundColor: c.swatch,
+                    boxShadow: on
+                      ? "0 0 0 2px var(--cog-cream-light), 0 0 0 4px var(--cog-charcoal)"
+                      : "inset 0 0 0 1px rgba(28,26,23,0.12)",
+                  }}
+                >
+                  {on && <Check size={14} strokeWidth={3} color="#FFFFFF" />}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex items-baseline justify-between px-6 pb-1.5 pt-4">
@@ -252,7 +293,7 @@ const AlbumEditSheet = ({ album, songs, initialSongIds, onSave, onDelete, onClos
             </button>
           )}
           <button
-            onClick={() => canSave && onSave(name, [...selected])}
+            onClick={() => canSave && onSave(name, [...selected], color)}
             disabled={!canSave}
             className="flex-1 rounded-xl py-3.5 text-[0.9375rem] font-semibold text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-50"
             style={{

@@ -10,6 +10,9 @@ export interface SongAlbum {
   name: string;
   songIds: string[];
   createdAt: string;
+  /** Semantic color key from albumColors.ts (Drive's folder color) — absent
+   *  on albums made before colors existed; the mosaic cover stands for them. */
+  color?: string | null;
 }
 
 const KEY = "cog:library-albums";
@@ -48,12 +51,13 @@ function persist(albums: SongAlbum[]): void {
   }
 }
 
-export function createAlbum(name: string, songIds: string[]): SongAlbum {
+export function createAlbum(name: string, songIds: string[], color?: string | null): SongAlbum {
   const album: SongAlbum = {
     id: makeId(),
     name: name.trim() || "Untitled album",
     songIds,
     createdAt: new Date().toISOString(),
+    color: color ?? null,
   };
   persist([...listAlbums(), album]);
   return album;
@@ -61,7 +65,7 @@ export function createAlbum(name: string, songIds: string[]): SongAlbum {
 
 export function updateAlbum(
   id: string,
-  changes: { name?: string; songIds?: string[] },
+  changes: { name?: string; songIds?: string[]; color?: string | null },
 ): SongAlbum[] {
   const next = listAlbums().map((a) =>
     a.id === id
@@ -69,6 +73,7 @@ export function updateAlbum(
           ...a,
           name: changes.name !== undefined ? changes.name.trim() || a.name : a.name,
           songIds: changes.songIds ?? a.songIds,
+          color: changes.color !== undefined ? changes.color : a.color ?? null,
         }
       : a,
   );

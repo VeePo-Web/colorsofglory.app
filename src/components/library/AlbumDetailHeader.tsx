@@ -1,6 +1,7 @@
 import { ChevronLeft, Pencil, Disc3, Plus, ArrowUpDown, Check, Repeat } from "lucide-react";
 import type { SongCard as SongRow } from "@/integrations/cog/songs";
 import type { SongAlbum } from "@/lib/library/albums";
+import { albumColor } from "@/lib/library/albumColors";
 import { coverColor } from "@/lib/library/format";
 
 interface AlbumDetailHeaderProps {
@@ -43,6 +44,9 @@ const AlbumDetailHeader = ({
   const covers = songs.slice(0, 4).map((s) => coverColor(s.cover_color));
   const ideas = songs.reduce((n, s) => n + s.voice_memo_count, 0);
   const empty = songs.length === 0;
+  // The album's chosen color wears the header cover too — the same "find the
+  // red one" identity inside the album as on the shelf.
+  const chosen = albumColor(album.color);
 
   return (
     <div className="mb-4">
@@ -77,7 +81,14 @@ const AlbumDetailHeader = ({
           className="grid h-[92px] w-[92px] shrink-0 grid-cols-2 grid-rows-2 overflow-hidden rounded-2xl"
           style={{ border: "1px solid var(--cog-border)", boxShadow: "0 8px 22px -10px rgba(28,26,23,0.28)" }}
         >
-          {empty ? (
+          {chosen ? (
+            <div
+              className="col-span-2 row-span-2 flex items-center justify-center"
+              style={{ backgroundColor: chosen.tint }}
+            >
+              <Disc3 size={30} strokeWidth={1.5} style={{ color: chosen.swatch }} />
+            </div>
+          ) : empty ? (
             <div
               className="col-span-2 row-span-2 flex items-center justify-center"
               style={{ backgroundColor: "var(--cog-gold-pale)" }}
