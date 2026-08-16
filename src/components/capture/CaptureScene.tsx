@@ -469,7 +469,9 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
   );
 
   const handleAudioFile = useCallback(
-    async (file: File, fileDurationMs: number) => {
+    // mimeType arrives NORMALIZED from the import core (iOS reports .m4a as
+    // audio/x-m4a or nothing — T4); absent (retry path), fall back gently.
+    async (file: File, fileDurationMs: number, mimeType?: string) => {
       if (saving) return;
       setStatus("transcribing");
       setSaving(true);
@@ -482,7 +484,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
         if (!songId) {
           await saveSeedIdea({
             blob: file,
-            mimeType: file.type || "audio/webm",
+            mimeType: mimeType || file.type || "audio/webm",
             durationMs: fileDurationMs,
             title: defaultCaptureName(),
           });
@@ -512,7 +514,7 @@ const CaptureScene = ({ songId, songTitle }: CaptureSceneProps) => {
           blob: file,
           songId: targetSongId,
           title: targetSongTitle ? `${targetSongTitle} — capture` : "Capture",
-          mimeType: file.type || "audio/webm",
+          mimeType: mimeType || file.type || "audio/webm",
           durationMs: fileDurationMs,
           sectionLabel: "Capture",
           fileName: file.name,

@@ -133,9 +133,15 @@ export function isStorageQuotaError(err: unknown): boolean {
   const code = (err as { code?: unknown } | null)?.code;
   if (typeof code === "string" && code === "QUOTA_EXCEEDED_STORAGE") return true;
   const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
-  const lower = msg.toLowerCase();
+  // The upload-url edge fn's 413 body is the RAW phrase "Storage limit
+  // exceeded" and error normalization preserves it as the code — before this
+  // was matched, a storage-blocked import burned all its attempts and PARKED
+  // instead of waiting for room (Lane D · B4).
+  const codeText = typeof code === "string" ? code : "";
+  const lower = `${msg} ${codeText}`.toLowerCase();
   return (
     msg.includes("QUOTA_EXCEEDED_STORAGE") ||
+    lower.includes("storage limit exceeded") ||
     lower.includes("storage_limit_reached") ||
     lower.includes("storage_quota_exceeded") ||
     lower.includes("out of storage")

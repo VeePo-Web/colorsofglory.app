@@ -1,23 +1,25 @@
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { isAudioFile, ACCEPTED_AUDIO_EXTENSIONS } from "@/lib/voice/audioFormat";
+import { ACCEPT_AUDIO, validateImportFile, type ImportRejectReason } from "@/lib/voice/audioImport";
 
 interface UploadDropZoneProps {
   /** Called once per accepted file — pick five voice memos, five calls. */
   onFile: (file: File) => void;
+  /** @deprecated size is the ONE 50MB server truth now (Lane D · B5). */
   isPro?: boolean;
   disabled?: boolean;
 }
 
 /**
  * UploadDropZone — desktop drag-and-drop target + mobile file picker trigger.
- * Accepts: mp3, m4a, wav, webm, ogg, aac — MULTIPLE at once (THE BAND SHELF:
- * "upload all their voice memos and drafts"). Each accepted file fires onFile
- * individually, so every file rides its own retry-safe outbox job.
- * On mobile: <input type="file" accept="audio/*" multiple> opens iOS Files
- * (incl. Voice Memos) or the Android picker.
+ * MULTIPLE at once (THE BAND SHELF: "upload all their voice memos and
+ * drafts"). Each accepted file fires onFile individually, so every file
+ * rides its own retry-safe outbox job. Validation is the shared import core
+ * (Lane D): extension-first, one 50MB truth, kind per-reason copy — and the
+ * accept string is the iOS law (bare `audio/*` grays out audio in the Files
+ * picker; explicit extensions first un-gray it).
  */
-const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZoneProps) => {
+const UploadDropZone = ({ onFile, disabled = false }: UploadDropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -42,24 +44,33 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
   };
 
   // Accept what's good, name what was skipped — a batch never fails wholesale
-  // because one file was wrong.
+  // because one file was wrong. Counts for the common misses, the exact kind
+  // sentence for the special ones (.qta, iCloud empty, unservable format).
   const validateAndSubmit = (files: File[]) => {
     setError(null);
     if (files.length === 0) return;
 
-    const maxBytes = isPro ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
     let wrongType = 0;
     let tooBig = 0;
+    const special = new Map<ImportRejectReason, string>();
     for (const file of files) {
-      if (!isAudioFile(file)) { wrongType += 1; continue; }
-      if (file.size > maxBytes) { tooBig += 1; continue; }
-      onFile(file);
+      const v = validateImportFile(file);
+      if (v.ok) {
+        onFile(file);
+        continue;
+      }
+      if (v.reason === "not-audio") wrongType += 1;
+      else if (v.reason === "too-big") tooBig += 1;
+      else special.set(v.reason, v.message);
     }
 
     const problems: string[] = [];
     if (wrongType > 0) problems.push(`${wrongType} ${wrongType === 1 ? "file isn't" : "files aren't"} audio (try MP3, M4A, WAV, or WebM)`);
-    if (tooBig > 0) problems.push(`${tooBig} over the ${isPro ? "200MB" : "20MB"} limit`);
-    if (problems.length > 0) setError(`Skipped ${problems.join(" and ")}.`);
+    if (tooBig > 0) problems.push(`${tooBig} over the 50MB limit`);
+    const parts: string[] = [];
+    if (problems.length > 0) parts.push(`Skipped ${problems.join(" and ")}.`);
+    parts.push(...special.values());
+    if (parts.length > 0) setError(parts.join(" "));
   };
 
   return (
@@ -69,7 +80,7 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
         ref={inputRef}
         type="file"
         multiple
-        accept={`audio/*,${ACCEPTED_AUDIO_EXTENSIONS}`}
+        accept={ACCEPT_AUDIO}
         onChange={handleInputChange}
         style={{ display: "none" }}
         aria-hidden="true"
@@ -117,7 +128,7 @@ const UploadDropZone = ({ onFile, isPro = false, disabled = false }: UploadDropZ
             Upload audio files
           </p>
           <p style={{ margin: "2px 0 0", fontFamily: "var(--font-body)", fontSize: 11, color: "#999" }}>
-            MP3, M4A, WAV · pick several at once · iOS Voice Memos via Files app
+            MP3, M4A, WAV · up to 50MB · iOS Voice Memos via the Files app
           </p>
         </div>
       </div>

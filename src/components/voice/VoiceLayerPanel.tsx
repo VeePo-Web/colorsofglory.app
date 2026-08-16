@@ -6,11 +6,8 @@ import type { VoiceMemoRecord } from "@/lib/voice/voiceApi";
 import { listVoiceMemos, deleteMemo } from "@/lib/voice/voiceApi";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
 import { subscribeOutbox } from "@/lib/voice/captureOutbox";
-import {
-  getAudioFileDuration,
-  getBestMimeType,
-  getFileExtension,
-} from "@/lib/voice/audioFormat";
+import { getFileExtension } from "@/lib/voice/audioFormat";
+import { prepareImport } from "@/lib/voice/audioImport";
 
 interface VoiceLayerPanelProps {
   songId: string;
@@ -91,11 +88,19 @@ const VoiceLayerPanel = ({
     setUploading(true);
 
     try {
-      const durationMs = await getAudioFileDuration(file);
-      const mimeType = file.type || getBestMimeType();
+      // The shared import core (Lane D · D1): extension-first validation,
+      // NORMALIZED Content-Type (iOS's audio/x-m4a would 400 at the server;
+      // an empty type must never borrow the recorder's webm mime),
+      // watchdog-guarded duration.
+      const prepared = await prepareImport(file);
+      if (!prepared.ok) {
+        setUploadError(prepared.message);
+        return;
+      }
+      const { mimeType, durationMs } = prepared;
       const ext = getFileExtension(mimeType);
       const memoCount = memos.length + 1;
-      const title = file.name.replace(/\.[^.]+$/, "") || `Voice Memo ${memoCount}`;
+      const title = prepared.title ?? `Voice Memo ${memoCount}`;
       const fileName = `${title.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.${ext}`;
 
       // Canonical save (cache-first + auto-retry + real peaks): the import is

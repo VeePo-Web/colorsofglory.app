@@ -17,11 +17,8 @@ import {
   deleteMemo,
   type VoiceMemoRecord,
 } from "@/lib/voice/voiceApi";
-import {
-  formatDuration,
-  getAudioFileDuration,
-  getBestMimeType,
-} from "@/lib/voice/audioFormat";
+import { formatDuration } from "@/lib/voice/audioFormat";
+import { prepareImport } from "@/lib/voice/audioImport";
 import { audioCache } from "@/lib/voice/audioCache";
 import { saveMemoDurable } from "@/lib/voice/saveMemo";
 import {
@@ -674,9 +671,15 @@ const VoiceMemosPage = () => {
     setIsUploading(true);
 
     try {
-      const durationMs = await getAudioFileDuration(file);
-      const mimeType = file.type || getBestMimeType();
-      const title = file.name.replace(/\.[^.]+$/, "") || defaultCaptureName();
+      // The shared import core (Lane D · D1): extension-first validation,
+      // NORMALIZED Content-Type (iOS reports .m4a as audio/x-m4a — the raw
+      // type 400s at the server; and an empty type must never borrow the
+      // recorder's webm mime), watchdog-guarded duration.
+      const prepared = await prepareImport(file);
+      if (!prepared.ok) {
+        setUploadError(prepared.message);
+        return;
+      }
 
       // Imports ride the same canonical path as recorded takes: cache-first,
       // auto-retry, real peaks. Downstream, an imported memo is
@@ -684,9 +687,9 @@ const VoiceMemosPage = () => {
       const { optimistic } = await saveMemoDurable({
         blob: file,
         songId,
-        mimeType,
-        durationMs,
-        title,
+        mimeType: prepared.mimeType,
+        durationMs: prepared.durationMs,
+        title: prepared.title ?? defaultCaptureName(),
         sectionLabel: "Raw idea",
         fileName: file.name,
         createdBy: currentUserId ?? "You",

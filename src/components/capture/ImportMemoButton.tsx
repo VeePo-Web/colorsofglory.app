@@ -1,33 +1,22 @@
 import { useRef } from "react";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
-
-const MAX_BYTES = 50 * 1024 * 1024; // mirror intake-voice-memo cap
+import { ACCEPT_AUDIO, prepareImport } from "@/lib/voice/audioImport";
 
 interface ImportMemoButtonProps {
   disabled?: boolean;
-  onPicked: (file: File, durationMs: number) => void | Promise<void>;
+  /** mimeType is the NORMALIZED Content-Type (iOS lies about m4a — T4). */
+  onPicked: (file: File, durationMs: number, mimeType: string) => void | Promise<void>;
 }
 
-async function measureDurationMs(file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    audio.preload = "metadata";
-    const done = (ms: number) => {
-      URL.revokeObjectURL(url);
-      resolve(ms);
-    };
-    audio.onloadedmetadata = () => {
-      const d = audio.duration;
-      done(isFinite(d) && d > 0 ? Math.round(d * 1000) : 0);
-    };
-    audio.onerror = () => done(0);
-    setTimeout(() => done(0), 1500);
-    audio.src = url;
-  });
-}
-
+/**
+ * The capture lane's import door (Lane D · THE HOMECOMING). One tap → the
+ * native picker. The accept string is THE iOS law (T1): bare `audio/*` is
+ * broken on iOS Safari — audio files gray out in the Files browser — so the
+ * shared ACCEPT_AUDIO leads with explicit extensions. Validation, mime
+ * normalization, and the guarded duration read all live in the shared core,
+ * so this door behaves identically to every other door.
+ */
 const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,17 +25,13 @@ const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
     e.target.value = "";
     if (!file) return;
 
-    if (!/^audio\//.test(file.type) && !/\.(m4a|mp3|wav|aac|amr|3gp|webm|ogg|flac)$/i.test(file.name)) {
-      toast.error("Only audio files can be imported.");
+    const prepared = await prepareImport(file);
+    if (!prepared.ok) {
+      // Cause + fix in one calm sentence — never a technical rejection.
+      toast(prepared.message);
       return;
     }
-    if (file.size > MAX_BYTES) {
-      toast.error("That file is bigger than 50MB.");
-      return;
-    }
-
-    const durationMs = await measureDurationMs(file);
-    await onPicked(file, durationMs);
+    await onPicked(prepared.file, prepared.durationMs, prepared.mimeType);
   };
 
   return (
@@ -54,7 +39,7 @@ const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
       <input
         ref={inputRef}
         type="file"
-        accept="audio/*"
+        accept={ACCEPT_AUDIO}
         onChange={handlePick}
         style={{ display: "none" }}
       />
