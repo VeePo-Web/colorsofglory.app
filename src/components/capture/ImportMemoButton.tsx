@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ACCEPT_AUDIO, prepareImport } from "@/lib/voice/audioImport";
+import ImportCoachSheet, { shouldCoachImport } from "@/components/voice/ImportCoachSheet";
 
 interface ImportMemoButtonProps {
   disabled?: boolean;
@@ -19,6 +20,15 @@ interface ImportMemoButtonProps {
  */
 const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  // The once-per-device coach (Moment 2): the FIRST iOS tap teaches the
+  // Voice Memos → Files ritual — one gold tap through to the picker, then
+  // never again. Android/desktop go straight in.
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  const openDoor = () => {
+    if (shouldCoachImport()) setCoachOpen(true);
+    else inputRef.current?.click();
+  };
 
   const handlePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,7 +56,7 @@ const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
       <button
         type="button"
         disabled={disabled}
-        onClick={() => inputRef.current?.click()}
+        onClick={openDoor}
         className="flex items-center justify-center transition-transform active:scale-95"
         style={{
           gap: 8,
@@ -65,6 +75,15 @@ const ImportMemoButton = ({ disabled, onPicked }: ImportMemoButtonProps) => {
         <Upload size={14} />
         Import a voice memo
       </button>
+      {coachOpen && (
+        <ImportCoachSheet
+          onChooseFile={() => {
+            setCoachOpen(false);
+            inputRef.current?.click();
+          }}
+          onClose={() => setCoachOpen(false)}
+        />
+      )}
     </>
   );
 };

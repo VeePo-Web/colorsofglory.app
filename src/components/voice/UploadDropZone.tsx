@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { ACCEPT_AUDIO, validateImportFile, type ImportRejectReason } from "@/lib/voice/audioImport";
+import ImportCoachSheet, { isIOSDevice, shouldCoachImport } from "./ImportCoachSheet";
 
 interface UploadDropZoneProps {
   /** Called once per accepted file — pick five voice memos, five calls. */
@@ -22,7 +23,17 @@ interface UploadDropZoneProps {
 const UploadDropZone = ({ onFile, disabled = false }: UploadDropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The once-per-device coach (Moment 2): the first iOS TAP teaches the
+  // Voice Memos → Files ritual; drags never coach (a dragger knows the way);
+  // the quiet link below re-opens it forever.
+  const [coachOpen, setCoachOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const openDoor = () => {
+    if (disabled) return;
+    if (shouldCoachImport()) setCoachOpen(true);
+    else inputRef.current?.click();
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -91,11 +102,11 @@ const UploadDropZone = ({ onFile, disabled = false }: UploadDropZoneProps) => {
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-label="Upload audio files — tap to browse or drag files here"
-        onClick={() => !disabled && inputRef.current?.click()}
+        onClick={openDoor}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !disabled) inputRef.current?.click(); }}
+        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !disabled) openDoor(); }}
         style={{
           padding: "14px 16px",
           borderRadius: 12,
@@ -146,6 +157,39 @@ const UploadDropZone = ({ onFile, disabled = false }: UploadDropZoneProps) => {
         >
           {error}
         </p>
+      )}
+
+      {/* The forever door back to the coach — iOS only (the ritual only
+          exists there), quiet, 44px reach via padding. */}
+      {!disabled && isIOSDevice() && (
+        <button
+          type="button"
+          onClick={() => setCoachOpen(true)}
+          style={{
+            marginTop: 2,
+            padding: "10px 4px",
+            background: "transparent",
+            border: "none",
+            fontFamily: "var(--font-body)",
+            fontSize: 12,
+            color: "var(--cog-warm-gray)",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+            cursor: "pointer",
+          }}
+        >
+          From Voice Memos? Here&rsquo;s how
+        </button>
+      )}
+
+      {coachOpen && (
+        <ImportCoachSheet
+          onChooseFile={() => {
+            setCoachOpen(false);
+            inputRef.current?.click();
+          }}
+          onClose={() => setCoachOpen(false)}
+        />
       )}
     </div>
   );
