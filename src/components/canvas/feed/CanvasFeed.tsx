@@ -51,6 +51,10 @@ export interface CanvasFeedProps {
    *  area, the creation dock yields — enforced here, where users actually are. */
   dockHidden?: boolean;
   onPlaySong: (ids: string[]) => void;
+  /** The Practice Room door: "Play the song" lifts into the sing mode —
+   *  the whole song, every voice, karaoke words. Row taps keep the quick
+   *  in-room listen (onPlaySong). */
+  onPracticeSong?: () => void;
   onPlayPause: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -74,6 +78,7 @@ const CanvasFeed = memo(function CanvasFeed({
   arrivalIds,
   dockHidden = false,
   onPlaySong,
+  onPracticeSong,
   onPlayPause,
   onNext,
   onPrev,
@@ -426,6 +431,7 @@ const CanvasFeed = memo(function CanvasFeed({
               finished={listenFinished}
               paused={listenPaused}
               onPlaySong={onPlaySong}
+              onPracticeSong={onPracticeSong}
               onPlayPause={onPlayPause}
               onNext={onNext}
               onPrev={onPrev}

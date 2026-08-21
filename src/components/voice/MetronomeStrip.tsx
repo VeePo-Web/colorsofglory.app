@@ -35,7 +35,55 @@ const MetronomeStrip = ({ bpm, beatsPerBar = 4 }: MetronomeStripProps) => {
     vibrate(beat.beatInBar === 0 ? 24 : 12);
   }, [beat, running, canVibrate, vibrate]);
 
-  if (!bpm || !supported) return null;
+  // "I'm on earbuds" — the explicit confirmation that unlocks audible
+  // monitoring while recording. Never assumed; honest when off. Built once,
+  // rendered on BOTH paths: it must outlive the click (G11b) — a layer's
+  // guide track plays only on a confirmed headphone route, tempo or not.
+  const earbudsSwitch = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={headphonesConfirmed}
+      aria-label={
+        headphonesConfirmed
+          ? "On earbuds — sound can play while recording"
+          : "I'm on earbuds — let sound play while recording"
+      }
+      onClick={() => setHeadphones(!headphonesConfirmed)}
+      className="transition-transform active:scale-95"
+      style={{
+        minWidth: 44,
+        minHeight: 44,
+        padding: "0 12px",
+        borderRadius: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        background: headphonesConfirmed ? "var(--cog-gold-pale)" : "transparent",
+        border: "1px solid var(--cog-border-gold)",
+        color: headphonesConfirmed ? "var(--cog-charcoal)" : "var(--cog-warm-gray)",
+        fontFamily: "var(--font-body)",
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      <Headphones size={14} strokeWidth={2} />
+      {headphonesConfirmed ? "Earbuds" : "Earbuds?"}
+    </button>
+  );
+
+  if (!bpm || !supported) {
+    // No tempo (or no Web Audio): the click can't run, but the earbuds
+    // confirmation still stands — it used to die with the strip, leaving a
+    // layer take no way to unlock its guide mid-session.
+    return (
+      <div style={{ display: "flex", justifyContent: "center", width: "100%", marginTop: 14 }}>
+        {earbudsSwitch}
+      </div>
+    );
+  }
 
   const silent = clickMode === "silent";
   const status = !running
@@ -107,40 +155,7 @@ const MetronomeStrip = ({ bpm, beatsPerBar = 4 }: MetronomeStripProps) => {
           {`Click · ${bpm}`}
         </button>
 
-        {/* "I'm on earbuds" — the explicit confirmation that unlocks audible
-            monitoring while recording. Never assumed; honest when off. */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={headphonesConfirmed}
-          aria-label={
-            headphonesConfirmed
-              ? "On earbuds — click can sound while recording"
-              : "I'm on earbuds — let the click sound while recording"
-          }
-          onClick={() => setHeadphones(!headphonesConfirmed)}
-          className="transition-transform active:scale-95"
-          style={{
-            minWidth: 44,
-            minHeight: 44,
-            padding: "0 12px",
-            borderRadius: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            background: headphonesConfirmed ? "var(--cog-gold-pale)" : "transparent",
-            border: "1px solid var(--cog-border-gold)",
-            color: headphonesConfirmed ? "var(--cog-charcoal)" : "var(--cog-warm-gray)",
-            fontFamily: "var(--font-body)",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          <Headphones size={14} strokeWidth={2} />
-          {headphonesConfirmed ? "Earbuds" : "Earbuds?"}
-        </button>
+        {earbudsSwitch}
       </div>
     </div>
   );

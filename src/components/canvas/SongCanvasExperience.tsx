@@ -29,7 +29,6 @@ import {
   CopyPlus,
   ListMusic,
 } from "lucide-react";
-import { loadPracticeSections } from "@/lib/practice/practiceApi";
 import { setNavDirection } from "@/lib/nav/navDirection";
 import SongTabBar from "@/components/cog/SongTabBar";
 import CreativeActionDock from "@/components/cog/CreativeActionDock";
@@ -69,6 +68,7 @@ import {
 } from "@/lib/voice/pendingUploads";
 import { deleteMemo, getSignedUrl } from "@/lib/voice/voiceApi";
 import { saveFailedCapture, clearFailedCapture, listFailedCaptures } from "@/lib/voice/failedCaptureStore";
+import { LayerFlowScrim } from "@/components/canvas/LayerFlowScrim";
 import { isStorageQuotaError } from "@/lib/voice/captureOutbox";
 import { useSubscription } from "@/hooks/useSubscription";
 import { audioCache } from "@/lib/voice/audioCache";
@@ -354,6 +354,23 @@ const SongCanvasExperience = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // THE OPEN DOOR — the Practice Room's end moment ("Someone should hear
+  // this") lands here as ?share=1: captured once, consumed from the URL
+  // exactly like the arrivals above, then the share sheet opens. The song
+  // was just heard whole — the one moment the invite is most true (the
+  // funnel's next loop, opened at the peak).
+  const [isShareArrival] = useState(() => searchParams.get("share") === "1");
+  useEffect(() => {
+    if (!isShareArrival) return;
+    const next = new URLSearchParams(window.location.search);
+    if (next.has("share")) {
+      next.delete("share");
+      setSearchParams(next, { replace: true });
+    }
+    if (!isViewer) setShowShareSheet(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // First-run tour refs — the canvas hooks live below, after showFirstRun is
   // known, so they can wait for the empty-room first-action guide to finish.
   const featuresTourRef = useRef<HTMLElement>(null);
@@ -598,24 +615,17 @@ const SongCanvasExperience = () => {
   // request turns the page, even two in a row.
   const [finalPageRequest, setFinalPageRequest] = useState(0);
 
-  // ── Practice launcher state ──────────────────────────────────────────────────
-  const [isPracticeLaunching, setIsPracticeLaunching] = useState(false);
-
-  const handleLaunchPractice = useCallback(async () => {
-    if (isPracticeLaunching) return;
-    setIsPracticeLaunching(true);
-    try {
-      const sections = await loadPracticeSections(songId);
-      // One grammar: practice/Flow always RISES (the same depth motion as
-      // the Flow handle's lift — docs/FLOW-ACCESS-CONTRACT.md).
-      setNavDirection("up");
-      navigate(`/songs/${songId}/practice`, {
-        state: { songTitle, sections },
-      });
-    } catch {
-      setIsPracticeLaunching(false);
-    }
-  }, [isPracticeLaunching, songId, songTitle, navigate]);
+  // ── The Practice Room door ─────────────────────────────────────────────────
+  // "Play the song" lifts into THE PRACTICE ROOM ({ sing: true }): the whole
+  // song in one continuous flow, every voice (base + layers) on one clock,
+  // karaoke words, the Parts mixer (docs/prompts/THE-HALLWAY-PRACTICE-ROOM-
+  // VISION.md). Navigate immediately — the room self-loads the full bundle,
+  // so the writer watches the room open, never a spinner on the canvas.
+  const handleLaunchPractice = useCallback(() => {
+    // One grammar: practice always RISES (docs/FLOW-ACCESS-CONTRACT.md).
+    setNavDirection("up");
+    navigate(`/songs/${songId}/practice`, { state: { sing: true, songTitle } });
+  }, [songId, songTitle, navigate]);
 
   const showSavedMoment = useCallback((title: string, destination: string, detail?: string) => {
     setSaveMoment({
@@ -688,6 +698,9 @@ const SongCanvasExperience = () => {
   const recordingParentIdRef = useRef<string | null>(null);
   // The base memo whose stack sheet is currently open (null = closed).
   const [stackBaseId, setStackBaseId] = useState<string | null>(null);
+  // G10b — the layer that just landed (self-expiring): its stack row glows
+  // once and the sheet announces it for screen readers.
+  const [arrivedLayerId, setArrivedLayerId] = useState<string | null>(null);
   // The tries player (F15) opened from the Memo Sheet's Section A.
   const [takesFor, setTakesFor] = useState<{ id: string; title: string; peaks: number[] | null } | null>(null);
 
@@ -939,11 +952,16 @@ const SongCanvasExperience = () => {
   const [pathExpanded, setPathExpanded] = useState(false);
   const prevQueueLen = useRef(listenPath.queue.length);
   useEffect(() => {
-    // Auto-expand when the songwriter grows the queue by hand; a restored
-    // saved path stays a quiet pill.
-    if (listenPath.queue.length > prevQueueLen.current) setPathExpanded(true);
+    // Auto-expand when the songwriter grows the queue by hand ON THE MAP —
+    // the expanded transport (ListenPathBar) is map-idiom and only renders
+    // there. On the feed, expanding this flag hid the creation dock with
+    // nothing in its place (the only collapse control is map-gated), so a
+    // single "Play the song" cost Record memo for the rest of the session.
+    if (canvasView === "map" && listenPath.queue.length > prevQueueLen.current) {
+      setPathExpanded(true);
+    }
     prevQueueLen.current = listenPath.queue.length;
-  }, [listenPath.queue.length]);
+  }, [listenPath.queue.length, canvasView]);
   useEffect(() => {
     if (arrangement.arranging) {
       setPathExpanded(false);
@@ -1539,6 +1557,15 @@ const SongCanvasExperience = () => {
     if (parentMemoId) setStackBaseId(parentMemoId);
 
     const addVoiceCard = (id: string, processing: boolean) => {
+      // G10b — the new layer greets itself: the reopened stack gives this
+      // row a one-time warm glow and speaks "Your layer is in the stack."
+      if (parentMemoId) {
+        setArrivedLayerId(id);
+        window.setTimeout(
+          () => setArrivedLayerId((cur) => (cur === id ? null : cur)),
+          5000,
+        );
+      }
       setCards((prev) => {
         const ideaIndex = prev.filter((card) => card.tree === "ideas" && !card.parentMemoId).length;
         const now = new Date().toISOString();
@@ -1568,15 +1595,20 @@ const SongCanvasExperience = () => {
     // recovery copy where the failed-capture shelf can find it and tell the
     // truth: a "Saved" toast over nothing was the worst lie this surface told.
     const persistFailed = async () => {
-      await saveFailedCapture(rec.blob, {
+      // saveFailedCapture now CONFIRMS its durable write (it throws on a
+      // refused put) — so the toast can tell the exact truth: either a backup
+      // copy really is parked on this device, or nothing is.
+      const backupKept = await saveFailedCapture(rec.blob, {
         songId,
         title: name || "Voice memo",
         durationMs: rec.durationMs,
         parentMemoId,
         origin: "canvas",
-      }).catch(() => {});
+      }).then(() => true, () => false);
       toast.error("This device wouldn't keep the take", {
-        description: "Storage looks full or blocked. Free a little space and record again — nothing was sent anywhere.",
+        description: backupKept
+          ? "Storage refused the save, but a backup copy is parked on this device — free a little space and it will come back."
+          : "Storage looks full or blocked. Free a little space and record again — nothing was sent anywhere.",
       });
     };
 
@@ -1830,12 +1862,15 @@ const SongCanvasExperience = () => {
   );
 
   // The Feed never sits over a live map workflow: entering it exits weave /
-  // arrange, and any merge selection (its bar is map-idiom) clears on sight.
+  // arrange, any merge selection (its bar is map-idiom) clears on sight, and
+  // the listen transport collapses back to its quiet pill (its expanded bar
+  // is map-only — an expanded flag with no surface would still hide the dock).
   useEffect(() => {
     if (canvasView !== "feed") return;
     if (weave.active) weave.exit();
     if (arrangement.arranging) arrangement.cancel();
     if (merge.selection.length > 0) merge.clearSelection();
+    setPathExpanded(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasView, weave.active, arrangement.arranging, merge.selection.length]);
 
@@ -2811,6 +2846,7 @@ const SongCanvasExperience = () => {
     mergeSelectionCount: merge.selection.length,
     listenPathExpanded: pathExpanded,
     listenPathQueueCount: listenPath.queue.length,
+    view: canvasView,
   });
 
   return (
@@ -2855,11 +2891,15 @@ const SongCanvasExperience = () => {
             <button
               type="button"
               onClick={() => setShowReviewQueue(true)}
+              // Pale tone, dark text (the segmented-control register) — a
+              // solid gold fill here stood as a SECOND gold primary against
+              // the dock's Record memo on every screen with pending review.
+              // One bold thing: gold fill belongs to the one act (LAW 2).
               className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-all duration-150 hover:opacity-90 active:scale-[0.97]"
               style={{
-                backgroundColor: "var(--cog-gold)",
-                color: "#FFFFFF",
-                boxShadow: "0 1px 6px rgba(184,149,58,0.30)",
+                backgroundColor: "var(--cog-gold-pale)",
+                color: "var(--cog-charcoal)",
+                border: "1px solid var(--cog-border-gold)",
                 fontFamily: "var(--font-body)",
               }}
               aria-label={`Needs your review: ${reviewQueueItems.length} item${reviewQueueItems.length === 1 ? "" : "s"} from your co-writers`}
@@ -2983,6 +3023,7 @@ const SongCanvasExperience = () => {
             arrivalIds={arrivalIds}
             dockHidden={bottomWorkflowActive}
             onPlaySong={(ids) => listenPath.playAll(ids)}
+            onPracticeSong={handleLaunchPractice}
             onPlayPause={listenPath.playPause}
             onNext={listenPath.next}
             onPrev={listenPath.prev}
@@ -3242,6 +3283,32 @@ const SongCanvasExperience = () => {
         onDone={() => setSaveMoment(null)}
       />
 
+      {/* G7 — THE UNBROKEN DIM: one persistent scrim under the layer flow's
+          three sheet hand-offs (stack→record→review→stack). Each sheet used
+          to mount its own scrim, flashing full-brightness canvas between
+          them. The sheets below all render scrim={false}; this owns the dim.
+          Clicks route to what the CURRENT top sheet allows: close the stack,
+          cancel from a denied-mic panel — and NOTHING during a live take or
+          an unsaved review (a stray tap must never cost an idea). */}
+      <LayerFlowScrim
+        active={
+          recordingFlow !== "idle" ||
+          recorderState.phase === "requesting-permission" ||
+          recorderState.phase === "permission-denied" ||
+          (stackBaseId != null &&
+            cards.some((c) => memoKey(c.id) === memoKey(stackBaseId)))
+        }
+        onDismiss={
+          recorderState.phase === "permission-denied"
+            ? handleCancelRecording
+            : recordingFlow === "idle" &&
+                recorderState.phase !== "requesting-permission" &&
+                stackBaseId != null
+              ? () => setStackBaseId(null)
+              : undefined
+        }
+      />
+
       {/* Recording sheet — opens on the TAP (requesting-permission counts):
           the 400ms of dead feed between "Sing over this" and the mic opening
           read as a broken button (P1-1). */}
@@ -3249,6 +3316,7 @@ const SongCanvasExperience = () => {
         recorderState.phase === "requesting-permission" ||
         recorderState.phase === "permission-denied") && (
         <RecordingSheet
+          scrim={false}
           phase={recorderState.phase}
           durationMs={recorderState.durationMs}
           analyserNode={recorderState.analyserNode}
@@ -3270,6 +3338,7 @@ const SongCanvasExperience = () => {
       {/* Review sheet */}
       {recordingFlow === "reviewing" && pendingRecording && (
         <VoiceReviewSheet
+          scrim={false}
           recording={pendingRecording}
           // A layer inherits its base's name (G8) — the writer shouldn't
           // invent a title for "the harmony on X"; that's what it IS.
@@ -3309,6 +3378,8 @@ const SongCanvasExperience = () => {
         );
         return (
           <MemoSheet
+            scrim={false}
+            arrivedLayerId={arrivedLayerId}
             base={toStackView(base)}
             layers={stackLayers.map(toStackView)}
             songId={isDemoRoom ? undefined : songId}

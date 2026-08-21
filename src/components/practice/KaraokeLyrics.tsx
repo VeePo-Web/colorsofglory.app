@@ -12,6 +12,12 @@ interface KaraokeLyricsProps {
   show: boolean;
   /** In Drive Mode: larger, higher contrast */
   driveMode?: boolean;
+  /**
+   * THE PRACTICE ROOM register (pass 7): the words OWN the screen — fluid
+   * sing-along type you can read from a music stand or a lap, the Apple
+   * Music Sing scale. Additive: absent = every existing surface unchanged.
+   */
+  sing?: boolean;
 }
 
 function useSyncedLine(
@@ -51,6 +57,7 @@ export function KaraokeLyrics({
   currentPositionMs,
   show,
   driveMode = false,
+  sing = false,
 }: KaraokeLyricsProps) {
   const { current, next } = useSyncedLine(transcriptLines, currentPositionMs);
 
@@ -82,12 +89,16 @@ export function KaraokeLyrics({
     return (
       <div
         className="px-6 overflow-y-auto"
-        style={{ maxHeight: driveMode ? 160 : 120 }}
+        style={{ maxHeight: sing ? 300 : driveMode ? 160 : 120 }}
       >
         <p
           style={{
             fontFamily: "var(--font-display)",
-            fontSize: driveMode ? "1.125rem" : "0.9375rem",
+            fontSize: sing
+              ? "clamp(1.125rem, 5vw, 1.5rem)"
+              : driveMode
+                ? "1.125rem"
+                : "0.9375rem",
             lineHeight: 1.7,
             color: "var(--cog-charcoal)",
             whiteSpace: "pre-wrap",
@@ -101,13 +112,21 @@ export function KaraokeLyrics({
   }
 
   // Karaoke mode — one line highlighted, next line dimmed below
-  const activeFontSize = driveMode ? "1.5rem" : "1.125rem";
-  const nextFontSize   = driveMode ? "1rem"   : "0.875rem";
+  const activeFontSize = sing
+    ? "clamp(1.5rem, 7.2vw, 2.25rem)"
+    : driveMode
+      ? "1.5rem"
+      : "1.125rem";
+  const nextFontSize = sing
+    ? "clamp(1rem, 4.4vw, 1.375rem)"
+    : driveMode
+      ? "1rem"
+      : "0.875rem";
 
   return (
     <div
       className="flex flex-col items-center justify-center px-6 text-center"
-      style={{ minHeight: driveMode ? 120 : 88, gap: 8 }}
+      style={{ minHeight: sing ? 168 : driveMode ? 120 : 88, gap: sing ? 14 : 8 }}
     >
       {/* Current line */}
       <p

@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   PracticeSection,
   PracticeTake,
+  PracticeLayer,
   PracticeChordLine,
   TranscriptLine,
 } from "@/lib/audio/practiceTypes";
@@ -10,6 +11,7 @@ import { masteryFromLoops } from "@/lib/audio/practiceTypes";
 import { getSongSheet } from "@/integrations/cog/sheet";
 import type { SheetDoc } from "@/lib/chords/sheetState";
 import { chordToLetters, chordToNumbers } from "@/lib/chords/nashville";
+import { groupIntoStacks } from "@/lib/voice/stackModel";
 
 interface SectionRow {
   id: string;
@@ -17,14 +19,23 @@ interface SectionRow {
   position: number | null;
 }
 
-interface MemoRow {
+/** A voice_memos row as practice reads it — exported for the pure grouping tests. */
+export interface PracticeMemoRow {
   id: string;
   section_id: string | null;
   duration_ms: number | null;
   title: string | null;
+  created_at?: string | null;
+  /** Stack link: the base this memo was sung over. null/absent ⇒ a base. */
+  parent_memo_id?: string | null;
+  /** Room-shared mix persisted by the stack sheet. */
+  layer_gain?: number | null;
+  layer_muted?: boolean | null;
+  layer_offset_ms?: number | null;
+  author_user_id?: string | null;
 }
 
-interface TranscriptRow {
+export interface PracticeTranscriptRow {
   memo_id: string;
   text: string;
   segments: unknown;
@@ -189,61 +200,42 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
 
   if (sectionsErr) throw sectionsErr;
 
-  // 2. Load all active voice memos for this song
+  // 2. Load all active voice memos for this song — WITH the stack columns.
+  // parent_memo_id is the seam that makes practice hear the whole song: a
+  // base + 3 harmonies used to arrive here as 4 swipeable "takes" because
+  // this select was deaf to layers, so every practice surface played the
+  // family one voice at a time.
   const { data: memosData, error: memosErr } = await supabase
     .from("voice_memos")
-    .select("id, section_id, duration_ms, title")
+    .select(
+      "id, section_id, duration_ms, title, created_at, parent_memo_id, layer_gain, layer_muted, layer_offset_ms, author_user_id",
+    )
     .eq("song_id", songId)
     .in("status", ["finalized", "transcribed", "ready"])
     .order("created_at", { ascending: true });
 
   if (memosErr) throw memosErr;
 
-  const memos = (memosData ?? []) as MemoRow[];
+  const memos = (memosData ?? []) as PracticeMemoRow[];
   const sections = (sectionsData ?? []) as SectionRow[];
 
   // Load all transcripts in one query for all memo IDs
   const memoIds = memos.map(m => m.id);
-  let transcripts: TranscriptRow[] = [];
+  let transcripts: PracticeTranscriptRow[] = [];
   if (memoIds.length > 0) {
     const { data: txData } = await supabase
       .from("voice_memo_transcripts")
       .select("memo_id, text, segments")
       .in("memo_id", memoIds)
       .eq("status", "ready");
-    transcripts = (txData ?? []) as TranscriptRow[];
+    transcripts = (txData ?? []) as PracticeTranscriptRow[];
   }
 
-  const transcriptByMemoId = new Map<string, TranscriptRow>(
+  const transcriptByMemoId = new Map<string, PracticeTranscriptRow>(
     transcripts.map(t => [t.memo_id, t]),
   );
 
-  // Group ALL memos per section (oldest first — the query orders by
-  // created_at): every playable memo on a section is one of its takes (F15).
-  const memosBySection = new Map<string | null, MemoRow[]>();
-  for (const memo of memos) {
-    const key = memo.section_id ?? null;
-    const arr = memosBySection.get(key) ?? [];
-    arr.push(memo);
-    memosBySection.set(key, arr);
-  }
-
-  const takeFromMemo = (memo: MemoRow, index: number): PracticeTake => {
-    const transcript = transcriptByMemoId.get(memo.id);
-    const transcriptLines = transcript
-      ? parseWordTimestamps(transcript.segments) ??
-        (transcript.text
-          ? [{ text: transcript.text, startMs: 0, endMs: memo.duration_ms ?? 0 }]
-          : null)
-      : null;
-    return {
-      memoId: memo.id,
-      label: memo.title?.trim() || `Take ${index + 1}`,
-      durationMs: memo.duration_ms ?? 0,
-      lyrics: transcript?.text || null,
-      transcriptLines,
-    };
-  };
+  const takesBySection = buildSectionTakes(memos, transcriptByMemoId);
 
   // Load persisted mastery data
   const history = loadHistory(songId);
@@ -255,10 +247,9 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
 
   // Sections with known section_id
   for (const section of sections) {
-    const sectionMemos = memosBySection.get(section.id);
-    if (!sectionMemos || sectionMemos.length === 0) continue; // no voice memo → not practicable
+    const takes = takesBySection.get(section.id);
+    if (!takes || takes.length === 0) continue; // no voice memo → not practicable
 
-    const takes = sectionMemos.map(takeFromMemo);
     const active = takes[0];
 
     const sectionHistory = history.sections[section.id];
@@ -281,16 +272,15 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
     });
   }
 
-  // Memos not attached to any section (section_id = null) — append at end,
-  // all of them together as one "Voice Memo" section with N takes.
-  const nullMemos = memosBySection.get(null) ?? [];
-  if (nullMemos.length > 0 && !result.some(r => r.memoId === nullMemos[0].id)) {
-    const takes = nullMemos.map(takeFromMemo);
-    const active = takes[0];
+  // Stacks whose BASE is not attached to any section — append at end, all of
+  // them together as one "Voice Memo" section with N takes.
+  const nullTakes = takesBySection.get(null) ?? [];
+  if (nullTakes.length > 0 && !result.some(r => r.memoId === nullTakes[0].memoId)) {
+    const active = nullTakes[0];
 
     result.push({
-      id: `unassigned-${nullMemos[0].id}`,
-      label: nullMemos[0].title ?? "Voice Memo",
+      id: `unassigned-${nullTakes[0].memoId}`,
+      label: active.label || "Voice Memo",
       memoId: active.memoId,
       lyrics: active.lyrics,
       transcriptLines: active.transcriptLines,
@@ -298,12 +288,77 @@ export async function loadPracticeSections(songId: string): Promise<PracticeSect
       cacheStatus: "pending",
       masteryLevel: "untouched",
       loopCountThisSession: 0,
-      takes,
+      takes: nullTakes,
       activeTakeIndex: 0,
     });
   }
 
   return result;
+}
+
+/**
+ * PURE: flat voice_memos rows → per-section takes. Exported for tests.
+ *
+ * The two rules that make practice hear the song the way the room built it:
+ *  1. Stacks are grouped SONG-WIDE, then a stack lives wherever its BASE
+ *     lives — a layer ("Sing over this") skips the section decision at save
+ *     time, so its own section_id may be null or stale; following it would
+ *     tear a harmony away from its base into a phantom "take."
+ *  2. Bases are the takes (F15 swipe-between-alternates); a base's layers
+ *     ride WITH it, carrying the room-shared seed mix. Orphan layers (base
+ *     deleted/unloaded) promote to their own base — never dropped
+ *     (groupIntoStacks' covenant: a captured idea is never lost).
+ */
+export function buildSectionTakes(
+  memos: PracticeMemoRow[],
+  transcriptByMemoId: Map<string, PracticeTranscriptRow>,
+): Map<string | null, PracticeTake[]> {
+  const stacks = groupIntoStacks(
+    memos.map((m) => ({
+      ...m,
+      parentMemoId: m.parent_memo_id ?? null,
+      createdAt: m.created_at ?? undefined,
+    })),
+  );
+
+  const layerFromMemo = (memo: PracticeMemoRow, index: number): PracticeLayer => ({
+    memoId: memo.id,
+    label: memo.title?.trim() || `Layer ${index + 1}`,
+    durationMs: memo.duration_ms ?? 0,
+    gain: typeof memo.layer_gain === "number" ? memo.layer_gain : 1,
+    muted: memo.layer_muted === true,
+    offsetMs:
+      typeof memo.layer_offset_ms === "number" && memo.layer_offset_ms > 0
+        ? memo.layer_offset_ms
+        : 0,
+    authorId: memo.author_user_id ?? null,
+  });
+
+  const takesBySection = new Map<string | null, PracticeTake[]>();
+  for (const stack of stacks) {
+    const memo = stack.base;
+    const transcript = transcriptByMemoId.get(memo.id);
+    const transcriptLines = transcript
+      ? parseWordTimestamps(transcript.segments) ??
+        (transcript.text
+          ? [{ text: transcript.text, startMs: 0, endMs: memo.duration_ms ?? 0 }]
+          : null)
+      : null;
+
+    const key = memo.section_id ?? null;
+    const arr = takesBySection.get(key) ?? [];
+    arr.push({
+      memoId: memo.id,
+      label: memo.title?.trim() || `Take ${arr.length + 1}`,
+      durationMs: memo.duration_ms ?? 0,
+      lyrics: transcript?.text || null,
+      transcriptLines,
+      layers: stack.layers.map(layerFromMemo),
+      authorId: memo.author_user_id ?? null,
+    });
+    takesBySection.set(key, arr);
+  }
+  return takesBySection;
 }
 
 /**

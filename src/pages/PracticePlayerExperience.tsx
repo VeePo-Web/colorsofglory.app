@@ -2,10 +2,12 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Loader2, Mic } from "lucide-react";
 import { goBackOr } from "@/lib/nav/safeBack";
+import { setNavDirection } from "@/lib/nav/navDirection";
 import { usePracticeContext } from "@/hooks/usePracticeContext";
 import { DriveModePlayer } from "@/components/practice/DriveModePlayer";
 import { FlowPlayer } from "@/components/practice/FlowPlayer";
 import { FullPracticePlayer } from "@/components/practice/FullPracticePlayer";
+import { SingItPlayer } from "@/components/practice/SingItPlayer";
 import { useLiftGesture } from "@/components/practice/useLiftGesture";
 import { loadSession, loadLoopMode } from "@/lib/audio/practiceStorage";
 import { loadPracticeBundle } from "@/lib/practice/practiceApi";
@@ -119,13 +121,21 @@ export default function PracticePlayerPage() {
   const [flowMode, setFlowMode] = useState(
     () => Boolean((location.state as { flow?: boolean } | null)?.flow),
   );
+  // Sing it — THE PRACTICE ROOM (docs/prompts/THE-HALLWAY-PRACTICE-ROOM-
+  // VISION.md): the whole song, every voice, karaoke words, the Parts mixer.
+  // The canvas doors arrive here with { sing: true }.
+  const [singMode, setSingMode] = useState(
+    () => Boolean((location.state as { sing?: boolean } | null)?.sing),
+  );
   // The set-down drag's visual target — the whole page rides the finger.
   const dismissRef = useRef<HTMLDivElement>(null);
 
   // Screen stays awake for the whole live session (full player, drive mode,
-  // and Flow — a music stand that sleeps mid-verse fails its one job).
+  // Flow, and the Practice Room — a music stand that sleeps mid-verse fails
+  // its one job).
   usePracticeWakeLock(
     flowMode ||
+    singMode ||
     (state.songId === songId &&
       (state.status === "ready" || state.status === "playing" || state.status === "paused")),
   );
@@ -248,6 +258,34 @@ export default function PracticePlayerPage() {
         <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--cog-muted)" }}>
           Audio is cached so it works offline
         </p>
+      </div>
+    );
+  }
+
+  // ─── Sing it — THE PRACTICE ROOM ────────────────────────────────────────
+  // The whole song, one continuous flow, every voice, words on screen. The
+  // deep rehearsal room (loops, speed, takes) is one quiet tap away.
+  if (singMode) {
+    return (
+      <div ref={dismissRef} style={{ position: "fixed", inset: 0 }}>
+        <SetDownGrabber onDismiss={handleClose} visualTarget={dismissRef} />
+        <SingItPlayer
+          sections={state.sections}
+          songId={state.songId || songId || ""}
+          songTitle={state.songTitle}
+          onClose={handleClose}
+          onDeepPractice={() => setSingMode(false)}
+          // The next loop: the room's own share door, opened by ?share=1
+          // (consumed once, exactly like the capture/invite arrivals).
+          onShare={
+            songId
+              ? () => {
+                  setNavDirection("down");
+                  navigate(`/songs/${songId}/canvas?share=1`);
+                }
+              : undefined
+          }
+        />
       </div>
     );
   }

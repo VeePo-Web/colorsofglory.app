@@ -83,10 +83,13 @@ export function MiniPracticePlayer() {
         navigate(`/songs/${songId}/practice`, { state: { songTitle, sections } });
       }
     } else if (entrySongId) {
-      // Lift straight into Flow — the practice page self-loads the song's
-      // sections on a cold open, and `flow: true` lands in perform mode.
+      // Lift straight into THE PRACTICE ROOM — the whole song plays, every
+      // voice, karaoke words (docs/prompts/THE-HALLWAY-PRACTICE-ROOM-
+      // VISION.md). "Lift to play" finally tells the literal truth: lifting
+      // PLAYS. Flow (the silent music stand) stays one tap away inside the
+      // deep player. The practice page self-loads sections on a cold open.
       setNavDirection("up");
-      navigate(`/songs/${entrySongId}/practice`, { state: { flow: true } });
+      navigate(`/songs/${entrySongId}/practice`, { state: { sing: true } });
     }
   }, [sessionActive, songId, songTitle, sections, entrySongId, navigate]);
 
@@ -98,19 +101,23 @@ export function MiniPracticePlayer() {
   // ── ENTRY state — the calm "lift to play" handle ──────────────────────
   if (!sessionActive) {
     if (!entrySongId || keyboardUp) return null;
+    // The canvas dock owns bottom safe+88 … safe+144 — the old fixed 104px
+    // sat INSIDE that band (a 40px overlap the dock painted over). On the
+    // canvas the handle clears the dock; other surfaces keep the tuned 104.
+    const onCanvas = /\/canvas$/.test(pathname);
     return (
       <div
         ref={barRef}
         className="fixed left-0 right-0 z-40 flex justify-center"
-        // 104px clears every song surface's bottom bar (room dock, sheet's
-        // Add-section bar, voice's recorder panel, the canvas dock) with a
-        // calm gap; the ACTIVE bar keeps its established 80px slot.
-        style={{ bottom: 104, animation: "mini-in 250ms var(--cog-ease-reveal) both" }}
+        style={{
+          bottom: onCanvas ? "calc(env(safe-area-inset-bottom) + 152px)" : 104,
+          animation: "mini-in 250ms var(--cog-ease-reveal) both",
+        }}
       >
         <button
           type="button"
           onClick={lift}
-          aria-label="Lift to play in Flow"
+          aria-label="Lift to practice — the whole song plays"
           className="flex flex-col items-center transition-transform active:scale-[0.97]"
           style={{
             background: "var(--cog-cream-light)",
@@ -142,7 +149,7 @@ export function MiniPracticePlayer() {
                 color: "var(--cog-charcoal)",
               }}
             >
-              Flow
+              Practice
             </span>
             <span
               style={{
@@ -151,7 +158,7 @@ export function MiniPracticePlayer() {
                 color: "var(--cog-warm-gray)",
               }}
             >
-              · lift to play
+              · lift to sing it
             </span>
           </span>
         </button>

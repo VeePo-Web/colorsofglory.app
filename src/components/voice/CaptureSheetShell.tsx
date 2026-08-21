@@ -6,6 +6,13 @@ interface CaptureSheetShellProps {
   onBackdropClick?: () => void;
   minHeight?: number;
   /**
+   * Render the shell's own backdrop scrim (default true). The canvas host
+   * passes false and hoists ONE persistent scrim under the whole layer flow
+   * (LayerFlowScrim, G7) so stack→record→review hand-offs never flash a
+   * bare canvas between sheets. Standalone surfaces keep the default.
+   */
+  scrim?: boolean;
+  /**
    * A short human status ("Recording", "Saving your idea") announced politely to
    * screen readers whenever it changes. The visual UI already shows this; the
    * live region makes the capture lifecycle perceivable without sight.
@@ -75,7 +82,7 @@ function useKeyboardInset(): number {
  * each re-declaring ~40 lines of identical inline styling, so they stay visually
  * identical by construction and recolor with the design system, not by hand.
  */
-const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, children }: CaptureSheetShellProps) => {
+const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, scrim = true, children }: CaptureSheetShellProps) => {
   // G10: the shared trap — Tab wraps, focus enters on open, returns on close.
   // Escape routes through onBackdropClick, which is UNDEFINED during a live
   // take (RecordingSheet passes it only when there is nothing to lose), so a
@@ -101,21 +108,23 @@ const CaptureSheetShell = ({ ariaLabel, onBackdropClick, minHeight, liveStatus, 
 
   return (
     <>
-      {/* Frosted charcoal scrim */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 799,
-          backgroundColor: "rgba(28,26,23,0.65)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          opacity: visible ? 1 : 0,
-          transition: "opacity 300ms ease",
-        }}
-        onClick={onBackdropClick}
-        aria-hidden="true"
-      />
+      {/* Frosted charcoal scrim — unless the host hoisted one (G7). */}
+      {scrim && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 799,
+            backgroundColor: "rgba(28,26,23,0.65)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            opacity: visible ? 1 : 0,
+            transition: "opacity 300ms ease",
+          }}
+          onClick={onBackdropClick}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Bottom sheet */}
       <div

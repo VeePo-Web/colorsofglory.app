@@ -31,11 +31,22 @@ describe("failedCaptureStore — durable failed-take recovery", () => {
     mockCache.get.mockResolvedValue(null);
   });
 
+  it("REFUSES a phantom index row when the device refuses the blob (P7-6)", async () => {
+    // This shelf is reached precisely when a durable write already failed
+    // once — the take's LAST copy. An unconfirmed write must throw, and no
+    // index row may point at a blob that never committed.
+    mockCache.setDurable.mockResolvedValue(false);
+    await expect(
+      saveFailedCapture(blob(), { songId: null, title: "x", durationMs: 1 }),
+    ).rejects.toThrow("salvage-not-persisted");
+    expect(readRaw()).toEqual([]);
+  });
+
   it("caches the blob BEFORE the index row — the take survives a reload", async () => {
     const order: string[] = [];
-    mockCache.set.mockImplementation(async () => { order.push("cache"); });
+    mockCache.setDurable.mockImplementation(async () => { order.push("cache"); return true; });
     const rec = await saveFailedCapture(blob(), { songId: "s1", title: "Bridge", durationMs: 4200 });
-    expect(mockCache.set).toHaveBeenCalledWith(rec.id, expect.any(Blob));
+    expect(mockCache.setDurable).toHaveBeenCalledWith(rec.id, expect.any(Blob));
     order.push("index");
     expect(order).toEqual(["cache", "index"]);
     expect(readRaw()).toHaveLength(1);

@@ -42,6 +42,15 @@ interface MemoSheetProps {
   onClose: () => void;
   /** Optional pre-record tempo transport (TempoRow) — shown under the stack. */
   tempoSlot?: ReactNode;
+  /**
+   * Render the sheet's own backdrop scrim (default true). The canvas host
+   * passes false and hoists ONE persistent scrim under the whole layer flow
+   * (LayerFlowScrim, G7) so sheet hand-offs never flash a bare canvas.
+   */
+  scrim?: boolean;
+  /** G10b — the layer that just landed: its row glows once and the stack
+   *  announces "Your layer is in the stack" for screen readers. */
+  arrivedLayerId?: string | null;
 }
 
 const SectionLabel = ({ children }: { children: ReactNode }) => (
@@ -70,6 +79,8 @@ const MemoSheet = ({
   onTryAgain,
   onClose,
   tempoSlot,
+  scrim = true,
+  arrivedLayerId,
 }: MemoSheetProps) => {
   const [visible, setVisible] = useState(false);
   const [takes, setTakes] = useState<Take[] | null>(null);
@@ -166,20 +177,22 @@ const MemoSheet = ({
 
   return (
     <>
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 799,
-          backgroundColor: "rgba(26,26,26,0.55)",
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
-          opacity: visible ? 1 : 0,
-          transition: "opacity 280ms ease",
-        }}
-        aria-hidden="true"
-      />
+      {scrim && (
+        <div
+          onClick={onClose}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 799,
+            backgroundColor: "rgba(26,26,26,0.55)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            opacity: visible ? 1 : 0,
+            transition: "opacity 280ms ease",
+          }}
+          aria-hidden="true"
+        />
+      )}
       <TrappedDialog
         onClose={onClose}
         aria-label={`Voice memo: ${base.title}`}
@@ -332,6 +345,7 @@ const MemoSheet = ({
             <MemoStack
               base={base}
               layers={shownLayers}
+              arrivedLayerId={arrivedLayerId}
               bpm={bpm}
               canRecordOver={canRecordOver}
               onRecordOver={onRecordOver}

@@ -332,15 +332,79 @@ FIXED IN PASS 5 (2026-08-16 — THE SEAMLESS LAYER):
   Stop button's press state moved to CSS :active via cog-press (iOS never
   rendered the mouse-event version under a thumb).
 
-STILL FILED FOR PASS 6+:
+FIXED IN PASS 7 (2026-08-19 — THE PRACTICE ROOM; vision doc
+THE-HALLWAY-PRACTICE-ROOM-VISION.md; three deep ground-truth traces +
+a five-lens adversarially-verified diff review, executed):
+- P7-1 ✅ (P1, the data seam): practiceApi was DEAF TO LAYERS — its select
+  omitted `parent_memo_id`, so a base + 3 harmonies arrived in practice as
+  4 swipeable "takes" and no practice surface could ever play the family
+  together. Now: the select carries the stack columns, `buildSectionTakes`
+  (pure, 6 tests) groups stacks SONG-WIDE and seats each stack at its
+  BASE's section (a layer's own section_id is null by design — following
+  it tore harmonies into phantom takes). Bases are the takes; layers ride
+  with their base, carrying the room-shared seed mix.
+- P7-2 ✅ (P1, the engine): `useSingItPlayer` — the whole song on ONE
+  Web Audio clock, generalized from useStackPlayer: every part decodes on
+  one AudioContext, schedules at its section's timeline offset in one
+  shared tick (gapless by construction), hard-stops at its section
+  boundary, ramps per-part gain (30ms), joins mid-flight when a decode
+  lands late, and falls back honestly to sequential bases-only elements.
+  Pure timeline math in `singItEngine.ts` (8 tests: placement, holes,
+  seek windows, max()-merged offsets).
+- P7-3/4 ✅ (P1, the room): `SingItPlayer` — one gold play circle, karaoke
+  words (existing KaraokeLyrics, timestamp-synced per section), a
+  tappable section ribbon, chrome that recedes while the song sounds,
+  "That's your song." at the end (peak-end), and the Parts mixer
+  (`PartsMixerSheet`): every voice one row — maker color, live slider,
+  mute — persisted per song (`singItMix`, device-local).
+- P7-5 ✅ (P2, the doors): the canvas lift pill reads "Practice · lift to
+  sing it" and lands in the room ({ sing: true }); Final's gold "Play the
+  song" lifts there too (row taps keep the quick in-room listen); the
+  dead handleLaunchPractice is repurposed as the one door; on the canvas
+  the pill sits at safe+152 — it used to sit INSIDE the dock's band
+  (40px overlap the dock painted over).
+- P7-6 ✅ (P1, covenant debt): the LAST-RESORT salvage shelf
+  (`saveFailedCapture`) wrote with unchecked `audioCache.set` on exactly
+  the path where a durable write had already failed once — a phantom
+  index row over a blob that never committed. Now setDurable + throw;
+  all four callers retain and narrate; the canvas failure toast tells
+  the exact truth (backup kept vs nothing kept).
+- P7-D ✅ (P0, the dock-vanish): one "Play the song" on the feed
+  PERMANENTLY hid Record memo + Add part — playAll grew the listen-path
+  queue, the auto-expand flipped `pathExpanded`, and the only collapse
+  control (ListenPathBar) is map-gated. Triple fix: the pure gate now
+  never counts the listen path on the feed (`view` field, unit-pinned),
+  auto-expand is map-only, and entering the feed collapses the flag.
+- P7-G ✅ (P2, gold discipline): the header's Review pill de-golded to
+  the pale segmented register (it stood as a SECOND gold against Record
+  memo on every screen with pending review); FeedCard's "→ Final" now
+  wears Final's own SAGE (the same color the promote swipe already
+  reveals); "Sing over this" gets flex room so it never ellipsizes in
+  the three-verb row at 390px.
+- G7 ✅ (P2, the unbroken dim): ONE hoisted scrim (`LayerFlowScrim`,
+  one canonical tone) under the layer flow's three sheet hand-offs;
+  RecordingSheet / VoiceReviewSheet / MemoSheet accept `scrim={false}`
+  from the canvas host (every other consumer keeps its own). Clicks
+  route to what the top sheet allows — never a discard.
+- G10b ✅ (P3): the new layer greets itself — a one-time warm glow on
+  its stack row + role=status "Your layer is in the stack."
+- G11b ✅ (P3): the earbuds confirmation now outlives the click — it
+  renders without a BPM (it used to die with MetronomeStrip's gate,
+  leaving a layer take no way to unlock its guide mid-session).
+- G11c ✅ (P3): the end of the stack is spoken — a polite status line
+  fires when the engine finishes (never on pause).
+
+STILL FILED FOR PASS 8+:
 - F9 (P3): take_id → "hear where this line came from", held for its UI moment.
-- G7 (P2): ONE persistent scrim under the layer flow's three sheet hand-offs
-  (stack→record→review→stack) — the last bare-canvas flash mid-flow.
-- G10b (P3): the new layer announces itself in the stack (arrival glow +
-  role=status "Your layer is in the stack").
-- G11 (rest, P3): earbuds toggle reachable without a BPM (hoist from
-  MetronomeStrip); stop-button label during count-in ("cancel the
-  count-in"); end-of-stack announcement for screen readers.
+- Final listen (canvasAudio, row taps) still plays bases only — priced
+  against usage now that "Play the song" carries the full mix.
+- Two unreconciled orders: song_sections.position (practice) vs the Final
+  tree's card order (canvas) — the Practice Room follows sections.
+- F13's chord/key suggestions still never reach the canvas feed.
+- The worst-case interruption stack on a fresh invite arrival (RoomWelcome
+  + RoleToast + join toast + 2 CoachMarks = 5 surfaces) needs sequencing.
+- Map-only dead weight (10 unreachable-on-phone surfaces) — deletion is
+  its own careful pass.
 
 ============================================================
 PART 7 — SHIP PROTOCOL (Concurrent-Tree — mandatory every pass)

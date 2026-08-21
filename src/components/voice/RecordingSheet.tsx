@@ -19,6 +19,9 @@ interface RecordingSheetProps {
   onNoteChange: (v: string) => void;
   onStop: () => void;
   onCancel: () => void;
+  /** Forwarded to CaptureSheetShell — false when the host hoists ONE scrim
+   *  under the whole layer flow (LayerFlowScrim, G7). */
+  scrim?: boolean;
   onOpenSettings: () => void;
   /** Optional in-take tempo companion (MetronomeStrip) — the visual beat lives here. */
   metronomeSlot?: ReactNode;
@@ -55,6 +58,7 @@ const RecordingSheet = ({
   onNoteChange,
   onStop,
   onCancel,
+  scrim,
   onOpenSettings,
   metronomeSlot,
   countingIn = false,
@@ -90,6 +94,7 @@ const RecordingSheet = ({
       onBackdropClick={isDenied ? onCancel : undefined}
       minHeight={340}
       liveStatus={liveStatus}
+      scrim={scrim}
     >
       {isDenied ? (
         <MicPermissionPanel

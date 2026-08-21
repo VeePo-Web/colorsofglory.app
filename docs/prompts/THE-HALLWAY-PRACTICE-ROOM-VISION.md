@@ -350,6 +350,35 @@ FILED (named, not this pass):
   lands on the song row only); F9 take-provenance held for its UI moment.
 
 ============================================================
+PART 7.5 — PASS 7, EXECUTED (2026-08-19/21)
+============================================================
+
+SHIPPED: P7-1 (practiceApi learns layers — the data seam; 6 tests) ·
+P7-2 (singItEngine, 8 tests + useSingItPlayer: whole song, one Web Audio
+clock, per-part gain, section-boundary stops, late-decode join, honest
+bases-only fallback) · P7-3/4 (SingItPlayer + PartsMixerSheet + singItMix,
+4 tests) · P7-5 (the doors: lift pill → the room, Final's gold → the room,
+the pill's 40px dock overlap fixed) · P7-6 (the last-resort salvage shelf
+confirms its durable write) · P7-D (P0: the dock-vanish trap) · P7-G (gold
+discipline: one gold per state) · G7 (ONE hoisted scrim) · G10b · G11b ·
+G11c.
+
+THE FUNNEL CLOSED (the last two, this pass):
+- THE NEXT LOOP: the end moment now offers "Someone should hear this" →
+  the song's share door (`?share=1`, consumed once like every other
+  arrival). Peak-end + Zeigarnik: the loop closes on the song heard whole
+  and OPENS the one that grows the room. The flywheel has no dead stop.
+- THE WORDS OWN THE SCREEN: KaraokeLyrics gains an additive `sing`
+  register — fluid clamp type (up to 2.25rem active / 1.375rem next) for
+  the phone, the Apple Music Sing scale. Every other surface unchanged.
+
+NOT VERIFIED HERE (state it, never bank it): the five-lens adversarial
+diff review was launched and DIED on a spend limit — its empty result is
+not a clean bill of health. Re-run it next pass. And the felt truths need
+a real iPhone: gapless section seams, the mixer's live ramp under a thumb,
+the ribbon's tap-to-seat, and VoiceOver walking play → ribbon → Parts.
+
+============================================================
 PART 8 — WHAT DONE LOOKS LIKE
 ============================================================
 

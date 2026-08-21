@@ -29,6 +29,9 @@ const PREVIEW_BAR_MAX_H = 40;
 interface VoiceReviewSheetProps {
   recording: RecordingResult;
   defaultName: string;
+  /** Forwarded to CaptureSheetShell — false when the host hoists ONE scrim
+   *  under the whole layer flow (LayerFlowScrim, G7). */
+  scrim?: boolean;
   section: string;
   isPro?: boolean;
   /**
@@ -44,6 +47,7 @@ interface VoiceReviewSheetProps {
 const VoiceReviewSheet = ({
   recording,
   defaultName,
+  scrim,
   section: initialSection,
   isPro = false,
   destinationNote,
@@ -119,6 +123,7 @@ const VoiceReviewSheet = ({
     <CaptureSheetShell
       ariaLabel="Review your recording"
       liveStatus={isSaving ? "Saving your memo" : "Review your recording"}
+      scrim={scrim}
     >
       <div style={{ padding: "20px 24px 0" }}>
         {interruptionNote && (

@@ -3,6 +3,7 @@ import { Mic } from "lucide-react";
 import type { CanvasBoardCard } from "@/lib/canvas/canvasTypes";
 import type { CanvasCardInteractions } from "@/components/canvas/CanvasCard";
 import type { CardFaceProps } from "@/components/canvas/cardFace";
+import { GLORY } from "@/lib/canvas/glorySpectrum";
 import LyricCard from "@/components/canvas/LyricCard";
 import VoiceMemoCard from "@/components/canvas/VoiceMemoCard";
 import HumCard from "@/components/canvas/HumCard";
@@ -219,7 +220,10 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); interactions.onRecordOver?.(); }}
-                  style={btn("rgba(28,26,23,0.05)", "var(--cog-warm-gray)")}
+                  // The longest verb gets the room it needs — a truncated
+                  // "Sing over th…" fails the Guess Contract at 390px when
+                  // three verbs share the row.
+                  style={{ ...btn("rgba(28,26,23,0.05)", "var(--cog-warm-gray)"), flex: 1.7 }}
                   aria-label="Sing over this — your voice plays together with it"
                 >
                   <Mic size={13} strokeWidth={2.1} style={{ marginRight: 5, verticalAlign: "-2px", display: "inline" }} />
@@ -230,7 +234,7 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
               {interactions.onOpenStack && Boolean(interactions.layerCount) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); interactions.onOpenStack?.(); }}
-                  style={btn(`${color.base}16`, color.dark)}
+                  style={{ ...btn(`${color.base}16`, color.dark), flex: "0 1 auto", paddingInline: 10 }}
                   aria-label={`Open the stack — ${interactions.layerCount} layers`}
                 >
                   {`Layers · ${interactions.layerCount}`}
@@ -255,7 +259,7 @@ const FeedCard = memo(function FeedCard({ card, selected, interactions, adornmen
                 if (rect && onFlyToFinal) onFlyToFinal(card, rect);
                 else interactions.onMoveToFinal();
               }}
-              style={btn("var(--cog-gold)", "#FFF")}
+              style={btn(GLORY.sage.dark, "#FFF")}
               aria-label="Move this idea into the final song"
             >
               → Final

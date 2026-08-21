@@ -17,9 +17,32 @@ export interface TranscriptLine {
 }
 
 /**
- * One playable take of a section — a voice memo attached to that section.
- * Practice consumes C4's memo model read-only: every playable memo on a
- * section is a take the rehearser can swipe between (F15). The per-memo
+ * One voice recorded over a take's base ("Sing over this") — it plays
+ * TOGETHER with the base, never instead of it. Practice reads C4's stack
+ * model read-only; the seed mix is the room-shared layer_gain/layer_muted
+ * (what the stack sheet persisted), which the practice room's own
+ * device-local mix may override.
+ */
+export interface PracticeLayer {
+  memoId: string;
+  /** Memo title, or "Layer N" by recording order. */
+  label: string;
+  durationMs: number;
+  /** Room-shared seed volume (0–1.5, the stack mixer's range). */
+  gain: number;
+  /** Room-shared seed mute. */
+  muted: boolean;
+  /** Latency offset — start playback this many ms INTO the layer's audio. */
+  offsetMs: number;
+  /** Who sang it — drives the mixer row's maker dot (getCreatorColor). */
+  authorId?: string | null;
+}
+
+/**
+ * One playable take of a section — a BASE voice memo attached to that
+ * section, carrying the voices layered over it. Practice consumes C4's memo
+ * model read-only: bases are the takes the rehearser swipes between (F15);
+ * a base's layers sound WITH it, never as alternatives to it. The per-memo
  * "versions" queue (memo_takes rows) stays in C4's TakeMiniPlayer lane.
  */
 export interface PracticeTake {
@@ -29,6 +52,13 @@ export interface PracticeTake {
   durationMs: number;
   lyrics: string | null;
   transcriptLines: TranscriptLine[] | null;
+  /**
+   * Voices layered over this base ("Sing over this"). Absent/empty = the
+   * take sings alone (pre-stacks rows, nav-state fast-path sections).
+   */
+  layers?: PracticeLayer[];
+  /** Who recorded the base — the mixer row's maker dot. */
+  authorId?: string | null;
 }
 
 /** A chord glyph rendered in the song's display key, bonded to a char index. */

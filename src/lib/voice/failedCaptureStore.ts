@@ -52,6 +52,13 @@ function generateId(): string {
 /**
  * Persist a failed capture take durably. The blob goes to the device cache BEFORE
  * the index row, so from the moment this resolves the take survives a reload.
+ *
+ * THROWS when the device refuses the durable write (iOS private mode, storage
+ * pressure). This shelf is reached precisely when a durable write already
+ * failed once — it is the take's LAST copy, so an unconfirmed write here must
+ * never be reported as kept, and a phantom index row (pointing at a blob that
+ * never committed) must never be written. Callers retain the take in memory
+ * and narrate honestly.
  */
 export async function saveFailedCapture(
   blob: Blob,
@@ -64,7 +71,8 @@ export async function saveFailedCapture(
   },
 ): Promise<FailedCapture> {
   const id = generateId();
-  await audioCache.set(id, blob);
+  const persisted = await audioCache.setDurable(id, blob);
+  if (!persisted) throw new Error("salvage-not-persisted");
   const record: FailedCapture = {
     id,
     songId: meta.songId,

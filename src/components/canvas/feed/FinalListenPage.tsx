@@ -54,6 +54,11 @@ export interface FinalListenPageProps {
   /** Play these parts in order — the page passes the full song or a
    *  play-from-here tail (tap any row to start THERE, Apple Music style). */
   onPlaySong: (ids: string[]) => void;
+  /** THE PRACTICE ROOM door (pass 7): when present, the header's gold
+   *  "Play the song" lifts into the sing mode — the whole song in one
+   *  continuous flow, EVERY voice (base + layers) on one clock, karaoke
+   *  words, the Parts mixer. Row taps keep the quick in-room listen. */
+  onPracticeSong?: () => void;
   onPlayPause: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -76,6 +81,7 @@ const FinalListenPage = memo(function FinalListenPage({
   finished,
   paused,
   onPlaySong,
+  onPracticeSong,
   onPlayPause,
   onNext,
   onPrev,
@@ -196,7 +202,9 @@ const FinalListenPage = memo(function FinalListenPage({
           // header yields rather than doubling the same verb on one screen.
           <button
             type="button"
-            onClick={() => onPlaySong(cards.map((c) => c.id))}
+            onClick={() =>
+              onPracticeSong ? onPracticeSong() : onPlaySong(cards.map((c) => c.id))
+            }
             aria-label="Play the whole song, top to bottom"
             style={{
               width: "100%", minHeight: 52, borderRadius: 15, border: "none", cursor: "pointer",

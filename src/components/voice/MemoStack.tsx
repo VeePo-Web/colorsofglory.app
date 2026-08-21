@@ -48,6 +48,9 @@ interface MemoStackProps {
   /** Per-layer permission: only the layer's own writer may remove their
    *  work — nobody's contribution is erased by another hand. */
   canRemoveLayer?: (layerId: string) => boolean;
+  /** G10b — the layer that just landed: its row wears a one-time warm glow
+   *  and the stack speaks "Your layer is in the stack." */
+  arrivedLayerId?: string | null;
 }
 
 const STACK_BARS = 28;
@@ -55,7 +58,7 @@ const STACK_WAVE_H = 34;
 const LAYER_BARS = 20;
 const LAYER_WAVE_H = 14;
 
-const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRemoveLayer, canRemoveLayer }: MemoStackProps) => {
+const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRemoveLayer, canRemoveLayer, arrivedLayerId }: MemoStackProps) => {
   const group: MemoStackGroup<StackMemoView> = { base, layers };
   // Which layer is showing its inline "Remove?" confirm strip.
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
@@ -110,6 +113,19 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
 
   // Resolve audio when the stack opens so the first tap plays instantly (iOS).
   useEffect(() => { void prepare(); }, [prepare]);
+
+  // G11c — the end of the stack is SPOKEN, not just seen: the engine flips
+  // isPlaying off with progress reset to 0 when the last voice finishes
+  // (a pause keeps its position, so this never fires on pause).
+  const [liveNote, setLiveNote] = useState("");
+  const wasPlayingRef = useRef(false);
+  useEffect(() => {
+    if (wasPlayingRef.current && !state.isPlaying && state.progress === 0) {
+      setLiveNote("That's the end of the stack.");
+    }
+    if (state.isPlaying) setLiveNote("");
+    wasPlayingRef.current = state.isPlaying;
+  }, [state.isPlaying, state.progress]);
 
   const baseColor = getCreatorColor(base.contributor);
   // Melody Lens precedence: contour (rides the tune) → real peaks → seed.
@@ -231,12 +247,29 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
         </div>
       </div>
 
+      {/* The stack's one polite voice: a landed layer + the end of playback.
+          Visual users see the glow and the resting bar; this is the same
+          truth for ears (G10b + G11c). */}
+      <p
+        role="status"
+        style={{
+          position: "absolute", width: 1, height: 1, padding: 0, margin: -1,
+          overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap", border: 0,
+        }}
+      >
+        {arrivedLayerId && layers.some((l) => memoKey(l.id) === memoKey(arrivedLayerId))
+          ? "Your layer is in the stack."
+          : liveNote}
+      </p>
+
       {/* ── Layer rows (the stack) ─────────────────────────────────────── */}
       {layers.map((layer) => {
         const lc = getCreatorColor(layer.contributor);
         const isMuted = state.muted.has(layer.id);
         const isSolo = state.soloId === layer.id;
         const confirming = confirmRemoveId === layer.id;
+        const justArrived =
+          arrivedLayerId != null && memoKey(layer.id) === memoKey(arrivedLayerId);
         // The layer's own shape — base and layer visually READ as aligned
         // takes, not anonymous strips (alignment used to be audio-only).
         const layerWave = resolveWaveformBars({
@@ -249,6 +282,7 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
         return (
           <div
             key={layer.id}
+            className={justArrived ? "cog-layer-arrived" : undefined}
             style={{
               display: "flex", alignItems: "center", gap: 10,
               padding: "9px 10px", marginBottom: 8, borderRadius: 14,
@@ -437,6 +471,18 @@ const MemoStack = ({ base, layers, bpm, canRecordOver = true, onRecordOver, onRe
           Sing over this
         </button>
       )}
+
+      <style>{`
+        @keyframes cog-layer-arrive {
+          0%   { box-shadow: 0 0 0 0 rgba(184,149,58,0); }
+          35%  { box-shadow: 0 0 0 5px rgba(184,149,58,0.22); }
+          100% { box-shadow: 0 0 0 0 rgba(184,149,58,0); }
+        }
+        .cog-layer-arrived { animation: cog-layer-arrive 1400ms var(--cog-ease-reveal) both; }
+        @media (prefers-reduced-motion: reduce) {
+          .cog-layer-arrived { animation: none; }
+        }
+      `}</style>
     </section>
   );
 };

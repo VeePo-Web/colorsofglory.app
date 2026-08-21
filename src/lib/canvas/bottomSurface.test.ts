@@ -43,4 +43,32 @@ describe("isBottomWorkflowActive — one bottom action surface at a time", () =>
       isBottomWorkflowActive({ ...calm, listenPathExpanded: true, listenPathQueueCount: 0 }),
     ).toBe(false);
   });
+
+  it("NEVER counts the listen path on the FEED — the dock-vanish regression", () => {
+    // "Play the song" on the Final page grows the queue, which auto-expanded
+    // the path — but the expanded transport is map-only, so on the feed the
+    // dock vanished with nothing in its place, for the rest of the session.
+    expect(
+      isBottomWorkflowActive({
+        ...calm,
+        view: "feed",
+        listenPathExpanded: true,
+        listenPathQueueCount: 3,
+      }),
+    ).toBe(false);
+    // A real map workflow still yields the feed dock's slot when the view
+    // flips back — weave/arrange/merge are view-independent workflows.
+    expect(isBottomWorkflowActive({ ...calm, view: "feed", arranging: true })).toBe(true);
+  });
+
+  it("still counts the expanded listen path on the MAP (its transport renders there)", () => {
+    expect(
+      isBottomWorkflowActive({
+        ...calm,
+        view: "map",
+        listenPathExpanded: true,
+        listenPathQueueCount: 3,
+      }),
+    ).toBe(true);
+  });
 });
